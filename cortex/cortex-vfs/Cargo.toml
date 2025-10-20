@@ -1,0 +1,52 @@
+[package]
+name = "cortex-vfs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core
+cortex-core = { path = "../cortex-core" }
+cortex-storage = { path = "../cortex-storage" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# File watching
+notify = { workspace = true }
+ignore = { workspace = true }
+
+# Hashing
+blake3 = { workspace = true }
+
+# Utilities
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+num_cpus = "1.17.0"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }
+criterion = { version = "0.7.0", features = ["html_reports"] }
+
+[[bench]]
+name = "vfs_bench"
+harness = false

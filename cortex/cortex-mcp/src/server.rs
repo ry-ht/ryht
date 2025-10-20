@@ -1,0 +1,437 @@
+//! Cortex MCP Server
+//!
+//! Main server implementation that integrates all Cortex tools with the MCP framework.
+
+use crate::tools::{
+    build_execution::*, code_manipulation::*, code_nav::*, code_quality::*, cognitive_memory::*,
+    dependency_analysis::*, documentation::*, materialization::*, monitoring::*, multi_agent::*,
+    semantic_search::*, testing::*, version_control::*, vfs::*, workspace::*,
+};
+use anyhow::Result;
+use cortex_core::config::GlobalConfig;
+use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig};
+use cortex_vfs::VirtualFileSystem;
+use mcp_server::prelude::*;
+use mcp_server::Transport;
+use std::sync::Arc;
+use tracing::{info, warn};
+
+/// Cortex MCP Server
+///
+/// Provides all Cortex functionality through the MCP protocol
+pub struct CortexMcpServer {
+    server: mcp_server::McpServer,
+}
+
+impl CortexMcpServer {
+    /// Creates a new Cortex MCP server using global configuration
+    ///
+    /// This will:
+    /// 1. Load configuration from ~/.ryht/cortex/config.toml
+    /// 2. Initialize connection to SurrealDB
+    /// 3. Register all MCP tools
+    /// 4. Set up middleware and hooks
+    pub async fn new() -> Result<Self> {
+        info!("Initializing Cortex MCP Server");
+
+        // Load global configuration
+        let config = GlobalConfig::load_or_create_default().await?;
+        info!("Configuration loaded from {}", GlobalConfig::config_path()?.display());
+
+        // Initialize database connection
+        let storage = Self::create_storage(&config).await?;
+        info!("Database connection established");
+
+        // Create VFS
+        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+
+        // Build server with all tools
+        let server = Self::build_server(storage, vfs).await?;
+
+        info!("Cortex MCP Server initialized successfully");
+
+        Ok(Self { server })
+    }
+
+    /// Creates a new server with custom configuration
+    pub async fn with_config(config: GlobalConfig) -> Result<Self> {
+        let storage = Self::create_storage(&config).await?;
+        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+        let server = Self::build_server(storage, vfs).await?;
+
+        Ok(Self { server })
+    }
+
+    /// Creates storage connection manager from configuration
+    async fn create_storage(config: &GlobalConfig) -> Result<Arc<ConnectionManager>> {
+        use cortex_storage::PoolConnectionMode;
+
+        let db_config = config.database();
+        let pool_config = config.pool();
+
+        // Convert config to ConnectionManager format
+        let connection_mode = if db_config.mode == "local" {
+            PoolConnectionMode::Local {
+                endpoint: format!("ws://{}", db_config.local_bind),
+            }
+        } else {
+            PoolConnectionMode::Remote {
+                endpoints: db_config.remote_urls.clone(),
+                load_balancing: cortex_storage::LoadBalancingStrategy::RoundRobin,
+            }
+        };
+
+        let credentials = Credentials {
+            username: db_config.username.clone(),
+            password: db_config.password.clone(),
+        };
+
+        let pool_cfg = PoolConfig {
+            min_connections: pool_config.min_connections as usize,
+            max_connections: pool_config.max_connections as usize,
+            connection_timeout: std::time::Duration::from_millis(pool_config.connection_timeout_ms),
+            idle_timeout: Some(std::time::Duration::from_millis(pool_config.idle_timeout_ms)),
+            ..Default::default()
+        };
+
+        let database_config = DatabaseConfig {
+            connection_mode,
+            credentials,
+            pool_config: pool_cfg,
+            namespace: db_config.namespace.clone(),
+            database: db_config.database.clone(),
+        };
+
+        let manager = ConnectionManager::new(database_config).await?;
+
+        Ok(Arc::new(manager))
+    }
+
+    /// Builds the MCP server with all registered tools
+    async fn build_server(
+        storage: Arc<ConnectionManager>,
+        vfs: Arc<VirtualFileSystem>,
+    ) -> Result<mcp_server::McpServer> {
+        info!("Registering MCP tools");
+
+        // Create shared contexts
+        let workspace_ctx = WorkspaceContext::new(storage.clone());
+        let vfs_ctx = VfsContext::new(vfs.clone());
+        let code_ctx = CodeNavContext::new(storage.clone());
+        let code_manip_ctx = CodeManipulationContext::new(storage.clone());
+        let semantic_ctx = SemanticSearchContext::new(storage.clone());
+        let deps_ctx = DependencyAnalysisContext::new(storage.clone());
+        let quality_ctx = CodeQualityContext::new(storage.clone());
+        let version_ctx = VersionControlContext::new(storage.clone());
+        let memory_ctx = CognitiveMemoryContext::new(storage.clone());
+        let agent_ctx = MultiAgentContext::new(storage.clone());
+        let mat_ctx = MaterializationContext::new(storage.clone());
+        let test_ctx = TestingContext::new(storage.clone());
+        let doc_ctx = DocumentationContext::new(storage.clone());
+        let build_ctx = BuildExecutionContext::new(storage.clone());
+        let monitor_ctx = MonitoringContext::new(storage.clone());
+
+        // Build server with all tools
+        let server = mcp_server::McpServer::builder()
+            .name("cortex-mcp")
+            .version(env!("CARGO_PKG_VERSION"))
+            // Workspace Management Tools (8)
+            .tool(WorkspaceCreateTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceGetTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceListTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceActivateTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceSyncTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceExportTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceArchiveTool::new(workspace_ctx.clone()))
+            .tool(WorkspaceDeleteTool::new(workspace_ctx.clone()))
+            // Virtual Filesystem Tools (12)
+            .tool(VfsGetNodeTool::new(vfs_ctx.clone()))
+            .tool(VfsListDirectoryTool::new(vfs_ctx.clone()))
+            .tool(VfsCreateFileTool::new(vfs_ctx.clone()))
+            .tool(VfsUpdateFileTool::new(vfs_ctx.clone()))
+            .tool(VfsDeleteNodeTool::new(vfs_ctx.clone()))
+            .tool(VfsMoveNodeTool::new(vfs_ctx.clone()))
+            .tool(VfsCopyNodeTool::new(vfs_ctx.clone()))
+            .tool(VfsCreateDirectoryTool::new(vfs_ctx.clone()))
+            .tool(VfsGetTreeTool::new(vfs_ctx.clone()))
+            .tool(VfsSearchFilesTool::new(vfs_ctx.clone()))
+            .tool(VfsGetFileHistoryTool::new(vfs_ctx.clone()))
+            .tool(VfsRestoreFileVersionTool::new(vfs_ctx.clone()))
+            // Code Navigation Tools (10)
+            .tool(CodeGetUnitTool::new(code_ctx.clone()))
+            .tool(CodeListUnitsTool::new(code_ctx.clone()))
+            .tool(CodeGetSymbolsTool::new(code_ctx.clone()))
+            .tool(CodeFindDefinitionTool::new(code_ctx.clone()))
+            .tool(CodeFindReferencesTool::new(code_ctx.clone()))
+            .tool(CodeGetSignatureTool::new(code_ctx.clone()))
+            .tool(CodeGetCallHierarchyTool::new(code_ctx.clone()))
+            .tool(CodeGetTypeHierarchyTool::new(code_ctx.clone()))
+            .tool(CodeGetImportsTool::new(code_ctx.clone()))
+            .tool(CodeGetExportsTool::new(code_ctx.clone()))
+            // Code Manipulation Tools (15)
+            .tool(CodeCreateUnitTool::new(code_manip_ctx.clone()))
+            .tool(CodeUpdateUnitTool::new(code_manip_ctx.clone()))
+            .tool(CodeDeleteUnitTool::new(code_manip_ctx.clone()))
+            .tool(CodeMoveUnitTool::new(code_manip_ctx.clone()))
+            .tool(CodeRenameUnitTool::new(code_manip_ctx.clone()))
+            .tool(CodeExtractFunctionTool::new(code_manip_ctx.clone()))
+            .tool(CodeInlineFunctionTool::new(code_manip_ctx.clone()))
+            .tool(CodeChangeSignatureTool::new(code_manip_ctx.clone()))
+            .tool(CodeAddParameterTool::new(code_manip_ctx.clone()))
+            .tool(CodeRemoveParameterTool::new(code_manip_ctx.clone()))
+            .tool(CodeAddImportTool::new(code_manip_ctx.clone()))
+            .tool(CodeOptimizeImportsTool::new(code_manip_ctx.clone()))
+            .tool(CodeGenerateGetterSetterTool::new(code_manip_ctx.clone()))
+            .tool(CodeImplementInterfaceTool::new(code_manip_ctx.clone()))
+            .tool(CodeOverrideMethodTool::new(code_manip_ctx.clone()))
+            // Semantic Search Tools (8)
+            .tool(SearchSemanticTool::new(semantic_ctx.clone()))
+            .tool(SearchByPatternTool::new(semantic_ctx.clone()))
+            .tool(SearchBySignatureTool::new(semantic_ctx.clone()))
+            .tool(SearchByComplexityTool::new(semantic_ctx.clone()))
+            .tool(SearchSimilarCodeTool::new(semantic_ctx.clone()))
+            .tool(SearchByAnnotationTool::new(semantic_ctx.clone()))
+            .tool(SearchUnusedCodeTool::new(semantic_ctx.clone()))
+            .tool(SearchDuplicatesTool::new(semantic_ctx.clone()))
+            // Dependency Analysis Tools (10)
+            .tool(DepsGetDependenciesTool::new(deps_ctx.clone()))
+            .tool(DepsFindPathTool::new(deps_ctx.clone()))
+            .tool(DepsFindCyclesTool::new(deps_ctx.clone()))
+            .tool(DepsImpactAnalysisTool::new(deps_ctx.clone()))
+            .tool(DepsFindRootsTool::new(deps_ctx.clone()))
+            .tool(DepsFindLeavesTool::new(deps_ctx.clone()))
+            .tool(DepsFindHubsTool::new(deps_ctx.clone()))
+            .tool(DepsGetLayersTool::new(deps_ctx.clone()))
+            .tool(DepsCheckConstraintsTool::new(deps_ctx.clone()))
+            .tool(DepsGenerateGraphTool::new(deps_ctx.clone()))
+            // Code Quality Tools (8)
+            .tool(QualityAnalyzeComplexityTool::new(quality_ctx.clone()))
+            .tool(QualityFindCodeSmellsTool::new(quality_ctx.clone()))
+            .tool(QualityCheckNamingTool::new(quality_ctx.clone()))
+            .tool(QualityAnalyzeCouplingTool::new(quality_ctx.clone()))
+            .tool(QualityAnalyzeCohesionTool::new(quality_ctx.clone()))
+            .tool(QualityFindAntipatternsTool::new(quality_ctx.clone()))
+            .tool(QualitySuggestRefactoringsTool::new(quality_ctx.clone()))
+            .tool(QualityCalculateMetricsTool::new(quality_ctx.clone()))
+            // Version Control Tools (10)
+            .tool(VersionGetHistoryTool::new(version_ctx.clone()))
+            .tool(VersionCompareTool::new(version_ctx.clone()))
+            .tool(VersionRestoreTool::new(version_ctx.clone()))
+            .tool(VersionCreateSnapshotTool::new(version_ctx.clone()))
+            .tool(VersionListSnapshotsTool::new(version_ctx.clone()))
+            .tool(VersionRestoreSnapshotTool::new(version_ctx.clone()))
+            .tool(VersionDiffSnapshotsTool::new(version_ctx.clone()))
+            .tool(VersionBlameTool::new(version_ctx.clone()))
+            .tool(VersionGetChangelogTool::new(version_ctx.clone()))
+            .tool(VersionTagTool::new(version_ctx.clone()))
+            // Cognitive Memory Tools (12)
+            .tool(MemoryFindSimilarEpisodesTool::new(memory_ctx.clone()))
+            .tool(MemoryRecordEpisodeTool::new(memory_ctx.clone()))
+            .tool(MemoryGetEpisodeTool::new(memory_ctx.clone()))
+            .tool(MemoryExtractPatternsTool::new(memory_ctx.clone()))
+            .tool(MemoryApplyPatternTool::new(memory_ctx.clone()))
+            .tool(MemorySearchEpisodesTool::new(memory_ctx.clone()))
+            .tool(MemoryGetStatisticsTool::new(memory_ctx.clone()))
+            .tool(MemoryConsolidateTool::new(memory_ctx.clone()))
+            .tool(MemoryExportKnowledgeTool::new(memory_ctx.clone()))
+            .tool(MemoryImportKnowledgeTool::new(memory_ctx.clone()))
+            .tool(MemoryGetRecommendationsTool::new(memory_ctx.clone()))
+            .tool(MemoryLearnFromFeedbackTool::new(memory_ctx.clone()))
+            // Multi-Agent Coordination Tools (10)
+            .tool(SessionCreateTool::new(agent_ctx.clone()))
+            .tool(SessionUpdateTool::new(agent_ctx.clone()))
+            .tool(SessionMergeTool::new(agent_ctx.clone()))
+            .tool(SessionAbandonTool::new(agent_ctx.clone()))
+            .tool(LockAcquireTool::new(agent_ctx.clone()))
+            .tool(LockReleaseTool::new(agent_ctx.clone()))
+            .tool(LockListTool::new(agent_ctx.clone()))
+            .tool(AgentRegisterTool::new(agent_ctx.clone()))
+            .tool(AgentSendMessageTool::new(agent_ctx.clone()))
+            .tool(AgentGetMessagesTool::new(agent_ctx.clone()))
+            // Materialization Tools (8)
+            .tool(FlushPreviewTool::new(mat_ctx.clone()))
+            .tool(FlushExecuteTool::new(mat_ctx.clone()))
+            .tool(FlushSelectiveTool::new(mat_ctx.clone()))
+            .tool(SyncFromDiskTool::new(mat_ctx.clone()))
+            .tool(SyncStatusTool::new(mat_ctx.clone()))
+            .tool(SyncResolveConflictTool::new(mat_ctx.clone()))
+            .tool(WatchStartTool::new(mat_ctx.clone()))
+            .tool(WatchStopTool::new(mat_ctx.clone()))
+            // Testing & Validation Tools (10)
+            .tool(TestGenerateTool::new(test_ctx.clone()))
+            .tool(TestValidateTool::new(test_ctx.clone()))
+            .tool(TestFindMissingTool::new(test_ctx.clone()))
+            .tool(TestAnalyzeCoverageTool::new(test_ctx.clone()))
+            .tool(TestRunInMemoryTool::new(test_ctx.clone()))
+            .tool(ValidateSyntaxTool::new(test_ctx.clone()))
+            .tool(ValidateSemanticsTool::new(test_ctx.clone()))
+            .tool(ValidateContractsTool::new(test_ctx.clone()))
+            .tool(ValidateDependenciesTool::new(test_ctx.clone()))
+            .tool(ValidateStyleTool::new(test_ctx.clone()))
+            // Documentation Tools (8)
+            .tool(DocGenerateTool::new(doc_ctx.clone()))
+            .tool(DocUpdateTool::new(doc_ctx.clone()))
+            .tool(DocExtractTool::new(doc_ctx.clone()))
+            .tool(DocFindUndocumentedTool::new(doc_ctx.clone()))
+            .tool(DocCheckConsistencyTool::new(doc_ctx.clone()))
+            .tool(DocLinkToCodeTool::new(doc_ctx.clone()))
+            .tool(DocGenerateReadmeTool::new(doc_ctx.clone()))
+            .tool(DocGenerateChangelogTool::new(doc_ctx.clone()))
+            // Build & Execution Tools (8)
+            .tool(BuildTriggerTool::new(build_ctx.clone()))
+            .tool(BuildConfigureTool::new(build_ctx.clone()))
+            .tool(RunExecuteTool::new(build_ctx.clone()))
+            .tool(RunScriptTool::new(build_ctx.clone()))
+            .tool(TestExecuteTool::new(build_ctx.clone()))
+            .tool(LintRunTool::new(build_ctx.clone()))
+            .tool(FormatCodeTool::new(build_ctx.clone()))
+            .tool(PackagePublishTool::new(build_ctx.clone()))
+            // Monitoring & Analytics Tools (10)
+            .tool(MonitorHealthTool::new(monitor_ctx.clone()))
+            .tool(MonitorPerformanceTool::new(monitor_ctx.clone()))
+            .tool(AnalyticsCodeMetricsTool::new(monitor_ctx.clone()))
+            .tool(AnalyticsAgentActivityTool::new(monitor_ctx.clone()))
+            .tool(AnalyticsErrorAnalysisTool::new(monitor_ctx.clone()))
+            .tool(AnalyticsProductivityTool::new(monitor_ctx.clone()))
+            .tool(AnalyticsQualityTrendsTool::new(monitor_ctx.clone()))
+            .tool(ExportMetricsTool::new(monitor_ctx.clone()))
+            .tool(AlertConfigureTool::new(monitor_ctx.clone()))
+            .tool(ReportGenerateTool::new(monitor_ctx.clone()))
+            // Note: Middleware support may be added in future versions
+            .build();
+
+        info!("Registered {} tools", 149); // Total: 8+12+10+15+8+10+8+10+12+10+8+10+8+8+8+10 = 149
+
+        Ok(server)
+    }
+
+    /// Serves the MCP server over stdio (standard input/output)
+    ///
+    /// This is the primary transport for CLI tools and process spawning
+    pub async fn serve_stdio(self) -> Result<()> {
+        info!("Starting Cortex MCP Server on stdio");
+        let mut transport = StdioTransport::new();
+
+        // Server loop: read requests and send responses
+        loop {
+            match transport.recv().await {
+                Some(request) => {
+                    let response = self.server.handle_request(request).await;
+                    if let Err(e) = transport.send(response).await {
+                        warn!("Failed to send response: {}", e);
+                        break;
+                    }
+                }
+                None => {
+                    info!("Transport closed, shutting down");
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Serves the MCP server over HTTP with SSE
+    ///
+    /// This is useful for web-based integrations
+    pub async fn serve_http(self, _bind_addr: &str) -> Result<()> {
+        #[cfg(feature = "http")]
+        {
+            info!("Starting Cortex MCP Server on HTTP: {}", _bind_addr);
+            let mut transport = mcp_server::transport::HttpTransport::new(_bind_addr).await?;
+
+            // Server loop: read requests and send responses
+            loop {
+                match transport.recv().await {
+                    Some(request) => {
+                        let response = self.server.handle_request(request).await;
+                        if let Err(e) = transport.send(response).await {
+                            warn!("Failed to send response: {}", e);
+                            break;
+                        }
+                    }
+                    None => {
+                        info!("Transport closed, shutting down");
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        #[cfg(not(feature = "http"))]
+        {
+            warn!("HTTP transport not enabled. Compile with --features http");
+            Err(anyhow::anyhow!("HTTP transport not available"))
+        }
+    }
+
+    /// Get a reference to the underlying MCP server
+    pub fn server(&self) -> &mcp_server::McpServer {
+        &self.server
+    }
+}
+
+/// Builder for creating a Cortex MCP server with custom options
+pub struct CortexMcpServerBuilder {
+    config: Option<GlobalConfig>,
+    storage: Option<Arc<ConnectionManager>>,
+}
+
+impl CortexMcpServerBuilder {
+    pub fn new() -> Self {
+        Self {
+            config: None,
+            storage: None,
+        }
+    }
+
+    pub fn config(mut self, config: GlobalConfig) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn storage(mut self, storage: Arc<ConnectionManager>) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
+    pub async fn build(self) -> Result<CortexMcpServer> {
+        if let Some(storage) = self.storage {
+            let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+            let server = CortexMcpServer::build_server(storage, vfs).await?;
+            Ok(CortexMcpServer { server })
+        } else if let Some(config) = self.config {
+            CortexMcpServer::with_config(config).await
+        } else {
+            CortexMcpServer::new().await
+        }
+    }
+}
+
+impl Default for CortexMcpServerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore] // Requires database setup
+    async fn test_server_creation() {
+        let result = CortexMcpServer::new().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database setup
+    async fn test_builder_pattern() {
+        let builder = CortexMcpServerBuilder::new();
+        let result = builder.build().await;
+        assert!(result.is_ok());
+    }
+}

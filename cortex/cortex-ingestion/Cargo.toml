@@ -1,0 +1,72 @@
+[package]
+name = "cortex-ingestion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core
+cortex-core = { path = "../cortex-core" }
+cortex-storage = { path = "../cortex-storage" }
+cortex-vfs = { path = "../cortex-vfs" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9.33"
+toml = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# File handling
+ignore = { workspace = true }
+blake3 = { workspace = true }
+
+# Text processing
+regex = { workspace = true }
+unicode-segmentation = { workspace = true }
+
+# Document processing
+pdf-extract = "0.10.0"
+lopdf = "0.38.0"
+pulldown-cmark = { version = "0.13.0", default-features = false }
+html2text = "0.15.5"
+scraper = "0.24.0"
+csv = "1.4.0"
+
+# Language detection
+whatlang = "0.18.0"
+
+# Tree-sitter for code parsing
+tree-sitter = "0.25.10"
+tree-sitter-rust = "0.24.0"
+tree-sitter-python = "0.25.0"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-go = "0.25.0"
+tree-sitter-java = "0.23.5"
+
+# Utilities
+rayon = { workspace = true }
+mime_guess = "2.0.5"
+encoding_rs = "0.8.35"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }

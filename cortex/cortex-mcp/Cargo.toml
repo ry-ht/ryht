@@ -1,0 +1,52 @@
+[package]
+name = "cortex-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core
+cortex-core = { path = "../cortex-core" }
+cortex-storage = { path = "../cortex-storage" }
+cortex-vfs = { path = "../cortex-vfs" }
+cortex-memory = { path = "../cortex-memory" }
+
+# MCP Server Framework
+mcp-server = { path = "../../crates/mcp-server", features = ["http"] }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# HTTP and networking
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = "1.0.4"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+clap = { version = "4.5", features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3.23"
+
+[[bin]]
+name = "cortex-mcp"
+path = "src/bin/main.rs"

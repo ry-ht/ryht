@@ -1,0 +1,91 @@
+# Cortex Global Configuration Example
+#
+# This file demonstrates all available configuration options for Cortex.
+# Copy this file to ~/.ryht/cortex/config.toml and customize as needed.
+
+[general]
+# Configuration version (used for migration support)
+version = "0.1.0"
+
+# Log level: trace, debug, info, warn, error
+log_level = "info"
+
+[database]
+# Database mode: local, remote, or hybrid
+# - local: Embedded SurrealDB instance
+# - remote: Connect to remote SurrealDB instance(s)
+# - hybrid: Local cache with remote sync
+mode = "local"
+
+# Local binding address for embedded database (used in local/hybrid mode)
+local_bind = "127.0.0.1:8000"
+
+# Remote database URLs (used in remote/hybrid mode)
+# Example: ["ws://localhost:8001", "ws://backup.example.com:8000"]
+remote_urls = []
+
+# Database credentials
+username = "root"
+password = "root"
+
+# SurrealDB namespace and database
+namespace = "cortex"
+database = "knowledge"
+
+[pool]
+# Minimum number of connections to maintain in the pool
+min_connections = 2
+
+# Maximum number of connections in the pool
+max_connections = 10
+
+# Connection timeout in milliseconds
+connection_timeout_ms = 5000
+
+# Idle connection timeout in milliseconds (5 minutes)
+idle_timeout_ms = 300000
+
+[cache]
+# In-memory cache size in megabytes
+memory_size_mb = 512
+
+# Default TTL for cache entries in seconds (5 minutes)
+ttl_seconds = 300
+
+# Optional Redis URL for distributed caching
+# Example: "redis://localhost:6379"
+redis_url = ""
+
+[vfs]
+# Maximum file size in megabytes that can be stored in VFS
+max_file_size_mb = 100
+
+# Enable automatic flushing of VFS changes to disk
+auto_flush = false
+
+# Interval between automatic flushes in seconds (if auto_flush is true)
+flush_interval_seconds = 60
+
+[ingestion]
+# Number of parallel workers for ingestion pipeline
+parallel_workers = 4
+
+# Chunk size for batch processing
+chunk_size = 1000
+
+# Enable automatic embedding generation during ingestion
+generate_embeddings = true
+
+# Embedding model to use
+# Supported: "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"
+embedding_model = "text-embedding-3-small"
+
+[mcp]
+# MCP server binding address
+server_bind = "127.0.0.1:3000"
+
+# Enable CORS for web-based clients
+cors_enabled = true
+
+# Maximum request size in megabytes
+max_request_size_mb = 10

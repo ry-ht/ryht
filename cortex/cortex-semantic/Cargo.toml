@@ -1,0 +1,84 @@
+[package]
+name = "cortex-semantic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core dependencies
+cortex-core = { path = "../cortex-core" }
+cortex-storage = { path = "../cortex-storage" }
+cortex-memory = { path = "../cortex-memory" }
+cortex-ingestion = { path = "../cortex-ingestion" }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# HTTP client for API calls
+reqwest = { workspace = true }
+
+# ONNX Runtime for local embeddings
+ort = { workspace = true }
+
+# HNSW index
+hnsw = "0.11.0"
+space = "0.19.0"
+rand_chacha = "0.9.0"
+
+# Linear algebra
+ndarray = "0.16.1"
+
+# Parallel processing
+rayon = { workspace = true }
+
+# Caching
+moka = { version = "0.12.11", features = ["future"] }
+
+# Utilities
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Text processing
+regex = { workspace = true }
+unicode-segmentation = { workspace = true }
+
+# Database
+surrealdb = { workspace = true }
+
+# Configuration
+toml = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+mockall = { workspace = true }
+proptest = { workspace = true }
+criterion = "0.7.0"
+approx = "0.5.1"
+
+[[bench]]
+name = "embedding_bench"
+harness = false
+
+[[bench]]
+name = "search_bench"
+harness = false

@@ -95,6 +95,7 @@ pub struct HttpTransport {
 }
 
 #[cfg(feature = "http")]
+#[derive(Clone)]
 struct AppState {
     request_tx: mpsc::UnboundedSender<JsonRpcRequest>,
     notification_tx: Arc<tokio::sync::broadcast::Sender<JsonRpcResponse>>,
@@ -185,7 +186,7 @@ impl HttpTransport {
 
 #[cfg(feature = "http")]
 async fn handle_mcp_request(
-    State(state): State<AppState>,
+    state: State<AppState>,
     Json(request): Json<JsonRpcRequest>,
 ) -> Response {
     // Send request to transport
@@ -215,9 +216,9 @@ async fn handle_mcp_request(
 
 #[cfg(feature = "http")]
 async fn handle_sse(
-    State(state): State<AppState>,
+    state: State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let mut rx = state.notification_tx.subscribe();
+    let rx = state.notification_tx.subscribe();
 
     let stream = stream::unfold(rx, |mut rx| async move {
         match rx.recv().await {
