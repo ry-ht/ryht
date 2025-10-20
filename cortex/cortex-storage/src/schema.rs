@@ -12,7 +12,6 @@ DEFINE TABLE relations SCHEMAFULL;
 DEFINE TABLE episodes SCHEMAFULL;
 
 -- Projects table
-DEFINE FIELD id ON projects TYPE record<projects>;
 DEFINE FIELD name ON projects TYPE string;
 DEFINE FIELD path ON projects TYPE string;
 DEFINE FIELD description ON projects TYPE option<string>;
@@ -24,7 +23,6 @@ DEFINE INDEX projects_name ON projects FIELDS name UNIQUE;
 DEFINE INDEX projects_path ON projects FIELDS path UNIQUE;
 
 -- Documents table
-DEFINE FIELD id ON documents TYPE record<documents>;
 DEFINE FIELD project_id ON documents TYPE record<projects>;
 DEFINE FIELD path ON documents TYPE string;
 DEFINE FIELD content_hash ON documents TYPE string;
@@ -38,7 +36,6 @@ DEFINE INDEX documents_project ON documents FIELDS project_id;
 DEFINE INDEX documents_hash ON documents FIELDS content_hash;
 
 -- Chunks table
-DEFINE FIELD id ON chunks TYPE record<chunks>;
 DEFINE FIELD document_id ON chunks TYPE record<documents>;
 DEFINE FIELD content ON chunks TYPE string;
 DEFINE FIELD start_offset ON chunks TYPE int;
@@ -49,7 +46,6 @@ DEFINE FIELD metadata ON chunks TYPE object;
 DEFINE INDEX chunks_document ON chunks FIELDS document_id;
 
 -- Embeddings table
-DEFINE FIELD id ON embeddings TYPE record<embeddings>;
 DEFINE FIELD entity_id ON embeddings TYPE string;
 DEFINE FIELD entity_type ON embeddings TYPE string;
 DEFINE FIELD vector ON embeddings TYPE array;
@@ -59,7 +55,6 @@ DEFINE FIELD created_at ON embeddings TYPE datetime;
 DEFINE INDEX embeddings_entity ON embeddings FIELDS entity_id, entity_type;
 
 -- Symbols table
-DEFINE FIELD id ON symbols TYPE record<symbols>;
 DEFINE FIELD document_id ON symbols TYPE record<documents>;
 DEFINE FIELD name ON symbols TYPE string;
 DEFINE FIELD kind ON symbols TYPE string;
@@ -72,7 +67,6 @@ DEFINE INDEX symbols_document ON symbols FIELDS document_id;
 DEFINE INDEX symbols_name ON symbols FIELDS name;
 
 -- Relations table
-DEFINE FIELD id ON relations TYPE record<relations>;
 DEFINE FIELD source_id ON relations TYPE string;
 DEFINE FIELD target_id ON relations TYPE string;
 DEFINE FIELD relation_type ON relations TYPE string;
@@ -83,7 +77,6 @@ DEFINE INDEX relations_source ON relations FIELDS source_id;
 DEFINE INDEX relations_target ON relations FIELDS target_id;
 
 -- Episodes table
-DEFINE FIELD id ON episodes TYPE record<episodes>;
 DEFINE FIELD project_id ON episodes TYPE record<projects>;
 DEFINE FIELD session_id ON episodes TYPE option<string>;
 DEFINE FIELD content ON episodes TYPE string;

@@ -375,20 +375,17 @@ impl MemoryConsolidator {
 mod tests {
     use super::*;
     use cortex_core::id::CortexId;
-    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, PoolConfig, ConnectionMode, Credentials};
+    use cortex_storage::connection::ConnectionConfig;
+    use cortex_storage::pool::ConnectionPool;
 
     async fn create_test_consolidator() -> MemoryConsolidator {
         let config = ConnectionConfig::memory();
-        let pool_config = PoolConfig::default();
-        let manager = Arc::new(
-            ConnectionManager::new(config)
-                .await
-                .expect("Failed to create connection manager"),
-        );
+        let pool = Arc::new(ConnectionPool::new(config));
+        pool.initialize().await.unwrap();
 
-        let episodic = Arc::new(EpisodicMemorySystem::new(manager.clone()));
-        let semantic = Arc::new(SemanticMemorySystem::new(manager.clone()));
-        let procedural = Arc::new(ProceduralMemorySystem::new(manager));
+        let episodic = Arc::new(EpisodicMemorySystem::new(pool.clone()).await.unwrap());
+        let semantic = Arc::new(SemanticMemorySystem::new(pool.clone()).await.unwrap());
+        let procedural = Arc::new(ProceduralMemorySystem::new(pool).await.unwrap());
         let working = Arc::new(WorkingMemorySystem::new(1000, 10 * 1024 * 1024));
 
         MemoryConsolidator::new(episodic, semantic, procedural, working)

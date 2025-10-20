@@ -1,6 +1,6 @@
 # ry.ht
 
-> A cyberpunk cognitive infrastructure: Multi-agent orchestration meets neural memory architecture
+> A cognitive infrastructure: Multi-agent orchestration meets neural memory architecture
 
 ## 🔷 Overview
 

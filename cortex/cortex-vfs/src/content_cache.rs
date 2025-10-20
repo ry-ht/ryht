@@ -168,8 +168,18 @@ impl ContentCache {
 
         // Evict until we have enough space
         while current_size + needed_size > self.max_size {
-            if let Some(hash) = self.lru_queue.write().pop_front() {
-                self.remove(&hash);
+            // Pop from LRU queue
+            let hash = {
+                let mut queue = self.lru_queue.write();
+                queue.pop_front()
+            };
+
+            if let Some(hash) = hash {
+                // Remove from entries and update size
+                if let Some((_, entry)) = self.entries.remove(&hash) {
+                    self.size_bytes.fetch_sub(entry.size, Ordering::Relaxed);
+                    self.stats.record_eviction();
+                }
                 current_size = self.size_bytes.load(Ordering::Relaxed);
             } else {
                 // Nothing left to evict
@@ -346,14 +356,14 @@ mod tests {
 
     #[test]
     fn test_cache_eviction() {
-        let cache = ContentCache::new(20); // Very small cache
+        let cache = ContentCache::new(10); // Very small cache - fits 2 entries of 5 bytes
 
         // Fill cache
-        cache.put("key1".to_string(), vec![1, 2, 3, 4, 5]);
-        cache.put("key2".to_string(), vec![6, 7, 8, 9, 10]);
+        cache.put("key1".to_string(), vec![1, 2, 3, 4, 5]); // 5 bytes
+        cache.put("key2".to_string(), vec![6, 7, 8, 9, 10]); // 5 bytes, total = 10
 
-        // This should evict key1
-        cache.put("key3".to_string(), vec![11, 12, 13, 14, 15]);
+        // This should evict key1 (10 + 5 > 10, need to evict)
+        cache.put("key3".to_string(), vec![11, 12, 13, 14, 15]); // 5 bytes
 
         // key1 should be evicted
         assert!(cache.get("key1").is_none());
@@ -365,16 +375,16 @@ mod tests {
 
     #[test]
     fn test_lru_order() {
-        let cache = ContentCache::new(30);
+        let cache = ContentCache::new(20); // Fits 2 entries of 10 bytes
 
-        cache.put("key1".to_string(), vec![1; 10]);
-        cache.put("key2".to_string(), vec![2; 10]);
+        cache.put("key1".to_string(), vec![1; 10]); // 10 bytes
+        cache.put("key2".to_string(), vec![2; 10]); // 10 bytes, total = 20
 
         // Access key1 to make it more recent
         cache.get("key1");
 
         // Add key3, should evict key2 (least recently used)
-        cache.put("key3".to_string(), vec![3; 10]);
+        cache.put("key3".to_string(), vec![3; 10]); // 10 bytes
 
         assert!(cache.get("key1").is_some());
         assert!(cache.get("key2").is_none()); // Evicted

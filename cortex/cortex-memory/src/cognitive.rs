@@ -216,16 +216,37 @@ impl CognitiveManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::{DatabaseConfig, PoolConfig};
+    use cortex_storage::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy, LoadBalancingStrategy};
+    use std::time::Duration;
 
     async fn create_test_manager() -> CognitiveManager {
-        let config = ConnectionConfig::memory();
-        let pool_config = PoolConfig::default();
-        let manager = Arc::new(
-            ConnectionManager::new(config)
-                .await
-                .expect("Failed to create connection manager"),
-        );
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: "memory".to_string(),
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 10,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy {
+                    max_retries: 3,
+                    initial_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(10),
+                    backoff_multiplier: 2.0,
+                },
+                warm_connections: false,
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
+
+        let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
         CognitiveManager::new(manager)
     }
 

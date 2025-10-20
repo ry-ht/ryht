@@ -500,8 +500,8 @@ mod tests {
         let path = Path::new("/test/dir/file.rs");
         let metadata = extract_path_metadata(path);
 
-        assert_eq!(metadata.get("extension"), Some(&"rs".to_string()));
-        assert_eq!(metadata.get("filename"), Some(&"file.rs".to_string()));
+        assert_eq!(metadata.get("extension"), Some(&serde_json::Value::String("rs".to_string())));
+        assert_eq!(metadata.get("filename"), Some(&serde_json::Value::String("file.rs".to_string())));
     }
 
     #[test]
@@ -509,7 +509,7 @@ mod tests {
         let content = "Hello world\nSecond line";
         let metadata = extract_content_metadata(content);
 
-        assert_eq!(metadata.get("lines"), Some(&"2".to_string()));
-        assert_eq!(metadata.get("words"), Some(&"3".to_string()));
+        assert_eq!(metadata.get("lines"), Some(&serde_json::Value::Number(2.into())));
+        assert_eq!(metadata.get("words"), Some(&serde_json::Value::Number(4.into()))); // "Hello", "world", "Second", "line"
     }
 }

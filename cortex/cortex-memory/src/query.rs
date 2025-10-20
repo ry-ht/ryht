@@ -344,17 +344,15 @@ pub struct QueryResults {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, PoolConfig, ConnectionMode, Credentials};
+    use cortex_storage::connection::ConnectionConfig;
+    use cortex_storage::pool::ConnectionPool;
 
     async fn create_test_query_engine() -> CrossMemoryQuery {
         let config = ConnectionConfig::memory();
-        let pool_config = PoolConfig::default();
-        let manager = Arc::new(
-            ConnectionManager::new(config)
-                .await
-                .expect("Failed to create connection manager"),
-        );
-        let cognitive = Arc::new(CognitiveManager::new(manager));
+        let pool = Arc::new(ConnectionPool::new(config));
+        pool.initialize().await.unwrap();
+
+        let cognitive = Arc::new(CognitiveManager::new(pool).await.unwrap());
         CrossMemoryQuery::new(cognitive)
     }
 

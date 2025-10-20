@@ -166,3 +166,8 @@ harness = true
 name = "test_surrealdb_integration"
 path = "tests/test_surrealdb_integration.rs"
 harness = true
+
+[[test]]
+name = "reality_check_e2e"
+path = "tests/reality_check_e2e.rs"
+harness = true

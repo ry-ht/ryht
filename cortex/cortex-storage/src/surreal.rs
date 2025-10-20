@@ -7,6 +7,7 @@ use cortex_core::traits::Storage;
 use cortex_core::types::*;
 use async_trait::async_trait;
 use std::sync::Arc;
+use surrealdb::sql::{Datetime, Value, Object};
 
 /// Storage implementation using SurrealDB
 pub struct SurrealStorage {
@@ -32,20 +33,35 @@ impl Storage for SurrealStorage {
     async fn store_project(&self, project: &Project) -> Result<()> {
         let db = self.pool.get().await?;
 
-        // Create a map without the id field to avoid SurrealDB conflicts
-        let mut content = serde_json::to_value(project).map_err(|e| {
-            CortexError::storage(format!("Failed to serialize project: {}", e))
-        })?;
+        // Clone the data to avoid lifetime issues
+        let id = project.id.to_string();
+        let name = project.name.clone();
+        let path = project.path.to_string_lossy().to_string();
+        let description = project.description.clone();
+        let created_at = project.created_at.to_rfc3339();
+        let updated_at = project.updated_at.to_rfc3339();
+        // Convert serde_json::Value to string for SurrealDB
+        let metadata_json = serde_json::to_string(&metadata).unwrap_or_default();
 
-        // Remove the id field from content since we're specifying it in the record locator
-        if let Some(obj) = content.as_object_mut() {
-            obj.remove("id");
-        }
+        // Use INSERT ... ON DUPLICATE KEY UPDATE pattern to upsert
+        let query = format!(r#"
+            CREATE projects:⟨{}⟩ CONTENT {{
+                name: $name,
+                path: $path,
+                description: $description,
+                created_at: <datetime> $created_at,
+                updated_at: <datetime> $updated_at,
+                metadata: $metadata
+            }}
+        "#, id);
 
-        // Use upsert with the cleaned content
-        let _: Option<serde_json::Value> = db
-            .upsert(("projects", project.id.to_string()))
-            .content(content)
+        db.query(query)
+            .bind(("name", name))
+            .bind(("path", path))
+            .bind(("description", description))
+            .bind(("created_at", created_at))
+            .bind(("updated_at", updated_at))
+            .bind(("metadata", metadata))
             .await
             .map_err(|e| CortexError::storage(format!("Failed to store project: {}", e)))?;
 
@@ -55,21 +71,83 @@ impl Storage for SurrealStorage {
     async fn get_project(&self, id: CortexId) -> Result<Option<Project>> {
         let db = self.pool.get().await?;
 
-        let project: Option<Project> = db
-            .select(("projects", id.to_string()))
+        // Use a query to retrieve with proper field conversion
+        let id_str = id.to_string();
+        let query = format!("SELECT name, path, description, created_at, updated_at, metadata FROM projects:⟨{}⟩", id_str);
+
+        let mut response = db
+            .query(query)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to get project: {}", e)))?;
 
-        Ok(project)
+        #[derive(serde::Deserialize)]
+        struct ProjectRow {
+            name: String,
+            path: String,
+            description: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+            metadata: std::collections::HashMap<String, String>,
+        }
+
+        let rows: Vec<ProjectRow> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to extract project: {}", e)))?;
+
+        if let Some(row) = rows.into_iter().next() {
+            Ok(Some(Project {
+                id,
+                name: row.name,
+                path: std::path::PathBuf::from(row.path),
+                description: row.description,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                metadata: row.metadata,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn list_projects(&self) -> Result<Vec<Project>> {
         let db = self.pool.get().await?;
 
-        let projects: Vec<Project> = db
-            .select("projects")
+        // Use a query to retrieve all projects
+        let query = "SELECT name, path, description, created_at, updated_at, metadata, meta::id(id) AS id_str FROM projects";
+
+        let mut response = db
+            .query(query)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to list projects: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct ProjectRow {
+            name: String,
+            path: String,
+            description: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+            metadata: std::collections::HashMap<String, String>,
+            id_str: String,
+        }
+
+        let rows: Vec<ProjectRow> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to extract projects: {}", e)))?;
+
+        let mut projects = Vec::new();
+        for row in rows {
+            let id = CortexId::parse(&row.id_str)
+                .map_err(|e| CortexError::storage(format!("Failed to parse ID: {}", e)))?;
+
+            projects.push(Project {
+                id,
+                name: row.name,
+                path: std::path::PathBuf::from(row.path),
+                description: row.description,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+                metadata: row.metadata,
+            });
+        }
 
         Ok(projects)
     }
@@ -77,8 +155,10 @@ impl Storage for SurrealStorage {
     async fn delete_project(&self, id: CortexId) -> Result<()> {
         let db = self.pool.get().await?;
 
-        let _: Option<Project> = db
-            .delete(("projects", id.to_string()))
+        let id_str = id.to_string();
+        let query = format!("DELETE projects:⟨{}⟩", id_str);
+
+        db.query(query)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to delete project: {}", e)))?;
 
@@ -88,9 +168,21 @@ impl Storage for SurrealStorage {
     async fn store_document(&self, document: &Document) -> Result<()> {
         let db = self.pool.get().await?;
 
+        // Construct the content map manually to ensure proper datetime serialization
+        let content = serde_json::json!({
+            "project_id": format!("projects:{}", document.project_id),
+            "path": document.path,
+            "content_hash": document.content_hash,
+            "size": document.size,
+            "mime_type": document.mime_type,
+            "created_at": Datetime::from(document.created_at),
+            "updated_at": Datetime::from(document.updated_at),
+            "metadata": document.metadata,
+        });
+
         // Use upsert to avoid ID conflicts
-        let _: Option<Document> = db.upsert(("documents", document.id.to_string()))
-            .content(document.clone())
+        let _: Option<serde_json::Value> = db.upsert(("documents", document.id.to_string()))
+            .content(content)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to store document: {}", e)))?;
 
@@ -137,8 +229,17 @@ impl Storage for SurrealStorage {
     async fn store_embedding(&self, embedding: &Embedding) -> Result<()> {
         let db = self.pool.get().await?;
 
-        let _: Option<Embedding> = db.upsert(("embeddings", embedding.id.to_string()))
-            .content(embedding.clone())
+        // Construct the content map manually to ensure proper datetime serialization
+        let content = serde_json::json!({
+            "entity_id": embedding.entity_id.to_string(),
+            "entity_type": embedding.entity_type,
+            "vector": embedding.vector,
+            "model": embedding.model,
+            "created_at": Datetime::from(embedding.created_at),
+        });
+
+        let _: Option<serde_json::Value> = db.upsert(("embeddings", embedding.id.to_string()))
+            .content(content)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to store embedding: {}", e)))?;
 
@@ -163,8 +264,20 @@ impl Storage for SurrealStorage {
     async fn store_episode(&self, episode: &Episode) -> Result<()> {
         let db = self.pool.get().await?;
 
-        let _: Option<Episode> = db.upsert(("episodes", episode.id.to_string()))
-            .content(episode.clone())
+        // Construct the content map manually to ensure proper datetime serialization
+        let content = serde_json::json!({
+            "project_id": format!("projects:{}", episode.project_id),
+            "session_id": episode.session_id,
+            "content": episode.content,
+            "context": episode.context,
+            "importance": episode.importance,
+            "created_at": Datetime::from(episode.created_at),
+            "accessed_count": episode.accessed_count,
+            "last_accessed_at": episode.last_accessed_at.map(Datetime::from),
+        });
+
+        let _: Option<serde_json::Value> = db.upsert(("episodes", episode.id.to_string()))
+            .content(content)
             .await
             .map_err(|e| CortexError::storage(format!("Failed to store episode: {}", e)))?;
 
@@ -240,6 +353,10 @@ mod tests {
 
         // Create
         storage.store_project(&project).await.unwrap();
+
+        // List first to check if it was stored
+        let all_projects = storage.list_projects().await.unwrap();
+        eprintln!("All projects: {:?}", all_projects);
 
         // Read
         let retrieved = storage.get_project(project.id).await.unwrap();

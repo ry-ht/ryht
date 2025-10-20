@@ -516,17 +516,15 @@ impl SemanticMemorySystem {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, PoolConfig, ConnectionMode, Credentials};
+    use cortex_storage::connection::ConnectionConfig;
+    use cortex_storage::pool::ConnectionPool;
 
     async fn create_test_memory() -> SemanticMemorySystem {
         let config = ConnectionConfig::memory();
-        let pool_config = PoolConfig::default();
-        let manager = Arc::new(
-            ConnectionManager::new(config)
-                .await
-                .expect("Failed to create connection manager"),
-        );
-        SemanticMemorySystem::new(manager)
+        let pool = Arc::new(ConnectionPool::new(config));
+        pool.initialize().await.unwrap();
+
+        SemanticMemorySystem::new(pool).await.unwrap()
     }
 
     #[tokio::test]
