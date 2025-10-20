@@ -1,0 +1,54 @@
+ryht/
+│
+├── 📱 axon/                    Multi-Agent Orchestration (Tauri App)
+│   ├── src/                    React + TypeScript frontend
+│   │   ├── components/         UI components
+│   │   ├── stores/             State management
+│   │   └── App.tsx            Main application
+│   ├── src-tauri/              Rust backend
+│   │   ├── src/
+│   │   │   ├── main.rs        GUI mode
+│   │   │   └── web_main.rs    Web server mode
+│   │   └── Cargo.toml         Dependencies
+│   ├── package.json
+│   └── README.md
+│
+├── 🧠 cortex/                  Cognitive Memory System
+│   ├── src/
+│   │   ├── main.rs            Entry point
+│   │   ├── memory.rs          Memory structures
+│   │   ├── storage.rs         SQLite persistence
+│   │   ├── indexing.rs        Tantivy search
+│   │   └── retrieval.rs       Query strategies
+│   ├── Cargo.toml
+│   └── migrations/             Database migrations (TODO)
+│
+├── 📦 crates/                  Shared Libraries
+│   ├── common/                 Common utilities
+│   │   └── src/
+│   │       ├── config.rs      Configuration
+│   │       ├── error.rs       Error types
+│   │       ├── utils.rs       Helper functions
+│   │       └── lib.rs
+│   └── types/                  Shared types
+│       └── src/
+│           └── lib.rs         Type definitions
+│
+├── 📚 docs/                    Documentation
+│   └── spec/                   Specifications
+│       └── cognitive-memory-system/
+│
+├── 🧪 experiments/             Experimental projects (gitignored)
+│   ├── opcode/                 Original (now axon)
+│   └── .../                    Various POCs
+│
+├── 📄 Configuration Files
+│   ├── Cargo.toml              Workspace config
+│   ├── .gitignore              Git ignore rules
+│   └── LICENSE                 MIT/Apache-2.0
+│
+└── 📖 Documentation
+    ├── README.md               Project overview
+    ├── ARCHITECTURE.md         System design
+    ├── QUICKSTART.md           Getting started
+    └── PROJECT_STATUS.md       Current status

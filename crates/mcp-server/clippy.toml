@@ -1,0 +1,63 @@
+# Clippy configuration for MCP Server
+# https://doc.rust-lang.org/clippy/
+
+# Cognitive complexity threshold
+# Functions with higher complexity will trigger warnings
+cognitive-complexity-threshold = 30
+
+# Documentation
+# Require documentation for public items
+# (This is enforced in the CI pipeline with -D warnings)
+
+# Type complexity
+# Maximum complexity for types before triggering warnings
+type-complexity-threshold = 250
+
+# Too many arguments
+# Maximum number of function arguments before warning
+too-many-arguments-threshold = 8
+
+# Too many lines
+# Maximum lines in a function before warning
+too-many-lines-threshold = 150
+
+# Literal representation
+# Enforce consistent literal separators
+literal-representation-threshold = 1000
+
+# Single char pattern
+# Maximum length for single-char-pattern lint
+single-char-binding-names-threshold = 4
+
+# Allowed by default pedantic lints
+# These are reasonable for production code
+msrv = "1.70"
+
+# Enum variant names
+# Allow variants like `Error` in `ErrorKind::Error`
+enum-variant-name-threshold = 3
+
+# Blacklisted names
+# Variable names that should be avoided
+disallowed-names = ["foo", "bar", "baz", "TODO", "FIXME"]
+
+# Avoid breaking API changes
+avoid-breaking-exported-api = true
+
+# Maximum number of single-char bindings
+max-fn-params-bools = 3
+
+# Enforce minimum trait bounds
+# Warn about functions with too few trait bounds
+allow-mixed-uninlined-format-args = true
+
+# Suppress specific lints for the codebase
+# Uncomment and adjust as needed based on team preferences
+
+# Allow certain patterns common in async code
+# allow-expect-in-tests = true
+# allow-unwrap-in-tests = true
+
+# Allow module inception (mod foo { mod foo {} })
+# This is common in Rust projects
+# allow-module-inception = true
