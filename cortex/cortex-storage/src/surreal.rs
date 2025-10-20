@@ -40,6 +40,7 @@ impl Storage for SurrealStorage {
         let description = project.description.clone();
         let created_at = project.created_at.to_rfc3339();
         let updated_at = project.updated_at.to_rfc3339();
+        let metadata = project.metadata.clone();
         // Convert serde_json::Value to string for SurrealDB
         let metadata_json = serde_json::to_string(&metadata).unwrap_or_default();
 
