@@ -106,7 +106,7 @@ pub fn confirm(msg: impl Into<String>) -> Result<bool> {
 }
 
 /// Prompt user for input
-pub fn prompt<T: Clone + std::str::FromStr>(msg: impl Into<String>) -> Result<T>
+pub fn prompt<T: Clone + std::str::FromStr + Display>(msg: impl Into<String>) -> Result<T>
 where
     <T as std::str::FromStr>::Err: Display,
 {
@@ -132,7 +132,7 @@ where
 }
 
 /// Prompt user to select from a list
-pub fn select(msg: impl Into<String>, items: &[impl ToString]) -> Result<usize> {
+pub fn select(msg: impl Into<String>, items: &[impl ToString + Display]) -> Result<usize> {
     Select::new()
         .with_prompt(msg)
         .items(items)
@@ -157,7 +157,7 @@ impl TableBuilder {
     pub fn header<I, S>(mut self, headers: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<String>,
+        S: Into<String> + Display,
     {
         let row: Vec<Cell> = headers
             .into_iter()
@@ -170,7 +170,7 @@ impl TableBuilder {
     pub fn row<I, S>(mut self, cells: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<String>,
+        S: Into<String> + Display,
     {
         let row: Vec<Cell> = cells.into_iter().map(|c| Cell::new(c)).collect();
         self.table.add_row(row);

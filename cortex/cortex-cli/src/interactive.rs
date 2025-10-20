@@ -69,7 +69,7 @@ impl InteractiveSession {
     }
 
     /// Ask for text input
-    pub fn input<T: Clone + std::str::FromStr>(&self, prompt: &str) -> Result<T>
+    pub fn input<T: Clone + std::str::FromStr + Display>(&self, prompt: &str) -> Result<T>
     where
         <T as std::str::FromStr>::Err: Display,
     {
@@ -96,7 +96,7 @@ impl InteractiveSession {
     }
 
     /// Select from a list of items
-    pub fn select(&self, prompt: &str, items: &[impl ToString]) -> Result<usize> {
+    pub fn select(&self, prompt: &str, items: &[impl ToString + Display]) -> Result<usize> {
         Select::with_theme(&self.theme)
             .with_prompt(prompt)
             .items(items)
@@ -106,7 +106,7 @@ impl InteractiveSession {
     }
 
     /// Select multiple items from a list
-    pub fn multi_select(&self, prompt: &str, items: &[impl ToString]) -> Result<Vec<usize>> {
+    pub fn multi_select(&self, prompt: &str, items: &[impl ToString + Display]) -> Result<Vec<usize>> {
         MultiSelect::with_theme(&self.theme)
             .with_prompt(prompt)
             .items(items)
@@ -167,13 +167,14 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
     // Select workspace type
     let workspace_type_idx = session.select(
         "Workspace type",
-        &["Agent (for AI agents)", "Project (for code)", "Shared (multi-user)"],
+        &["Code (for source code)", "Documentation", "Mixed (code + docs)", "External (readonly)"],
     )?;
     let workspace_type = match workspace_type_idx {
-        0 => cortex_vfs::WorkspaceType::Agent,
-        1 => cortex_vfs::WorkspaceType::Project,
-        2 => cortex_vfs::WorkspaceType::Shared,
-        _ => cortex_vfs::WorkspaceType::Project,
+        0 => cortex_vfs::WorkspaceType::Code,
+        1 => cortex_vfs::WorkspaceType::Documentation,
+        2 => cortex_vfs::WorkspaceType::Mixed,
+        3 => cortex_vfs::WorkspaceType::External,
+        _ => cortex_vfs::WorkspaceType::Code,
     };
 
     // Get optional description

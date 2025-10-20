@@ -12,7 +12,7 @@ use cortex_mcp::CortexMcpServer;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
-    Workspace, WorkspaceType,
+    Workspace, WorkspaceType, SourceType,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -57,12 +57,14 @@ pub async fn init_workspace(
         id: workspace_id,
         name: name.clone(),
         workspace_type,
+        source_type: SourceType::Local,
+        namespace: format!("workspace_{}", workspace_id),
+        source_path: Some(workspace_path.clone()),
+        read_only: false,
+        parent_workspace: None,
+        fork_metadata: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
-        root_path: Some(workspace_path.display().to_string()),
-        metadata: serde_json::json!({
-            "description": format!("Cortex workspace: {}", name),
-        }),
     };
 
     // TODO: Save workspace to database via VFS
@@ -96,10 +98,14 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
         id: workspace_id,
         name: name.clone(),
         workspace_type,
+        source_type: SourceType::Local,
+        namespace: format!("workspace_{}", workspace_id),
+        source_path: None,
+        read_only: false,
+        parent_workspace: None,
+        fork_metadata: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
-        root_path: None,
-        metadata: serde_json::json!({}),
     };
 
     // TODO: Save workspace
@@ -203,27 +209,31 @@ pub async fn ingest_path(
 
     // Import project
     let options = cortex_vfs::ImportOptions {
-        detect_language: true,
-        extract_metadata: true,
-        chunk_files: true,
-        max_file_size: 10 * 1024 * 1024, // 10MB
-        ignore_patterns: vec![
+        read_only: false,
+        create_fork: false,
+        namespace: workspace_name.clone(),
+        include_patterns: vec!["**/*".to_string()],
+        exclude_patterns: vec![
             "**/node_modules/**".to_string(),
             "**/target/**".to_string(),
             "**/.git/**".to_string(),
+            "**/dist/**".to_string(),
+            "**/build/**".to_string(),
         ],
+        max_depth: None,
+        process_code: true,
+        generate_embeddings: false,
     };
 
-    let workspace_id = Uuid::new_v4(); // TODO: Look up actual workspace
-    let report = loader.import_external_project(workspace_id, &path, options).await?;
+    let report = loader.import_project(&path, options).await?;
 
     spinner.finish_and_clear();
 
     output::success("Ingestion complete");
-    output::kv("Files processed", report.files_processed);
     output::kv("Files imported", report.files_imported);
-    output::kv("Total size", format_bytes(report.total_bytes));
-    output::kv("Duration", format!("{:.2}s", report.duration_secs));
+    output::kv("Directories imported", report.directories_imported);
+    output::kv("Total size", format_bytes(report.bytes_imported as u64));
+    output::kv("Duration", format!("{:.2}s", report.duration_ms as f64 / 1000.0));
 
     if !report.errors.is_empty() {
         output::warning(format!("{} errors occurred:", report.errors.len()));
@@ -388,10 +398,14 @@ pub async fn flush_vfs(
     let engine = MaterializationEngine::new(vfs);
 
     let options = FlushOptions {
-        overwrite: false,
-        create_directories: true,
+        preserve_permissions: true,
         preserve_timestamps: true,
-        dry_run: false,
+        create_backup: false,
+        atomic: true,
+        parallel: true,
+        max_workers: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4),
     };
 
     let report = engine.flush(scope, &target_path, options).await?;
@@ -401,8 +415,8 @@ pub async fn flush_vfs(
     output::success("Flush complete");
     output::kv("Files written", report.files_written);
     output::kv("Directories created", report.directories_created);
-    output::kv("Total size", format_bytes(report.total_bytes));
-    output::kv("Duration", format!("{:.2}s", report.duration_secs));
+    output::kv("Total size", format_bytes(report.bytes_written as u64));
+    output::kv("Duration", format!("{:.2}s", report.duration_ms as f64 / 1000.0));
 
     if !report.errors.is_empty() {
         output::warning(format!("{} errors occurred:", report.errors.len()));
@@ -795,29 +809,25 @@ pub async fn db_install() -> Result<()> {
 
 /// Create a storage connection manager from config
 async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>> {
+    use cortex_storage::{PoolConnectionMode, LoadBalancingStrategy};
+
     let db_config = DatabaseConfig {
+        connection_mode: PoolConnectionMode::Local {
+            endpoint: config.database.connection_string.clone(),
+        },
+        credentials: Credentials {
+            username: config.database.username.clone(),
+            password: config.database.password.clone(),
+        },
+        pool_config: PoolConfig {
+            max_connections: config.database.pool_size,
+            ..Default::default()
+        },
         namespace: config.database.namespace.clone(),
         database: config.database.database.clone(),
-        credentials: if let (Some(user), Some(pass)) = (
-            config.database.username.as_ref(),
-            config.database.password.as_ref(),
-        ) {
-            Credentials::UserPassword(user.clone(), pass.clone())
-        } else {
-            Credentials::None
-        },
     };
 
-    let pool_config = PoolConfig {
-        max_connections: config.database.pool_size,
-        ..Default::default()
-    };
-
-    let manager = ConnectionManager::builder()
-        .connection_string(&config.database.connection_string)
-        .database_config(db_config)
-        .pool_config(pool_config)
-        .build()
+    let manager = ConnectionManager::new(db_config)
         .await
         .context("Failed to create storage connection")?;
 

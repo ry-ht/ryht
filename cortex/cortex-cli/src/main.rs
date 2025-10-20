@@ -67,17 +67,19 @@ impl From<OutputFormatArg> for OutputFormat {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum WorkspaceTypeArg {
-    Agent,
-    Project,
-    Shared,
+    Code,
+    Documentation,
+    Mixed,
+    External,
 }
 
 impl From<WorkspaceTypeArg> for WorkspaceType {
     fn from(arg: WorkspaceTypeArg) -> Self {
         match arg {
-            WorkspaceTypeArg::Agent => WorkspaceType::Agent,
-            WorkspaceTypeArg::Project => WorkspaceType::Project,
-            WorkspaceTypeArg::Shared => WorkspaceType::Shared,
+            WorkspaceTypeArg::Code => WorkspaceType::Code,
+            WorkspaceTypeArg::Documentation => WorkspaceType::Documentation,
+            WorkspaceTypeArg::Mixed => WorkspaceType::Mixed,
+            WorkspaceTypeArg::External => WorkspaceType::External,
         }
     }
 }
@@ -94,7 +96,7 @@ enum Commands {
         path: Option<PathBuf>,
 
         /// Workspace type
-        #[arg(short = 't', long, default_value = "project")]
+        #[arg(short = 't', long, default_value = "code")]
         workspace_type: WorkspaceTypeArg,
     },
 
@@ -205,7 +207,7 @@ enum WorkspaceCommands {
         name: String,
 
         /// Workspace type
-        #[arg(short = 't', long, default_value = "project")]
+        #[arg(short = 't', long, default_value = "code")]
         workspace_type: WorkspaceTypeArg,
     },
 

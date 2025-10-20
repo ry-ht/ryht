@@ -101,7 +101,7 @@ impl Tool for CodeGetUnitTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let _input: GetUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -161,7 +161,7 @@ impl Tool for CodeListUnitsTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed(
             "Code unit listing not yet implemented".to_string(),
         ))
@@ -207,7 +207,7 @@ impl Tool for CodeGetSymbolsTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -252,7 +252,7 @@ impl Tool for CodeFindDefinitionTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -296,7 +296,7 @@ impl Tool for CodeFindReferencesTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -340,7 +340,7 @@ impl Tool for CodeGetSignatureTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -386,7 +386,7 @@ impl Tool for CodeGetCallHierarchyTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -431,7 +431,7 @@ impl Tool for CodeGetTypeHierarchyTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -475,7 +475,7 @@ impl Tool for CodeGetImportsTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }
@@ -519,7 +519,7 @@ impl Tool for CodeGetExportsTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed("Not yet implemented".to_string()))
     }
 }

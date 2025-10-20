@@ -99,7 +99,7 @@ impl Tool for VfsGetNodeTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: GetNodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -119,7 +119,7 @@ impl Tool for VfsGetNodeTool {
         let node = self
             .ctx
             .vfs
-            .get_node(&workspace_id, &path)
+            .metadata(&workspace_id, &path)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get node: {}", e)))?;
 
@@ -137,23 +137,24 @@ impl Tool for VfsGetNodeTool {
             node_type: match node.node_type {
                 NodeType::File => "file",
                 NodeType::Directory => "directory",
-                NodeType::Symlink => "symlink",
+                NodeType::SymLink => "symlink",
+                NodeType::Document => "document",
             }
             .to_string(),
             name: node.path.file_name().unwrap_or("").to_string(),
             path: node.path.to_string(),
             content,
-            size_bytes: node.size_bytes,
+            size_bytes: node.size_bytes as u64,
             permissions: "644".to_string(), // TODO: Get from metadata
             metadata: if input.include_metadata {
                 Some(serde_json::json!({
                     "created_at": node.created_at,
-                    "modified_at": node.modified_at,
+                    "updated_at": node.updated_at,
                 }))
             } else {
                 None
             },
-            version: node.version,
+            version: node.version as u64,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -226,7 +227,7 @@ impl Tool for VfsListDirectoryTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: ListDirectoryInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -279,10 +280,11 @@ impl Tool for VfsListDirectoryTool {
                 node_type: match node.node_type {
                     NodeType::File => "file",
                     NodeType::Directory => "directory",
-                    NodeType::Symlink => "symlink",
+                    NodeType::SymLink => "symlink",
+                    NodeType::Document => "document",
                 }
                 .to_string(),
-                size_bytes: node.size_bytes,
+                size_bytes: node.size_bytes as u64,
             })
             .collect();
 
@@ -355,7 +357,7 @@ impl Tool for VfsCreateFileTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: CreateFileInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -382,15 +384,15 @@ impl Tool for VfsCreateFileTool {
         let node = self
             .ctx
             .vfs
-            .get_node(&workspace_id, &path)
+            .metadata(&workspace_id, &path)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get created node: {}", e)))?;
 
         let output = CreateFileOutput {
             node_id: node.id.to_string(),
             path: path.to_string(),
-            size_bytes: node.size_bytes,
-            version: node.version,
+            size_bytes: node.size_bytes as u64,
+            version: node.version as u64,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -449,7 +451,7 @@ impl Tool for VfsUpdateFileTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: UpdateFileInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -478,15 +480,15 @@ impl Tool for VfsUpdateFileTool {
         let node = self
             .ctx
             .vfs
-            .get_node(&workspace_id, &path)
+            .metadata(&workspace_id, &path)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get updated node: {}", e)))?;
 
         let output = UpdateFileOutput {
             node_id: node.id.to_string(),
             path: path.to_string(),
-            version: node.version,
-            size_bytes: node.size_bytes,
+            version: node.version as u64,
+            size_bytes: node.size_bytes as u64,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -540,7 +542,7 @@ impl Tool for VfsDeleteNodeTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: DeleteNodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -559,7 +561,7 @@ impl Tool for VfsDeleteNodeTool {
 
         self.ctx
             .vfs
-            .delete_node(&workspace_id, &path, input.recursive)
+            .delete(&workspace_id, &path, input.recursive)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to delete node: {}", e)))?;
 
@@ -620,7 +622,7 @@ impl Tool for VfsMoveNodeTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: MoveNodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -642,11 +644,15 @@ impl Tool for VfsMoveNodeTool {
             source_path, target_path, workspace_id
         );
 
-        self.ctx
-            .vfs
-            .move_node(&workspace_id, &source_path, &target_path)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to move node: {}", e)))?;
+        // VFS doesn't have move_node yet, so we implement it as copy+delete
+        let content = self.ctx.vfs.read_file(&workspace_id, &source_path).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to read source: {}", e)))?;
+
+        self.ctx.vfs.write_file(&workspace_id, &target_path, &content).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to write target: {}", e)))?;
+
+        self.ctx.vfs.delete(&workspace_id, &source_path, false).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to delete source: {}", e)))?;
 
         let output = MoveNodeOutput {
             source_path: source_path.to_string(),
@@ -708,7 +714,7 @@ impl Tool for VfsCopyNodeTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: CopyNodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -767,7 +773,7 @@ impl Tool for VfsCreateDirectoryTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         let input: CreateDirectoryInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
@@ -786,14 +792,14 @@ impl Tool for VfsCreateDirectoryTool {
 
         self.ctx
             .vfs
-            .create_directory(&workspace_id, &path)
+            .create_directory(&workspace_id, &path, true)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create directory: {}", e)))?;
 
         let node = self
             .ctx
             .vfs
-            .get_node(&workspace_id, &path)
+            .metadata(&workspace_id, &path)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get created node: {}", e)))?;
 
@@ -856,7 +862,7 @@ impl Tool for VfsGetTreeTool {
         &self,
         input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed(
             "get_tree not yet fully implemented".to_string(),
         ))
@@ -899,7 +905,7 @@ impl Tool for VfsSearchFilesTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed(
             "search_files not yet implemented".to_string(),
         ))
@@ -941,7 +947,7 @@ impl Tool for VfsGetFileHistoryTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed(
             "get_file_history not yet implemented".to_string(),
         ))
@@ -984,7 +990,7 @@ impl Tool for VfsRestoreFileVersionTool {
         &self,
         _input: serde_json::Value,
         _context: &ToolContext,
-    ) -> std::result::std::result::Result<ToolResult, ToolError> {
+    ) -> std::result::Result<ToolResult, ToolError> {
         Err(ToolError::ExecutionFailed(
             "restore_file_version not yet implemented".to_string(),
         ))

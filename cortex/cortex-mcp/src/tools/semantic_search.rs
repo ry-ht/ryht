@@ -94,7 +94,7 @@ impl Tool for SearchSemanticTool {
         serde_json::to_value(schemars::schema_for!(SemanticSearchInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: SemanticSearchInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -106,7 +106,7 @@ impl Tool for SearchSemanticTool {
             query: input.query.clone(),
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -161,7 +161,7 @@ impl Tool for SearchByPatternTool {
         serde_json::to_value(schemars::schema_for!(PatternSearchInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: PatternSearchInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -172,7 +172,7 @@ impl Tool for SearchByPatternTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -228,7 +228,7 @@ impl Tool for SearchBySignatureTool {
         serde_json::to_value(schemars::schema_for!(SignatureSearchInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: SignatureSearchInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -239,7 +239,7 @@ impl Tool for SearchBySignatureTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -294,7 +294,7 @@ impl Tool for SearchByComplexityTool {
         serde_json::to_value(schemars::schema_for!(ComplexitySearchInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: ComplexitySearchInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -308,7 +308,7 @@ impl Tool for SearchByComplexityTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -367,7 +367,7 @@ impl Tool for SearchSimilarCodeTool {
         serde_json::to_value(schemars::schema_for!(SimilarCodeInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: SimilarCodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -379,7 +379,7 @@ impl Tool for SearchSimilarCodeTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -433,7 +433,7 @@ impl Tool for SearchByAnnotationTool {
         serde_json::to_value(schemars::schema_for!(AnnotationSearchInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: AnnotationSearchInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -444,7 +444,7 @@ impl Tool for SearchByAnnotationTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -500,7 +500,7 @@ impl Tool for SearchUnusedCodeTool {
         serde_json::to_value(schemars::schema_for!(UnusedCodeInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: UnusedCodeInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -511,7 +511,7 @@ impl Tool for SearchUnusedCodeTool {
             total_count: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -575,7 +575,7 @@ impl Tool for SearchDuplicatesTool {
         serde_json::to_value(schemars::schema_for!(DuplicatesInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: DuplicatesInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -586,7 +586,7 @@ impl Tool for SearchDuplicatesTool {
             total_groups: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 

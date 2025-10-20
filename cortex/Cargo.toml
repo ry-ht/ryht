@@ -105,3 +105,64 @@ debug = true
 
 [profile.test]
 opt-level = 1
+
+# Workspace-level integration tests package
+[package]
+name = "cortex-integration-tests"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cortex-core = { path = "cortex-core" }
+cortex-storage = { path = "cortex-storage" }
+cortex-vfs = { path = "cortex-vfs" }
+cortex-memory = { path = "cortex-memory" }
+cortex-semantic = { path = "cortex-semantic" }
+cortex-ingestion = { path = "cortex-ingestion" }
+# cortex-mcp = { path = "cortex-mcp" } # Temporarily disabled due to compilation errors
+# cortex-cli = { path = "cortex-cli" } # Temporarily disabled
+
+# Test dependencies
+tokio.workspace = true
+tempfile.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+futures.workspace = true
+
+[[test]]
+name = "cross_crate_integration"
+path = "tests/cross_crate_integration.rs"
+harness = true
+
+[[test]]
+name = "e2e_workflow_tests"
+path = "tests/e2e_workflow_tests.rs"
+harness = true
+
+[[test]]
+name = "test_complete_workflow"
+path = "tests/test_complete_workflow.rs"
+harness = true
+
+[[test]]
+name = "test_multi_agent_scenario"
+path = "tests/test_multi_agent_scenario.rs"
+harness = true
+
+[[test]]
+name = "test_memory_consolidation"
+path = "tests/test_memory_consolidation.rs"
+harness = true
+
+[[test]]
+name = "test_production_load"
+path = "tests/test_production_load.rs"
+harness = true
+
+[[test]]
+name = "test_surrealdb_integration"
+path = "tests/test_surrealdb_integration.rs"
+harness = true

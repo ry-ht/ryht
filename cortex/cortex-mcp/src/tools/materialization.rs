@@ -19,7 +19,7 @@ pub struct MaterializationContext {
 impl MaterializationContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
-        let engine = Arc::new(MaterializationEngine::new(vfs.clone()));
+        let engine = Arc::new(MaterializationEngine::new((*vfs).clone()));
         Self { storage, vfs, engine }
     }
 }
@@ -50,7 +50,7 @@ macro_rules! impl_mat_tool {
                 serde_json::to_value(schemars::schema_for!($input)).unwrap()
             }
 
-            async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+            async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
                 let _input: $input = serde_json::from_value(input)
                     .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
                 debug!("{} executed", $tool_name);

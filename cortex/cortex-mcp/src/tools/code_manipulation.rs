@@ -91,7 +91,7 @@ impl Tool for CodeCreateUnitTool {
         serde_json::to_value(schemars::schema_for!(CreateUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: CreateUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -108,7 +108,7 @@ impl Tool for CodeCreateUnitTool {
             version: 1,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -159,7 +159,7 @@ impl Tool for CodeUpdateUnitTool {
         serde_json::to_value(schemars::schema_for!(UpdateUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: UpdateUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -171,7 +171,7 @@ impl Tool for CodeUpdateUnitTool {
             updated: true,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -218,7 +218,7 @@ impl Tool for CodeDeleteUnitTool {
         serde_json::to_value(schemars::schema_for!(DeleteUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: DeleteUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -230,7 +230,7 @@ impl Tool for CodeDeleteUnitTool {
             cascade_deleted: vec![],
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -279,7 +279,7 @@ impl Tool for CodeMoveUnitTool {
         serde_json::to_value(schemars::schema_for!(MoveUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: MoveUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -292,7 +292,7 @@ impl Tool for CodeMoveUnitTool {
             imports_updated: vec![],
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -342,7 +342,7 @@ impl Tool for CodeRenameUnitTool {
         serde_json::to_value(schemars::schema_for!(RenameUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: RenameUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -355,7 +355,7 @@ impl Tool for CodeRenameUnitTool {
             references_updated: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -405,7 +405,7 @@ impl Tool for CodeExtractFunctionTool {
         serde_json::to_value(schemars::schema_for!(ExtractFunctionInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: ExtractFunctionInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -421,7 +421,7 @@ impl Tool for CodeExtractFunctionTool {
             return_type: None,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -466,7 +466,7 @@ impl Tool for CodeInlineFunctionTool {
         serde_json::to_value(schemars::schema_for!(InlineFunctionInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: InlineFunctionInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -478,7 +478,7 @@ impl Tool for CodeInlineFunctionTool {
             function_removed: false,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -528,7 +528,7 @@ impl Tool for CodeChangeSignatureTool {
         serde_json::to_value(schemars::schema_for!(ChangeSignatureInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: ChangeSignatureInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -541,7 +541,7 @@ impl Tool for CodeChangeSignatureTool {
             callers_updated: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -590,7 +590,7 @@ impl Tool for CodeAddParameterTool {
         serde_json::to_value(schemars::schema_for!(AddParameterInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: AddParameterInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -605,7 +605,7 @@ impl Tool for CodeAddParameterTool {
             new_signature: format!("fn(..., {}: {})", input.parameter_name, input.parameter_type),
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -653,7 +653,7 @@ impl Tool for CodeRemoveParameterTool {
         serde_json::to_value(schemars::schema_for!(RemoveParameterInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: RemoveParameterInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -669,7 +669,7 @@ impl Tool for CodeRemoveParameterTool {
             callers_updated: 0,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -716,7 +716,7 @@ impl Tool for CodeAddImportTool {
         serde_json::to_value(schemars::schema_for!(AddImportInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: AddImportInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -728,7 +728,7 @@ impl Tool for CodeAddImportTool {
             line_number: 1,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -779,7 +779,7 @@ impl Tool for CodeOptimizeImportsTool {
         serde_json::to_value(schemars::schema_for!(OptimizeImportsInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: OptimizeImportsInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -792,7 +792,7 @@ impl Tool for CodeOptimizeImportsTool {
             imports_grouped: input.group,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -841,7 +841,7 @@ impl Tool for CodeGenerateGetterSetterTool {
         serde_json::to_value(schemars::schema_for!(GenerateGetterSetterInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: GenerateGetterSetterInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -857,7 +857,7 @@ impl Tool for CodeGenerateGetterSetterTool {
             setter_id: Some(format!("unit_{}", uuid::Uuid::new_v4())),
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -904,7 +904,7 @@ impl Tool for CodeImplementInterfaceTool {
         serde_json::to_value(schemars::schema_for!(ImplementInterfaceInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: ImplementInterfaceInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -919,7 +919,7 @@ impl Tool for CodeImplementInterfaceTool {
             methods_generated: vec![],
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 
@@ -967,7 +967,7 @@ impl Tool for CodeOverrideMethodTool {
         serde_json::to_value(schemars::schema_for!(OverrideMethodInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: OverrideMethodInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -983,7 +983,7 @@ impl Tool for CodeOverrideMethodTool {
             calls_super: input.call_super,
         };
 
-        Ok(serde_json::to_value(output).unwrap())
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
     }
 }
 

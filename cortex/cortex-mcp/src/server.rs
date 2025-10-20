@@ -82,8 +82,8 @@ impl CortexMcpServer {
         };
 
         let credentials = Credentials {
-            username: db_config.username.clone(),
-            password: db_config.password.clone(),
+            username: Some(db_config.username.clone()),
+            password: Some(db_config.password.clone()),
         };
 
         let pool_cfg = PoolConfig {
