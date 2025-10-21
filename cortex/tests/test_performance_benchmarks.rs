@@ -390,7 +390,7 @@ async fn bench_vfs_materialization_throughput() {
 
     // Benchmark materialization
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let engine = MaterializationEngine::new(vfs.clone());
+    let engine = MaterializationEngine::new((*vfs).clone());
 
     let start = Instant::now();
     engine.flush(
@@ -440,7 +440,12 @@ async fn bench_semantic_embedding_generation() {
     let mut samples = Vec::new();
     for (i, doc) in test_documents.iter().enumerate() {
         let start = Instant::now();
-        engine.index_document(&format!("doc_{}", i), doc)
+        engine.index_document(
+            format!("doc_{}", i),
+            doc.to_string(),
+            cortex_semantic::types::EntityType::Document,
+            std::collections::HashMap::new(),
+        )
             .await
             .expect("Failed to index document");
         samples.push(start.elapsed());
@@ -462,7 +467,12 @@ async fn bench_semantic_search_latency() {
     // Index documents
     for i in 0..100 {
         let doc = format!("Test document {} about software development and programming", i);
-        engine.index_document(&format!("doc_{}", i), &doc)
+        engine.index_document(
+            format!("doc_{}", i),
+            doc,
+            cortex_semantic::types::EntityType::Document,
+            std::collections::HashMap::new(),
+        )
             .await
             .expect("Failed to index");
     }
@@ -509,7 +519,12 @@ async fn bench_semantic_index_build_time() {
             "fn function_{}(param: Type) -> Result<Value> {{\n  // Implementation\n  Ok(value)\n}}",
             i
         );
-        engine.index_document(&format!("fn_{}", i), &doc)
+        engine.index_document(
+            format!("fn_{}", i),
+            doc,
+            cortex_semantic::types::EntityType::Code,
+            std::collections::HashMap::new(),
+        )
             .await
             .expect("Failed to index");
     }
@@ -535,7 +550,12 @@ async fn bench_semantic_concurrent_search() {
     // Index documents
     for i in 0..100 {
         let doc = format!("Document {} about technology and software engineering", i);
-        engine.index_document(&format!("doc_{}", i), &doc)
+        engine.index_document(
+            format!("doc_{}", i),
+            doc,
+            cortex_semantic::types::EntityType::Document,
+            std::collections::HashMap::new(),
+        )
             .await
             .expect("Failed to index");
     }

@@ -620,7 +620,7 @@ async fn test_database_data_integrity() {
             total_duration_ms: 1000,
             parameters: {
                 let mut map = std::collections::HashMap::new();
-                map.insert("optimization".to_string(), "3".to_string());
+                map.insert("optimization".to_string(), serde_json::json!("3"));
                 map
             },
         },

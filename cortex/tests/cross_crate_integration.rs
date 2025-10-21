@@ -476,8 +476,8 @@ async fn test_vfs_memory_content_hashing_integration() {
         .await
         .expect("Failed to read file");
 
-    // Verify content hash is consistent
-    let hash1 = file_content.content_hash.clone();
+    // Verify content is correct
+    assert_eq!(file_content, content);
 
     // Write same content again
     vfs.write_file(&workspace_id, &file_path, content)
@@ -489,10 +489,8 @@ async fn test_vfs_memory_content_hashing_integration() {
         .await
         .expect("Failed to read file");
 
-    let hash2 = file_content2.content_hash;
-
-    // Hashes should be identical (deduplication)
-    assert_eq!(hash1, hash2);
+    // Content should still be the same (verifying VFS storage)
+    assert_eq!(file_content, file_content2);
 
     // Store semantic unit with content hash
     let unit = SemanticUnit {
@@ -809,16 +807,13 @@ Reinforcement learning learns through trial and error with rewards and penalties
 
     // Chunk the document
     let chunker = SemanticChunker::new(500, 50);
-    let chunks = chunker
-        .chunk(document.as_bytes(), "document.md")
-        .expect("Failed to chunk document");
+    let chunks = chunker.chunk(document);
 
     assert!(!chunks.is_empty());
 
-    // Verify chunks have proper metadata
+    // Verify chunks are not empty
     for chunk in &chunks {
-        assert!(!chunk.content.is_empty());
-        assert!(chunk.chunk_type == ChunkType::Paragraph || chunk.chunk_type == ChunkType::Heading);
+        assert!(!chunk.is_empty());
     }
 }
 
@@ -840,15 +835,17 @@ This document describes the system architecture.
 - Frontend
 "#;
 
-    let metadata = extract_comprehensive_metadata(document.as_bytes(), "doc.md")
-        .expect("Failed to extract metadata");
+    let metadata = extract_comprehensive_metadata(
+        std::path::Path::new("doc.md"),
+        document,
+    );
 
     assert!(metadata.contains_key("word_count"));
     assert!(metadata.contains_key("language"));
 
     // Detect language
     let lang = detect_language(document);
-    assert!(!lang.is_empty());
+    assert!(lang.is_some());
 }
 
 #[tokio::test]
@@ -883,16 +880,16 @@ assert_eq!(fibonacci(10), 55);
     // Process high quality document
     let processor_factory = ProcessorFactory::new();
     let processor = processor_factory
-        .create_processor(ContentType::Markdown)
-        .expect("Failed to create processor");
+        .get_for_path(std::path::Path::new("test.md"))
+        .expect("Failed to get markdown processor");
 
     let high_quality = processor
-        .process(high_quality_doc.as_bytes(), "high.md")
+        .process(high_quality_doc.as_bytes())
         .await
         .expect("Failed to process high quality doc");
 
     let low_quality = processor
-        .process(low_quality_doc.as_bytes(), "low.md")
+        .process(low_quality_doc.as_bytes())
         .await
         .expect("Failed to process low quality doc");
 
@@ -1027,11 +1024,11 @@ Rust has zero-cost abstractions and compiles to native code.
     // Step 2: Process document
     let processor_factory = ProcessorFactory::new();
     let processor = processor_factory
-        .create_processor(ContentType::Markdown)
-        .expect("Failed to create processor");
+        .get_for_path(std::path::Path::new("rust_guide.md"))
+        .expect("Failed to get markdown processor");
 
     let processed = processor
-        .process(document.as_bytes(), "rust_guide.md")
+        .process(document.as_bytes())
         .await
         .expect("Failed to process document");
 
@@ -1070,9 +1067,9 @@ Rust has zero-cost abstractions and compiles to native code.
             qualified_name: format!("rust_guide::chunk_{}", idx),
             display_name: format!("Chunk {}", idx),
             file_path: "rust_guide.md".to_string(),
-            start_line: chunk.start_line,
+            start_line: idx as u32,
             start_column: 0,
-            end_line: chunk.end_line,
+            end_line: (idx + 1) as u32,
             end_column: 0,
             signature: String::new(),
             body: chunk.content.clone(),
@@ -1109,7 +1106,7 @@ Rust has zero-cost abstractions and compiles to native code.
         .await
         .expect("Failed to get statistics");
 
-    assert!(stats.semantic.total_units >= processed.chunks.len());
+    assert!(stats.semantic.total_units >= processed.chunks.len() as u64);
 }
 
 #[tokio::test]

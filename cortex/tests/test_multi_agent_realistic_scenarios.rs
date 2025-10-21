@@ -28,8 +28,7 @@ use cortex_storage::session::{
     AgentSession, IsolationLevel, OperationType, SessionManager, SessionMetadata, SessionScope,
     SessionState,
 };
-use cortex_core::types::{CodeUnit, CodeUnitType, Language, Parameter};
-use cortex_memory::prelude::ComplexityMetrics;
+use cortex_core::types::{CodeUnit, CodeUnitType, Language, Parameter, Visibility};
 use cortex_core::id::CortexId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -122,35 +121,23 @@ fn create_code_unit(
     signature: &str,
     body: &str,
 ) -> CodeUnit {
-    CodeUnit {
-        id: CortexId::new(),
+    let qualified_name = format!("{}::{}", file_path.replace("/", "::").replace(".rs", ""), name);
+    let mut unit = CodeUnit::new(
         unit_type,
-        name: name.to_string(),
-        qualified_name: format!("{}::{}", file_path.replace("/", "::").replace(".rs", ""), name),
-        display_name: name.to_string(),
-        file_path: file_path.to_string(),
-        start_line: 1,
-        start_column: 0,
-        end_line: 10,
-        end_column: 0,
-        signature: signature.to_string(),
-        body: body.to_string(),
-        docstring: None,
-        visibility: "public".to_string(),
-        modifiers: vec![],
-        parameters: vec![],
-        return_type: None,
-        language: Language::Rust,
-        dependencies: vec![],
-        dependents: vec![],
-        complexity: ComplexityMetrics {
-            cyclomatic: 1,
-            cognitive: 1,
-            nesting: 1,
-            lines: body.lines().count(),
-        },
-        metadata: HashMap::new(),
-    }
+        name.to_string(),
+        qualified_name,
+        file_path.to_string(),
+        Language::Rust,
+    );
+
+    unit.start_line = 1;
+    unit.end_line = 10;
+    unit.signature = signature.to_string();
+    unit.body = Some(body.to_string());
+    unit.visibility = Visibility::Public;
+    unit.complexity.lines = body.lines().count() as u32;
+
+    unit
 }
 
 // ==============================================================================
@@ -535,7 +522,7 @@ async fn scenario_3_type_system_evolution() {
     // Agent A: Changes field type (u32 -> Uuid)
     let mut agent_a_struct = base_struct.clone();
     agent_a_struct.signature = "pub struct User { pub id: Uuid, pub name: String }".to_string();
-    agent_a_struct.body = "{\n    pub id: Uuid,\n    pub name: String,\n}".to_string();
+    agent_a_struct.body = Some("{\n    pub id: Uuid,\n    pub name: String,\n}".to_string());
 
     info!("Agent A changes: id field u32 -> Uuid");
 
@@ -625,17 +612,15 @@ async fn scenario_4_cross_file_dependency_chain() {
         "pub fn process_result(result: Result<String>) -> String",
         "{\n    let data = result.unwrap_or_default();\n    format_output(&data)\n}",
     );
-    module_b.dependencies = vec![module_a.id];
 
     // Module C: Uses module B
-    let mut module_c = create_code_unit(
+    let module_c = create_code_unit(
         "handle_request",
         CodeUnitType::Function,
         "src/api/request_handler.rs",
         "pub fn handle_request(req: Request) -> Response",
         "{\n    let result = execute(req);\n    let output = process_result(result);\n    Response::new(output)\n}",
     );
-    module_c.dependencies = vec![module_b.id];
 
     info!("Dependency chain: Module C -> Module B -> Module A");
 
@@ -706,7 +691,7 @@ async fn scenario_4_cross_file_dependency_chain() {
 
     metrics.lock().await.locks_acquired += 1;
 
-    module_b.body = "{\n    let data = result.unwrap_or_default();\n    format_output(&data, \"Result:\")\n}".to_string();
+    module_b.body = Some("{\n    let data = result.unwrap_or_default();\n    format_output(&data, \"Result:\")\n}".to_string());
     info!("  Updated Module B body");
 
     // Verify rebuild order
@@ -900,15 +885,19 @@ async fn scenario_5_deadlock_prevention() {
     }
 
     // Cleanup - release all acquired locks
-    if let Ok(cortex_storage::locks::LockAcquisition::Acquired(l)) = lock_x {
+    if let cortex_storage::locks::LockAcquisition::Acquired(l) = lock_x {
         lock_manager.release_lock(&l.lock_id).ok();
         metrics.lock().await.locks_released += 1;
     }
-    if let Ok(cortex_storage::locks::LockAcquisition::Acquired(l)) = lock_y {
+    if let cortex_storage::locks::LockAcquisition::Acquired(l) = lock_y {
         lock_manager.release_lock(&l.lock_id).ok();
         metrics.lock().await.locks_released += 1;
     }
-    if let Ok(cortex_storage::locks::LockAcquisition::Acquired(l)) = lock_z {
+    if let Ok(cortex_storage::locks::LockAcquisition::Acquired(l)) = lock_z_result {
+        lock_manager.release_lock(&l.lock_id).ok();
+        metrics.lock().await.locks_released += 1;
+    }
+    if let cortex_storage::locks::LockAcquisition::Acquired(l) = lock_z {
         lock_manager.release_lock(&l.lock_id).ok();
         metrics.lock().await.locks_released += 1;
     }

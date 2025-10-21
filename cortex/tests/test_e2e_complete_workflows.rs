@@ -220,7 +220,7 @@ async fn setup_test_infrastructure(db_name: &str) -> Result<(
 
     let conn = connection_manager.acquire().await?;
     let session_manager = Arc::new(SessionManager::new(
-        conn.connection().clone(),
+        Arc::new(conn.connection().clone()),
         "cortex_e2e_test".to_string(),
         db_name.to_string(),
     ));
@@ -1203,7 +1203,7 @@ pub fn api_routes() -> Router {
 "#;
 
     let api_path = VirtualPath::new("src/backend/api.rs")?;
-    vfs.write_file(&session_a.workspace_id, &api_path, api_rs.as_bytes()).await?;
+    vfs.write_file(session_a.workspace_id.as_uuid(), &api_path, api_rs.as_bytes()).await?;
     metrics.record_vfs_operation("write_file", 180);
     metrics.files_created += 1;
 
@@ -1281,7 +1281,7 @@ export const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onDelete })
 "#;
 
     let task_list_path = VirtualPath::new("src/frontend/TaskList.tsx")?;
-    vfs.write_file(&session_b.workspace_id, &task_list_path, task_list_tsx.as_bytes()).await?;
+    vfs.write_file(session_b.workspace_id.as_uuid(), &task_list_path, task_list_tsx.as_bytes()).await?;
     metrics.record_vfs_operation("write_file", 150);
     metrics.files_created += 1;
 
@@ -1366,7 +1366,7 @@ describe('TaskList Integration', () => {
 "#;
 
     let tests_path = VirtualPath::new("tests/integration.test.tsx")?;
-    vfs.write_file(&session_c.workspace_id, &tests_path, integration_tests.as_bytes()).await?;
+    vfs.write_file(session_c.workspace_id.as_uuid(), &tests_path, integration_tests.as_bytes()).await?;
     metrics.record_vfs_operation("write_file", 200);
     metrics.files_created += 1;
     metrics.tests_generated += 3;

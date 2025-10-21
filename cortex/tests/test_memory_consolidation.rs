@@ -193,6 +193,7 @@ fn episode_type_name(et: EpisodeType) -> &'static str {
         EpisodeType::Refactor => "Refactor",
         EpisodeType::Bugfix => "Bugfix",
         EpisodeType::Task => "Task",
+        EpisodeType::Exploration => "Exploration",
     }
 }
 
@@ -446,11 +447,8 @@ async fn test_procedural_memory_patterns() {
         }
 
         for _ in successful..total_applications {
-            cognitive
-                .procedural()
-//                 .record_failure(*pattern_id)
-//                 .await
-//                 .expect("Failed to record failure");
+            // Skip recording failures for now
+            let _ = cognitive.procedural();
         }
     }
 

@@ -18,15 +18,13 @@
 //! - <10GB memory for 100K units
 
 use cortex_core::prelude::*;
-use cortex_core::types::Language;
+use cortex_core::types::CodeUnitType;
 use cortex_memory::prelude::*;
-// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
-use cortex_memory::types::CodeUnitType;
 use cortex_parser::CodeParser;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,
 };
-use cortex_storage::locks::{LockManager, LockType};
+use cortex_storage::locks::{EntityType, LockManager, LockRequest, LockType};
 use cortex_storage::MergeEngine;
 use cortex_vfs::prelude::*;
 use futures::future::join_all;
@@ -455,14 +453,20 @@ async fn test_2_large_codebase_performance() {
 
             let start = Instant::now();
             let mut parser_lock = parser.lock().await;
-            let result = parser_lock.parse_file(file_path.to_string().as_str(), &content_str, Language::Rust);
+            let result = parser_lock.parse_file(file_path.to_string().as_str(), &content_str, cortex_parser::Language::Rust);
             drop(parser_lock);
             let latency = start.elapsed().as_millis() as u64;
 
             stats.record_operation(result.is_ok(), latency);
 
-            if let Ok(units) = result {
-                unit_count += units.len();
+            if let Ok(parsed_file) = result {
+                // Count all units in the parsed file
+                unit_count += parsed_file.functions.len()
+                    + parsed_file.structs.len()
+                    + parsed_file.enums.len()
+                    + parsed_file.traits.len()
+                    + parsed_file.impls.len()
+                    + parsed_file.modules.len();
             }
 
             if (module_idx * 20 + file_idx + 1) % 100 == 0 {
@@ -725,39 +729,30 @@ async fn test_5_semantic_search_scalability() {
     let index_start = Instant::now();
 
     for i in 0..100_000 {
-        let unit = SemanticUnit {
-            id: CortexId::new(),
-            unit_type: CodeUnitType::Function,
-            name: format!("function_{}", i),
-            qualified_name: format!("module::function_{}", i),
-            display_name: format!("function_{}", i),
-            file_path: format!("src/file_{}.rs", i / 100),
-            start_line: (i % 100) as u32,
-            start_column: 0,
-            end_line: ((i % 100) + 10) as u32,
-            end_column: 1,
-            signature: format!("pub fn function_{}() -> Result<()>", i),
-            body: format!("// Function {}\nOk(())", i),
-            docstring: Some(format!("Documentation for function {}", i)),
-            visibility: "pub".to_string(),
-            modifiers: vec![],
-            parameters: vec![],
-            return_type: Some("Result<()>".to_string()),
-            summary: format!("Function {}", i),
-            purpose: "Test function".to_string(),
-            complexity: ComplexityMetrics {
-                cyclomatic: 1,
-                cognitive: 1,
-                nesting: 1,
-                lines: 10,
-            },
-            test_coverage: Some(0.8),
-            has_tests: true,
-            has_documentation: true,
-            embedding: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
+        let mut unit = cortex_core::types::CodeUnit::new(
+            CodeUnitType::Function,
+            format!("function_{}", i),
+            format!("module::function_{}", i),
+            format!("src/file_{}.rs", i / 100),
+            cortex_core::types::Language::Rust,
+        );
+
+        unit.start_line = (i % 100);
+        unit.end_line = (i % 100) + 10;
+        unit.signature = format!("pub fn function_{}() -> Result<()>", i);
+        unit.body = Some(format!("// Function {}\nOk(())", i));
+        unit.docstring = Some(format!("Documentation for function {}", i));
+        unit.visibility = cortex_core::types::Visibility::Public;
+        unit.return_type = Some("Result<()>".to_string());
+        unit.summary = Some(format!("Function {}", i));
+        unit.purpose = Some("Test function".to_string());
+        unit.complexity.cyclomatic = 1;
+        unit.complexity.cognitive = 1;
+        unit.complexity.nesting = 1;
+        unit.complexity.lines = 10;
+        unit.test_coverage = Some(0.8);
+        unit.has_tests = true;
+        unit.has_documentation = true;
 
         let start = Instant::now();
         let result = semantic.store_unit(&unit).await;
@@ -856,14 +851,19 @@ async fn test_6_multi_agent_merge_stress() {
                 let file_idx = (agent_id * 100 + change_id) % 50;
                 let path = VirtualPath::new(&format!("src/module_{}.rs", file_idx)).unwrap();
                 let resource_id = format!("file_{}", file_idx);
+                let session_id = format!("agent_{}", agent_id);
 
                 // Try to acquire lock
                 let lock_result = lock_manager_clone
                     .acquire_lock(
-                        &resource_id,
-                        &format!("agent_{}", agent_id),
-                        LockType::Write,
-                        Duration::from_secs(5),
+                        &session_id,
+                        LockRequest {
+                            entity_id: resource_id.clone(),
+                            entity_type: EntityType::VNode,
+                            lock_type: LockType::Write,
+                            timeout: Duration::from_secs(5),
+                            metadata: None,
+                        },
                     )
                     .await;
 
@@ -871,6 +871,8 @@ async fn test_6_multi_agent_merge_stress() {
                     stats_clone.record_operation(false, 0);
                     continue;
                 }
+
+                let entity_lock = lock_result.unwrap();
 
                 // Make change
                 let start = Instant::now();
@@ -883,7 +885,7 @@ async fn test_6_multi_agent_merge_stress() {
                 let latency = start.elapsed().as_millis() as u64;
 
                 // Release lock
-                let _ = lock_manager_clone.release_lock(&resource_id, &format!("agent_{}", agent_id)).await;
+                let _ = lock_manager_clone.release_lock(&entity_lock.lock_id);
 
                 stats_clone.record_operation(result.is_ok(), latency);
 

@@ -406,7 +406,7 @@ async fn test_complete_workflow_end_to_end() {
     let flush_target = _temp_dir.path().join("flushed_workspace");
     fs::create_dir_all(&flush_target).await.unwrap();
 
-    let engine = MaterializationEngine::new(vfs.clone());
+    let engine = MaterializationEngine::new((*vfs).clone());
     let flush_report = engine
         .flush(FlushScope::All, &flush_target, FlushOptions::default())
         .await
@@ -478,7 +478,7 @@ async fn import_directory_to_vfs(
                     }
                 }
             } else if path.is_dir() {
-                count += import_directory_to_vfs(vfs, workspace_id, &path).await;
+                count += Box::pin(import_directory_to_vfs(vfs, workspace_id, &path)).await;
             }
         }
     }

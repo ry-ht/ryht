@@ -545,7 +545,7 @@ async fn test_graceful_degradation() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
 
     // Test 1: Handle invalid data gracefully
     info!("Test 1: Testing invalid data handling");
