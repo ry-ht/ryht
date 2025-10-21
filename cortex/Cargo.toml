@@ -239,6 +239,16 @@ name = "test_memory_system_integration"
 path = "tests/test_memory_system_integration.rs"
 harness = true
 
+[[test]]
+name = "test_mcp_tools_e2e_workflows"
+path = "tests/test_mcp_tools_e2e_workflows.rs"
+harness = true
+
+[[test]]
+name = "test_performance_regression"
+path = "tests/test_performance_regression.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"

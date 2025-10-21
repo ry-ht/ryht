@@ -165,7 +165,10 @@ impl AstEditor {
         new_name: &str,
         edits: &mut Vec<Edit>,
     ) {
-        if node.kind() == "identifier" {
+        // Match both "identifier" and "type_identifier" nodes
+        // type_identifier is used for type names (struct, enum, type aliases, etc.)
+        // identifier is used for variable/function names
+        if node.kind() == "identifier" || node.kind() == "type_identifier" {
             let text = &self.source[node.byte_range()];
             if text == old_name {
                 let range = Range::from_node(&node);
@@ -325,58 +328,27 @@ impl AstEditor {
             return Ok(());
         }
 
-        // Sort edits by position (reverse order so we can apply them without shifting positions)
-        self.edits.sort_by(|a, b| {
-            b.range
-                .start
-                .line
-                .cmp(&a.range.start.line)
-                .then_with(|| b.range.start.column.cmp(&a.range.start.column))
-        });
-
-        let mut new_source = self.source.clone();
-        let lines: Vec<&str> = new_source.lines().collect();
-        let mut result_lines: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+        // Convert position-based edits to byte-based edits
+        let mut byte_edits: Vec<(usize, usize, String)> = Vec::new();
 
         for edit in &self.edits {
-            let start_line = edit.range.start.line;
-            let end_line = edit.range.end.line;
-
-            if start_line == end_line {
-                // Single line edit
-                if start_line < result_lines.len() {
-                    let line = &result_lines[start_line];
-                    let start_col = min(edit.range.start.column, line.len());
-                    let end_col = min(edit.range.end.column, line.len());
-
-                    let new_line = format!(
-                        "{}{}{}",
-                        &line[..start_col],
-                        &edit.new_text,
-                        &line[end_col..]
-                    );
-                    result_lines[start_line] = new_line;
-                }
-            } else {
-                // Multi-line edit
-                if start_line < result_lines.len() && end_line < result_lines.len() {
-                    let start_col = min(edit.range.start.column, result_lines[start_line].len());
-                    let end_col = min(edit.range.end.column, result_lines[end_line].len());
-
-                    let new_content = format!(
-                        "{}{}{}",
-                        &result_lines[start_line][..start_col],
-                        &edit.new_text,
-                        &result_lines[end_line][end_col..]
-                    );
-
-                    // Replace the range with new content
-                    result_lines.splice(start_line..=end_line, vec![new_content]);
-                }
-            }
+            let start_byte = self.position_to_byte(edit.range.start)?;
+            let end_byte = self.position_to_byte(edit.range.end)?;
+            byte_edits.push((start_byte, end_byte, edit.new_text.clone()));
         }
 
-        new_source = result_lines.join("\n");
+        // Sort edits by position (reverse order so we can apply them without shifting positions)
+        byte_edits.sort_by(|a, b| b.0.cmp(&a.0));
+
+        let mut new_source = self.source.clone();
+
+        // Apply edits in reverse order
+        for (start_byte, end_byte, new_text) in byte_edits {
+            let start = min(start_byte, new_source.len());
+            let end = min(end_byte, new_source.len());
+
+            new_source.replace_range(start..end, &new_text);
+        }
 
         // Re-parse the modified source
         self.tree = self
@@ -388,6 +360,34 @@ impl AstEditor {
         self.edits.clear();
 
         Ok(())
+    }
+
+    /// Convert a position (line, column) to a byte offset
+    fn position_to_byte(&self, pos: Position) -> Result<usize> {
+        let lines: Vec<&str> = self.source.lines().collect();
+
+        let mut byte_offset = 0;
+
+        // Add bytes for all complete lines before the target line
+        for (i, line) in lines.iter().enumerate() {
+            if i < pos.line {
+                byte_offset += line.len() + 1; // +1 for newline
+            } else {
+                break;
+            }
+        }
+
+        // If the line doesn't exist yet, return the end of the file
+        if pos.line >= lines.len() {
+            return Ok(self.source.len());
+        }
+
+        // Add the column offset within the target line
+        let line = lines[pos.line];
+        let col = min(pos.column, line.len());
+        byte_offset += col;
+
+        Ok(byte_offset)
     }
 
     /// Get a node by path (e.g., "function_item:0.identifier:0")
@@ -529,15 +529,30 @@ impl AstEditor {
         new_params: Vec<(String, String)>,
         new_return_type: Option<String>,
     ) -> Result<()> {
-        // Find the function
-        let function_query = format!("(function_item name: (identifier) @name (#eq? @name \"{}\")) @function", function_name);
-        let functions = self.query(&function_query)?;
+        // Find the function - first get all functions, then filter by name
+        let function_query = "(function_item) @function";
+        let all_functions = self.query(&function_query)?;
 
-        if functions.is_empty() {
-            bail!("Function '{}' not found", function_name);
+        // Filter to find the function with the matching name
+        let mut function_node = None;
+        for func in all_functions {
+            // Look for the name field of the function
+            let mut cursor = func.walk();
+            for child in func.children(&mut cursor) {
+                if child.kind() == "identifier" {
+                    let name = self.node_text(&child);
+                    if name == function_name {
+                        function_node = Some(func);
+                        break;
+                    }
+                }
+            }
+            if function_node.is_some() {
+                break;
+            }
         }
 
-        let function_node = functions[0];
+        let function_node = function_node.ok_or_else(|| anyhow!("Function '{}' not found", function_name))?;
 
         // Collect node info before mutating
         let function_range = Range::from_node(&function_node);
