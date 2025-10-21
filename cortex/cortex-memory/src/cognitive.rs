@@ -82,7 +82,7 @@ impl CognitiveManager {
     #[instrument(skip(self, unit))]
     pub async fn remember_unit(&self, unit: &SemanticUnit) -> Result<CortexId> {
         info!(unit_id = %unit.id, "Remembering semantic unit");
-        self.semantic.store_unit(unit).await
+        self.semantic.store_semantic_unit(unit).await
     }
 
     /// Remember: Store a learned pattern
@@ -111,7 +111,16 @@ impl CognitiveManager {
         embedding: &[f32],
     ) -> Result<Vec<MemorySearchResult<SemanticUnit>>> {
         info!(query = %query.query_text, "Recalling semantic units");
-        self.semantic.search_units(query, embedding).await
+        // Convert CodeUnit results to SemanticUnit for backward compatibility
+        let code_units = self.semantic.search_units(query, embedding).await?;
+        let semantic_units = code_units.into_iter().map(|result| {
+            MemorySearchResult {
+                item: self.semantic.convert_code_to_semantic_unit(&result.item),
+                similarity_score: result.similarity_score,
+                relevance_score: result.relevance_score,
+            }
+        }).collect();
+        Ok(semantic_units)
     }
 
     /// Recall: Retrieve similar patterns
@@ -216,7 +225,7 @@ impl CognitiveManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy, LoadBalancingStrategy};
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy, LoadBalancingStrategy};
     use std::time::Duration;
 
     async fn create_test_manager() -> CognitiveManager {
@@ -235,12 +244,15 @@ mod tests {
                 idle_timeout: None,
                 max_lifetime: None,
                 retry_policy: RetryPolicy {
-                    max_retries: 3,
+                    max_attempts: 3,
                     initial_backoff: Duration::from_millis(100),
                     max_backoff: Duration::from_secs(10),
-                    backoff_multiplier: 2.0,
+                    multiplier: 2.0,
                 },
                 warm_connections: false,
+                validate_on_checkout: true,
+                recycle_after_uses: Some(1000),
+                shutdown_grace_period: Duration::from_secs(5),
             },
             namespace: "test".to_string(),
             database: "test".to_string(),

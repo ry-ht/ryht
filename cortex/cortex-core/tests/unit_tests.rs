@@ -371,7 +371,7 @@ fn test_metadata_builder_option_some() {
 #[test]
 fn test_metadata_builder_option_none() {
     let metadata = MetadataBuilder::new()
-        .add_option::<String, String>("key1", None)
+        .add_option("key1", None::<String>)
         .build();
 
     assert!(metadata.is_empty());

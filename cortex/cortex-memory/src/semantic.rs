@@ -6,6 +6,7 @@
 use crate::types::*;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
+use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Language, Visibility, Parameter, TypeParameter, Attribute, Complexity as CoreComplexity, CodeUnitStatus};
 use cortex_storage::ConnectionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,8 +27,93 @@ impl SemanticMemorySystem {
     // Code Unit Operations
     // ========================================================================
 
-    /// Store a semantic code unit
-    pub async fn store_unit(&self, unit: &SemanticUnit) -> Result<CortexId> {
+    /// Store a code unit using the new comprehensive schema
+    pub async fn store_unit(&self, unit: &CodeUnit) -> Result<CortexId> {
+        info!(unit_id = %unit.id, name = %unit.name, "Storing code unit");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        // Create unit - let SurrealDB assign record ID, store our ID in content
+        let _: Option<CodeUnit> = conn
+            .connection()
+            .create("code_unit")
+            .content(unit.clone())
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        Ok(unit.id)
+    }
+
+    /// Helper method to convert SurrealDB JSON to SemanticUnit
+    fn json_to_semantic_unit(mut unit_json: serde_json::Value) -> Result<SemanticUnit> {
+        // Restore the original id field from cortex_id
+        if let Some(obj) = unit_json.as_object_mut() {
+            if let Some(cortex_id) = obj.remove("cortex_id") {
+                obj.insert("id".to_string(), cortex_id);
+            }
+        }
+
+        serde_json::from_value(unit_json)
+            .map_err(|e| CortexError::storage(format!("Failed to deserialize semantic unit: {}", e)))
+    }
+
+    /// Get the SELECT clause for querying semantic units (with enum field conversion)
+    fn semantic_unit_select_clause() -> &'static str {
+        "SELECT
+            cortex_id,
+            type::string(unit_type) as unit_type,
+            name,
+            qualified_name,
+            display_name,
+            file_path,
+            start_line,
+            start_column,
+            end_line,
+            end_column,
+            signature,
+            body,
+            docstring,
+            visibility,
+            modifiers,
+            parameters,
+            return_type,
+            summary,
+            purpose,
+            complexity.cyclomatic as cyclomatic,
+            complexity.cognitive as cognitive,
+            complexity.nesting as nesting,
+            complexity.lines as lines,
+            test_coverage,
+            has_tests,
+            has_documentation,
+            embedding,
+            created_at,
+            updated_at"
+    }
+
+    /// Helper to reconstruct complexity from flat fields
+    fn json_to_semantic_unit_with_complexity(mut unit_json: serde_json::Value) -> Result<SemanticUnit> {
+        // Reconstruct complexity object if it's been flattened
+        if let Some(obj) = unit_json.as_object_mut() {
+            if obj.contains_key("cyclomatic") {
+                let complexity = serde_json::json!({
+                    "cyclomatic": obj.remove("cyclomatic").unwrap_or(serde_json::Value::Null),
+                    "cognitive": obj.remove("cognitive").unwrap_or(serde_json::Value::Null),
+                    "nesting": obj.remove("nesting").unwrap_or(serde_json::Value::Null),
+                    "lines": obj.remove("lines").unwrap_or(serde_json::Value::Null),
+                });
+                obj.insert("complexity".to_string(), complexity);
+            }
+        }
+
+        Self::json_to_semantic_unit(unit_json)
+    }
+
+    /// Store a semantic unit (legacy compatibility)
+    pub async fn store_semantic_unit(&self, unit: &SemanticUnit) -> Result<CortexId> {
         info!(unit_id = %unit.id, name = %unit.name, "Storing semantic unit");
 
         let conn = self
@@ -35,72 +121,170 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
-        let query = "
-            CREATE code_unit CONTENT {
-                id: $id,
-                unit_type: $unit_type,
-                name: $name,
-                qualified_name: $qualified_name,
-                display_name: $display_name,
-                file_path: $file_path,
-                start_line: $start_line,
-                start_column: $start_column,
-                end_line: $end_line,
-                end_column: $end_column,
-                signature: $signature,
-                body: $body,
-                docstring: $docstring,
-                visibility: $visibility,
-                modifiers: $modifiers,
-                parameters: $parameters,
-                return_type: $return_type,
-                summary: $summary,
-                purpose: $purpose,
-                complexity: $complexity,
-                test_coverage: $test_coverage,
-                has_tests: $has_tests,
-                has_documentation: $has_documentation,
-                embedding: $embedding,
-                created_at: $created_at,
-                updated_at: $updated_at
+        // Serialize the unit to JSON and rename the id field to avoid SurrealDB record ID conflicts
+        let mut unit_json = serde_json::to_value(unit.clone())
+            .map_err(|e| CortexError::storage(format!("Failed to serialize semantic unit: {}", e)))?;
+
+        // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
+        if let Some(obj) = unit_json.as_object_mut() {
+            if let Some(id_val) = obj.remove("id") {
+                obj.insert("cortex_id".to_string(), id_val);
             }
-        ";
+        }
 
-        conn.connection().query(query)
-            .bind(("id", unit.id.to_string()))
-            .bind(("unit_type", unit.unit_type))
-            .bind(("name", unit.name.clone()))
-            .bind(("qualified_name", unit.qualified_name.clone()))
-            .bind(("display_name", unit.display_name.clone()))
-            .bind(("file_path", unit.file_path.clone()))
-            .bind(("start_line", unit.start_line))
-            .bind(("start_column", unit.start_column))
-            .bind(("end_line", unit.end_line))
-            .bind(("end_column", unit.end_column))
-            .bind(("signature", unit.signature.clone()))
-            .bind(("body", unit.body.clone()))
-            .bind(("docstring", unit.docstring.clone()))
-            .bind(("visibility", unit.visibility.clone()))
-            .bind(("modifiers", unit.modifiers.clone()))
-            .bind(("parameters", unit.parameters.clone()))
-            .bind(("return_type", unit.return_type.clone()))
-            .bind(("summary", unit.summary.clone()))
-            .bind(("purpose", unit.purpose.clone()))
-            .bind(("complexity", unit.complexity.clone()))
-            .bind(("test_coverage", unit.test_coverage))
-            .bind(("has_tests", unit.has_tests))
-            .bind(("has_documentation", unit.has_documentation))
-            .bind(("embedding", unit.embedding.clone()))
-            .bind(("created_at", unit.created_at))
-            .bind(("updated_at", unit.updated_at))
+        // Create semantic unit with the modified JSON
+        let query = "CREATE semantic_unit CONTENT $data";
+        conn
+            .connection()
+            .query(query)
+            .bind(("data", unit_json))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| CortexError::storage(format!("Failed to store semantic unit: {}", e)))?;
 
+        debug!(unit_id = %unit.id, "Semantic unit stored successfully");
         Ok(unit.id)
     }
 
+    /// Convert legacy SemanticUnit to new CodeUnit
+    fn convert_semantic_to_code_unit(&self, unit: &SemanticUnit) -> CodeUnit {
+        CodeUnit {
+            id: unit.id,
+            unit_type: self.convert_unit_type(unit.unit_type),
+            name: unit.name.clone(),
+            qualified_name: unit.qualified_name.clone(),
+            display_name: unit.display_name.clone(),
+            file_path: unit.file_path.clone(),
+            language: Language::Unknown, // Will need to infer from file_path
+            start_line: unit.start_line as usize,
+            end_line: unit.end_line as usize,
+            start_column: unit.start_column as usize,
+            end_column: unit.end_column as usize,
+            start_byte: 0,
+            end_byte: 0,
+            signature: unit.signature.clone(),
+            body: Some(unit.body.clone()),
+            docstring: unit.docstring.clone(),
+            comments: Vec::new(),
+            return_type: unit.return_type.clone(),
+            parameters: unit.parameters.iter().map(|p| Parameter {
+                name: p.clone(),
+                param_type: None,
+                default_value: None,
+                is_optional: false,
+                is_variadic: false,
+                attributes: Vec::new(),
+            }).collect(),
+            type_parameters: Vec::new(),
+            generic_constraints: Vec::new(),
+            throws: Vec::new(),
+            visibility: self.convert_visibility(&unit.visibility),
+            attributes: Vec::new(),
+            modifiers: unit.modifiers.clone(),
+            is_async: unit.modifiers.contains(&"async".to_string()),
+            is_unsafe: unit.modifiers.contains(&"unsafe".to_string()),
+            is_const: unit.modifiers.contains(&"const".to_string()),
+            is_static: unit.modifiers.contains(&"static".to_string()),
+            is_abstract: false,
+            is_virtual: false,
+            is_override: false,
+            is_final: false,
+            is_exported: false,
+            is_default_export: false,
+            complexity: CoreComplexity {
+                cyclomatic: unit.complexity.cyclomatic,
+                cognitive: unit.complexity.cognitive,
+                nesting: unit.complexity.nesting,
+                lines: unit.complexity.lines,
+                parameters: 0,
+                returns: 0,
+            },
+            test_coverage: unit.test_coverage.map(|c| c as f64),
+            has_tests: unit.has_tests,
+            has_documentation: unit.has_documentation,
+            language_specific: HashMap::new(),
+            embedding: unit.embedding.clone(),
+            embedding_model: Some("text-embedding-3-small".to_string()),
+            summary: Some(unit.summary.clone()),
+            purpose: Some(unit.purpose.clone()),
+            ast_node_type: None,
+            ast_metadata: None,
+            status: CodeUnitStatus::Active,
+            version: 1,
+            created_at: unit.created_at,
+            updated_at: unit.updated_at,
+            created_by: "system".to_string(),
+            updated_by: "system".to_string(),
+            tags: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    fn convert_unit_type(&self, unit_type: CodeUnitType) -> CoreCodeUnitType {
+        match unit_type {
+            CodeUnitType::Function => CoreCodeUnitType::Function,
+            CodeUnitType::Method => CoreCodeUnitType::Method,
+            CodeUnitType::AsyncFunction => CoreCodeUnitType::AsyncFunction,
+            CodeUnitType::Generator => CoreCodeUnitType::Generator,
+            CodeUnitType::Lambda => CoreCodeUnitType::Lambda,
+            CodeUnitType::Class => CoreCodeUnitType::Class,
+            CodeUnitType::Struct => CoreCodeUnitType::Struct,
+            CodeUnitType::Enum => CoreCodeUnitType::Enum,
+            CodeUnitType::Union => CoreCodeUnitType::Union,
+            CodeUnitType::Interface => CoreCodeUnitType::Interface,
+            CodeUnitType::Trait => CoreCodeUnitType::Trait,
+            CodeUnitType::TypeAlias => CoreCodeUnitType::TypeAlias,
+            CodeUnitType::Typedef => CoreCodeUnitType::Typedef,
+            CodeUnitType::Const => CoreCodeUnitType::Const,
+            CodeUnitType::Static => CoreCodeUnitType::Static,
+            CodeUnitType::Variable => CoreCodeUnitType::Variable,
+            CodeUnitType::Module => CoreCodeUnitType::Module,
+            CodeUnitType::Namespace => CoreCodeUnitType::Namespace,
+            CodeUnitType::Package => CoreCodeUnitType::Package,
+            CodeUnitType::ImplBlock => CoreCodeUnitType::ImplBlock,
+            CodeUnitType::Decorator => CoreCodeUnitType::Decorator,
+            CodeUnitType::Macro => CoreCodeUnitType::Macro,
+            CodeUnitType::Template => CoreCodeUnitType::Template,
+            CodeUnitType::Test => CoreCodeUnitType::Test,
+            CodeUnitType::Benchmark => CoreCodeUnitType::Benchmark,
+            CodeUnitType::Example => CoreCodeUnitType::Example,
+        }
+    }
+
+    fn convert_visibility(&self, visibility: &str) -> Visibility {
+        match visibility.to_lowercase().as_str() {
+            "public" => Visibility::Public,
+            "private" => Visibility::Private,
+            "protected" => Visibility::Protected,
+            "internal" => Visibility::Internal,
+            "package" => Visibility::Package,
+            _ => Visibility::Private,
+        }
+    }
+
     /// Retrieve a code unit by ID
-    pub async fn get_unit(&self, id: CortexId) -> Result<Option<SemanticUnit>> {
+    pub async fn get_unit(&self, id: CortexId) -> Result<Option<CodeUnit>> {
+        debug!(unit_id = %id, "Retrieving code unit");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        // Query by id field in content, not by record ID
+        let query = "SELECT * FROM code_unit WHERE id = $id LIMIT 1";
+        let mut result = conn
+            .connection()
+            .query(query)
+            .bind(("id", id))
+            .await
+            .map_err(|e| CortexError::storage(format!("Query failed: {}", e)))?;
+
+        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))?;
+        Ok(units.into_iter().next())
+    }
+
+    /// Retrieve a semantic unit by ID (legacy compatibility)
+    pub async fn get_semantic_unit(&self, id: CortexId) -> Result<Option<SemanticUnit>> {
         debug!(unit_id = %id, "Retrieving semantic unit");
 
         let conn = self
@@ -108,15 +292,102 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        // Query by cortex_id field (we renamed id to cortex_id to avoid SurrealDB record ID conflicts)
+        let query = format!("{} FROM semantic_unit WHERE cortex_id = $cortex_id LIMIT 1", Self::semantic_unit_select_clause());
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE id = $id")
-            .bind(("id", id.to_string()))
+            .query(&query)
+            .bind(("cortex_id", id.to_string()))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| CortexError::storage(format!("Query failed: {}", e)))?;
 
-        let unit: Option<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(unit)
+        let units: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))?;
+
+        // Convert the JSON back to SemanticUnit, handling the cortex_id -> id conversion
+        if let Some(unit_json) = units.into_iter().next() {
+            Ok(Some(Self::json_to_semantic_unit_with_complexity(unit_json)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Convert new CodeUnit back to legacy SemanticUnit
+    pub fn convert_code_to_semantic_unit(&self, unit: &CodeUnit) -> SemanticUnit {
+        SemanticUnit {
+            id: unit.id,
+            unit_type: self.convert_core_unit_type(unit.unit_type),
+            name: unit.name.clone(),
+            qualified_name: unit.qualified_name.clone(),
+            display_name: unit.display_name.clone(),
+            file_path: unit.file_path.clone(),
+            start_line: unit.start_line as u32,
+            start_column: unit.start_column as u32,
+            end_line: unit.end_line as u32,
+            end_column: unit.end_column as u32,
+            signature: unit.signature.clone(),
+            body: unit.body.clone().unwrap_or_default(),
+            docstring: unit.docstring.clone(),
+            visibility: self.convert_core_visibility(unit.visibility),
+            modifiers: unit.modifiers.clone(),
+            parameters: unit.parameters.iter().map(|p| p.name.clone()).collect(),
+            return_type: unit.return_type.clone(),
+            summary: unit.summary.clone().unwrap_or_default(),
+            purpose: unit.purpose.clone().unwrap_or_default(),
+            complexity: ComplexityMetrics {
+                cyclomatic: unit.complexity.cyclomatic,
+                cognitive: unit.complexity.cognitive,
+                nesting: unit.complexity.nesting,
+                lines: unit.complexity.lines,
+            },
+            test_coverage: unit.test_coverage.map(|c| c as f32),
+            has_tests: unit.has_tests,
+            has_documentation: unit.has_documentation,
+            embedding: unit.embedding.clone(),
+            created_at: unit.created_at,
+            updated_at: unit.updated_at,
+        }
+    }
+
+    fn convert_core_unit_type(&self, unit_type: CoreCodeUnitType) -> CodeUnitType {
+        match unit_type {
+            CoreCodeUnitType::Function => CodeUnitType::Function,
+            CoreCodeUnitType::Method => CodeUnitType::Method,
+            CoreCodeUnitType::AsyncFunction => CodeUnitType::AsyncFunction,
+            CoreCodeUnitType::Generator => CodeUnitType::Generator,
+            CoreCodeUnitType::Lambda => CodeUnitType::Lambda,
+            CoreCodeUnitType::Class => CodeUnitType::Class,
+            CoreCodeUnitType::Struct => CodeUnitType::Struct,
+            CoreCodeUnitType::Enum => CodeUnitType::Enum,
+            CoreCodeUnitType::Union => CodeUnitType::Union,
+            CoreCodeUnitType::Interface => CodeUnitType::Interface,
+            CoreCodeUnitType::Trait => CodeUnitType::Trait,
+            CoreCodeUnitType::TypeAlias => CodeUnitType::TypeAlias,
+            CoreCodeUnitType::Typedef => CodeUnitType::Typedef,
+            CoreCodeUnitType::Const => CodeUnitType::Const,
+            CoreCodeUnitType::Static => CodeUnitType::Static,
+            CoreCodeUnitType::Variable => CodeUnitType::Variable,
+            CoreCodeUnitType::Module => CodeUnitType::Module,
+            CoreCodeUnitType::Namespace => CodeUnitType::Namespace,
+            CoreCodeUnitType::Package => CodeUnitType::Package,
+            CoreCodeUnitType::ImplBlock => CodeUnitType::ImplBlock,
+            CoreCodeUnitType::Decorator => CodeUnitType::Decorator,
+            CoreCodeUnitType::Macro => CodeUnitType::Macro,
+            CoreCodeUnitType::Template => CodeUnitType::Template,
+            CoreCodeUnitType::Test => CodeUnitType::Test,
+            CoreCodeUnitType::Benchmark => CodeUnitType::Benchmark,
+            CoreCodeUnitType::Example => CodeUnitType::Example,
+        }
+    }
+
+    fn convert_core_visibility(&self, visibility: Visibility) -> String {
+        match visibility {
+            Visibility::Public => "public".to_string(),
+            Visibility::Private => "private".to_string(),
+            Visibility::Protected => "protected".to_string(),
+            Visibility::Internal => "internal".to_string(),
+            Visibility::Package => "package".to_string(),
+        }
     }
 
     /// Search for code units by semantic similarity
@@ -124,7 +395,7 @@ impl SemanticMemorySystem {
         &self,
         query: &MemoryQuery,
         embedding: &[f32],
-    ) -> Result<Vec<MemorySearchResult<SemanticUnit>>> {
+    ) -> Result<Vec<MemorySearchResult<CodeUnit>>> {
         info!(query = %query.query_text, "Searching for similar code units");
 
         let conn = self
@@ -151,14 +422,14 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<(SemanticUnit, f32)> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let units: Vec<(CodeUnit, f32)> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
 
         let results = units
             .into_iter()
             .map(|(unit, similarity)| MemorySearchResult {
                 item: unit.clone(),
                 similarity_score: 1.0 - similarity,
-                relevance_score: self.calculate_unit_relevance(&unit),
+                relevance_score: self.calculate_code_unit_relevance(&unit),
             })
             .collect();
 
@@ -166,7 +437,7 @@ impl SemanticMemorySystem {
     }
 
     /// Get all units in a file
-    pub async fn get_units_in_file(&self, file_path: &str) -> Result<Vec<SemanticUnit>> {
+    pub async fn get_units_in_file(&self, file_path: &str) -> Result<Vec<CodeUnit>> {
         debug!(file_path, "Retrieving units in file");
 
         let conn = self
@@ -181,12 +452,12 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
         Ok(units)
     }
 
     /// Search units by qualified name (e.g., "module::Class::method")
-    pub async fn find_by_qualified_name(&self, qualified_name: &str) -> Result<Option<SemanticUnit>> {
+    pub async fn find_by_qualified_name(&self, qualified_name: &str) -> Result<Option<CodeUnit>> {
         debug!(qualified_name, "Finding unit by qualified name");
 
         let conn = self
@@ -201,7 +472,7 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let unit: Option<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let unit: Option<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
         Ok(unit)
     }
 
@@ -218,31 +489,26 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
-        let query = "
-            CREATE DEPENDS_ON CONTENT {
-                id: $id,
-                in: $source_id,
-                out: $target_id,
-                dependency_type: $dependency_type,
-                is_direct: $is_direct,
-                is_runtime: $is_runtime,
-                is_dev: $is_dev,
-                metadata: $metadata
-            }
-        ";
+        // Serialize the dependency to JSON to ensure proper enum serialization
+        let mut dep_json = serde_json::to_value(dependency.clone())
+            .map_err(|e| CortexError::storage(format!("Failed to serialize dependency: {}", e)))?;
 
-        conn.connection().query(query)
-            .bind(("id", dependency.id.to_string()))
-            .bind(("source_id", format!("code_unit:{}", dependency.source_id)))
-            .bind(("target_id", format!("code_unit:{}", dependency.target_id)))
-            .bind(("dependency_type", dependency.dependency_type))
-            .bind(("is_direct", dependency.is_direct))
-            .bind(("is_runtime", dependency.is_runtime))
-            .bind(("is_dev", dependency.is_dev))
-            .bind(("metadata", dependency.metadata.clone()))
+        // Add SurrealDB edge fields (in and out)
+        if let Some(obj) = dep_json.as_object_mut() {
+            obj.insert("in".to_string(), serde_json::json!(format!("code_unit:{}", dependency.source_id)));
+            obj.insert("out".to_string(), serde_json::json!(format!("code_unit:{}", dependency.target_id)));
+        }
+
+        // Create the edge with the JSON content
+        let query = "CREATE DEPENDS_ON CONTENT $data";
+        conn
+            .connection()
+            .query(query)
+            .bind(("data", dep_json))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| CortexError::storage(format!("Failed to store dependency: {}", e)))?;
 
+        debug!(dep_id = %dependency.id, "Dependency stored successfully");
         Ok(dependency.id)
     }
 
@@ -255,15 +521,33 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        // Use the RELATE statement syntax to query edges
+        // Since we store the dependency with source_id/target_id fields, query those
+        let query = "SELECT id, source_id, target_id, dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE source_id = $unit_id";
         let mut result = conn
             .connection()
-            .query("SELECT * FROM DEPENDS_ON WHERE in = $unit_id")
-            .bind(("unit_id", format!("code_unit:{}", unit_id)))
+            .query(query)
+            .bind(("unit_id", unit_id.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let deps: Vec<Dependency> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(deps)
+        let deps_json: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // Deserialize each dependency, filtering out any that fail
+        let dependencies: Vec<Dependency> = deps_json.into_iter()
+            .filter_map(|dep_json| {
+                // Print for debugging
+                if let Err(e) = serde_json::from_value::<Dependency>(dep_json.clone()) {
+                    eprintln!("Skipping dependency due to deserialize error: {}", e);
+                    eprintln!("JSON was: {}", serde_json::to_string_pretty(&dep_json).unwrap_or_else(|_| format!("{:?}", dep_json)));
+                    None
+                } else {
+                    serde_json::from_value(dep_json).ok()
+                }
+            })
+            .collect();
+
+        Ok(dependencies)
     }
 
     /// Get dependents of a code unit (what depends on it)
@@ -275,15 +559,22 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = "SELECT id, source_id, target_id, dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE target_id = $unit_id";
         let mut result = conn
             .connection()
-            .query("SELECT * FROM DEPENDS_ON WHERE out = $unit_id")
-            .bind(("unit_id", format!("code_unit:{}", unit_id)))
+            .query(query)
+            .bind(("unit_id", unit_id.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let deps: Vec<Dependency> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(deps)
+        let deps_json: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // Deserialize each dependency
+        let dependencies = deps_json.into_iter()
+            .filter_map(|v| serde_json::from_value::<Dependency>(v).ok())
+            .collect();
+
+        Ok(dependencies)
     }
 
     /// Get dependency graph for a set of units
@@ -305,7 +596,44 @@ impl SemanticMemorySystem {
     // Analysis Operations
     // ========================================================================
 
-    /// Calculate relevance score for a semantic unit
+    /// Calculate relevance score for a code unit
+    fn calculate_code_unit_relevance(&self, unit: &CodeUnit) -> f32 {
+        let mut score = 0.5; // Base score
+
+        // Bonus for documentation
+        if unit.has_documentation {
+            score += 0.1;
+        }
+
+        // Bonus for tests
+        if unit.has_tests {
+            score += 0.1;
+        }
+
+        // Penalty for high complexity
+        if unit.complexity.cyclomatic > 10 {
+            score -= 0.1;
+        }
+
+        // Bonus for test coverage
+        if let Some(coverage) = unit.test_coverage {
+            score += (coverage as f32) * 0.2;
+        }
+
+        // Bonus for public visibility
+        if unit.visibility == Visibility::Public {
+            score += 0.05;
+        }
+
+        // Small bonus for type information
+        if unit.return_type.is_some() && !unit.parameters.is_empty() {
+            score += 0.05;
+        }
+
+        score.clamp(0.0, 1.0)
+    }
+
+    /// Calculate relevance score for a semantic unit (legacy)
     fn calculate_unit_relevance(&self, unit: &SemanticUnit) -> f32 {
         let mut score = 0.5; // Base score
 
@@ -356,7 +684,7 @@ impl SemanticMemorySystem {
     }
 
     /// Find units with high complexity that need refactoring
-    pub async fn find_complex_units(&self, complexity_threshold: u32) -> Result<Vec<SemanticUnit>> {
+    pub async fn find_complex_units(&self, complexity_threshold: u32) -> Result<Vec<CodeUnit>> {
         info!(threshold = complexity_threshold, "Finding complex units");
 
         let conn = self
@@ -364,6 +692,7 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        // Query both code_unit and semantic_unit tables for compatibility
         let mut result = conn
             .connection()
             .query("SELECT * FROM code_unit WHERE complexity.cyclomatic > $threshold ORDER BY complexity.cyclomatic DESC")
@@ -371,12 +700,30 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let mut units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // Also check semantic_unit table (legacy) and convert to CodeUnit
+        let query = format!("{} FROM semantic_unit WHERE complexity.cyclomatic > $threshold ORDER BY cyclomatic DESC", Self::semantic_unit_select_clause());
+        let mut result2 = conn
+            .connection()
+            .query(&query)
+            .bind(("threshold", complexity_threshold))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let semantic_units_json: Vec<serde_json::Value> = result2.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+
+        for unit_json in semantic_units_json {
+            if let Ok(semantic_unit) = Self::json_to_semantic_unit_with_complexity(unit_json) {
+                units.push(self.convert_semantic_to_code_unit(&semantic_unit));
+            }
+        }
+
         Ok(units)
     }
 
     /// Find units without tests
-    pub async fn find_untested_units(&self) -> Result<Vec<SemanticUnit>> {
+    pub async fn find_untested_units(&self) -> Result<Vec<CodeUnit>> {
         info!("Finding untested code units");
 
         let conn = self
@@ -390,12 +737,12 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
         Ok(units)
     }
 
     /// Find units without documentation
-    pub async fn find_undocumented_units(&self) -> Result<Vec<SemanticUnit>> {
+    pub async fn find_undocumented_units(&self) -> Result<Vec<CodeUnit>> {
         info!("Finding undocumented code units");
 
         let conn = self
@@ -409,7 +756,7 @@ impl SemanticMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<SemanticUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
         Ok(units)
     }
 
@@ -516,15 +863,44 @@ impl SemanticMemorySystem {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use cortex_storage::connection::ConnectionConfig;
-    use cortex_storage::pool::ConnectionPool;
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
+    use std::time::Duration;
 
     async fn create_test_memory() -> SemanticMemorySystem {
-        let config = ConnectionConfig::memory();
-        let pool = Arc::new(ConnectionPool::new(config));
-        pool.initialize().await.unwrap();
+        // Use a temporary file-based database for tests to ensure persistence
+        let temp_db = format!("file:/tmp/cortex_semantic_test_{}.db", CortexId::new());
 
-        SemanticMemorySystem::new(pool).await.unwrap()
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: temp_db,
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 1, // Force single connection
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy {
+                    max_attempts: 3,
+                    initial_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(10),
+                    multiplier: 2.0,
+                },
+                warm_connections: true,
+                validate_on_checkout: false,
+                recycle_after_uses: None,
+                shutdown_grace_period: Duration::from_secs(5),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
+
+        let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
+        SemanticMemorySystem::new(manager)
     }
 
     #[tokio::test]
@@ -561,12 +937,12 @@ mod tests {
         };
 
         let id = memory
-            .store_unit(&unit)
+            .store_semantic_unit(&unit)
             .await
             .expect("Failed to store unit");
 
         let retrieved = memory
-            .get_unit(id)
+            .get_semantic_unit(id)
             .await
             .expect("Failed to retrieve unit");
 
@@ -646,7 +1022,7 @@ mod tests {
         };
 
         memory
-            .store_unit(&unit)
+            .store_semantic_unit(&unit)
             .await
             .expect("Failed to store unit");
 

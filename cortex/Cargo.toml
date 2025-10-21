@@ -7,6 +7,7 @@ members = [
     "cortex-ingestion",
     "cortex-memory",
     "cortex-semantic",
+    "cortex-parser",
     "cortex-mcp",
     "cortex-cli",
 ]
@@ -72,6 +73,7 @@ unicode-segmentation = "1.12.0"
 
 # Embeddings and ML
 ort = { version = "1.16.3", features = ["load-dynamic"] }
+tokenizers = { version = "0.19.1", default-features = false, features = ["onig"] }
 
 # File watching
 notify = "8.2.0"
@@ -92,6 +94,9 @@ rayon = "1.11.0"
 mockall = "0.13.1"
 tempfile = "3.23.0"
 proptest = "1.8.0"
+
+# Benchmarking
+criterion = { version = "0.7.0", features = ["html_reports"] }
 
 [profile.release]
 opt-level = 3
@@ -119,6 +124,7 @@ cortex-vfs = { path = "cortex-vfs" }
 cortex-memory = { path = "cortex-memory" }
 cortex-semantic = { path = "cortex-semantic" }
 cortex-ingestion = { path = "cortex-ingestion" }
+cortex-parser = { path = "cortex-parser" }
 # cortex-mcp = { path = "cortex-mcp" } # Temporarily disabled due to compilation errors
 # cortex-cli = { path = "cortex-cli" } # Temporarily disabled
 
@@ -131,6 +137,10 @@ uuid.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 futures.workspace = true
+tracing-subscriber = { workspace = true }
+blake3.workspace = true
+rand = "0.9.2"
+criterion = { workspace = true }
 
 [[test]]
 name = "cross_crate_integration"
@@ -171,3 +181,38 @@ harness = true
 name = "reality_check_e2e"
 path = "tests/reality_check_e2e.rs"
 harness = true
+
+[[test]]
+name = "e2e_real_project"
+path = "tests/e2e_real_project.rs"
+harness = true
+
+[[test]]
+name = "test_multi_agent_advanced"
+path = "tests/test_multi_agent_advanced.rs"
+harness = true
+
+[[test]]
+name = "test_complete_e2e_workflows"
+path = "tests/test_complete_e2e_workflows.rs"
+harness = true
+
+[[test]]
+name = "test_token_efficiency"
+path = "tests/test_token_efficiency.rs"
+harness = true
+
+[[test]]
+name = "test_performance_benchmarks"
+path = "tests/test_performance_benchmarks.rs"
+harness = true
+
+[[test]]
+name = "test_multi_agent_realistic_scenarios"
+path = "tests/test_multi_agent_realistic_scenarios.rs"
+harness = true
+
+# Benchmarks
+[[bench]]
+name = "performance_benchmarks"
+harness = false

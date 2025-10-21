@@ -178,13 +178,17 @@ impl CrossMemoryQuery {
 
         // Search by files touched
         for file_path in &episode.files_touched {
-            if let Ok(units) = self
+            if let Ok(code_units) = self
                 .cognitive_manager
                 .semantic()
                 .get_units_in_file(file_path)
                 .await
             {
-                related.extend(units);
+                // Convert CodeUnit to SemanticUnit
+                let semantic_units: Vec<_> = code_units.iter()
+                    .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                    .collect();
+                related.extend(semantic_units);
             }
         }
 
@@ -219,8 +223,8 @@ impl CrossMemoryQuery {
     pub async fn get_unit_context(&self, unit_id: CortexId) -> Result<UnitContext> {
         info!(unit_id = %unit_id, "Getting comprehensive unit context");
 
-        // Get the unit
-        let unit = self
+        // Get the unit (as CodeUnit)
+        let code_unit = self
             .cognitive_manager
             .semantic()
             .get_unit(unit_id)
@@ -228,6 +232,9 @@ impl CrossMemoryQuery {
             .ok_or_else(|| {
                 cortex_core::error::CortexError::not_found("code_unit", unit_id.to_string())
             })?;
+
+        // Convert to SemanticUnit
+        let unit = self.cognitive_manager.semantic().convert_code_to_semantic_unit(&code_unit);
 
         // Get dependencies
         let dependencies = self
@@ -244,11 +251,16 @@ impl CrossMemoryQuery {
             .await?;
 
         // Get related units in the same file
-        let file_units = self
+        let code_file_units = self
             .cognitive_manager
             .semantic()
-            .get_units_in_file(&unit.file_path)
+            .get_units_in_file(&code_unit.file_path)
             .await?;
+
+        // Convert to SemanticUnits
+        let file_units: Vec<_> = code_file_units.iter()
+            .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+            .collect();
 
         Ok(UnitContext {
             unit,
@@ -276,31 +288,43 @@ impl CrossMemoryQuery {
 
         // Apply complexity filters for code units
         if let Some(complexity_threshold) = filters.complexity_threshold {
-            let complex_units = self
+            let complex_code_units = self
                 .cognitive_manager
                 .semantic()
                 .find_complex_units(complexity_threshold)
                 .await?;
+            // Convert to SemanticUnits
+            let complex_units: Vec<_> = complex_code_units.iter()
+                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .collect();
             results.code_units = complex_units;
         }
 
         // Find untested units if requested
         if filters.untested_only {
-            let untested = self
+            let untested_code_units = self
                 .cognitive_manager
                 .semantic()
                 .find_untested_units()
                 .await?;
+            // Convert to SemanticUnits
+            let untested: Vec<_> = untested_code_units.iter()
+                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .collect();
             results.code_units.extend(untested);
         }
 
         // Find undocumented units if requested
         if filters.undocumented_only {
-            let undocumented = self
+            let undocumented_code_units = self
                 .cognitive_manager
                 .semantic()
                 .find_undocumented_units()
                 .await?;
+            // Convert to SemanticUnits
+            let undocumented: Vec<_> = undocumented_code_units.iter()
+                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .collect();
             results.code_units.extend(undocumented);
         }
 
@@ -344,15 +368,41 @@ pub struct QueryResults {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::connection::ConnectionConfig;
-    use cortex_storage::pool::ConnectionPool;
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
+    use std::time::Duration;
 
     async fn create_test_query_engine() -> CrossMemoryQuery {
-        let config = ConnectionConfig::memory();
-        let pool = Arc::new(ConnectionPool::new(config));
-        pool.initialize().await.unwrap();
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: "memory".to_string(),
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 10,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy {
+                    max_attempts: 3,
+                    initial_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(10),
+                    multiplier: 2.0,
+                },
+                warm_connections: false,
+                validate_on_checkout: true,
+                recycle_after_uses: Some(1000),
+                shutdown_grace_period: Duration::from_secs(5),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
 
-        let cognitive = Arc::new(CognitiveManager::new(pool).await.unwrap());
+        let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
+        let cognitive = Arc::new(CognitiveManager::new(manager));
         CrossMemoryQuery::new(cognitive)
     }
 

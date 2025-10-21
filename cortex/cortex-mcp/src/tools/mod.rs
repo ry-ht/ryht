@@ -1,6 +1,6 @@
 //! Cortex MCP Tools
 //!
-//! This module provides 150+ MCP tools for Cortex, organized by category:
+//! This module provides 170+ MCP tools for Cortex, organized by category:
 //! - Workspace Management (8 tools)
 //! - Virtual Filesystem (12 tools)
 //! - Code Navigation (10 tools)
@@ -16,6 +16,11 @@
 //! - Documentation (8 tools)
 //! - Build & Execution (8 tools)
 //! - Monitoring & Analytics (10 tools)
+//! - Security Analysis (4 tools) - NEW
+//! - Type Analysis (4 tools) - NEW
+//! - AI-Assisted Development (6 tools) - NEW
+//! - Advanced Testing (6 tools) - NEW
+//! - Architecture Analysis (5 tools) - NEW
 
 pub mod workspace;
 pub mod vfs;
@@ -32,6 +37,11 @@ pub mod testing;
 pub mod documentation;
 pub mod build_execution;
 pub mod monitoring;
+pub mod security_analysis;
+pub mod type_analysis;
+pub mod ai_assisted;
+pub mod advanced_testing;
+pub mod architecture_analysis;
 
 // Re-export all tools
 pub use workspace::*;
@@ -49,6 +59,11 @@ pub use testing::*;
 pub use documentation::*;
 pub use build_execution::*;
 pub use monitoring::*;
+pub use security_analysis::*;
+pub use type_analysis::*;
+pub use ai_assisted::*;
+pub use advanced_testing::*;
+pub use architecture_analysis::*;
 
 use mcp_server::tool::ToolDefinition;
 

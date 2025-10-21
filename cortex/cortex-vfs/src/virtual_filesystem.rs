@@ -397,35 +397,14 @@ impl VirtualFileSystem {
     }
 
     /// Store content in database (deduplicated).
+    ///
+    /// IMPROVED: Uses atomic UPSERT to prevent race conditions in reference counting
     async fn store_content(&self, hash: &str, content: &[u8]) -> Result<()> {
-        // Check if content already exists
-        let exists_query = format!("SELECT id FROM file_content WHERE content_hash = $hash LIMIT 1");
         let conn = self.storage.acquire().await?;
-        let mut response = conn.connection()
-            .query(&exists_query)
-            .bind(("hash", hash.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let exists: Option<String> = response.take(0)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        if exists.is_some() {
-            // Content already stored, just increment reference count
-            let update_query = format!(
-                "UPDATE file_content SET reference_count += 1 WHERE content_hash = $hash"
-            );
-            conn.connection()
-                .query(&update_query)
-                .bind(("hash", hash.to_string()))
-                .await
-                .map_err(|e| CortexError::storage(e.to_string()))?;
-
-            debug!("Content already exists (deduplicated): {}", hash);
-            return Ok(());
-        }
-
-        // Store new content
+        // IMPROVED: Use atomic UPSERT instead of check-then-update
+        // This prevents race conditions where multiple threads try to create the same content
+        // SurrealDB's UPSERT will atomically create or update
         let file_content = FileContent {
             content_hash: hash.to_string(),
             content: String::from_utf8(content.to_vec()).ok(),
@@ -444,14 +423,19 @@ impl VirtualFileSystem {
         let file_content_json = serde_json::to_value(&file_content)
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let create_query = format!("CREATE file_content CONTENT $content");
+        // Use UPSERT to atomically increment reference_count if exists, create if not
+        let upsert_query = format!(
+            "UPSERT file_content:$hash CONTENT $content ON DUPLICATE KEY UPDATE reference_count += 1"
+        );
+
         conn.connection()
-            .query(&create_query)
+            .query(&upsert_query)
+            .bind(("hash", hash.to_string()))
             .bind(("content", file_content_json))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        debug!("Stored new content: {}", hash);
+        debug!("Content stored/referenced: {}", hash);
         Ok(())
     }
 
@@ -494,6 +478,66 @@ impl VirtualFileSystem {
         self.content_cache.clear();
         self.vnode_cache.clear();
         self.path_cache.clear();
+    }
+
+    // ============================================================================
+    // Ingestion Integration Methods
+    // ============================================================================
+
+    /// Reparse a file and update its code units in semantic memory.
+    /// This is a convenience method that can be called after file modifications.
+    pub async fn reparse_file(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+    ) -> Result<usize> {
+        // This method would require an ingestion pipeline instance
+        // For now, we return Ok(0) as a placeholder
+        // In practice, this would be called from the ingestion pipeline
+        debug!("Reparse requested for {} (not yet implemented)", path);
+        Ok(0)
+    }
+
+    /// Get the number of code units extracted from a file.
+    /// This reads metadata from the VNode if available.
+    pub async fn get_file_units_count(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+    ) -> Result<usize> {
+        let vnode = self.get_vnode(workspace_id, path).await?
+            .ok_or_else(|| CortexError::not_found("File", path.to_string()))?;
+
+        // Check metadata for units_count
+        if let Some(count_value) = vnode.metadata.get("units_count") {
+            if let Some(count) = count_value.as_u64() {
+                return Ok(count as usize);
+            }
+        }
+
+        Ok(0)
+    }
+
+    /// Update VNode metadata with code units count.
+    /// Called by the ingestion pipeline after processing.
+    pub async fn update_file_units_count(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+        count: usize,
+    ) -> Result<()> {
+        let mut vnode = self.get_vnode(workspace_id, path).await?
+            .ok_or_else(|| CortexError::not_found("File", path.to_string()))?;
+
+        vnode.metadata.insert(
+            "units_count".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(count)),
+        );
+        vnode.mark_modified();
+
+        self.save_vnode(&vnode).await?;
+
+        Ok(())
     }
 }
 

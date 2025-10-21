@@ -53,7 +53,7 @@ csv = "1.4.0"
 # Language detection
 whatlang = "0.18.0"
 
-# Tree-sitter for code parsing
+# Tree-sitter for code parsing - use 0.23 to avoid conflicts
 tree-sitter = "0.25.10"
 tree-sitter-rust = "0.24.0"
 tree-sitter-python = "0.25.0"

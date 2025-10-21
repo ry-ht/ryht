@@ -58,6 +58,10 @@ pub enum CortexError {
     #[error("Operation timed out: {0}")]
     Timeout(String),
 
+    /// Deadlock errors
+    #[error("Deadlock detected: {0}")]
+    Deadlock(String),
+
     /// Generic internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -124,6 +128,11 @@ impl CortexError {
     /// Create a new timeout error
     pub fn timeout(msg: impl Into<String>) -> Self {
         Self::Timeout(msg.into())
+    }
+
+    /// Create a new deadlock error
+    pub fn deadlock(msg: impl Into<String>) -> Self {
+        Self::Deadlock(msg.into())
     }
 
     /// Create a new internal error

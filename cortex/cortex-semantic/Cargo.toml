@@ -37,6 +37,7 @@ reqwest = { workspace = true }
 
 # ONNX Runtime for local embeddings
 ort = { workspace = true }
+tokenizers = { workspace = true }
 
 # HNSW index
 hnsw = "0.11.0"

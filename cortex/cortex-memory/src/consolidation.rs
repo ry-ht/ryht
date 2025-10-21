@@ -375,17 +375,43 @@ impl MemoryConsolidator {
 mod tests {
     use super::*;
     use cortex_core::id::CortexId;
-    use cortex_storage::connection::ConnectionConfig;
-    use cortex_storage::pool::ConnectionPool;
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
+    use std::time::Duration;
 
     async fn create_test_consolidator() -> MemoryConsolidator {
-        let config = ConnectionConfig::memory();
-        let pool = Arc::new(ConnectionPool::new(config));
-        pool.initialize().await.unwrap();
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: "memory".to_string(),
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 10,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy {
+                    max_attempts: 3,
+                    initial_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(10),
+                    multiplier: 2.0,
+                },
+                warm_connections: false,
+                validate_on_checkout: true,
+                recycle_after_uses: Some(1000),
+                shutdown_grace_period: Duration::from_secs(5),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
 
-        let episodic = Arc::new(EpisodicMemorySystem::new(pool.clone()).await.unwrap());
-        let semantic = Arc::new(SemanticMemorySystem::new(pool.clone()).await.unwrap());
-        let procedural = Arc::new(ProceduralMemorySystem::new(pool).await.unwrap());
+        let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
+        let episodic = Arc::new(EpisodicMemorySystem::new(manager.clone()));
+        let semantic = Arc::new(SemanticMemorySystem::new(manager.clone()));
+        let procedural = Arc::new(ProceduralMemorySystem::new(manager));
         let working = Arc::new(WorkingMemorySystem::new(1000, 10 * 1024 * 1024));
 
         MemoryConsolidator::new(episodic, semantic, procedural, working)

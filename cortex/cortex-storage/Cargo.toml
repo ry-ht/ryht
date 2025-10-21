@@ -38,6 +38,7 @@ once_cell = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
+md5 = "0.8.0"
 
 # Process management
 dirs = "6.0.0"

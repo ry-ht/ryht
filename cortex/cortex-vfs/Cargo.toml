@@ -11,6 +11,8 @@ repository.workspace = true
 # Core
 cortex-core = { path = "../cortex-core" }
 cortex-storage = { path = "../cortex-storage" }
+cortex-parser = { path = "../cortex-parser" }
+cortex-memory = { path = "../cortex-memory" }
 
 # Async
 tokio = { workspace = true }

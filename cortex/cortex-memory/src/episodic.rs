@@ -32,6 +32,46 @@ impl EpisodicMemorySystem {
         self
     }
 
+    /// Helper method to convert SurrealDB JSON to EpisodicMemory
+    fn json_to_episode(mut episode_json: serde_json::Value) -> Result<EpisodicMemory> {
+        // Restore the original id field from cortex_id
+        if let Some(obj) = episode_json.as_object_mut() {
+            if let Some(cortex_id) = obj.remove("cortex_id") {
+                obj.insert("id".to_string(), cortex_id);
+            }
+        }
+
+        serde_json::from_value(episode_json)
+            .map_err(|e| CortexError::storage(format!("Failed to deserialize episode: {}", e)))
+    }
+
+    /// Get the SELECT clause for querying episodes (with enum field conversion)
+    fn episode_select_clause() -> &'static str {
+        "SELECT
+            cortex_id,
+            type::string(episode_type) as episode_type,
+            task_description,
+            agent_id,
+            session_id,
+            workspace_id,
+            entities_created,
+            entities_modified,
+            entities_deleted,
+            files_touched,
+            queries_made,
+            tools_used,
+            solution_summary,
+            type::string(outcome) as outcome,
+            success_metrics,
+            errors_encountered,
+            lessons_learned,
+            duration_seconds,
+            tokens_used,
+            embedding,
+            created_at,
+            completed_at"
+    }
+
     /// Store a new episode
     pub async fn store_episode(&self, episode: &EpisodicMemory) -> Result<CortexId> {
         info!(episode_id = %episode.id, "Storing episodic memory");
@@ -41,59 +81,25 @@ impl EpisodicMemorySystem {
             .acquire()
             .await?;
 
-        // Convert to SurrealDB format
-        let query = "
-            CREATE episode CONTENT {
-                id: $id,
-                episode_type: $episode_type,
-                task_description: $task_description,
-                agent_id: $agent_id,
-                session_id: $session_id,
-                workspace_id: $workspace_id,
-                entities_created: $entities_created,
-                entities_modified: $entities_modified,
-                entities_deleted: $entities_deleted,
-                files_touched: $files_touched,
-                queries_made: $queries_made,
-                tools_used: $tools_used,
-                solution_summary: $solution_summary,
-                outcome: $outcome,
-                success_metrics: $success_metrics,
-                errors_encountered: $errors_encountered,
-                lessons_learned: $lessons_learned,
-                duration_seconds: $duration_seconds,
-                tokens_used: $tokens_used,
-                embedding: $embedding,
-                created_at: $created_at,
-                completed_at: $completed_at
-            }
-        ";
+        // Serialize the episode to JSON and rename the id field to avoid SurrealDB record ID conflicts
+        let mut episode_json = serde_json::to_value(episode.clone())
+            .map_err(|e| CortexError::storage(format!("Failed to serialize episode: {}", e)))?;
 
-        conn.connection().query(query)
-            .bind(("id", episode.id.to_string()))
-            .bind(("episode_type", episode.episode_type))
-            .bind(("task_description", episode.task_description.clone()))
-            .bind(("agent_id", episode.agent_id.clone()))
-            .bind(("session_id", episode.session_id.clone()))
-            .bind(("workspace_id", episode.workspace_id.to_string()))
-            .bind(("entities_created", episode.entities_created.clone()))
-            .bind(("entities_modified", episode.entities_modified.clone()))
-            .bind(("entities_deleted", episode.entities_deleted.clone()))
-            .bind(("files_touched", episode.files_touched.clone()))
-            .bind(("queries_made", episode.queries_made.clone()))
-            .bind(("tools_used", episode.tools_used.clone()))
-            .bind(("solution_summary", episode.solution_summary.clone()))
-            .bind(("outcome", episode.outcome))
-            .bind(("success_metrics", episode.success_metrics.clone()))
-            .bind(("errors_encountered", episode.errors_encountered.clone()))
-            .bind(("lessons_learned", episode.lessons_learned.clone()))
-            .bind(("duration_seconds", episode.duration_seconds))
-            .bind(("tokens_used", episode.tokens_used.clone()))
-            .bind(("embedding", episode.embedding.clone()))
-            .bind(("created_at", episode.created_at))
-            .bind(("completed_at", episode.completed_at.clone()))
+        // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
+        if let Some(obj) = episode_json.as_object_mut() {
+            if let Some(id_val) = obj.remove("id") {
+                obj.insert("cortex_id".to_string(), id_val);
+            }
+        }
+
+        // Create episode with the modified JSON
+        let query = "CREATE episode CONTENT $data";
+        conn
+            .connection()
+            .query(query)
+            .bind(("data", episode_json))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| CortexError::storage(format!("Failed to store episode: {}", e)))?;
 
         debug!(episode_id = %episode.id, "Episode stored successfully");
         Ok(episode.id)
@@ -108,15 +114,24 @@ impl EpisodicMemorySystem {
             .acquire()
             .await?;
 
+        // Query by cortex_id field (we renamed id to cortex_id to avoid SurrealDB record ID conflicts)
+        let query = format!("{} FROM episode WHERE cortex_id = $cortex_id LIMIT 1", Self::episode_select_clause());
         let mut result = conn
             .connection()
-            .query("SELECT * FROM episode WHERE id = $id")
-            .bind(("id", id.to_string()))
+            .query(&query)
+            .bind(("cortex_id", id.to_string()))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| CortexError::storage(format!("Query failed: {}", e)))?;
 
-        let episode: Option<EpisodicMemory> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(episode)
+        let episodes: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))?;
+
+        // Convert the JSON back to EpisodicMemory, handling the cortex_id -> id conversion
+        if let Some(episode_json) = episodes.into_iter().next() {
+            Ok(Some(Self::json_to_episode(episode_json)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Retrieve episodes by similarity search using embeddings
@@ -152,19 +167,32 @@ impl EpisodicMemorySystem {
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let episodes: Vec<(EpisodicMemory, f32)> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let episodes_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let results = episodes
+        let results = episodes_json
             .into_iter()
-            .map(|(episode, similarity)| {
+            .map(|mut json| {
+                // Extract similarity score
+                let similarity = json.get("similarity")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+
+                // Remove similarity field before converting to EpisodicMemory
+                if let Some(obj) = json.as_object_mut() {
+                    obj.remove("similarity");
+                }
+
+                let episode = Self::json_to_episode(json)?;
                 let relevance = self.calculate_relevance(&episode);
-                MemorySearchResult {
+
+                Ok(MemorySearchResult {
                     item: episode,
                     similarity_score: 1.0 - similarity, // Convert distance to similarity
                     relevance_score: relevance,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(results)
     }
@@ -182,16 +210,29 @@ impl EpisodicMemorySystem {
             .acquire()
             .await?;
 
+        // Convert outcome to snake_case string for comparison (matches serde serialization)
+        let outcome_str = match outcome {
+            EpisodeOutcome::Success => "success",
+            EpisodeOutcome::Partial => "partial",
+            EpisodeOutcome::Failure => "failure",
+            EpisodeOutcome::Abandoned => "abandoned",
+        };
+
+        let query = format!("{} FROM episode WHERE type::string(outcome) = $outcome ORDER BY created_at DESC LIMIT $limit", Self::episode_select_clause());
         let mut result = conn
             .connection()
-            .query("SELECT * FROM episode WHERE outcome = $outcome ORDER BY created_at DESC LIMIT $limit")
-            .bind(("outcome", outcome))
+            .query(&query)
+            .bind(("outcome", outcome_str))
             .bind(("limit", limit))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let episodes: Vec<EpisodicMemory> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(episodes)
+        let episodes_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        episodes_json.into_iter()
+            .map(Self::json_to_episode)
+            .collect()
     }
 
     /// Extract patterns from successful episodes
@@ -204,14 +245,20 @@ impl EpisodicMemorySystem {
             .await?;
 
         // Query successful episodes
+        let query = format!("{} FROM episode WHERE type::string(outcome) = $outcome ORDER BY created_at DESC", Self::episode_select_clause());
         let mut result = conn
             .connection()
-            .query("SELECT * FROM episode WHERE outcome = $outcome ORDER BY created_at DESC")
-            .bind(("outcome", EpisodeOutcome::Success))
+            .query(&query)
+            .bind(("outcome", "success"))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let episodes: Vec<EpisodicMemory> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let episodes_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let episodes: Vec<EpisodicMemory> = episodes_json.into_iter()
+            .map(Self::json_to_episode)
+            .collect::<Result<Vec<_>>>()?;
 
         // Group episodes by similar characteristics
         let patterns = self.cluster_and_extract_patterns(&episodes, min_success_rate)?;
@@ -338,21 +385,27 @@ impl EpisodicMemorySystem {
             .await?;
 
         // Get all episodes and calculate importance
+        let query = format!("{} FROM episode", Self::episode_select_clause());
         let mut result = conn
             .connection()
-            .query("SELECT * FROM episode")
+            .query(&query)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let episodes: Vec<EpisodicMemory> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let episodes_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let episodes: Vec<EpisodicMemory> = episodes_json.into_iter()
+            .map(Self::json_to_episode)
+            .collect::<Result<Vec<_>>>()?;
 
         let mut deleted_count = 0;
         for episode in episodes {
             let importance = self.calculate_importance(&episode);
             if importance < threshold {
                 conn.connection()
-                    .query("DELETE episode WHERE id = $id")
-                    .bind(("id", episode.id.to_string()))
+                    .query("DELETE episode WHERE cortex_id = $cortex_id")
+                    .bind(("cortex_id", episode.id.to_string()))
                     .await
                     .map_err(|e| CortexError::storage(e.to_string()))?;
                 deleted_count += 1;
@@ -414,15 +467,44 @@ impl EpisodicMemorySystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::connection::ConnectionConfig;
-    use cortex_storage::pool::ConnectionPool;
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
+    use std::time::Duration;
 
     async fn create_test_memory() -> EpisodicMemorySystem {
-        let config = ConnectionConfig::memory();
-        let pool = Arc::new(ConnectionPool::new(config));
-        pool.initialize().await.unwrap();
+        // Use a temporary file-based database for tests to ensure persistence
+        let temp_db = format!("file:/tmp/cortex_test_{}.db", CortexId::new());
 
-        EpisodicMemorySystem::new(pool).await.unwrap()
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: temp_db,
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 1, // Force single connection
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy {
+                    max_attempts: 3,
+                    initial_backoff: Duration::from_millis(100),
+                    max_backoff: Duration::from_secs(10),
+                    multiplier: 2.0,
+                },
+                warm_connections: true,
+                validate_on_checkout: false,
+                recycle_after_uses: None,
+                shutdown_grace_period: Duration::from_secs(5),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
+
+        let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
+        EpisodicMemorySystem::new(manager)
     }
 
     #[tokio::test]

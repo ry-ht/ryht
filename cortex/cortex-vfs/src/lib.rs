@@ -61,6 +61,7 @@ pub mod fork_manager;
 pub mod watcher;
 pub mod cache;
 pub mod dedup;
+pub mod ingestion;
 
 // Re-export main types
 pub use path::{VirtualPath, VirtualPathError};
@@ -71,6 +72,7 @@ pub use materialization::MaterializationEngine;
 pub use external_loader::ExternalProjectLoader;
 pub use fork_manager::ForkManager;
 pub use watcher::FileWatcher;
+pub use ingestion::{FileIngestionPipeline, IngestionResult, WorkspaceIngestionResult};
 
 /// Prelude module with commonly used types.
 pub mod prelude {
@@ -86,6 +88,7 @@ pub mod prelude {
     pub use crate::external_loader::ExternalProjectLoader;
     pub use crate::fork_manager::ForkManager;
     pub use crate::watcher::FileWatcher;
+    pub use crate::ingestion::{FileIngestionPipeline, IngestionResult, WorkspaceIngestionResult};
 }
 
 #[cfg(test)]

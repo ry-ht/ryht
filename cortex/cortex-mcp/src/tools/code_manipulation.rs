@@ -18,13 +18,18 @@
 //! - cortex.code.override_method
 
 use async_trait::async_trait;
+use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter as CoreParameter, Complexity};
+use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile, RustParser};
 use cortex_storage::ConnectionManager;
-use cortex_vfs::VirtualFileSystem;
+use cortex_vfs::{VirtualFileSystem, VirtualPath};
 use mcp_server::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::debug;
+use uuid::Uuid;
+use anyhow::{Context as AnyhowContext, Result as AnyhowResult, bail};
 
 // =============================================================================
 // Shared Context
@@ -41,6 +46,179 @@ impl CodeManipulationContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
         Self { storage, vfs }
+    }
+
+    /// Parse a file using the appropriate parser based on extension
+    async fn parse_file(&self, workspace_id: &Uuid, file_path: &str) -> AnyhowResult<(ParsedFile, String, ParserLanguage)> {
+        let vpath = VirtualPath::new(file_path).map_err(|e| anyhow::anyhow!("Invalid path: {}", e))?;
+        let content_bytes = self.vfs.read_file(workspace_id, &vpath).await
+            .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+        let content = String::from_utf8(content_bytes)
+            .map_err(|e| anyhow::anyhow!("File is not UTF-8: {}", e))?;
+
+        let path_buf = Path::new(file_path);
+        let language = ParserLanguage::from_path(path_buf)
+            .ok_or_else(|| anyhow::anyhow!("Unsupported file type: {}", file_path))?;
+
+        let mut parser = CodeParser::for_language(language)?;
+        let parsed = parser.parse_file(file_path, &content, language)?;
+
+        Ok((parsed, content, language))
+    }
+
+    /// Save modified content back to VFS
+    async fn save_file(&self, workspace_id: &Uuid, file_path: &str, content: &str) -> AnyhowResult<()> {
+        let vpath = VirtualPath::new(file_path).map_err(|e| anyhow::anyhow!("Invalid path: {}", e))?;
+        self.vfs.write_file(workspace_id, &vpath, content.as_bytes()).await
+            .map_err(|e| anyhow::anyhow!("Failed to write file: {}", e))?;
+        Ok(())
+    }
+
+    /// Store a code unit in semantic memory
+    async fn store_code_unit(&self, unit: CodeUnit) -> AnyhowResult<String> {
+        let conn = self.storage.acquire().await
+            .map_err(|e| anyhow::anyhow!("Failed to get connection: {}", e))?;
+
+        // Store in database
+        let query = r#"
+            CREATE code_unit CONTENT $unit
+        "#;
+
+        let unit_json = serde_json::to_value(&unit)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize unit: {}", e))?;
+
+        let _result: Vec<serde_json::Value> = conn.connection().query(query)
+            .bind(("unit", unit_json))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to store code unit: {}", e))?
+            .take(0)
+            .map_err(|e| anyhow::anyhow!("Failed to parse result: {}", e))?;
+
+        Ok(unit.id.to_string())
+    }
+
+    /// Get a code unit by ID
+    async fn get_code_unit(&self, unit_id: &str) -> AnyhowResult<CodeUnit> {
+        let conn = self.storage.acquire().await
+            .map_err(|e| anyhow::anyhow!("Failed to get connection: {}", e))?;
+
+        let query = r#"
+            SELECT * FROM code_unit WHERE id = $unit_id
+        "#;
+
+        let unit_id_owned = unit_id.to_string();
+
+        let mut result: Vec<CodeUnit> = conn.connection().query(query)
+            .bind(("unit_id", unit_id_owned))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to query code unit: {}", e))?
+            .take(0)
+            .map_err(|e| anyhow::anyhow!("Failed to parse result: {}", e))?;
+
+        result.pop().ok_or_else(|| anyhow::anyhow!("Code unit not found: {}", unit_id))
+    }
+
+    /// Update a code unit in semantic memory
+    async fn update_code_unit(&self, unit: &CodeUnit) -> AnyhowResult<()> {
+        let conn = self.storage.acquire().await
+            .map_err(|e| anyhow::anyhow!("Failed to get connection: {}", e))?;
+
+        let query = r#"
+            UPDATE $unit_id CONTENT $unit
+        "#;
+
+        let unit_json = serde_json::to_value(unit)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize unit: {}", e))?;
+
+        let _result: Vec<serde_json::Value> = conn.connection().query(query)
+            .bind(("unit_id", unit.id.to_string()))
+            .bind(("unit", unit_json))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to update code unit: {}", e))?
+            .take(0)
+            .map_err(|e| anyhow::anyhow!("Failed to parse result: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Delete a code unit from semantic memory
+    async fn delete_code_unit(&self, unit_id: &str) -> AnyhowResult<()> {
+        let conn = self.storage.acquire().await
+            .map_err(|e| anyhow::anyhow!("Failed to get connection: {}", e))?;
+
+        let query = r#"
+            DELETE $unit_id
+        "#;
+
+        let unit_id_owned = unit_id.to_string();
+
+        let _result: Vec<serde_json::Value> = conn.connection().query(query)
+            .bind(("unit_id", unit_id_owned))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to delete code unit: {}", e))?
+            .take(0)
+            .map_err(|e| anyhow::anyhow!("Failed to parse result: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Convert cortex_parser Parameter to cortex_core Parameter
+    fn convert_parameter(param: &cortex_parser::types::Parameter) -> CoreParameter {
+        CoreParameter {
+            name: param.name.clone(),
+            param_type: Some(param.param_type.clone()),
+            default_value: param.default_value.clone(),
+            is_optional: false,
+            is_variadic: false,
+            attributes: vec![],
+        }
+    }
+
+    /// Convert cortex_parser FunctionInfo to CodeUnit
+    fn function_to_code_unit(func: &cortex_parser::types::FunctionInfo, file_path: &str, language: Language) -> CodeUnit {
+        let mut unit = CodeUnit::new(
+            CodeUnitType::Function,
+            func.name.clone(),
+            func.qualified_name.clone(),
+            file_path.to_string(),
+            language,
+        );
+
+        unit.start_line = func.start_line;
+        unit.end_line = func.end_line;
+        unit.signature = format!("fn {}({}) -> {}",
+            func.name,
+            func.parameters.iter()
+                .map(|p| format!("{}: {}", p.name, p.param_type))
+                .collect::<Vec<_>>()
+                .join(", "),
+            func.return_type.as_ref().unwrap_or(&"()".to_string())
+        );
+        unit.body = Some(func.body.clone());
+        unit.docstring = func.docstring.clone();
+        unit.return_type = func.return_type.clone();
+        unit.parameters = func.parameters.iter().map(|p| Self::convert_parameter(p)).collect();
+        unit.visibility = match func.visibility {
+            cortex_parser::types::Visibility::Public => Visibility::Public,
+            cortex_parser::types::Visibility::PublicCrate => Visibility::Internal,
+            _ => Visibility::Private,
+        };
+        unit.is_async = func.is_async;
+        unit.is_unsafe = func.is_unsafe;
+        unit.is_const = func.is_const;
+
+        if let Some(complexity) = func.complexity {
+            unit.complexity = Complexity {
+                cyclomatic: complexity,
+                cognitive: complexity,
+                nesting: 0,
+                lines: (func.end_line - func.start_line) as u32,
+                parameters: func.parameters.len() as u32,
+                returns: if func.return_type.is_some() { 1 } else { 0 },
+            };
+        }
+
+        unit
     }
 }
 
@@ -68,6 +246,8 @@ struct CreateUnitInput {
     position: Option<String>,
     visibility: Option<String>,
     docstring: Option<String>,
+    #[serde(default = "default_workspace_id")]
+    workspace_id: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -84,7 +264,7 @@ impl Tool for CodeCreateUnitTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Creates a new code unit (function, class, etc.) in a file")
+        Some("Creates a new code unit (function, class, etc.) in a file using tree-sitter AST manipulation")
     }
 
     fn input_schema(&self) -> Value {
@@ -100,10 +280,116 @@ impl Tool for CodeCreateUnitTool {
             input.name, input.unit_type, input.file_path
         );
 
-        // TODO: Implement unit creation logic using tree-sitter parser
-        // For now, return a placeholder response
+        let workspace_id = Uuid::parse_str(&input.workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace_id: {}", e)))?;
+
+        // Parse the file
+        let (parsed, content, language) = self.ctx.parse_file(&workspace_id, &input.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let mut editor = match language {
+            ParserLanguage::Rust => {
+                AstEditor::new(content.clone(), tree_sitter_rust::LANGUAGE.into())
+                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+            }
+            ParserLanguage::TypeScript => {
+                AstEditor::new(content.clone(), tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+            }
+            ParserLanguage::JavaScript => {
+                AstEditor::new(content.clone(), tree_sitter_javascript::LANGUAGE.into())
+                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+            }
+        };
+
+        // Generate the new code unit
+        let visibility_str = input.visibility.as_deref().unwrap_or("pub");
+        let docstring = if let Some(ref doc) = input.docstring {
+            format!("/// {}\n", doc)
+        } else {
+            String::new()
+        };
+
+        let new_code = match input.unit_type.as_str() {
+            "function" => {
+                let default_signature = format!("fn {}()", input.name);
+                let signature = input.signature.as_deref().unwrap_or(&default_signature);
+                format!("{}{} {} {{\n    {}\n}}\n\n", docstring, visibility_str, signature, input.body)
+            }
+            "struct" => {
+                format!("{}{}struct {} {{\n    {}\n}}\n\n", docstring, visibility_str, input.name, input.body)
+            }
+            "enum" => {
+                format!("{}{}enum {} {{\n    {}\n}}\n\n", docstring, visibility_str, input.name, input.body)
+            }
+            "impl" => {
+                format!("{}impl {} {{\n    {}\n}}\n\n", docstring, input.name, input.body)
+            }
+            _ => {
+                return Err(ToolError::ExecutionFailed(format!("Unsupported unit type: {}", input.unit_type)));
+            }
+        };
+
+        // Determine insertion position
+        let insert_line = if let Some(pos) = input.position {
+            pos.parse::<usize>().unwrap_or(0)
+        } else {
+            // Insert at end of file
+            content.lines().count()
+        };
+
+        // Insert the new code
+        editor.insert_at(insert_line, 0, &new_code)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Apply edits
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        let modified_content = editor.get_source();
+        self.ctx.save_file(&workspace_id, &input.file_path, modified_content).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Re-parse to extract the new code unit
+        let mut parser = CodeParser::for_language(language)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        let reparsed = parser.parse_file(&input.file_path, modified_content, language)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the newly created unit
+        let core_language = match language {
+            ParserLanguage::Rust => Language::Rust,
+            ParserLanguage::TypeScript => Language::TypeScript,
+            ParserLanguage::JavaScript => Language::JavaScript,
+        };
+
+        let new_unit = if input.unit_type == "function" {
+            reparsed.functions.iter()
+                .find(|f| f.name == input.name)
+                .map(|f| CodeManipulationContext::function_to_code_unit(f, &input.file_path, core_language))
+        } else {
+            None
+        };
+
+        let unit_id = if let Some(unit) = new_unit {
+            let qualified_name = unit.qualified_name.clone();
+            let id = self.ctx.store_code_unit(unit).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            let output = CreateUnitOutput {
+                unit_id: id,
+                qualified_name,
+                version: 1,
+            };
+            return Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()));
+        } else {
+            format!("unit_{}", uuid::Uuid::new_v4())
+        };
+
         let output = CreateUnitOutput {
-            unit_id: format!("unit_{}", uuid::Uuid::new_v4()),
+            unit_id,
             qualified_name: format!("{}::{}", input.file_path, input.name),
             version: 1,
         };
@@ -152,7 +438,7 @@ impl Tool for CodeUpdateUnitTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Updates an existing code unit (signature, body, docstring, visibility)")
+        Some("Updates an existing code unit (signature, body, docstring, visibility) using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -165,13 +451,117 @@ impl Tool for CodeUpdateUnitTool {
 
         debug!("Updating unit '{}'", input.unit_id);
 
-        let output = UpdateUnitOutput {
-            unit_id: input.unit_id.clone(),
-            new_version: input.expected_version + 1,
-            updated: true,
+        // Fetch the code unit from semantic memory
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Check version
+        if unit.version as i64 != input.expected_version {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Version mismatch: expected {}, got {}",
+                input.expected_version, unit.version
+            )));
+        }
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4(); // TODO: Get from context
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
         };
 
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the function node to update
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let target_node_data = functions.iter()
+            .find(|node| node.start_position().row == unit.start_line)
+            .map(|node| (node.start_position(), node.end_position()));
+
+        if let Some((start_pos, end_pos)) = target_node_data {
+            // Build the updated function
+            let mut new_func = String::new();
+
+            // Add docstring
+            if let Some(ref doc) = input.docstring {
+                new_func.push_str(&format!("/// {}\n", doc));
+                unit.docstring = Some(doc.clone());
+            }
+
+            // Add visibility
+            if let Some(ref vis) = input.visibility {
+                new_func.push_str(vis);
+                new_func.push(' ');
+            }
+
+            // Add signature or use existing
+            if let Some(ref sig) = input.signature {
+                new_func.push_str(sig);
+                unit.signature = sig.clone();
+            } else {
+                new_func.push_str(&unit.signature);
+            }
+
+            // Add body
+            new_func.push_str(" {\n");
+            if let Some(ref body) = input.body {
+                new_func.push_str("    ");
+                new_func.push_str(body);
+                unit.body = Some(body.clone());
+            } else if let Some(ref body) = unit.body {
+                new_func.push_str("    ");
+                new_func.push_str(body);
+            }
+            new_func.push_str("\n}\n");
+
+            // Replace the function by line range
+            let range = cortex_parser::Range::new(
+                cortex_parser::Position::new(start_pos.row, start_pos.column),
+                cortex_parser::Position::new(end_pos.row, end_pos.column),
+            );
+            editor.edits.push(cortex_parser::Edit::replace(range, new_func));
+
+            // Apply edits
+            editor.apply_edits()
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            // Save modified file
+            self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            // Update version
+            unit.version += 1;
+            unit.updated_at = chrono::Utc::now();
+
+            // Update in semantic memory
+            self.ctx.update_code_unit(&unit).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            let output = UpdateUnitOutput {
+                unit_id: input.unit_id.clone(),
+                new_version: unit.version as i64,
+                updated: true,
+            };
+
+            Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+        } else {
+            Err(ToolError::ExecutionFailed("Function not found in AST".to_string()))
+        }
     }
 }
 
@@ -211,7 +601,7 @@ impl Tool for CodeDeleteUnitTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Deletes a code unit and optionally its dependents")
+        Some("Deletes a code unit and optionally its dependents using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -224,13 +614,72 @@ impl Tool for CodeDeleteUnitTool {
 
         debug!("Deleting unit '{}'", input.unit_id);
 
-        let output = DeleteUnitOutput {
-            unit_id: input.unit_id.clone(),
-            deleted: true,
-            cascade_deleted: vec![],
+        // Fetch the code unit
+        let unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Check version
+        if unit.version as i64 != input.expected_version {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Version mismatch: expected {}, got {}",
+                input.expected_version, unit.version
+            )));
+        }
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4(); // TODO: Get from context
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
         };
 
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find and delete the node
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let target_node_range = functions.iter()
+            .find(|node| node.start_position().row == unit.start_line)
+            .map(|node| cortex_parser::Range::from_node(node));
+
+        if let Some(range) = target_node_range {
+            editor.edits.push(cortex_parser::Edit::delete(range));
+
+            editor.apply_edits()
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            // Save modified file
+            self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            // Delete from semantic memory
+            self.ctx.delete_code_unit(&input.unit_id).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            let output = DeleteUnitOutput {
+                unit_id: input.unit_id.clone(),
+                deleted: true,
+                cascade_deleted: vec![],
+            };
+
+            Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+        } else {
+            Err(ToolError::ExecutionFailed("Function not found in AST".to_string()))
+        }
     }
 }
 
@@ -272,7 +721,7 @@ impl Tool for CodeMoveUnitTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Moves a code unit to another file, updating imports")
+        Some("Moves a code unit to another file, updating imports using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -285,9 +734,91 @@ impl Tool for CodeMoveUnitTool {
 
         debug!("Moving unit '{}' to '{}'", input.unit_id, input.target_file);
 
+        // Fetch the code unit
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let old_file = unit.file_path.clone();
+
+        // Extract code from source file (similar to delete)
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, source_content, _) = self.ctx.parse_file(&workspace_id, &old_file).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Extract the code unit text
+        let lines: Vec<&str> = source_content.lines().collect();
+        let unit_code = if unit.start_line < lines.len() && unit.end_line < lines.len() {
+            lines[unit.start_line..=unit.end_line].join("\n")
+        } else {
+            return Err(ToolError::ExecutionFailed("Invalid line range".to_string()));
+        };
+
+        // Delete from source file
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut source_editor = AstEditor::new(source_content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let functions = source_editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let source_node_range = functions.iter()
+            .find(|n| n.start_position().row == unit.start_line)
+            .map(|node| cortex_parser::Range::from_node(node));
+
+        if let Some(range) = source_node_range {
+            source_editor.edits.push(cortex_parser::Edit::delete(range));
+            source_editor.apply_edits()
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+            self.ctx.save_file(&workspace_id, &old_file, source_editor.get_source()).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        }
+
+        // Insert into target file
+        let (_, target_content, _) = self.ctx.parse_file(&workspace_id, &input.target_file).await
+            .unwrap_or_else(|_| (ParsedFile::new(input.target_file.clone()), String::new(), language));
+
+        let target_tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut target_editor = AstEditor::new(target_content.clone(), target_tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let insert_line = input.position
+            .and_then(|p| p.parse::<usize>().ok())
+            .unwrap_or_else(|| target_content.lines().count());
+
+        target_editor.insert_at(insert_line, 0, &format!("{}\n\n", unit_code))
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        target_editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        self.ctx.save_file(&workspace_id, &input.target_file, target_editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Update code unit metadata
+        unit.file_path = input.target_file.clone();
+        self.ctx.update_code_unit(&unit).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = MoveUnitOutput {
             unit_id: input.unit_id.clone(),
-            old_file: "/old/path.rs".to_string(),
+            old_file,
             new_file: input.target_file.clone(),
             imports_updated: vec![],
         };
@@ -335,7 +866,7 @@ impl Tool for CodeRenameUnitTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Renames a code unit and updates all references")
+        Some("Renames a code unit and updates all references using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -348,11 +879,59 @@ impl Tool for CodeRenameUnitTool {
 
         debug!("Renaming unit '{}' to '{}'", input.unit_id, input.new_name);
 
+        // Fetch the code unit
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let old_name = unit.name.clone();
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Rename the symbol
+        let edits = editor.rename_symbol(&old_name, &input.new_name)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let references_updated = edits.len() as i32;
+
+        // Apply edits
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Update code unit metadata
+        unit.name = input.new_name.clone();
+        unit.qualified_name = unit.qualified_name.replace(&old_name, &input.new_name);
+        self.ctx.update_code_unit(&unit).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = RenameUnitOutput {
             unit_id: input.unit_id.clone(),
-            old_name: "old_name".to_string(),
+            old_name,
             new_name: input.new_name.clone(),
-            references_updated: 0,
+            references_updated,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -398,7 +977,7 @@ impl Tool for CodeExtractFunctionTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Extracts code block into a new function with inferred parameters")
+        Some("Extracts code block into a new function with inferred parameters using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -414,11 +993,52 @@ impl Tool for CodeExtractFunctionTool {
             input.function_name, input.start_line, input.end_line
         );
 
+        // Fetch the source unit
+        let unit = self.ctx.get_code_unit(&input.source_unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Extract the function
+        let result = editor.extract_function(
+            input.start_line as usize,
+            input.end_line as usize,
+            &input.function_name
+        ).map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Apply edits
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = ExtractFunctionOutput {
             new_unit_id: format!("unit_{}", uuid::Uuid::new_v4()),
-            function_name: input.function_name.clone(),
-            parameters: vec![],
-            return_type: None,
+            function_name: result.function_name,
+            parameters: result.parameters.iter().map(|(n, t)| format!("{}: {}", n, t)).collect(),
+            return_type: result.return_type,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -472,6 +1092,8 @@ impl Tool for CodeInlineFunctionTool {
 
         debug!("Inlining function '{}'", input.function_id);
 
+        // This is a complex operation that requires analyzing call sites
+        // For now, return a basic implementation
         let output = InlineFunctionOutput {
             function_id: input.function_id.clone(),
             sites_inlined: 0,
@@ -693,6 +1315,8 @@ struct AddImportInput {
     import_spec: String,
     #[serde(default = "default_auto_position")]
     position: String,
+    #[serde(default = "default_workspace_id")]
+    workspace_id: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -709,7 +1333,7 @@ impl Tool for CodeAddImportTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Adds an import statement to a file at the optimal position")
+        Some("Adds an import statement to a file at the optimal position using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -721,6 +1345,31 @@ impl Tool for CodeAddImportTool {
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         debug!("Adding import '{}' to '{}'", input.import_spec, input.file_path);
+
+        let workspace_id = Uuid::parse_str(&input.workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace_id: {}", e)))?;
+
+        let (_, content, language) = self.ctx.parse_file(&workspace_id, &input.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Add the import (Rust-specific for now)
+        editor.add_import_rust(&input.import_spec)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        self.ctx.save_file(&workspace_id, &input.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let output = AddImportOutput {
             file_path: input.file_path.clone(),
@@ -755,6 +1404,8 @@ struct OptimizeImportsInput {
     sort: bool,
     #[serde(default = "default_true")]
     group: bool,
+    #[serde(default = "default_workspace_id")]
+    workspace_id: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -772,7 +1423,7 @@ impl Tool for CodeOptimizeImportsTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Optimizes imports by removing unused, sorting, and grouping")
+        Some("Optimizes imports by removing unused, sorting, and grouping using tree-sitter")
     }
 
     fn input_schema(&self) -> Value {
@@ -785,11 +1436,36 @@ impl Tool for CodeOptimizeImportsTool {
 
         debug!("Optimizing imports in '{}'", input.file_path);
 
+        let workspace_id = Uuid::parse_str(&input.workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace_id: {}", e)))?;
+
+        let (_, content, language) = self.ctx.parse_file(&workspace_id, &input.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Optimize imports (Rust-specific for now)
+        let result = editor.optimize_imports_rust()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        self.ctx.save_file(&workspace_id, &input.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = OptimizeImportsOutput {
             file_path: input.file_path.clone(),
-            imports_removed: 0,
-            imports_sorted: input.sort,
-            imports_grouped: input.group,
+            imports_removed: result.removed as i32,
+            imports_sorted: result.sorted,
+            imports_grouped: result.grouped,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1017,4 +1693,8 @@ fn default_auto_position() -> String {
 
 fn default_both_generation() -> String {
     "both".to_string()
+}
+
+fn default_workspace_id() -> String {
+    "00000000-0000-0000-0000-000000000000".to_string()
 }

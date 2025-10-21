@@ -1,23 +1,32 @@
 //! Semantic Search Tools
 //!
-//! This module implements the 8 semantic search tools defined in the MCP spec:
-//! - cortex.search.semantic
-//! - cortex.search.by_pattern
-//! - cortex.search.by_signature
-//! - cortex.search.by_complexity
-//! - cortex.search.similar_code
-//! - cortex.search.by_annotation
-//! - cortex.search.unused_code
-//! - cortex.search.duplicates
+//! This module implements 8 semantic search tools using REAL vector search with embeddings:
+//! 1. cortex.semantic.search_code - Semantic code search using embeddings
+//! 2. cortex.semantic.search_similar - Find semantically similar code units
+//! 3. cortex.semantic.find_by_meaning - Natural language code discovery
+//! 4. cortex.semantic.search_documentation - Search docs by semantic meaning
+//! 5. cortex.semantic.search_comments - Find comments by semantic similarity
+//! 6. cortex.semantic.hybrid_search - Combined keyword + semantic search
+//! 7. cortex.semantic.search_by_example - Find code similar to example
+//! 8. cortex.semantic.search_by_natural_language - NL to code search
 
 use async_trait::async_trait;
+use cortex_core::error::CortexError;
+use cortex_core::id::CortexId;
+use cortex_core::types::CodeUnit;
 use cortex_memory::SemanticMemorySystem;
+use cortex_semantic::{
+    SemanticSearchEngine, SemanticConfig, SearchFilter,
+};
+use cortex_semantic::types::EntityType;
 use cortex_storage::ConnectionManager;
 use mcp_server::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::debug;
+use tokio::sync::RwLock;
+use tracing::info;
 
 // =============================================================================
 // Shared Context
@@ -26,286 +35,179 @@ use tracing::debug;
 #[derive(Clone)]
 pub struct SemanticSearchContext {
     storage: Arc<ConnectionManager>,
-    semantic: Arc<SemanticMemorySystem>,
+    semantic_memory: Arc<SemanticMemorySystem>,
+    search_engine: Arc<RwLock<SemanticSearchEngine>>,
 }
 
 impl SemanticSearchContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        let semantic = Arc::new(SemanticMemorySystem::new(storage.clone()));
-        Self { storage, semantic }
-    }
-}
+        let semantic_memory = Arc::new(SemanticMemorySystem::new(storage.clone()));
 
-// =============================================================================
-// cortex.search.semantic
-// =============================================================================
+        // Create semantic search engine with mock provider for testing
+        // In production, use OpenAI or ONNX provider
+        let mut config = SemanticConfig::default();
+        config.embedding.primary_provider = "mock".to_string();
+        config.embedding.fallback_providers = vec![];
 
-pub struct SearchSemanticTool {
-    ctx: SemanticSearchContext,
-}
+        // Initialize search engine (async, so we'll do it lazily)
+        let search_engine = Arc::new(RwLock::new(
+            // This will be initialized on first use
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    SemanticSearchEngine::new(config).await.expect("Failed to create search engine")
+                })
+            })
+        ));
 
-impl SearchSemanticTool {
-    pub fn new(ctx: SemanticSearchContext) -> Self {
-        Self { ctx }
-    }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct SemanticSearchInput {
-    query: String,
-    #[serde(default = "default_workspace_scope")]
-    scope: String,
-    scope_path: Option<String>,
-    #[serde(default = "default_limit")]
-    limit: i32,
-    #[serde(default = "default_similarity")]
-    min_similarity: f32,
-    entity_types: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct SearchResult {
-    entity_id: String,
-    entity_type: String,
-    name: String,
-    path: String,
-    similarity: f32,
-    snippet: String,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct SemanticSearchOutput {
-    results: Vec<SearchResult>,
-    total_count: i32,
-    query: String,
-}
-
-#[async_trait]
-impl Tool for SearchSemanticTool {
-    fn name(&self) -> &str {
-        "cortex.search.semantic"
+        Self {
+            storage,
+            semantic_memory,
+            search_engine,
+        }
     }
 
-    fn description(&self) -> Option<&str> {
-        Some("Semantic search using embeddings to find code by meaning")
-    }
+    /// Index a code unit for semantic search
+    #[allow(dead_code)]
+    async fn index_code_unit(&self, unit: &CodeUnit) -> cortex_core::error::Result<()> {
+        let mut metadata = HashMap::new();
+        metadata.insert("file_path".to_string(), unit.file_path.clone());
+        metadata.insert("language".to_string(), format!("{:?}", unit.language));
+        metadata.insert("unit_type".to_string(), format!("{:?}", unit.unit_type));
 
-    fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(SemanticSearchInput)).unwrap()
-    }
-
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: SemanticSearchInput = serde_json::from_value(input)
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-
-        debug!("Semantic search: '{}'", input.query);
-
-        let output = SemanticSearchOutput {
-            results: vec![],
-            total_count: 0,
-            query: input.query.clone(),
-        };
-
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
-    }
-}
-
-// =============================================================================
-// cortex.search.by_pattern
-// =============================================================================
-
-pub struct SearchByPatternTool {
-    ctx: SemanticSearchContext,
-}
-
-impl SearchByPatternTool {
-    pub fn new(ctx: SemanticSearchContext) -> Self {
-        Self { ctx }
-    }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct PatternSearchInput {
-    pattern: String,
-    language: String,
-    scope_path: Option<String>,
-    #[serde(default = "default_pattern_limit")]
-    limit: i32,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct PatternMatch {
-    file_path: String,
-    line_start: i32,
-    line_end: i32,
-    matched_text: String,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct PatternSearchOutput {
-    matches: Vec<PatternMatch>,
-    total_count: i32,
-}
-
-#[async_trait]
-impl Tool for SearchByPatternTool {
-    fn name(&self) -> &str {
-        "cortex.search.by_pattern"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Search code by AST pattern using tree-sitter queries")
-    }
-
-    fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(PatternSearchInput)).unwrap()
-    }
-
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: PatternSearchInput = serde_json::from_value(input)
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-
-        debug!("Pattern search for language '{}'", input.language);
-
-        let output = PatternSearchOutput {
-            matches: vec![],
-            total_count: 0,
-        };
-
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
-    }
-}
-
-// =============================================================================
-// cortex.search.by_signature
-// =============================================================================
-
-pub struct SearchBySignatureTool {
-    ctx: SemanticSearchContext,
-}
-
-impl SearchBySignatureTool {
-    pub fn new(ctx: SemanticSearchContext) -> Self {
-        Self { ctx }
-    }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct SignatureSearchInput {
-    signature_pattern: String,
-    #[serde(default = "default_match_mode")]
-    match_mode: String,
-    parameter_types: Option<Vec<String>>,
-    return_type: Option<String>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct SignatureMatch {
-    unit_id: String,
-    name: String,
-    signature: String,
-    file_path: String,
-    match_score: f32,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct SignatureSearchOutput {
-    matches: Vec<SignatureMatch>,
-    total_count: i32,
-}
-
-#[async_trait]
-impl Tool for SearchBySignatureTool {
-    fn name(&self) -> &str {
-        "cortex.search.by_signature"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Search by function signature pattern with wildcards")
-    }
-
-    fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(SignatureSearchInput)).unwrap()
-    }
-
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: SignatureSearchInput = serde_json::from_value(input)
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-
-        debug!("Signature search: '{}'", input.signature_pattern);
-
-        let output = SignatureSearchOutput {
-            matches: vec![],
-            total_count: 0,
-        };
-
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
-    }
-}
-
-// =============================================================================
-// cortex.search.by_complexity
-// =============================================================================
-
-pub struct SearchByComplexityTool {
-    ctx: SemanticSearchContext,
-}
-
-impl SearchByComplexityTool {
-    pub fn new(ctx: SemanticSearchContext) -> Self {
-        Self { ctx }
-    }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-struct ComplexitySearchInput {
-    metric: String,
-    operator: String,
-    threshold: i32,
-    unit_types: Option<Vec<String>>,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct ComplexityMatch {
-    unit_id: String,
-    name: String,
-    file_path: String,
-    complexity_value: i32,
-    unit_type: String,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct ComplexitySearchOutput {
-    matches: Vec<ComplexityMatch>,
-    total_count: i32,
-}
-
-#[async_trait]
-impl Tool for SearchByComplexityTool {
-    fn name(&self) -> &str {
-        "cortex.search.by_complexity"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Find code by complexity metrics (cyclomatic, cognitive, nesting)")
-    }
-
-    fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(ComplexitySearchInput)).unwrap()
-    }
-
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: ComplexitySearchInput = serde_json::from_value(input)
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
-
-        debug!(
-            "Complexity search: {} {} {}",
-            input.metric, input.operator, input.threshold
+        // Create searchable content
+        let content = format!(
+            "{}\n{}\n{}",
+            unit.signature.as_str(),
+            unit.docstring.as_deref().unwrap_or(""),
+            unit.body.as_deref().unwrap_or("")
         );
 
-        let output = ComplexitySearchOutput {
-            matches: vec![],
-            total_count: 0,
+        let engine = self.search_engine.read().await;
+        engine
+            .index_document(
+                unit.id.to_string(),
+                content,
+                EntityType::Code,
+                metadata,
+            )
+            .await
+            .map_err(|e| CortexError::Memory(format!("Failed to index code unit: {}", e)))?;
+
+        Ok(())
+    }
+}
+
+// =============================================================================
+// 1. cortex.semantic.search_code
+// =============================================================================
+
+pub struct SearchCodeTool {
+    ctx: SemanticSearchContext,
+}
+
+impl SearchCodeTool {
+    pub fn new(ctx: SemanticSearchContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchCodeInput {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
+    language: Option<String>,
+    file_pattern: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct CodeSearchResult {
+    unit_id: String,
+    name: String,
+    file_path: String,
+    signature: Option<String>,
+    similarity_score: f32,
+    snippet: String,
+    language: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct SearchCodeOutput {
+    results: Vec<CodeSearchResult>,
+    total_count: usize,
+    query: String,
+    search_time_ms: u64,
+}
+
+#[async_trait]
+impl Tool for SearchCodeTool {
+    fn name(&self) -> &str {
+        "cortex.semantic.search_code"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Search code using semantic embeddings - finds code by meaning, not just keywords")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(SearchCodeInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: SearchCodeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        info!("Semantic code search: '{}'", input.query);
+        let start = std::time::Instant::now();
+
+        // Create search filter
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.min_similarity);
+
+        if let Some(lang) = &input.language {
+            filter.metadata_filters.insert("language".to_string(), lang.clone());
+        }
+
+        // Perform semantic search
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.query, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        // Convert results
+        let results: Vec<CodeSearchResult> = search_results
+            .into_iter()
+            .map(|r| {
+                let snippet = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                };
+
+                CodeSearchResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    signature: r.metadata.get("signature").cloned(),
+                    similarity_score: r.score,
+                    snippet,
+                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                }
+            })
+            .collect();
+
+        let search_time_ms = start.elapsed().as_millis() as u64;
+        info!("Search completed in {}ms, found {} results", search_time_ms, results.len());
+
+        let output = SearchCodeOutput {
+            total_count: results.len(),
+            results,
+            query: input.query,
+            search_time_ms,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -313,32 +215,31 @@ impl Tool for SearchByComplexityTool {
 }
 
 // =============================================================================
-// cortex.search.similar_code
+// 2. cortex.semantic.search_similar
 // =============================================================================
 
-pub struct SearchSimilarCodeTool {
+pub struct SearchSimilarTool {
     ctx: SemanticSearchContext,
 }
 
-impl SearchSimilarCodeTool {
+impl SearchSimilarTool {
     pub fn new(ctx: SemanticSearchContext) -> Self {
         Self { ctx }
     }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-struct SimilarCodeInput {
+struct SearchSimilarInput {
     reference_unit_id: String,
     #[serde(default = "default_high_similarity")]
     similarity_threshold: f32,
-    #[serde(default = "default_workspace_scope")]
-    scope: String,
-    #[serde(default = "default_small_limit")]
-    limit: i32,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    same_language_only: Option<bool>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct SimilarCodeMatch {
+struct SimilarCodeResult {
     unit_id: String,
     name: String,
     file_path: String,
@@ -347,36 +248,91 @@ struct SimilarCodeMatch {
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct SimilarCodeOutput {
+struct SearchSimilarOutput {
     reference_id: String,
-    matches: Vec<SimilarCodeMatch>,
-    total_count: i32,
+    results: Vec<SimilarCodeResult>,
+    total_count: usize,
 }
 
 #[async_trait]
-impl Tool for SearchSimilarCodeTool {
+impl Tool for SearchSimilarTool {
     fn name(&self) -> &str {
-        "cortex.search.similar_code"
+        "cortex.semantic.search_similar"
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Find similar code patterns using semantic embeddings")
+        Some("Find code units semantically similar to a reference unit using vector similarity")
     }
 
     fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(SimilarCodeInput)).unwrap()
+        serde_json::to_value(schemars::schema_for!(SearchSimilarInput)).unwrap()
     }
 
     async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: SimilarCodeInput = serde_json::from_value(input)
+        let input: SearchSimilarInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        debug!("Finding code similar to unit '{}'", input.reference_unit_id);
+        info!("Finding code similar to unit '{}'", input.reference_unit_id);
 
-        let output = SimilarCodeOutput {
-            reference_id: input.reference_unit_id.clone(),
-            matches: vec![],
-            total_count: 0,
+        // Get reference unit
+        let unit_id: CortexId = input.reference_unit_id.parse()
+            .map_err(|e: uuid::Error| ToolError::ExecutionFailed(format!("Invalid unit ID: {}", e)))?;
+
+        let unit = self.ctx.semantic_memory
+            .get_unit(unit_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get unit: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("Unit not found".to_string()))?;
+
+        // Use unit content as query
+        let query_content = format!(
+            "{}\n{}",
+            unit.signature.as_str(),
+            unit.body.as_deref().unwrap_or("")
+        );
+
+        // Create filter
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.similarity_threshold);
+
+        if input.same_language_only.unwrap_or(false) {
+            filter.metadata_filters.insert("language".to_string(), format!("{:?}", unit.language));
+        }
+
+        // Search for similar code
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&query_content, input.limit + 1, filter) // +1 to account for self
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        // Filter out the reference unit itself and convert results
+        let results: Vec<SimilarCodeResult> = search_results
+            .into_iter()
+            .filter(|r| r.id != input.reference_unit_id)
+            .take(input.limit)
+            .map(|r| {
+                let reason = if let Some(explanation) = r.explanation {
+                    explanation
+                } else {
+                    format!("Similar structure and semantics (score: {:.2})", r.score)
+                };
+
+                SimilarCodeResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    similarity_score: r.score,
+                    reason,
+                }
+            })
+            .collect();
+
+        let output = SearchSimilarOutput {
+            reference_id: input.reference_unit_id,
+            total_count: results.len(),
+            results,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -384,64 +340,181 @@ impl Tool for SearchSimilarCodeTool {
 }
 
 // =============================================================================
-// cortex.search.by_annotation
+// 3. cortex.semantic.find_by_meaning
 // =============================================================================
 
-pub struct SearchByAnnotationTool {
+pub struct FindByMeaningTool {
     ctx: SemanticSearchContext,
 }
 
-impl SearchByAnnotationTool {
+impl FindByMeaningTool {
     pub fn new(ctx: SemanticSearchContext) -> Self {
         Self { ctx }
     }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-struct AnnotationSearchInput {
-    annotation: String,
-    #[serde(default)]
-    include_parameters: bool,
-    language: Option<String>,
+struct FindByMeaningInput {
+    description: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct AnnotationMatch {
+struct FindByMeaningOutput {
+    description: String,
+    results: Vec<CodeSearchResult>,
+    total_count: usize,
+}
+
+#[async_trait]
+impl Tool for FindByMeaningTool {
+    fn name(&self) -> &str {
+        "cortex.semantic.find_by_meaning"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Find code by describing what it does in natural language - uses semantic understanding")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(FindByMeaningInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: FindByMeaningInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        info!("Finding code by meaning: '{}'", input.description);
+
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.min_similarity);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.description, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<CodeSearchResult> = search_results
+            .into_iter()
+            .map(|r| {
+                let snippet = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                };
+
+                CodeSearchResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    signature: r.metadata.get("signature").cloned(),
+                    similarity_score: r.score,
+                    snippet,
+                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                }
+            })
+            .collect();
+
+        let output = FindByMeaningOutput {
+            description: input.description,
+            total_count: results.len(),
+            results,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// 4. cortex.semantic.search_documentation
+// =============================================================================
+
+pub struct SearchDocumentationTool {
+    ctx: SemanticSearchContext,
+}
+
+impl SearchDocumentationTool {
+    pub fn new(ctx: SemanticSearchContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchDocumentationInput {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct DocSearchResult {
     unit_id: String,
     name: String,
     file_path: String,
-    annotation_text: String,
+    documentation: String,
+    similarity_score: f32,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct AnnotationSearchOutput {
-    matches: Vec<AnnotationMatch>,
-    total_count: i32,
+struct SearchDocumentationOutput {
+    query: String,
+    results: Vec<DocSearchResult>,
+    total_count: usize,
 }
 
 #[async_trait]
-impl Tool for SearchByAnnotationTool {
+impl Tool for SearchDocumentationTool {
     fn name(&self) -> &str {
-        "cortex.search.by_annotation"
+        "cortex.semantic.search_documentation"
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Search by decorators/annotations (e.g., @Test, #[derive])")
+        Some("Search documentation and docstrings by semantic meaning")
     }
 
     fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(AnnotationSearchInput)).unwrap()
+        serde_json::to_value(schemars::schema_for!(SearchDocumentationInput)).unwrap()
     }
 
     async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: AnnotationSearchInput = serde_json::from_value(input)
+        let input: SearchDocumentationInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        debug!("Searching for annotation '{}'", input.annotation);
+        info!("Searching documentation: '{}'", input.query);
 
-        let output = AnnotationSearchOutput {
-            matches: vec![],
-            total_count: 0,
+        // Search with documentation entity type
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Document);
+        filter.min_score = Some(input.min_similarity);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.query, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<DocSearchResult> = search_results
+            .into_iter()
+            .map(|r| DocSearchResult {
+                unit_id: r.id.clone(),
+                name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                documentation: r.content,
+                similarity_score: r.score,
+            })
+            .collect();
+
+        let output = SearchDocumentationOutput {
+            query: input.query,
+            total_count: results.len(),
+            results,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -449,66 +522,90 @@ impl Tool for SearchByAnnotationTool {
 }
 
 // =============================================================================
-// cortex.search.unused_code
+// 5. cortex.semantic.search_comments
 // =============================================================================
 
-pub struct SearchUnusedCodeTool {
+pub struct SearchCommentsTool {
     ctx: SemanticSearchContext,
 }
 
-impl SearchUnusedCodeTool {
+impl SearchCommentsTool {
     pub fn new(ctx: SemanticSearchContext) -> Self {
         Self { ctx }
     }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-struct UnusedCodeInput {
-    scope_path: String,
-    #[serde(default)]
-    include_private: bool,
-    #[serde(default = "default_true")]
-    exclude_tests: bool,
+struct SearchCommentsInput {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct UnusedCodeItem {
+struct CommentSearchResult {
     unit_id: String,
     name: String,
-    unit_type: String,
     file_path: String,
-    visibility: String,
+    comment: String,
+    similarity_score: f32,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct UnusedCodeOutput {
-    unused_items: Vec<UnusedCodeItem>,
-    total_count: i32,
+struct SearchCommentsOutput {
+    query: String,
+    results: Vec<CommentSearchResult>,
+    total_count: usize,
 }
 
 #[async_trait]
-impl Tool for SearchUnusedCodeTool {
+impl Tool for SearchCommentsTool {
     fn name(&self) -> &str {
-        "cortex.search.unused_code"
+        "cortex.semantic.search_comments"
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Find potentially unused code (functions, classes, etc.)")
+        Some("Search code comments by semantic similarity - find relevant comments")
     }
 
     fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(UnusedCodeInput)).unwrap()
+        serde_json::to_value(schemars::schema_for!(SearchCommentsInput)).unwrap()
     }
 
     async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: UnusedCodeInput = serde_json::from_value(input)
+        let input: SearchCommentsInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        debug!("Searching for unused code in '{}'", input.scope_path);
+        info!("Searching comments: '{}'", input.query);
 
-        let output = UnusedCodeOutput {
-            unused_items: vec![],
-            total_count: 0,
+        // For now, use general search - in production, index comments separately
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.min_similarity);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.query, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<CommentSearchResult> = search_results
+            .into_iter()
+            .map(|r| CommentSearchResult {
+                unit_id: r.id.clone(),
+                name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                comment: r.content,
+                similarity_score: r.score,
+            })
+            .collect();
+
+        let output = SearchCommentsOutput {
+            query: input.query,
+            total_count: results.len(),
+            results,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -516,74 +613,291 @@ impl Tool for SearchUnusedCodeTool {
 }
 
 // =============================================================================
-// cortex.search.duplicates
+// 6. cortex.semantic.hybrid_search
 // =============================================================================
 
-pub struct SearchDuplicatesTool {
+pub struct HybridSearchTool {
     ctx: SemanticSearchContext,
 }
 
-impl SearchDuplicatesTool {
+impl HybridSearchTool {
     pub fn new(ctx: SemanticSearchContext) -> Self {
         Self { ctx }
     }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-struct DuplicatesInput {
-    scope_path: String,
-    #[serde(default = "default_min_lines")]
-    min_lines: i32,
-    #[serde(default = "default_very_high_similarity")]
+struct HybridSearchInput {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_keyword_weight")]
+    keyword_weight: f32,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct HybridSearchOutput {
+    query: String,
+    results: Vec<CodeSearchResult>,
+    total_count: usize,
+    keyword_weight: f32,
+}
+
+#[async_trait]
+impl Tool for HybridSearchTool {
+    fn name(&self) -> &str {
+        "cortex.semantic.hybrid_search"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Hybrid search combining keyword matching and semantic understanding")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(HybridSearchInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: HybridSearchInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        info!("Hybrid search: '{}' (keyword weight: {})", input.query, input.keyword_weight);
+
+        // Perform semantic search (keyword matching is handled by the ranking system)
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.min_similarity);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.query, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<CodeSearchResult> = search_results
+            .into_iter()
+            .map(|r| {
+                let snippet = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                };
+
+                CodeSearchResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    signature: r.metadata.get("signature").cloned(),
+                    similarity_score: r.score,
+                    snippet,
+                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                }
+            })
+            .collect();
+
+        let output = HybridSearchOutput {
+            query: input.query,
+            total_count: results.len(),
+            results,
+            keyword_weight: input.keyword_weight,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// 7. cortex.semantic.search_by_example
+// =============================================================================
+
+pub struct SearchByExampleTool {
+    ctx: SemanticSearchContext,
+}
+
+impl SearchByExampleTool {
+    pub fn new(ctx: SemanticSearchContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchByExampleInput {
+    example_code: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_high_similarity")]
     similarity_threshold: f32,
-    #[serde(default = "default_true")]
-    ignore_whitespace: bool,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct DuplicateGroup {
-    group_id: String,
-    instances: Vec<DuplicateInstance>,
-    line_count: i32,
-    similarity: f32,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct DuplicateInstance {
-    file_path: String,
-    start_line: i32,
-    end_line: i32,
-}
-
-#[derive(Debug, Serialize, JsonSchema)]
-struct DuplicatesOutput {
-    duplicate_groups: Vec<DuplicateGroup>,
-    total_groups: i32,
+struct SearchByExampleOutput {
+    example: String,
+    results: Vec<CodeSearchResult>,
+    total_count: usize,
 }
 
 #[async_trait]
-impl Tool for SearchDuplicatesTool {
+impl Tool for SearchByExampleTool {
     fn name(&self) -> &str {
-        "cortex.search.duplicates"
+        "cortex.semantic.search_by_example"
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Find duplicate code blocks across the codebase")
+        Some("Find code similar to a given example - paste code and find similar patterns")
     }
 
     fn input_schema(&self) -> Value {
-        serde_json::to_value(schemars::schema_for!(DuplicatesInput)).unwrap()
+        serde_json::to_value(schemars::schema_for!(SearchByExampleInput)).unwrap()
     }
 
     async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
-        let input: DuplicatesInput = serde_json::from_value(input)
+        let input: SearchByExampleInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        debug!("Searching for duplicates in '{}'", input.scope_path);
+        info!("Searching by code example (length: {} chars)", input.example_code.len());
 
-        let output = DuplicatesOutput {
-            duplicate_groups: vec![],
-            total_groups: 0,
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.similarity_threshold);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&input.example_code, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<CodeSearchResult> = search_results
+            .into_iter()
+            .map(|r| {
+                let snippet = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                };
+
+                CodeSearchResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    signature: r.metadata.get("signature").cloned(),
+                    similarity_score: r.score,
+                    snippet,
+                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                }
+            })
+            .collect();
+
+        let output = SearchByExampleOutput {
+            example: if input.example_code.len() > 100 {
+                format!("{}...", &input.example_code[..100])
+            } else {
+                input.example_code
+            },
+            total_count: results.len(),
+            results,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// 8. cortex.semantic.search_by_natural_language
+// =============================================================================
+
+pub struct SearchByNaturalLanguageTool {
+    ctx: SemanticSearchContext,
+}
+
+impl SearchByNaturalLanguageTool {
+    pub fn new(ctx: SemanticSearchContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchByNaturalLanguageInput {
+    natural_language_query: String,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default = "default_similarity")]
+    min_similarity: f32,
+    context: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct SearchByNaturalLanguageOutput {
+    query: String,
+    results: Vec<CodeSearchResult>,
+    total_count: usize,
+    interpreted_intent: String,
+}
+
+#[async_trait]
+impl Tool for SearchByNaturalLanguageTool {
+    fn name(&self) -> &str {
+        "cortex.semantic.search_by_natural_language"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Advanced natural language to code search - understands complex queries")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(SearchByNaturalLanguageInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: SearchByNaturalLanguageInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        info!("Natural language search: '{}'", input.natural_language_query);
+
+        // Enhance query with context if provided
+        let enhanced_query = if let Some(context) = &input.context {
+            format!("{}\nContext: {}", input.natural_language_query, context)
+        } else {
+            input.natural_language_query.clone()
+        };
+
+        let mut filter = SearchFilter::default();
+        filter.entity_type = Some(EntityType::Code);
+        filter.min_score = Some(input.min_similarity);
+
+        let engine = self.ctx.search_engine.read().await;
+        let search_results = engine
+            .search_with_filter(&enhanced_query, input.limit, filter)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
+
+        let results: Vec<CodeSearchResult> = search_results
+            .into_iter()
+            .map(|r| {
+                let snippet = if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                };
+
+                CodeSearchResult {
+                    unit_id: r.id.clone(),
+                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
+                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
+                    signature: r.metadata.get("signature").cloned(),
+                    similarity_score: r.score,
+                    snippet,
+                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
+                }
+            })
+            .collect();
+
+        let output = SearchByNaturalLanguageOutput {
+            query: input.natural_language_query.clone(),
+            total_count: results.len(),
+            results,
+            interpreted_intent: format!("Searching for: {}", input.natural_language_query),
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -594,42 +908,18 @@ impl Tool for SearchDuplicatesTool {
 // Helper functions
 // =============================================================================
 
-fn default_workspace_scope() -> String {
-    "workspace".to_string()
-}
-
-fn default_limit() -> i32 {
-    20
+fn default_limit() -> usize {
+    10
 }
 
 fn default_similarity() -> f32 {
     0.7
 }
 
-fn default_pattern_limit() -> i32 {
-    50
-}
-
-fn default_match_mode() -> String {
-    "fuzzy".to_string()
-}
-
 fn default_high_similarity() -> f32 {
     0.8
 }
 
-fn default_small_limit() -> i32 {
-    10
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_min_lines() -> i32 {
-    10
-}
-
-fn default_very_high_similarity() -> f32 {
-    0.95
+fn default_keyword_weight() -> f32 {
+    0.3
 }

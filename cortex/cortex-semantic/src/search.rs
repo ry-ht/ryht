@@ -136,8 +136,10 @@ impl SemanticSearchEngine {
         self.documents.insert(doc_id.clone(), indexed_doc);
 
         // Insert into index
-        let index = self.index.write().await;
-        index.insert(doc_id, embedding).await?;
+        {
+            let index = self.index.write().await;
+            index.insert(doc_id, embedding).await?;
+        } // Explicitly drop write lock
 
         debug!("Document indexed successfully");
         Ok(())
@@ -177,8 +179,10 @@ impl SemanticSearchEngine {
         }
 
         // Batch insert into index
-        let index = self.index.write().await;
-        index.insert_batch(index_items).await?;
+        {
+            let index = self.index.write().await;
+            index.insert_batch(index_items).await?;
+        } // Explicitly drop write lock
 
         info!("Batch indexing completed");
         Ok(())
@@ -299,14 +303,19 @@ impl SemanticSearchEngine {
     pub async fn remove_document(&self, doc_id: &DocumentId) -> Result<()> {
         debug!("Removing document: {}", doc_id);
 
+        // Remove from document store
         self.documents.remove(doc_id);
 
-        let index = self.index.write().await;
-        index.remove(doc_id).await?;
+        // Remove from index
+        {
+            let index = self.index.write().await;
+            index.remove(doc_id).await?;
+        } // Explicitly drop write lock before cache invalidation
 
         // Invalidate caches
         self.invalidate_caches().await;
 
+        debug!("Document removed successfully: {}", doc_id);
         Ok(())
     }
 
@@ -314,13 +323,19 @@ impl SemanticSearchEngine {
     pub async fn clear(&self) -> Result<()> {
         info!("Clearing search engine");
 
+        // Clear document store
         self.documents.clear();
 
-        let index = self.index.write().await;
-        index.clear().await?;
+        // Clear index
+        {
+            let index = self.index.write().await;
+            index.clear().await?;
+        } // Explicitly drop write lock before cache invalidation
 
+        // Invalidate caches
         self.invalidate_caches().await;
 
+        info!("Search engine cleared successfully");
         Ok(())
     }
 
@@ -330,6 +345,7 @@ impl SemanticSearchEngine {
             info!("Saving index to: {}", persist_path.display());
             let index = self.index.read().await;
             index.save(persist_path).await?;
+            // Read lock automatically dropped here
         }
         Ok(())
     }
@@ -337,8 +353,10 @@ impl SemanticSearchEngine {
     /// Load index from disk.
     pub async fn load_index(&self, path: &Path) -> Result<()> {
         info!("Loading index from: {}", path.display());
-        let mut index = self.index.write().await;
-        index.load(path).await?;
+        {
+            let mut index = self.index.write().await;
+            index.load(path).await?;
+        } // Explicitly drop write lock
         Ok(())
     }
 
