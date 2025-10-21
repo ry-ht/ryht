@@ -4,55 +4,94 @@ resolver = "2"
 members = [
     "axon/src-tauri",
     "crates/*",
+    "cortex/cortex-core",
+    "cortex/cortex-storage",
+    "cortex/cortex-vfs",
+    "cortex/cortex-ingestion",
+    "cortex/cortex-memory",
+    "cortex/cortex-semantic",
+    "cortex/cortex-parser",
+    "cortex/cortex-cli",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["ry.ht team"]
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/ryht"
+rust-version = "1.75"
+authors = ["LuxQuant"]
+license = "MIT"
+repository = "https://github.com/ry-ht/ryht"
 
 [workspace.dependencies]
 # Async runtime
 tokio = { version = "1.48.0", features = ["full"] }
+tokio-util = { version = "0.7.16", features = ["full"] }
 async-trait = "0.1.89"
 futures = "0.3.31"
+async-stream = "0.3.6"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+bincode = { version = "2.0.1", features = ["serde"] }
 
 # Error handling
 anyhow = "1.0.100"
 thiserror = "2.0.17"
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
+tracing-appender = "0.2.3"
 
-# HTTP/Web (for dashboard)
-axum = "0.7"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+# HTTP/Web
+axum = { version = "0.8.6", features = ["macros"] }
+tower = { version = "0.5.2", features = ["full"] }
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
+reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
 
-# Database (for cognitive memory)
+# Database
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 surrealdb = { version = "2.3.10", features = ["kv-mem", "kv-rocksdb"] }
 
 # Configuration
 config = "0.15.18"
+toml = "0.9.8"
 
 # CLI
-clap = { version = "4.5.50", features = ["derive"] }
+clap = { version = "4.5.50", features = ["derive", "env"] }
 
 # Utilities
 uuid = { version = "1.10", features = ["serde", "v4"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+time = { version = "0.3.44", features = ["serde", "macros"] }
 dashmap = "6.1.0"
 parking_lot = "0.12.5"
 once_cell = "1.21.3"
 tempfile = "3.23.0"
+regex = "1.12.2"
+unicode-segmentation = "1.12.0"
+crossbeam = "0.8.4"
+rayon = "1.11.0"
+
+# Hashing and crypto
+blake3 = "1.8.2"
+sha2 = "0.10.9"
+
+# Embeddings and ML
+ort = { version = "1.16.3", features = ["load-dynamic"] }
+tokenizers = { version = "0.19.1", default-features = false, features = ["onig"] }
+
+# File watching
+notify = "8.2.0"
+ignore = "0.4.24"
+
+# Testing
+mockall = "0.13.1"
+proptest = "1.8.0"
+
+# Benchmarking
+criterion = { version = "0.7.0", features = ["html_reports"] }
 
 [profile.release]
 opt-level = 3
