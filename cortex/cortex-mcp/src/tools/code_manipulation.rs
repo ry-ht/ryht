@@ -1057,6 +1057,23 @@ impl CodeInlineFunctionTool {
     pub fn new(ctx: CodeManipulationContext) -> Self {
         Self { ctx }
     }
+
+    /// Extract arguments from a call expression
+    fn extract_call_arguments(&self, call_node: &tree_sitter::Node, source: &str) -> Vec<String> {
+        let mut args = Vec::new();
+
+        // Find the arguments node
+        if let Some(args_node) = call_node.child_by_field_name("arguments") {
+            let mut cursor = args_node.walk();
+            for child in args_node.children(&mut cursor) {
+                if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                    args.push(source[child.byte_range()].to_string());
+                }
+            }
+        }
+
+        args
+    }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -1092,12 +1109,109 @@ impl Tool for CodeInlineFunctionTool {
 
         debug!("Inlining function '{}'", input.function_id);
 
-        // This is a complex operation that requires analyzing call sites
-        // For now, return a basic implementation
+        // Fetch the function to inline
+        let function = self.ctx.get_code_unit(&input.function_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        if function.unit_type != CodeUnitType::Function {
+            return Err(ToolError::ExecutionFailed("Unit is not a function".to_string()));
+        }
+
+        let function_body = function.body.clone().unwrap_or_default();
+        let function_params = function.parameters.clone();
+
+        // Parse the file containing the function
+        let workspace_id = Uuid::new_v4();
+        let language = match function.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &function.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find all call sites in the file
+        let call_query = "(call_expression) @call";
+        let calls = editor.query(call_query)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let mut sites_inlined = 0;
+        let mut edits_to_apply = Vec::new();
+
+        // Process each call site
+        for call_node in calls {
+            let call_text = editor.node_text(&call_node);
+
+            // Check if this is a call to our function
+            if call_text.contains(&function.name) {
+                // Extract arguments from the call
+                let args = self.extract_call_arguments(&call_node, editor.get_source());
+
+                // Substitute parameters in function body
+                let mut inlined_body = function_body.clone();
+                for (i, param) in function_params.iter().enumerate() {
+                    if i < args.len() {
+                        // Simple substitution (real implementation would use AST)
+                        inlined_body = inlined_body.replace(&param.name, &args[i]);
+                    }
+                }
+
+                // Create edit to replace call with inlined body
+                let range = cortex_parser::Range::from_node(&call_node);
+                edits_to_apply.push(cortex_parser::Edit::replace(
+                    range,
+                    format!("{{\n    {}\n}}", inlined_body),
+                ));
+                sites_inlined += 1;
+            }
+        }
+
+        // Apply all inlining edits
+        editor.edits.extend(edits_to_apply);
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Now remove the original function definition
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let function_removed = if let Some(func_node) = functions.iter()
+            .find(|n| n.start_position().row == function.start_line) {
+            let range = cortex_parser::Range::from_node(func_node);
+            editor.edits.push(cortex_parser::Edit::delete(range));
+            editor.apply_edits()
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+            true
+        } else {
+            false
+        };
+
+        // Save the modified file
+        self.ctx.save_file(&workspace_id, &function.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Delete function from semantic memory
+        if function_removed {
+            self.ctx.delete_code_unit(&input.function_id).await
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        }
+
         let output = InlineFunctionOutput {
             function_id: input.function_id.clone(),
-            sites_inlined: 0,
-            function_removed: false,
+            sites_inlined,
+            function_removed,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1156,11 +1270,80 @@ impl Tool for CodeChangeSignatureTool {
 
         debug!("Changing signature for unit '{}'", input.unit_id);
 
+        // Fetch the code unit
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let old_signature = unit.signature.clone();
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the function definition
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let func_node = functions.iter()
+            .find(|n| n.start_position().row == unit.start_line)
+            .ok_or_else(|| ToolError::ExecutionFailed("Function not found in AST".to_string()))?;
+
+        let func_text = editor.node_text(func_node);
+        let body_start = func_text.find('{')
+            .ok_or_else(|| ToolError::ExecutionFailed("Function body not found".to_string()))?;
+        let body = &func_text[body_start..];
+
+        // Build new function with updated signature
+        let new_function = format!("{} {}", input.new_signature, body);
+        let range = cortex_parser::Range::from_node(func_node);
+        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+
+        // Apply edits to update function definition
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save the modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Update callers if requested
+        let mut callers_updated = 0;
+        if input.update_callers {
+            // TODO: Find and update all call sites
+            // This would require dependency graph analysis
+            callers_updated = 0;
+        }
+
+        // Update code unit metadata
+        unit.signature = input.new_signature.clone();
+        unit.version += 1;
+        unit.updated_at = chrono::Utc::now();
+        self.ctx.update_code_unit(&unit).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = ChangeSignatureOutput {
             unit_id: input.unit_id.clone(),
-            old_signature: "old_sig".to_string(),
+            old_signature,
             new_signature: input.new_signature.clone(),
-            callers_updated: 0,
+            callers_updated,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1221,10 +1404,107 @@ impl Tool for CodeAddParameterTool {
             input.parameter_name, input.unit_id
         );
 
+        // Fetch the code unit
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the function
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let func_node = functions.iter()
+            .find(|n| n.start_position().row == unit.start_line)
+            .ok_or_else(|| ToolError::ExecutionFailed("Function not found".to_string()))?;
+
+        let func_text = editor.node_text(func_node);
+
+        // Build new parameter
+        let new_param = if let Some(default) = &input.default_value {
+            format!("{}: {} = {}", input.parameter_name, input.parameter_type, default)
+        } else {
+            format!("{}: {}", input.parameter_name, input.parameter_type)
+        };
+
+        // Extract function signature and body
+        let body_start = func_text.find('{')
+            .ok_or_else(|| ToolError::ExecutionFailed("Function body not found".to_string()))?;
+        let signature_part = &func_text[..body_start].trim();
+        let body_part = &func_text[body_start..];
+
+        // Add parameter to signature
+        let new_signature = if signature_part.contains('(') && signature_part.contains(')') {
+            let paren_start = signature_part.find('(').unwrap();
+            let paren_end = signature_part.rfind(')').unwrap();
+            let existing_params = &signature_part[paren_start + 1..paren_end].trim();
+
+            let updated_params = if existing_params.is_empty() {
+                new_param.clone()
+            } else if input.position == "first" {
+                format!("{}, {}", new_param, existing_params)
+            } else {
+                format!("{}, {}", existing_params, new_param)
+            };
+
+            format!("{}({}){}",
+                &signature_part[..paren_start],
+                updated_params,
+                &signature_part[paren_end + 1..])
+        } else {
+            return Err(ToolError::ExecutionFailed("Invalid function signature".to_string()));
+        };
+
+        // Build complete function
+        let new_function = format!("{} {}", new_signature, body_part);
+        let range = cortex_parser::Range::from_node(func_node);
+        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Update unit metadata
+        unit.parameters.push(CoreParameter {
+            name: input.parameter_name.clone(),
+            param_type: Some(input.parameter_type.clone()),
+            default_value: input.default_value.clone(),
+            is_optional: input.default_value.is_some(),
+            is_variadic: false,
+            attributes: vec![],
+        });
+        unit.signature = new_signature.clone();
+        unit.version += 1;
+        self.ctx.update_code_unit(&unit).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = AddParameterOutput {
             unit_id: input.unit_id.clone(),
             parameter_added: input.parameter_name.clone(),
-            new_signature: format!("fn(..., {}: {})", input.parameter_name, input.parameter_type),
+            new_signature,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1284,10 +1564,94 @@ impl Tool for CodeRemoveParameterTool {
             input.parameter_name, input.unit_id
         );
 
+        // Fetch the code unit
+        let mut unit = self.ctx.get_code_unit(&input.unit_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Parse the file
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (_, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the function
+        let functions = editor.query("(function_item) @func")
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let func_node = functions.iter()
+            .find(|n| n.start_position().row == unit.start_line)
+            .ok_or_else(|| ToolError::ExecutionFailed("Function not found".to_string()))?;
+
+        let func_text = editor.node_text(func_node);
+
+        // Extract function signature and body
+        let body_start = func_text.find('{')
+            .ok_or_else(|| ToolError::ExecutionFailed("Function body not found".to_string()))?;
+        let signature_part = &func_text[..body_start].trim();
+        let body_part = &func_text[body_start..];
+
+        // Remove parameter from signature
+        let new_signature = if signature_part.contains('(') && signature_part.contains(')') {
+            let paren_start = signature_part.find('(').unwrap();
+            let paren_end = signature_part.rfind(')').unwrap();
+            let existing_params = &signature_part[paren_start + 1..paren_end];
+
+            // Split parameters and filter out the one to remove
+            let params: Vec<&str> = existing_params
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty() && !s.contains(&input.parameter_name))
+                .collect();
+
+            let updated_params = params.join(", ");
+
+            format!("{}({}){}",
+                &signature_part[..paren_start],
+                updated_params,
+                &signature_part[paren_end + 1..])
+        } else {
+            return Err(ToolError::ExecutionFailed("Invalid function signature".to_string()));
+        };
+
+        // Build complete function
+        let new_function = format!("{} {}", new_signature, body_part);
+        let range = cortex_parser::Range::from_node(func_node);
+        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Update unit metadata
+        unit.parameters.retain(|p| p.name != input.parameter_name);
+        unit.signature = new_signature.clone();
+        unit.version += 1;
+        self.ctx.update_code_unit(&unit).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = RemoveParameterOutput {
             unit_id: input.unit_id.clone(),
             parameter_removed: input.parameter_name.clone(),
-            new_signature: "fn(...)".to_string(),
+            new_signature,
             callers_updated: 0,
         };
 
@@ -1526,11 +1890,109 @@ impl Tool for CodeGenerateGetterSetterTool {
             input.field_name, input.class_id
         );
 
+        // Fetch the struct/class code unit
+        let unit = self.ctx.get_code_unit(&input.class_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let workspace_id = Uuid::new_v4();
+        let language = match unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        let (parsed, content, _) = self.ctx.parse_file(&workspace_id, &unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the field type from the struct
+        let field_type = parsed.structs.iter()
+            .find(|s| s.qualified_name == unit.qualified_name)
+            .and_then(|s| s.fields.iter().find(|f| f.name == input.field_name))
+            .map(|f| f.field_type.clone())
+            .ok_or_else(|| ToolError::ExecutionFailed(format!("Field '{}' not found", input.field_name)))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the impl block for this struct
+        let impl_query = "(impl_item) @impl";
+        let impls = editor.query(impl_query)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let impl_node = impls.iter()
+            .find(|n| {
+                let text = editor.node_text(n);
+                text.contains(&unit.name)
+            });
+
+        let visibility = input.visibility.as_deref().unwrap_or("pub");
+
+        // Generate getter and setter methods
+        let mut methods = String::new();
+
+        if input.generate == "getter" || input.generate == "both" {
+            methods.push_str(&format!(
+                "\n    {} fn {}(&self) -> &{} {{\n        &self.{}\n    }}\n",
+                visibility, input.field_name, field_type, input.field_name
+            ));
+        }
+
+        if input.generate == "setter" || input.generate == "both" {
+            methods.push_str(&format!(
+                "\n    {} fn set_{}(&mut self, value: {}) {{\n        self.{} = value;\n    }}\n",
+                visibility, input.field_name, field_type, input.field_name
+            ));
+        }
+
+        // Insert methods into impl block or create new impl block
+        if let Some(impl_node) = impl_node {
+            let impl_text = editor.node_text(impl_node);
+            let last_brace = impl_text.rfind('}')
+                .ok_or_else(|| ToolError::ExecutionFailed("Invalid impl block".to_string()))?;
+
+            let new_impl = format!("{}{}\n{}",
+                &impl_text[..last_brace],
+                methods,
+                &impl_text[last_brace..]);
+
+            let range = cortex_parser::Range::from_node(impl_node);
+            editor.edits.push(cortex_parser::Edit::replace(range, new_impl));
+        } else {
+            // Create new impl block
+            let new_impl = format!("\nimpl {} {{{}\n}}\n", unit.name, methods);
+            let insert_line = unit.end_line + 1;
+            editor.insert_at(insert_line, 0, &new_impl)
+                .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        }
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = GenerateGetterSetterOutput {
             class_id: input.class_id.clone(),
             field_name: input.field_name.clone(),
-            getter_id: Some(format!("unit_{}", uuid::Uuid::new_v4())),
-            setter_id: Some(format!("unit_{}", uuid::Uuid::new_v4())),
+            getter_id: if input.generate == "getter" || input.generate == "both" {
+                Some(format!("unit_{}", uuid::Uuid::new_v4()))
+            } else {
+                None
+            },
+            setter_id: if input.generate == "setter" || input.generate == "both" {
+                Some(format!("unit_{}", uuid::Uuid::new_v4()))
+            } else {
+                None
+            },
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1589,10 +2051,94 @@ impl Tool for CodeImplementInterfaceTool {
             input.interface_id, input.class_id
         );
 
+        // Fetch the struct/class code unit
+        let struct_unit = self.ctx.get_code_unit(&input.class_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Fetch the trait/interface code unit
+        let trait_unit = self.ctx.get_code_unit(&input.interface_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let workspace_id = Uuid::new_v4();
+        let language = match struct_unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        // Parse the trait definition to extract method signatures
+        let (trait_parsed, _, _) = self.ctx.parse_file(&workspace_id, &trait_unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let trait_info = trait_parsed.traits.iter()
+            .find(|t| t.qualified_name == trait_unit.qualified_name)
+            .ok_or_else(|| ToolError::ExecutionFailed("Trait not found".to_string()))?;
+
+        // Parse the struct file
+        let (_, struct_content, _) = self.ctx.parse_file(&workspace_id, &struct_unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(struct_content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Generate stub methods
+        let mut impl_body = String::new();
+        let mut methods_generated = Vec::new();
+
+        if input.generate_stubs {
+            for method in &trait_info.methods {
+                methods_generated.push(method.name.clone());
+
+                let params: Vec<String> = method.parameters.iter()
+                    .map(|p| format!("{}: {}", p.name, p.param_type))
+                    .collect();
+
+                let return_type = method.return_type.as_ref()
+                    .map(|r| format!(" -> {}", r))
+                    .unwrap_or_default();
+
+                impl_body.push_str(&format!(
+                    "    fn {}({}) {} {{\n        todo!(\"Implement {}\")\n    }}\n\n",
+                    method.name,
+                    params.join(", "),
+                    return_type,
+                    method.name
+                ));
+            }
+        }
+
+        // Create impl block
+        let impl_block = format!(
+            "\nimpl {} for {} {{\n{}}}\n",
+            trait_unit.name,
+            struct_unit.name,
+            impl_body
+        );
+
+        // Insert after the struct definition
+        let insert_line = struct_unit.end_line + 1;
+        editor.insert_at(insert_line, 0, &impl_block)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &struct_unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
         let output = ImplementInterfaceOutput {
             class_id: input.class_id.clone(),
             interface_id: input.interface_id.clone(),
-            methods_generated: vec![],
+            methods_generated,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1651,6 +2197,97 @@ impl Tool for CodeOverrideMethodTool {
             "Overriding method '{}' in class '{}'",
             input.method_name, input.class_id
         );
+
+        // Fetch the struct/class code unit
+        let struct_unit = self.ctx.get_code_unit(&input.class_id).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let workspace_id = Uuid::new_v4();
+        let language = match struct_unit.language {
+            Language::Rust => ParserLanguage::Rust,
+            Language::TypeScript => ParserLanguage::TypeScript,
+            Language::JavaScript => ParserLanguage::JavaScript,
+            _ => return Err(ToolError::ExecutionFailed("Unsupported language".to_string())),
+        };
+
+        // Parse the struct file
+        let (parsed, content, _) = self.ctx.parse_file(&workspace_id, &struct_unit.file_path).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Find the parent trait method signature
+        // For Rust, we need to find which trait this struct implements
+        let parent_method = parsed.traits.iter()
+            .flat_map(|t| &t.methods)
+            .find(|m| m.name == input.method_name)
+            .ok_or_else(|| ToolError::ExecutionFailed(
+                format!("Method '{}' not found in any trait", input.method_name)
+            ))?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content, tree_sitter_lang)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Build method signature
+        let params: Vec<String> = parent_method.parameters.iter()
+            .map(|p| format!("{}: {}", p.name, p.param_type))
+            .collect();
+
+        let return_type = parent_method.return_type.as_ref()
+            .map(|r| format!(" -> {}", r))
+            .unwrap_or_default();
+
+        // Build method body
+        let body = if input.call_super {
+            format!("        // TODO: Call parent implementation\n        todo!(\"Override {}\")", input.method_name)
+        } else {
+            format!("        todo!(\"Override {}\")", input.method_name)
+        };
+
+        let method_code = format!(
+            "\n    fn {}({}) {} {{\n{}\n    }}\n",
+            input.method_name,
+            params.join(", "),
+            return_type,
+            body
+        );
+
+        // Find the impl block for this struct
+        let impl_query = "(impl_item) @impl";
+        let impls = editor.query(impl_query)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let impl_node = impls.iter()
+            .find(|n| {
+                let text = editor.node_text(n);
+                text.contains(&struct_unit.name)
+            })
+            .ok_or_else(|| ToolError::ExecutionFailed("No impl block found".to_string()))?;
+
+        // Insert method into impl block
+        let impl_text = editor.node_text(impl_node);
+        let last_brace = impl_text.rfind('}')
+            .ok_or_else(|| ToolError::ExecutionFailed("Invalid impl block".to_string()))?;
+
+        let new_impl = format!("{}{}\n{}",
+            &impl_text[..last_brace],
+            method_code,
+            &impl_text[last_brace..]);
+
+        let range = cortex_parser::Range::from_node(impl_node);
+        editor.edits.push(cortex_parser::Edit::replace(range, new_impl));
+
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        // Save modified file
+        self.ctx.save_file(&workspace_id, &struct_unit.file_path, editor.get_source()).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let output = OverrideMethodOutput {
             class_id: input.class_id.clone(),

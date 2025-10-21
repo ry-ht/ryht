@@ -116,7 +116,7 @@ impl CortexMcpServer {
         info!("Registering MCP tools");
 
         // Create shared contexts
-        let workspace_ctx = WorkspaceContext::new(storage.clone());
+        let workspace_ctx = WorkspaceContext::new(storage.clone())?;
         let vfs_ctx = VfsContext::new(vfs.clone());
         let code_ctx = CodeNavContext::new(storage.clone());
         let code_manip_ctx = CodeManipulationContext::new(storage.clone());
