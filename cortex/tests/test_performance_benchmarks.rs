@@ -17,6 +17,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_semantic::prelude::*;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;
@@ -578,7 +580,7 @@ async fn bench_code_create_unit() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
 
     // Benchmark unit creation
     let mut samples = Vec::new();
@@ -693,7 +695,7 @@ async fn bench_code_update_references() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
 
     // Create source unit
     let source_id = CortexId::new();
@@ -733,7 +735,7 @@ async fn bench_session_creation() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     // Benchmark session creation
@@ -776,7 +778,7 @@ async fn bench_session_concurrent_access() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     // Create sessions
@@ -831,7 +833,7 @@ async fn bench_memory_episode_storage() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     let mut samples = Vec::new();
@@ -866,7 +868,7 @@ async fn bench_memory_pattern_extraction() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     // Create episodes for pattern extraction
@@ -910,7 +912,7 @@ async fn bench_memory_consolidation() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     // Create diverse memory objects
@@ -978,7 +980,7 @@ async fn bench_memory_retrieval() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let project_id = CortexId::new();
 
     // Store episodes
@@ -1057,7 +1059,7 @@ async fn stress_test_100000_code_units() {
             .expect("Failed to create connection manager"),
     );
 
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
 
     let start = Instant::now();
 
@@ -1117,7 +1119,7 @@ async fn stress_test_1000_concurrent_operations() {
     );
 
     let vfs = Arc::new(VirtualFileSystem::new(connection_manager.clone()));
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let workspace_id = uuid::Uuid::new_v4();
     let project_id = CortexId::new();
 
@@ -1178,7 +1180,7 @@ async fn stress_test_sustained_operations() {
     );
 
     let vfs = Arc::new(VirtualFileSystem::new(connection_manager.clone()));
-    let cognitive = CognitiveManager::new(connection_manager);
+    let cognitive = CognitiveManager::new(connection_manager.clone());
     let workspace_id = uuid::Uuid::new_v4();
     let project_id = CortexId::new();
 

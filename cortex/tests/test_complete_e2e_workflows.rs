@@ -12,6 +12,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;
 use std::collections::HashMap;

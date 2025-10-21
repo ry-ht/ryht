@@ -9,6 +9,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use std::sync::Arc;
 use std::time::Instant;
@@ -295,7 +297,7 @@ async fn test_database_operations_with_different_types() {
         .expect("Unit not found");
 
     assert_eq!(retrieved_unit.name, "crud_function");
-    assert_eq!(retrieved_unit.visibility, "public");
+    assert_eq!(retrieved_unit.visibility, Visibility::Public);
 
     // Test 3: Create and retrieve pattern
     info!("Test 3: Pattern CRUD operations");
@@ -318,7 +320,7 @@ async fn test_database_operations_with_different_types() {
         .expect("Failed to retrieve pattern")
         .expect("Pattern not found");
 
-    assert_eq!(retrieved_pattern.pattern_name, "CRUD test pattern");
+    assert_eq!(retrieved_pattern.name, "CRUD test pattern");
 
     // Test 4: Dependency operations
     info!("Test 4: Dependency operations");
@@ -631,7 +633,7 @@ async fn test_database_data_integrity() {
     ];
 
     episode.outcome = EpisodeOutcome::Success;
-    episode.duration_ms = 1500;
+    episode.duration_seconds = 2;
 
     let episode_id = cognitive
         .remember_episode(&episode)
@@ -652,7 +654,7 @@ async fn test_database_data_integrity() {
     assert_eq!(retrieved.entities_modified.len(), 1);
     assert_eq!(retrieved.tools_used.len(), 2);
     assert_eq!(retrieved.outcome, EpisodeOutcome::Success);
-    assert_eq!(retrieved.duration_ms, 1500);
+    assert_eq!(retrieved.duration_seconds, 2);
 
     info!("Database data integrity test passed");
 }

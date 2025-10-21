@@ -11,6 +11,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;
 use std::path::PathBuf;
@@ -99,7 +101,7 @@ async fn test_multi_agent_concurrent_operations() {
 
             episode.entities_created = vec![file_path.to_string()];
             episode.outcome = EpisodeOutcome::Success;
-            episode.duration_ms = agent_start.elapsed().as_millis() as u64;
+            episode.duration_seconds = agent_start.elapsed().as_secs();
 
             // Store episode
             let episode_id = cognitive

@@ -15,9 +15,11 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;
-use cortex_semantic::{SemanticSearch, SearchConfig};
+use cortex_semantic::{SemanticSearchEngine, SearchConfig};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -322,9 +324,9 @@ async fn test_complete_workflow_end_to_end() {
                             qualified_name: format!("test_project::{}", name),
                             display_name: name.clone(),
                             file_path: file.to_string_lossy().to_string(),
-                            start_line: line_num,
+                            start_line: line_num as u32,
                             start_column: 0,
-                            end_line: line_num + 10,
+                            end_line: (line_num + 10) as u32,
                             end_column: 1,
                             signature: format!("pub fn {}(...)", name),
                             body: "// Function body".to_string(),

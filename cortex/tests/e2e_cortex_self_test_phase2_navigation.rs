@@ -20,7 +20,7 @@ use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility};
 use cortex_memory::CognitiveManager;
 use cortex_memory::types::{DependencyType, MemoryQuery};
-use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConfig, Credentials, ConnectionMode};
+use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConfig, Credentials, PoolConnectionMode as ConnectionMode};
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -214,17 +214,8 @@ async fn test_02_find_references() -> anyhow::Result<()> {
     ) -> anyhow::Result<(u64, usize)> {
         let start = Instant::now();
 
-        // First find any unit with this name
-        let conn = semantic.connection_manager.acquire().await?;
-        let query = format!("SELECT * FROM code_unit WHERE name = $name LIMIT 1");
-        let mut result = conn.connection()
-            .query(&query)
-            .bind(("name", name))
-            .await
-            .map_err(|e| anyhow::anyhow!("Query failed: {}", e))?;
-
-        let units: Vec<CodeUnit> = result.take(0)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize: {}", e))?;
+        // First find any unit with this name using the public API
+        let units = semantic.find_by_name(name).await?;
 
         if let Some(unit) = units.into_iter().next() {
             let refs = semantic.find_references(unit.id).await?;
@@ -353,7 +344,7 @@ async fn test_04_find_implementations() -> anyhow::Result<()> {
         pattern: &str,
     ) -> anyhow::Result<(u64, usize)> {
         let start = Instant::now();
-        let conn = semantic.connection_manager.acquire().await?;
+        let conn = semantic.get_connection().await?;
 
         let query = "SELECT * FROM code_unit WHERE unit_type = 'ImplBlock' LIMIT 1000";
         let mut result = conn.connection()
@@ -417,7 +408,7 @@ async fn test_05_call_hierarchy() -> anyhow::Result<()> {
     println!("5.1 Tracing call hierarchy for VirtualFileSystem::read_file...");
 
     // First find the function
-    let conn = semantic.connection_manager.acquire().await?;
+    let conn = semantic.get_connection().await?;
     let query = "SELECT * FROM code_unit WHERE name = 'read_file' LIMIT 1";
     let mut result = conn.connection()
         .query(query)
@@ -477,7 +468,7 @@ async fn test_06_type_hierarchy() -> anyhow::Result<()> {
     // Test 6.1: CortexError type hierarchy
     println!("6.1 Analyzing CortexError type hierarchy...");
 
-    let conn = semantic.connection_manager.acquire().await?;
+    let conn = semantic.get_connection().await?;
     let query = "SELECT * FROM code_unit WHERE name = 'CortexError' LIMIT 10";
     let mut result = conn.connection()
         .query(query)
@@ -526,7 +517,7 @@ async fn test_07_symbol_search() -> anyhow::Result<()> {
         pattern: &str,
     ) -> anyhow::Result<(u64, Vec<CodeUnit>)> {
         let start = Instant::now();
-        let conn = semantic.connection_manager.acquire().await?;
+        let conn = semantic.get_connection().await?;
 
         // Use LIKE for pattern matching
         let query = format!(
@@ -688,7 +679,7 @@ async fn test_10_cross_file_navigation() -> anyhow::Result<()> {
     // Get all units across multiple crates
     println!("10.1 Analyzing cross-crate references...");
 
-    let conn = semantic.connection_manager.acquire().await?;
+    let conn = semantic.get_connection().await?;
 
     // Get sample units from different crates
     let query = "SELECT * FROM code_unit WHERE file_path CONTAINS 'cortex-' LIMIT 100";
@@ -757,7 +748,7 @@ async fn test_11_documentation_search() -> anyhow::Result<()> {
     // Test 11.1: Find all documented public functions
     println!("11.1 Finding documented public functions...");
 
-    let conn = semantic.connection_manager.acquire().await?;
+    let conn = semantic.get_connection().await?;
     let query = "SELECT * FROM code_unit WHERE has_documentation = true AND visibility = 'Public' LIMIT 500";
     let mut result = conn.connection().query(query).await?;
     let documented: Vec<CodeUnit> = result.take(0)?;

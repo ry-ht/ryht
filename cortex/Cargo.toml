@@ -143,6 +143,7 @@ rand = "0.9.2"
 criterion = { workspace = true }
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
+anyhow.workspace = true
 
 [[test]]
 name = "cross_crate_integration"

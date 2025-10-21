@@ -476,6 +476,31 @@ impl SemanticMemorySystem {
         Ok(unit)
     }
 
+    /// Search units by name (e.g., "VirtualFileSystem")
+    pub async fn find_by_name(&self, name: &str) -> Result<Vec<CodeUnit>> {
+        debug!(name, "Finding units by name");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        let mut result = conn
+            .connection()
+            .query("SELECT * FROM code_unit WHERE name = $name")
+            .bind(("name", name.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Ok(units)
+    }
+
+    /// Get a connection for custom queries (primarily for testing)
+    pub async fn get_connection(&self) -> Result<cortex_storage::PooledConnection> {
+        self.connection_manager.acquire().await
+    }
+
     // ========================================================================
     // Dependency Operations
     // ========================================================================

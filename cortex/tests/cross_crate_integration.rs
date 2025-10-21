@@ -15,8 +15,11 @@
 
 use cortex_core::prelude::*;
 use cortex_storage::prelude::*;
+use cortex_storage::connection_pool::ConnectionMode;
 use cortex_vfs::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_semantic::prelude::*;
 use cortex_ingestion::prelude::*;
 
@@ -255,7 +258,7 @@ async fn test_storage_vfs_connection_pool_usage() {
     let workspace = Workspace::new(
         workspace_id,
         "test-workspace".to_string(),
-        WorkspaceType::Regular,
+        WorkspaceType::Code,
     );
 
     // Write a file to VFS (should use connection pool internally)
@@ -483,7 +486,7 @@ async fn test_vfs_memory_content_hashing_integration() {
     // Store semantic unit with content hash
     let unit = SemanticUnit {
         id: CortexId::new(),
-        unit_type: CodeUnitType::Constant,
+        unit_type: CodeUnitType::Const,
         name: "VERSION".to_string(),
         qualified_name: "version::VERSION".to_string(),
         display_name: "VERSION".to_string(),
@@ -662,7 +665,7 @@ async fn test_memory_semantic_episodes_and_patterns() {
         "Optimized process_data function".to_string(),
         "test-agent".to_string(),
         project_id,
-        EpisodeType::Optimization,
+        EpisodeType::Feature,
     );
 
     episode.entities_modified = vec!["processor.rs".to_string()];
@@ -1051,7 +1054,7 @@ Rust has zero-cost abstractions and compiles to native code.
     for (idx, chunk) in processed.chunks.iter().enumerate() {
         let unit = SemanticUnit {
             id: CortexId::new(),
-            unit_type: CodeUnitType::Documentation,
+            unit_type: CodeUnitType::Module,
             name: format!("chunk_{}", idx),
             qualified_name: format!("rust_guide::chunk_{}", idx),
             display_name: format!("Chunk {}", idx),
@@ -1181,7 +1184,7 @@ async fn test_e2e_multi_agent_session_fork_modify_merge_verify() {
         .await
         .expect("Failed to read file");
 
-    assert!(String::from_utf8_lossy(&content.data).contains("println"));
+    assert!(String::from_utf8_lossy(&content).contains("println"));
 }
 
 // =============================================================================

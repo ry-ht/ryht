@@ -426,13 +426,19 @@ async fn scenario_2_refactoring_race_condition() {
     agent_b_unit.parameters = vec![
         Parameter {
             name: "data".to_string(),
-            param_type: "&str".to_string(),
+            param_type: Some("&str".to_string()),
             default_value: None,
+            is_optional: false,
+            is_variadic: false,
+            attributes: vec![],
         },
         Parameter {
             name: "options".to_string(),
-            param_type: "Options".to_string(),
+            param_type: Some("Options".to_string()),
             default_value: None,
+            is_optional: false,
+            is_variadic: false,
+            attributes: vec![],
         },
     ];
     agent_b_unit.signature = "pub fn process_data(data: &str, options: Options) -> String".to_string();
@@ -656,13 +662,19 @@ async fn scenario_4_cross_file_dependency_chain() {
     module_a.parameters = vec![
         Parameter {
             name: "data".to_string(),
-            param_type: "&str".to_string(),
+            param_type: Some("&str".to_string()),
             default_value: None,
+            is_optional: false,
+            is_variadic: false,
+            attributes: vec![],
         },
         Parameter {
             name: "prefix".to_string(),
-            param_type: "&str".to_string(),
+            param_type: Some("&str".to_string()),
             default_value: None,
+            is_optional: false,
+            is_variadic: false,
+            attributes: vec![],
         },
     ];
 

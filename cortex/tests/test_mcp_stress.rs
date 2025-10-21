@@ -19,6 +19,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_parser::CodeParser;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,

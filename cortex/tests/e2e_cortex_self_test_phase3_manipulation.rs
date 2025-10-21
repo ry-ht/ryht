@@ -56,7 +56,7 @@ impl TestContext {
         let workspace = Workspace::new(
             workspace_id,
             "cortex-manipulation-test".to_string(),
-            WorkspaceType::Project,
+            WorkspaceType::Code,
         );
 
         // Save workspace to DB (simulate)

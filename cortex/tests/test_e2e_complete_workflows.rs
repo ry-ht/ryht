@@ -19,6 +19,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
+// Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
+use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_storage::session::{SessionManager, SessionMetadata, IsolationLevel, SessionScope, ResolutionStrategy};
 use cortex_vfs::prelude::*;
@@ -1037,7 +1039,7 @@ describe('UserProfile', () => {
         "Fix null pointer bug in React components".to_string(),
         "debug-agent-001".to_string(),
         project_id,
-        EpisodeType::BugFix,
+        EpisodeType::Bugfix,
     );
     episode.outcome = EpisodeOutcome::Success;
     episode.entities_modified = vec![
