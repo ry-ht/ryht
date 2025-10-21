@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use surrealdb::engine::any::Any;
+use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::time::timeout;
@@ -43,6 +44,8 @@ pub struct DatabaseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ConnectionMode {
+    /// In-memory embedded mode - for testing, no server required
+    InMemory,
     /// Local development mode - single SurrealDB instance
     Local {
         endpoint: String, // ws://localhost:8000
@@ -140,6 +143,15 @@ impl ConnectionManager {
 
         // Create connection pool based on mode
         let pool = match &config.connection_mode {
+            ConnectionMode::InMemory => {
+                ConnectionPool::in_memory(
+                    &config.credentials,
+                    &config.namespace,
+                    &config.database,
+                    config.pool_config.clone(),
+                )
+                .await?
+            }
             ConnectionMode::Local { endpoint } => {
                 ConnectionPool::single(
                     endpoint.clone(),
@@ -410,6 +422,30 @@ pub struct ConnectionPool {
 }
 
 impl ConnectionPool {
+    /// Create a pool for embedded in-memory database (testing only)
+    async fn in_memory(
+        credentials: &Credentials,
+        namespace: &str,
+        database: &str,
+        mut config: PoolConfig,
+    ) -> Result<Self> {
+        // Disable connection warming for in-memory mode to avoid hanging
+        // Connections will be created on-demand instead
+        config.warm_connections = false;
+        config.min_connections = 0;
+
+        // Use "memory" endpoint for embedded in-memory mode
+        Self::new(
+            vec!["memory".to_string()],
+            LoadBalancingStrategy::RoundRobin,
+            credentials,
+            namespace,
+            database,
+            config,
+        )
+        .await
+    }
+
     /// Create a pool for a single endpoint
     async fn single(
         endpoint: String,
@@ -513,10 +549,20 @@ impl ConnectionPool {
 
         debug!("Creating connection to endpoint: {}", endpoint);
 
-        // Connect using Any engine - this accepts the connection string
-        let db: Surreal<Any> = surrealdb::engine::any::connect(endpoint)
-            .await
-            .context("Failed to connect to SurrealDB")?;
+        // Special handling for in-memory mode
+        let db: Surreal<Any> = if endpoint == "memory" {
+            // For in-memory mode, we need to use a special connection approach
+            // The Any engine doesn't support direct "memory" connections,
+            // so we use "mem://" which the Any engine interprets as in-memory
+            surrealdb::engine::any::connect("mem://")
+                .await
+                .context("Failed to connect to in-memory SurrealDB")?
+        } else {
+            // Connect using Any engine - this accepts the connection string
+            surrealdb::engine::any::connect(endpoint)
+                .await
+                .context("Failed to connect to SurrealDB")?
+        };
 
         // Use namespace and database first
         db.use_ns(&self.namespace)

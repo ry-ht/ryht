@@ -16,6 +16,9 @@ pub mod merge_engine;
 pub mod session_aware_storage;
 pub mod locks;
 
+// In-memory pool for testing (available in all builds for integration tests)
+pub mod in_memory_pool;
+
 pub use connection::ConnectionConfig;
 pub use surreal::SurrealStorage;
 pub use pool::ConnectionPool;
