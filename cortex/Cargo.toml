@@ -28,7 +28,7 @@ tokio-util = { version = "0.7.16", features = ["full"] }
 surrealdb = { version = "2.3.10", features = ["kv-mem", "kv-rocksdb"] }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 bincode = { version = "2.0.1", features = ["serde"] }
 
@@ -60,7 +60,7 @@ chrono = { version = "0.4.42", features = ["serde"] }
 time = { version = "0.3.44", features = ["serde", "macros"] }
 
 # UUID
-uuid = { version = "1.10", features = ["v4", "serde"] }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
 
 # Hashing and crypto
 blake3 = "1.8.2"
@@ -72,7 +72,7 @@ unicode-segmentation = "1.12.0"
 
 # Embeddings and ML
 ort = { version = "1.16.3", features = ["load-dynamic"] }
-tokenizers = { version = "0.19.1", default-features = false, features = ["onig"] }
+tokenizers = { version = "0.22.1", default-features = false, features = ["onig"] }
 
 # File watching
 notify = "8.2.0"
