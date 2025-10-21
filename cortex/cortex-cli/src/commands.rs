@@ -3,12 +3,12 @@
 //! This module contains the complete implementation of all Cortex CLI commands.
 
 use crate::config::CortexConfig;
+use crate::mcp::{CortexMcpServer, CortexMcpServerBuilder};
 use crate::output::{self, format_bytes, format_timestamp, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
 use cortex_core::error::CortexError;
 use cortex_ingestion::{ProjectImportOptions, ProjectLoader};
 use cortex_memory::CognitiveManager;
-use cortex_mcp::CortexMcpServer;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
@@ -832,4 +832,304 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
         .context("Failed to create storage connection")?;
 
     Ok(Arc::new(manager))
+}
+
+// ============================================================================
+// MCP Commands
+// ============================================================================
+
+/// Start MCP server in stdio mode
+pub async fn mcp_stdio() -> Result<()> {
+    output::header("Starting Cortex MCP Server (stdio mode)");
+    output::info("Initializing server...");
+
+    let server = CortexMcpServer::new().await
+        .context("Failed to initialize MCP server")?;
+
+    output::success("MCP server started successfully");
+    output::info("Listening on stdio");
+    output::info("Press Ctrl+C to stop");
+
+    server.serve_stdio().await?;
+    Ok(())
+}
+
+/// Start MCP server in HTTP mode
+pub async fn mcp_http(address: String, port: u16) -> Result<()> {
+    output::header("Starting Cortex MCP Server (HTTP mode)");
+    output::kv("Address", &address);
+    output::kv("Port", port);
+    output::info("Initializing server...");
+
+    let server = CortexMcpServer::new().await
+        .context("Failed to initialize MCP server")?;
+
+    let bind_addr = format!("{}:{}", address, port);
+
+    output::success("MCP server started successfully");
+    output::info(format!("Listening on http://{}", bind_addr));
+    output::info("Press Ctrl+C to stop");
+
+    server.serve_http(&bind_addr).await?;
+    Ok(())
+}
+
+/// Show information about available MCP tools
+pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
+    output::header("Cortex MCP Server - Tools Information");
+
+    // Tool categories and counts
+    let categories = vec![
+        ("Workspace Management", 8, vec![
+            "cortex.workspace.create",
+            "cortex.workspace.get",
+            "cortex.workspace.list",
+            "cortex.workspace.activate",
+            "cortex.workspace.sync_from_disk",
+            "cortex.workspace.export",
+            "cortex.workspace.archive",
+            "cortex.workspace.delete",
+        ]),
+        ("Virtual Filesystem", 12, vec![
+            "cortex.vfs.get_node",
+            "cortex.vfs.list_directory",
+            "cortex.vfs.create_file",
+            "cortex.vfs.update_file",
+            "cortex.vfs.delete_node",
+            "cortex.vfs.move_node",
+            "cortex.vfs.copy_node",
+            "cortex.vfs.create_directory",
+            "cortex.vfs.get_tree",
+            "cortex.vfs.search_files",
+            "cortex.vfs.get_file_history",
+            "cortex.vfs.restore_file_version",
+        ]),
+        ("Code Navigation", 10, vec![
+            "cortex.code.get_unit",
+            "cortex.code.list_units",
+            "cortex.code.get_symbols",
+            "cortex.code.find_definition",
+            "cortex.code.find_references",
+            "cortex.code.get_signature",
+            "cortex.code.get_call_hierarchy",
+            "cortex.code.get_type_hierarchy",
+            "cortex.code.get_imports",
+            "cortex.code.get_exports",
+        ]),
+        ("Code Manipulation", 15, vec![
+            "cortex.code.extract_method",
+            "cortex.code.inline_variable",
+            "cortex.code.rename_symbol",
+            "cortex.code.move_code",
+            "cortex.code.change_signature",
+            "cortex.code.extract_constant",
+            "cortex.code.inline_method",
+            "cortex.code.convert_to_function",
+            "cortex.code.extract_interface",
+            "cortex.code.pull_up_method",
+            "cortex.code.push_down_method",
+            "cortex.code.introduce_parameter",
+            "cortex.code.replace_temp_with_query",
+            "cortex.code.split_temporary_variable",
+            "cortex.code.remove_assignments_to_parameters",
+        ]),
+        ("Semantic Search", 8, vec![
+            "cortex.search.semantic",
+            "cortex.search.similar_code",
+            "cortex.search.by_pattern",
+            "cortex.search.by_type",
+            "cortex.search.cross_reference",
+            "cortex.search.usage_examples",
+            "cortex.search.api_discovery",
+            "cortex.search.query_expansion",
+        ]),
+        ("Dependency Analysis", 10, vec![
+            "cortex.deps.find_dependencies",
+            "cortex.deps.find_dependents",
+            "cortex.deps.shortest_path",
+            "cortex.deps.all_paths",
+            "cortex.deps.detect_cycles",
+            "cortex.deps.impact_analysis",
+            "cortex.deps.architectural_layers",
+            "cortex.deps.detect_hubs",
+            "cortex.deps.check_constraints",
+            "cortex.deps.visualize_graph",
+        ]),
+        ("Code Quality", 8, vec![
+            "cortex.quality.analyze_complexity",
+            "cortex.quality.detect_code_smells",
+            "cortex.quality.suggest_improvements",
+            "cortex.quality.calculate_metrics",
+            "cortex.quality.check_standards",
+            "cortex.quality.find_duplicates",
+            "cortex.quality.analyze_maintainability",
+            "cortex.quality.generate_report",
+        ]),
+        ("Version Control", 10, vec![
+            "cortex.vcs.get_history",
+            "cortex.vcs.get_diff",
+            "cortex.vcs.get_blame",
+            "cortex.vcs.find_commits",
+            "cortex.vcs.analyze_churn",
+            "cortex.vcs.get_contributors",
+            "cortex.vcs.get_branches",
+            "cortex.vcs.get_tags",
+            "cortex.vcs.compare_branches",
+            "cortex.vcs.get_merge_conflicts",
+        ]),
+        ("Cognitive Memory", 12, vec![
+            "cortex.memory.store_episode",
+            "cortex.memory.retrieve_episode",
+            "cortex.memory.consolidate",
+            "cortex.memory.forget",
+            "cortex.memory.associate",
+            "cortex.memory.recall_pattern",
+            "cortex.memory.get_context",
+            "cortex.memory.update_weights",
+            "cortex.memory.prune",
+            "cortex.memory.get_stats",
+            "cortex.memory.export",
+            "cortex.memory.import",
+        ]),
+        ("Multi-Agent Coordination", 10, vec![
+            "cortex.agent.create_session",
+            "cortex.agent.get_session",
+            "cortex.agent.list_sessions",
+            "cortex.agent.delete_session",
+            "cortex.agent.send_message",
+            "cortex.agent.receive_messages",
+            "cortex.agent.broadcast",
+            "cortex.agent.request_capability",
+            "cortex.agent.register_capability",
+            "cortex.agent.coordinate_task",
+        ]),
+        ("Materialization", 8, vec![
+            "cortex.mat.generate_code",
+            "cortex.mat.generate_tests",
+            "cortex.mat.generate_docs",
+            "cortex.mat.generate_schema",
+            "cortex.mat.apply_template",
+            "cortex.mat.scaffold_project",
+            "cortex.mat.generate_migration",
+            "cortex.mat.preview_changes",
+        ]),
+        ("Testing & Validation", 10, vec![
+            "cortex.test.generate_unit_tests",
+            "cortex.test.generate_integration_tests",
+            "cortex.test.run_tests",
+            "cortex.test.analyze_coverage",
+            "cortex.test.suggest_test_cases",
+            "cortex.test.validate_contracts",
+            "cortex.test.check_invariants",
+            "cortex.test.verify_properties",
+            "cortex.test.generate_mocks",
+            "cortex.test.analyze_assertions",
+        ]),
+        ("Documentation", 8, vec![
+            "cortex.doc.generate",
+            "cortex.doc.extract_examples",
+            "cortex.doc.generate_api_spec",
+            "cortex.doc.update_readme",
+            "cortex.doc.generate_changelog",
+            "cortex.doc.check_coverage",
+            "cortex.doc.validate_links",
+            "cortex.doc.generate_diagrams",
+        ]),
+        ("Build & Execution", 8, vec![
+            "cortex.build.compile",
+            "cortex.build.run",
+            "cortex.build.watch",
+            "cortex.build.clean",
+            "cortex.build.analyze_artifacts",
+            "cortex.build.optimize",
+            "cortex.build.profile",
+            "cortex.build.debug",
+        ]),
+        ("Monitoring & Analytics", 10, vec![
+            "cortex.monitor.track_metric",
+            "cortex.monitor.get_metrics",
+            "cortex.monitor.create_dashboard",
+            "cortex.monitor.set_threshold",
+            "cortex.monitor.get_health",
+            "cortex.monitor.analyze_performance",
+            "cortex.monitor.analyze_errors",
+            "cortex.monitor.analyze_productivity",
+            "cortex.monitor.quality_trends",
+            "cortex.monitor.export_metrics",
+        ]),
+        ("Security Analysis", 4, vec![
+            "cortex.security.scan",
+            "cortex.security.check_dependencies",
+            "cortex.security.analyze_secrets",
+            "cortex.security.generate_report",
+        ]),
+        ("Type Analysis", 4, vec![
+            "cortex.code.infer_types",
+            "cortex.code.check_types",
+            "cortex.code.suggest_type_annotations",
+            "cortex.code.analyze_type_coverage",
+        ]),
+        ("AI-Assisted Development", 6, vec![
+            "cortex.ai.suggest_refactoring",
+            "cortex.ai.explain_code",
+            "cortex.ai.suggest_optimization",
+            "cortex.ai.suggest_fix",
+            "cortex.ai.generate_docstring",
+            "cortex.ai.review_code",
+        ]),
+        ("Advanced Testing", 6, vec![
+            "cortex.test.generate_property",
+            "cortex.test.generate_mutation",
+            "cortex.test.generate_benchmarks",
+            "cortex.test.generate_fuzzing",
+            "cortex.test.analyze_flaky",
+            "cortex.test.suggest_edge_cases",
+        ]),
+        ("Architecture Analysis", 5, vec![
+            "cortex.arch.visualize",
+            "cortex.arch.detect_patterns",
+            "cortex.arch.suggest_boundaries",
+            "cortex.arch.check_violations",
+            "cortex.arch.analyze_drift",
+        ]),
+    ];
+
+    // Filter by category if specified
+    let filtered_categories: Vec<_> = if let Some(ref filter) = category {
+        categories.into_iter()
+            .filter(|(name, _, _)| name.to_lowercase().contains(&filter.to_lowercase()))
+            .collect()
+    } else {
+        categories
+    };
+
+    if filtered_categories.is_empty() {
+        output::warning(format!("No categories found matching '{}'", category.unwrap_or_default()));
+        return Ok(());
+    }
+
+    // Display categories
+    for (cat_name, count, tools) in &filtered_categories {
+        println!("\n{}: {} tools", cat_name, count);
+
+        if detailed {
+            for tool in tools {
+                println!("  - {}", tool);
+            }
+        }
+    }
+
+    // Total count
+    let total: usize = filtered_categories.iter().map(|(_, count, _)| count).sum();
+    println!("\nTotal: {} tools across {} categories", total, filtered_categories.len());
+
+    if !detailed {
+        output::info("Use --detailed to see all tool names");
+    }
+
+    if category.is_none() {
+        output::info("Use --category <name> to filter by category");
+    }
+
+    Ok(())
 }

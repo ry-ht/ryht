@@ -32,9 +32,9 @@ pub use server::{CortexMcpServer, CortexMcpServerBuilder};
 
 /// Re-export commonly used types
 pub mod prelude {
-    pub use crate::server::{CortexMcpServer, CortexMcpServerBuilder};
-    pub use crate::tools::*;
-    pub use crate::types::*;
+    pub use super::server::{CortexMcpServer, CortexMcpServerBuilder};
+    pub use super::tools::*;
+    pub use super::types::*;
     // Re-export specific items from mcp_server to avoid conflicts
     pub use mcp_server::prelude::{McpServer, Tool, ToolError, ToolResult};
 }

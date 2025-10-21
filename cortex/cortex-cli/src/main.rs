@@ -191,6 +191,10 @@ enum Commands {
     #[command(subcommand)]
     Export(ExportCommands),
 
+    /// Model Context Protocol operations
+    #[command(subcommand)]
+    Mcp(McpCommands),
+
     /// Interactive mode
     Interactive {
         /// Interactive mode to enter (wizard, search, menu)
@@ -427,6 +431,34 @@ enum ExportCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum McpCommands {
+    /// Start MCP server in stdio mode
+    Stdio,
+
+    /// Start MCP server in HTTP mode
+    Http {
+        /// Server address
+        #[arg(short, long, default_value = "127.0.0.1")]
+        address: String,
+
+        /// Server port
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+    },
+
+    /// Show information about available MCP tools
+    Info {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Filter by category
+        #[arg(long)]
+        category: Option<String>,
+    },
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum FlushScopeArg {
     All,
@@ -641,6 +673,18 @@ async fn run() -> Result<()> {
                 let export_format = export::ExportFormat::from_extension(&fmt)
                     .unwrap_or(export::ExportFormat::Json);
                 export::export_stats(&output, export_format).await?;
+            }
+        },
+
+        Commands::Mcp(mcp_cmd) => match mcp_cmd {
+            McpCommands::Stdio => {
+                commands::mcp_stdio().await?;
+            }
+            McpCommands::Http { address, port } => {
+                commands::mcp_http(address, port).await?;
+            }
+            McpCommands::Info { detailed, category } => {
+                commands::mcp_info(detailed, category).await?;
             }
         },
 

@@ -2,7 +2,7 @@
 //!
 //! Main server implementation that integrates all Cortex tools with the MCP framework.
 
-use crate::tools::{
+use super::tools::{
     advanced_testing::*, ai_assisted::*, architecture_analysis::*, build_execution::*,
     code_manipulation::*, code_nav::*, code_quality::*, cognitive_memory::*, dependency_analysis::*,
     documentation::*, materialization::*, monitoring::*, multi_agent::*, security_analysis::*,
@@ -384,7 +384,8 @@ impl CortexMcpServer {
         #[cfg(feature = "http")]
         {
             info!("Starting Cortex MCP Server on HTTP: {}", _bind_addr);
-            let mut transport = mcp_server::transport::HttpTransport::new(_bind_addr).await?;
+            let addr: std::net::SocketAddr = _bind_addr.parse()?;
+            let mut transport = mcp_server::transport::HttpTransport::new(addr);
 
             // Server loop: read requests and send responses
             loop {

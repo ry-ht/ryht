@@ -31,7 +31,8 @@ pub struct CallToolResponse {
 pub async fn list_tools(
     Json(_payload): Json<ListToolsRequest>,
 ) -> impl IntoResponse {
-    let tools = crate::tools::get_tools();
+    // TODO: Get tools from server instance
+    let tools = vec![];
     Json(ListToolsResponse { tools })
 }
 
