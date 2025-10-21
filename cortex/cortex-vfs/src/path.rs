@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 /// A virtual path that's independent of physical location.
 ///

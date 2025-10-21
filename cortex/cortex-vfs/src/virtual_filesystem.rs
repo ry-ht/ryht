@@ -1,15 +1,13 @@
 //! Core Virtual Filesystem implementation.
 
 use crate::content_cache::ContentCache;
-use crate::path::{VirtualPath, VirtualPathError};
+use crate::path::VirtualPath;
 use crate::types::*;
 use cortex_core::error::{CortexError, Result};
 use cortex_storage::ConnectionManager;
 use dashmap::DashMap;
-use std::path::Path;
 use std::sync::Arc;
-use tokio::fs;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 /// Virtual Filesystem providing path-agnostic file operations.
@@ -424,16 +422,28 @@ impl VirtualFileSystem {
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
         // Use UPSERT to atomically increment reference_count if exists, create if not
-        let upsert_query = format!(
-            "UPSERT type::thing('file_content', $hash) CONTENT $content ON DUPLICATE KEY UPDATE reference_count += 1"
-        );
-
-        conn.connection()
-            .query(&upsert_query)
-            .bind(("hash", hash.to_string()))
-            .bind(("content", file_content_json))
+        // First try to get existing record
+        let existing: Option<serde_json::Value> = conn.connection()
+            .select(("file_content", hash.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        if existing.is_some() {
+            // Update reference count
+            let update_query = "UPDATE type::thing('file_content', $hash) SET reference_count += 1";
+            conn.connection()
+                .query(update_query)
+                .bind(("hash", hash.to_string()))
+                .await
+                .map_err(|e| CortexError::storage(e.to_string()))?;
+        } else {
+            // Create new record
+            let _: Option<serde_json::Value> = conn.connection()
+                .create(("file_content", hash.to_string()))
+                .content(file_content_json)
+                .await
+                .map_err(|e| CortexError::storage(e.to_string()))?;
+        }
 
         debug!("Content stored/referenced: {}", hash);
         Ok(())
@@ -488,7 +498,7 @@ impl VirtualFileSystem {
     /// This is a convenience method that can be called after file modifications.
     pub async fn reparse_file(
         &self,
-        workspace_id: &Uuid,
+        _workspace_id: &Uuid,
         path: &VirtualPath,
     ) -> Result<usize> {
         // This method would require an ingestion pipeline instance

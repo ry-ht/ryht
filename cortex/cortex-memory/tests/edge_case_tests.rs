@@ -8,8 +8,13 @@ use std::sync::Arc;
 
 /// Create a test cognitive manager
 async fn create_test_manager() -> CognitiveManager {
-    let config = ConnectionConfig::memory();
-    let pool_config = PoolConfig::default();
+    let config = DatabaseConfig {
+        connection_mode: ConnectionMode::Local { endpoint: "mem://".to_string() },
+        credentials: Credentials::default(),
+        pool_config: PoolConfig::default(),
+        namespace: "cortex".to_string(),
+        database: "test".to_string(),
+    };
     let manager = Arc::new(
         ConnectionManager::new(config)
             .await
@@ -34,7 +39,7 @@ async fn test_empty_working_memory() {
 #[tokio::test]
 async fn test_working_memory_byte_limit() {
     let config = DatabaseConfig {
-        connection_mode: connection_pool::ConnectionMode::Local { endpoint: "mem://".to_string() },
+        connection_mode: ConnectionMode::Local { endpoint: "mem://".to_string() },
         credentials: Credentials::default(),
         pool_config: PoolConfig::default(),
         namespace: "cortex".to_string(),
@@ -208,7 +213,7 @@ async fn test_semantic_unit_with_high_complexity() {
 
     let retrieved = manager
         .semantic()
-        .get_unit(id)
+        .get_semantic_unit(id)
         .await
         .expect("Failed to retrieve")
         .expect("Unit not found");
@@ -433,13 +438,12 @@ async fn test_cross_memory_query() {
         ..Default::default()
     };
 
-    let results = query_engine
+    let _results = query_engine
         .complex_query(filters)
         .await
         .expect("Failed to execute query");
 
-    // Should complete without errors
-    assert!(results.episodes.len() >= 0);
+    // Should complete without errors (results is valid)
 }
 
 #[tokio::test]

@@ -1,11 +1,11 @@
 //! Main semantic search engine implementation.
 
 use crate::cache::{EmbeddingCache, EmbeddingCacheKey, QueryCache, QueryCacheKey, CachedSearchResult};
-use crate::config::{SemanticConfig, SearchConfig};
-use crate::error::{Result, SemanticError};
+use crate::config::SemanticConfig;
+use crate::error::Result;
 use crate::index::{HNSWIndex, VectorIndex, IndexStats};
 use crate::providers::{EmbeddingProvider, ProviderManager};
-use crate::query::{ProcessedQuery, QueryProcessor};
+use crate::query::QueryProcessor;
 use crate::ranking::{Ranker, RankableDocument, RankingStrategy};
 use crate::types::{DocumentId, EntityType, IndexedDocument, Vector};
 use dashmap::DashMap;
@@ -15,7 +15,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Main semantic search engine.
 pub struct SemanticSearchEngine {
@@ -62,7 +62,7 @@ impl SemanticSearchEngine {
         info!("Using embedding dimension: {}", dimension);
 
         // Create or load index
-        let index = if let Some(persist_path) = &config.index.persist_path {
+        let index = if let Some(_persist_path) = &config.index.persist_path {
             HNSWIndex::load_or_create(config.index.clone(), dimension).await?
         } else {
             HNSWIndex::new(config.index.clone(), dimension)?

@@ -1,6 +1,6 @@
 //! Configuration for semantic search system.
 
-use crate::types::{EmbeddingModel, SimilarityMetric};
+use crate::types::SimilarityMetric;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

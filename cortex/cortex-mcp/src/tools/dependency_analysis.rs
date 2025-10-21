@@ -17,12 +17,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, warn, info};
-use std::collections::{HashMap, HashSet};
-use cortex_core::error::CortexError;
+use std::collections::HashMap;
 
 use crate::graph_algorithms::{
     Graph, find_shortest_path, find_all_paths, find_cycles, topological_layers,
-    find_reachable, find_roots, find_leaves, find_hubs, calculate_centrality,
+    find_reachable, find_roots, find_leaves, find_hubs,
 };
 
 #[derive(Clone)]
@@ -71,6 +70,7 @@ impl DependencyAnalysisContext {
         struct DepEdge {
             source_id: String,
             target_id: String,
+            #[allow(dead_code)]
             dependency_type: String,
         }
 
@@ -94,6 +94,7 @@ impl DependencyAnalysisContext {
     }
 
     /// Get unit name from ID
+    #[allow(dead_code)]
     async fn get_unit_name(&self, entity_id: &str) -> std::result::Result<String, String> {
         let conn = self.storage
             .acquire()
@@ -185,6 +186,7 @@ pub struct GetDependenciesInput {
     entity_id: String,
     #[serde(default = "default_outgoing")]
     direction: String,
+    #[allow(dead_code)]
     dependency_types: Option<Vec<String>>,
     #[serde(default = "default_depth_one")]
     max_depth: i32,
@@ -442,6 +444,7 @@ pub struct FindCyclesInput {
     #[serde(default = "default_max_depth")]
     max_cycle_length: i32,
     #[serde(default = "default_file_level")]
+    #[allow(dead_code)]
     entity_level: String,
 }
 
@@ -510,6 +513,7 @@ impl Tool for DepsFindCyclesTool {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ImpactAnalysisInput {
     changed_entities: Vec<String>,
+    #[allow(dead_code)]
     impact_types: Option<Vec<String>>,
     #[serde(default = "default_all_depth")]
     max_depth: i32,
@@ -612,6 +616,7 @@ impl Tool for DepsImpactAnalysisTool {
 pub struct FindRootsInput {
     scope_path: String,
     #[serde(default = "default_file_level")]
+    #[allow(dead_code)]
     entity_type: String,
 }
 
@@ -676,6 +681,7 @@ impl Tool for DepsFindRootsTool {
 pub struct FindLeavesInput {
     scope_path: String,
     #[serde(default = "default_file_level")]
+    #[allow(dead_code)]
     entity_type: String,
 }
 
@@ -742,6 +748,7 @@ pub struct FindHubsInput {
     #[serde(default = "default_min_connections")]
     min_connections: i32,
     #[serde(default = "default_total")]
+    #[allow(dead_code)]
     connection_type: String,
 }
 
@@ -1036,8 +1043,10 @@ pub struct GenerateGraphInput {
     #[serde(default = "default_dot_format")]
     format: String,
     #[serde(default)]
+    #[allow(dead_code)]
     include_external: bool,
     #[serde(default = "default_none")]
+    #[allow(dead_code)]
     cluster_by: String,
 }
 
@@ -1077,7 +1086,7 @@ impl DepsGenerateGraphTool {
         })
     }
 
-    fn generate_dot(&self, graph: &Graph, input: &GenerateGraphInput) -> std::result::Result<String, String> {
+    fn generate_dot(&self, graph: &Graph, _input: &GenerateGraphInput) -> std::result::Result<String, String> {
         let mut dot = String::from("digraph Dependencies {\n");
         dot.push_str("  rankdir=TB;\n");
         dot.push_str("  node [shape=box];\n\n");

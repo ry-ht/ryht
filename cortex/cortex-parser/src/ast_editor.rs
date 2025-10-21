@@ -85,6 +85,7 @@ pub struct AstEditor {
     source: String,
     tree: Tree,
     parser: Parser,
+    #[allow(dead_code)]
     language: Language,
     pub edits: Vec<Edit>,
 }
@@ -121,7 +122,7 @@ impl AstEditor {
     }
 
     /// Get the root node
-    pub fn root_node(&self) -> Node {
+    pub fn root_node(&self) -> Node<'_> {
         self.tree.root_node()
     }
 
@@ -302,15 +303,15 @@ impl AstEditor {
     /// Analyze variables in a code block to determine parameters and return values
     fn analyze_variables(
         &self,
-        code: &str,
-        start_line: usize,
-        end_line: usize,
+        _code: &str,
+        _start_line: usize,
+        _end_line: usize,
     ) -> Result<(Vec<(String, String)>, Vec<(String, String)>)> {
         // This is a simplified analysis
         // In a real implementation, this would use tree-sitter to analyze scope and usage
 
-        let mut params = Vec::new();
-        let mut return_vars = Vec::new();
+        let params = Vec::new();
+        let return_vars = Vec::new();
 
         // For now, return empty lists (this would be filled in with real analysis)
         // A real implementation would:
@@ -391,7 +392,7 @@ impl AstEditor {
     }
 
     /// Get a node by path (e.g., "function_item:0.identifier:0")
-    pub fn find_node_by_path(&self, path: &str) -> Result<Node> {
+    pub fn find_node_by_path(&self, path: &str) -> Result<Node<'_>> {
         let parts: Vec<&str> = path.split('.').collect();
         let mut current = self.root_node();
 
@@ -427,7 +428,7 @@ impl AstEditor {
     }
 
     /// Find all nodes matching a query (simplified version using tree traversal)
-    pub fn query(&self, query_str: &str) -> Result<Vec<Node>> {
+    pub fn query(&self, query_str: &str) -> Result<Vec<Node<'_>>> {
         // For now, support simple node kind matching like "(function_item) @func"
         // Extract the node kind from the query
         let node_kind = if query_str.starts_with('(') {

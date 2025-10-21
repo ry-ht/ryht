@@ -923,7 +923,7 @@ impl GlobalConfig {
     ///
     /// Returns an error if deserialization or validation fails
     pub fn import_json(json: &str) -> Result<Self> {
-        let mut config: Self = serde_json::from_str(json)
+        let config: Self = serde_json::from_str(json)
             .map_err(|e| CortexError::Config(format!("Failed to import config from JSON: {}", e)))?;
 
         config.validate()?;
@@ -946,7 +946,7 @@ impl GlobalConfig {
     ///
     /// Returns an error if deserialization or validation fails
     pub fn import_toml(toml_str: &str) -> Result<Self> {
-        let mut config: Self = toml::from_str(toml_str)
+        let config: Self = toml::from_str(toml_str)
             .map_err(|e| CortexError::Config(format!("Failed to import config from TOML: {}", e)))?;
 
         config.validate()?;

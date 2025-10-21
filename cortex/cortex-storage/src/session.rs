@@ -528,9 +528,9 @@ impl SessionManager {
         // Use atomic update with conditional check to prevent race conditions
         // This ensures the state hasn't changed since we read it
         let session_id_str = format!("session:{}", session_id);
-        let current_state_str = serde_json::to_string(&session.state)
+        let _current_state_str = serde_json::to_string(&session.state)
             .map_err(|e| CortexError::Storage(format!("Failed to serialize state: {}", e)))?;
-        let new_state_str = serde_json::to_string(&new_state)
+        let _new_state_str = serde_json::to_string(&new_state)
             .map_err(|e| CortexError::Storage(format!("Failed to serialize state: {}", e)))?;
 
         self.db
@@ -861,10 +861,10 @@ impl SessionManager {
     /// Detect conflicts between session changes and main branch
     async fn detect_conflicts(
         &self,
-        session: &AgentSession,
+        _session: &AgentSession,
         changes: &[ChangeRecord],
     ) -> Result<Vec<MergeConflict>> {
-        let mut conflicts = Vec::new();
+        let conflicts = Vec::new();
 
         // Switch to main namespace
         self.db
@@ -873,7 +873,7 @@ impl SessionManager {
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to switch namespace: {}", e)))?;
 
-        for change in changes {
+        for _change in changes {
             // Check if entity was modified after session base version
             // This is a simplified check - real implementation would compare content hashes
 
@@ -956,7 +956,7 @@ impl SessionManager {
     }
 
     /// Copy an entity from session namespace to main namespace
-    async fn copy_entity_to_main(&self, session: &AgentSession, path: &str) -> Result<()> {
+    async fn copy_entity_to_main(&self, _session: &AgentSession, path: &str) -> Result<()> {
         debug!("Copying entity {} from session to main", path);
 
         // Implementation would query entity from session namespace
@@ -966,7 +966,7 @@ impl SessionManager {
     }
 
     /// Update an entity in main namespace with session data
-    async fn update_entity_in_main(&self, session: &AgentSession, path: &str) -> Result<()> {
+    async fn update_entity_in_main(&self, _session: &AgentSession, path: &str) -> Result<()> {
         debug!("Updating entity {} in main from session", path);
 
         // Implementation would update entity in main namespace

@@ -202,7 +202,7 @@ impl DependencyExtractor {
     pub fn extract_from_function(
         &mut self,
         function: &FunctionInfo,
-        source: &str,
+        _source: &str,
     ) -> Result<Vec<Dependency>> {
         let mut dependencies = Vec::new();
 

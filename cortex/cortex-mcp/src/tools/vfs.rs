@@ -191,7 +191,9 @@ struct ListDirectoryInput {
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ListFilter {
     node_type: Option<String>,
+    #[allow(dead_code)]
     language: Option<String>,
+    #[allow(dead_code)]
     pattern: Option<String>,
 }
 
@@ -251,7 +253,7 @@ impl Tool for VfsListDirectoryTool {
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list directory: {}", e)))?;
 
-        let mut entries: Vec<DirectoryEntry> = nodes
+        let entries: Vec<DirectoryEntry> = nodes
             .into_iter()
             .filter(|node| {
                 // Apply filters
@@ -316,10 +318,13 @@ struct CreateFileInput {
     content: String,
     workspace_id: Option<String>,
     #[serde(default = "default_encoding")]
+    #[allow(dead_code)]
     encoding: String,
     #[serde(default = "default_permissions")]
+    #[allow(dead_code)]
     permissions: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     parse: bool,
 }
 
@@ -417,11 +422,14 @@ impl VfsUpdateFileTool {
 struct UpdateFileInput {
     path: String,
     content: String,
+    #[allow(dead_code)]
     expected_version: u64,
     workspace_id: Option<String>,
     #[serde(default = "default_encoding")]
+    #[allow(dead_code)]
     encoding: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     reparse: bool,
 }
 
@@ -515,6 +523,7 @@ struct DeleteNodeInput {
     workspace_id: Option<String>,
     #[serde(default)]
     recursive: bool,
+    #[allow(dead_code)]
     expected_version: u64,
 }
 
@@ -594,6 +603,7 @@ struct MoveNodeInput {
     target_path: String,
     workspace_id: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     overwrite: bool,
 }
 
@@ -826,8 +836,10 @@ struct CreateDirectoryInput {
     path: String,
     workspace_id: Option<String>,
     #[serde(default = "default_permissions")]
+    #[allow(dead_code)]
     permissions: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     create_parents: bool,
 }
 
@@ -1146,7 +1158,7 @@ impl Tool for VfsSearchFilesTool {
 
             // Check filename pattern (glob-like matching)
             let filename = node.path.file_name().unwrap_or("");
-            let filename_to_check = if input.case_sensitive {
+            let _filename_to_check = if input.case_sensitive {
                 filename.to_string()
             } else {
                 filename.to_lowercase()
@@ -1274,6 +1286,7 @@ struct GetFileHistoryInput {
     path: String,
     workspace_id: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     max_versions: Option<usize>,
     #[serde(default)]
     include_content: bool,

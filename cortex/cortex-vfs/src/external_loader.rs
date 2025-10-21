@@ -5,10 +5,10 @@ use crate::types::*;
 use crate::virtual_filesystem::VirtualFileSystem;
 use cortex_core::error::{CortexError, Result};
 use ignore::WalkBuilder;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Loader for importing external projects and documents into VFS.

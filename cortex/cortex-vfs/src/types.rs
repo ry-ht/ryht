@@ -2,7 +2,6 @@
 
 use crate::path::VirtualPath;
 use chrono::{DateTime, Utc};
-use cortex_core::id::CortexId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

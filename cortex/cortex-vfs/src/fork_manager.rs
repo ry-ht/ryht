@@ -6,7 +6,7 @@ use crate::virtual_filesystem::VirtualFileSystem;
 use cortex_core::error::{CortexError, Result};
 use cortex_storage::ConnectionManager;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 use uuid::Uuid;
 
 /// Manager for creating and merging forks of workspaces.
@@ -248,7 +248,7 @@ impl ForkManager {
         &self,
         change: &Change,
         target: &Workspace,
-        strategy: &MergeStrategy,
+        _strategy: &MergeStrategy,
         report: &mut MergeReport,
     ) -> Result<()> {
         // Check if path exists in target
@@ -266,9 +266,9 @@ impl ForkManager {
                 }
             }
             ChangeType::Modified => {
-                if let Some(target_vnode) = target_vnode {
+                if let Some(ref tv) = target_vnode {
                     // Check if target was also modified
-                    if target_vnode.version > 1 {
+                    if tv.version > 1 {
                         // Conflict: both modified
                         let conflict = self.create_conflict(change, target).await?;
                         report.conflicts.push(conflict);
@@ -283,7 +283,7 @@ impl ForkManager {
                 }
             }
             ChangeType::Deleted => {
-                if let Some(target_vnode) = target_vnode {
+                if let Some(_target_vnode) = target_vnode {
                     // Delete in target
                     self.vfs.delete(&target.id, &change.path, false).await?;
                 }
@@ -331,8 +331,8 @@ impl ForkManager {
         // Simple line-based merge
         // In production, you'd want a more sophisticated merge algorithm
 
-        let fork_lines: Vec<&str> = conflict.fork_content.lines().collect();
-        let target_lines: Vec<&str> = conflict.target_content.lines().collect();
+        let _fork_lines: Vec<&str> = conflict.fork_content.lines().collect();
+        let _target_lines: Vec<&str> = conflict.target_content.lines().collect();
 
         // For now, just concatenate with conflict markers
         // A real implementation would use a proper diff3 algorithm

@@ -10,6 +10,7 @@ use tracing::debug;
 
 #[derive(Clone)]
 pub struct VersionControlContext {
+    #[allow(dead_code)]
     storage: Arc<ConnectionManager>,
 }
 
@@ -22,6 +23,7 @@ impl VersionControlContext {
 macro_rules! impl_version_tool {
     ($name:ident, $tool_name:expr, $desc:expr, $input:ty, $output:ty) => {
         pub struct $name {
+            #[allow(dead_code)]
             ctx: VersionControlContext,
         }
 
@@ -57,6 +59,7 @@ macro_rules! impl_version_tool {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct GetHistoryInput {
     entity_id: String,
     #[serde(default = "default_file_type")]
@@ -84,6 +87,7 @@ pub struct VersionEntry {
 impl_version_tool!(VersionGetHistoryTool, "cortex.version.get_history", "Get version history of entity", GetHistoryInput, GetHistoryOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct CompareInput {
     entity_id: String,
     version_a: i32,
@@ -102,6 +106,7 @@ pub struct CompareOutput {
 impl_version_tool!(VersionCompareTool, "cortex.version.compare", "Compare two versions", CompareInput, CompareOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct RestoreInput {
     entity_id: String,
     target_version: i32,
@@ -119,6 +124,7 @@ pub struct RestoreOutput {
 impl_version_tool!(VersionRestoreTool, "cortex.version.restore", "Restore to previous version", RestoreInput, RestoreOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct CreateSnapshotInput {
     name: String,
     description: Option<String>,
@@ -136,6 +142,7 @@ pub struct CreateSnapshotOutput {
 impl_version_tool!(VersionCreateSnapshotTool, "cortex.version.create_snapshot", "Create named snapshot", CreateSnapshotInput, CreateSnapshotOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ListSnapshotsInput {
     workspace_id: Option<String>,
     #[serde(default = "default_snapshot_limit")]
@@ -159,6 +166,7 @@ pub struct SnapshotInfo {
 impl_version_tool!(VersionListSnapshotsTool, "cortex.version.list_snapshots", "List available snapshots", ListSnapshotsInput, ListSnapshotsOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct RestoreSnapshotInput {
     snapshot_id: String,
     target_workspace: Option<String>,
@@ -173,6 +181,7 @@ pub struct RestoreSnapshotOutput {
 impl_version_tool!(VersionRestoreSnapshotTool, "cortex.version.restore_snapshot", "Restore from snapshot", RestoreSnapshotInput, RestoreSnapshotOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct DiffSnapshotsInput {
     snapshot_a: String,
     snapshot_b: String,
@@ -191,6 +200,7 @@ pub struct DiffSnapshotsOutput {
 impl_version_tool!(VersionDiffSnapshotsTool, "cortex.version.diff_snapshots", "Compare two snapshots", DiffSnapshotsInput, DiffSnapshotsOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct BlameInput {
     file_path: String,
     start_line: Option<i32>,
@@ -213,6 +223,7 @@ pub struct BlameLine {
 impl_version_tool!(VersionBlameTool, "cortex.version.blame", "Get blame information", BlameInput, BlameOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct GetChangelogInput {
     from_version: Option<String>,
     to_version: Option<String>,
@@ -229,6 +240,7 @@ pub struct GetChangelogOutput {
 impl_version_tool!(VersionGetChangelogTool, "cortex.version.get_changelog", "Generate changelog", GetChangelogInput, GetChangelogOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct TagInput {
     tag_name: String,
     message: Option<String>,

@@ -352,7 +352,7 @@ impl FileIngestionPipeline {
         };
 
         let now = Utc::now();
-        let mut code_unit = CodeUnit {
+        let code_unit = CodeUnit {
             id: CortexId::new(),
             unit_type,
             name: func.name.clone(),
@@ -897,10 +897,33 @@ impl FileIngestionPipeline {
 mod tests {
     use super::*;
     use cortex_storage::ConnectionManager;
-    use cortex_storage::connection::ConnectionConfig;
+    use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy};
+    use std::time::Duration;
 
     async fn create_test_pipeline() -> (FileIngestionPipeline, Arc<VirtualFileSystem>, Uuid) {
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::Local {
+                endpoint: "mem://".to_string(),
+            },
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 2,
+                max_connections: 5,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: Some(Duration::from_secs(30)),
+                max_lifetime: Some(Duration::from_secs(60)),
+                retry_policy: RetryPolicy::default(),
+                warm_connections: true,
+                validate_on_checkout: false,
+                recycle_after_uses: Some(10000),
+                shutdown_grace_period: Duration::from_secs(30),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
         let storage = Arc::new(ConnectionManager::new(config).await.unwrap());
 
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));

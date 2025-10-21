@@ -136,6 +136,7 @@ impl DocumentIngester {
 }
 
 struct ProcessedFileInfo {
+    #[allow(dead_code)]
     text_content: String,
     chunks: Vec<crate::processors::ContentChunk>,
     metadata: std::collections::HashMap<String, serde_json::Value>,

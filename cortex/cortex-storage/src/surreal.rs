@@ -7,7 +7,7 @@ use cortex_core::traits::Storage;
 use cortex_core::types::*;
 use async_trait::async_trait;
 use std::sync::Arc;
-use surrealdb::sql::{Datetime, Value, Object};
+use surrealdb::sql::Datetime;
 
 /// Storage implementation using SurrealDB
 pub struct SurrealStorage {
@@ -42,7 +42,7 @@ impl Storage for SurrealStorage {
         let updated_at = project.updated_at.to_rfc3339();
         let metadata = project.metadata.clone();
         // Convert serde_json::Value to string for SurrealDB
-        let metadata_json = serde_json::to_string(&metadata).unwrap_or_default();
+        let _metadata_json = serde_json::to_string(&metadata).unwrap_or_default();
 
         // Use INSERT ... ON DUPLICATE KEY UPDATE pattern to upsert
         let query = format!(r#"

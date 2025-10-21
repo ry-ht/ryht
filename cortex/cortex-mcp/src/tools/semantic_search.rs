@@ -34,6 +34,7 @@ use tracing::info;
 
 #[derive(Clone)]
 pub struct SemanticSearchContext {
+    #[allow(dead_code)]
     storage: Arc<ConnectionManager>,
     semantic_memory: Arc<SemanticMemorySystem>,
     search_engine: Arc<RwLock<SemanticSearchEngine>>,
@@ -119,6 +120,7 @@ struct SearchCodeInput {
     #[serde(default = "default_similarity")]
     min_similarity: f32,
     language: Option<String>,
+    #[allow(dead_code)]
     file_pattern: Option<String>,
 }
 

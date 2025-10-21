@@ -249,7 +249,9 @@ impl EmbeddingProvider for OpenAIProvider {
 pub struct ONNXProvider {
     model: EmbeddingModel,
     dimension: usize,
+    #[allow(dead_code)]
     session: Option<Arc<RwLock<ort::Session>>>,
+    #[allow(dead_code)]
     tokenizer: Option<Arc<tokenizers::Tokenizer>>,
     use_mock: bool,
 }

@@ -18,7 +18,6 @@ use cortex_storage::ConnectionManager;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,
     MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, WorkspaceType, SourceType,
-    FlushScope, FlushOptions, Language,
 };
 use cortex_memory::SemanticMemorySystem;
 use mcp_server::prelude::*;
@@ -28,7 +27,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 // =============================================================================
@@ -41,8 +40,11 @@ pub struct WorkspaceContext {
     storage: Arc<ConnectionManager>,
     vfs: Arc<VirtualFileSystem>,
     loader: Arc<ExternalProjectLoader>,
+    #[allow(dead_code)]
     engine: Arc<MaterializationEngine>,
+    #[allow(dead_code)]
     parser: Arc<tokio::sync::Mutex<CodeParser>>,
+    #[allow(dead_code)]
     semantic_memory: Arc<SemanticMemorySystem>,
     ingestion: Arc<FileIngestionPipeline>,
 }
@@ -297,6 +299,7 @@ struct CreateInput {
     process_code: bool,
     /// Maximum file size to import (MB)
     #[serde(default = "default_max_file_size")]
+    #[allow(dead_code)]
     max_file_size_mb: u64,
 }
 
@@ -740,6 +743,7 @@ impl WorkspaceSyncTool {
 struct SyncInput {
     workspace_id: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     detect_moves: bool,
     #[serde(default)]
     re_parse: bool,

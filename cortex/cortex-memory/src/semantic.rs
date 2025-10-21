@@ -6,7 +6,7 @@
 use crate::types::*;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
-use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Language, Visibility, Parameter, TypeParameter, Attribute, Complexity as CoreComplexity, CodeUnitStatus};
+use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Language, Visibility, Parameter, Complexity as CoreComplexity, CodeUnitStatus};
 use cortex_storage::ConnectionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -646,6 +646,7 @@ impl SemanticMemorySystem {
     }
 
     /// Calculate relevance score for a semantic unit (legacy)
+    #[allow(dead_code)]
     fn calculate_unit_relevance(&self, unit: &SemanticUnit) -> f32 {
         let mut score = 0.5; // Base score
 
@@ -999,7 +1000,7 @@ mod tests {
     async fn test_complexity_analysis() {
         let memory = create_test_memory().await;
 
-        let mut unit = SemanticUnit {
+        let unit = SemanticUnit {
             id: CortexId::new(),
             unit_type: CodeUnitType::Function,
             name: "complex_function".to_string(),

@@ -35,5 +35,6 @@ pub mod prelude {
     pub use crate::server::{CortexMcpServer, CortexMcpServerBuilder};
     pub use crate::tools::*;
     pub use crate::types::*;
-    pub use mcp_server::prelude::*;
+    // Re-export specific items from mcp_server to avoid conflicts
+    pub use mcp_server::prelude::{McpServer, Tool, ToolError, ToolResult};
 }

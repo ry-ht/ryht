@@ -99,7 +99,7 @@ impl MaterializationEngine {
 
     /// Collect changes to flush based on scope.
     async fn collect_changes(&self, scope: FlushScope) -> Result<Vec<VNode>> {
-        let query = match scope {
+        let _query = match scope {
             FlushScope::All => {
                 "SELECT * FROM vnode WHERE status IN ['modified', 'created', 'deleted']".to_string()
             }
@@ -381,7 +381,7 @@ impl MaterializationEngine {
         vnode: &VNode,
         target_path: &Path,
         preserve_perms: bool,
-        preserve_times: bool,
+        _preserve_times: bool,
     ) -> Result<()> {
         let physical_path = target_path.join(vnode.path.to_string().trim_start_matches('/'));
 

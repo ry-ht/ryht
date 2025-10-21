@@ -99,6 +99,7 @@ pub struct Metrics {
 
 impl Metrics {
     /// Create empty metrics.
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             total_requests: 0,

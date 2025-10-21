@@ -10,6 +10,7 @@ use tracing::debug;
 
 #[derive(Clone)]
 pub struct CodeQualityContext {
+    #[allow(dead_code)]
     storage: Arc<ConnectionManager>,
 }
 
@@ -22,6 +23,7 @@ impl CodeQualityContext {
 macro_rules! impl_quality_tool {
     ($name:ident, $tool_name:expr, $desc:expr, $input:ty, $output:ty) => {
         pub struct $name {
+            #[allow(dead_code)]
             ctx: CodeQualityContext,
         }
 
@@ -58,9 +60,12 @@ macro_rules! impl_quality_tool {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AnalyzeComplexityInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     metrics: Option<Vec<String>>,
     #[serde(default = "default_none")]
+    #[allow(dead_code)]
     aggregate_by: String,
 }
 
@@ -81,9 +86,12 @@ impl_quality_tool!(QualityAnalyzeComplexityTool, "cortex.quality.analyze_complex
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FindCodeSmellsInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     smell_types: Option<Vec<String>>,
     #[serde(default = "default_medium")]
+    #[allow(dead_code)]
     severity_threshold: String,
 }
 
@@ -105,14 +113,19 @@ impl_quality_tool!(QualityFindCodeSmellsTool, "cortex.quality.find_code_smells",
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CheckNamingInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     conventions: NamingConventions,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NamingConventions {
+    #[allow(dead_code)]
     functions: Option<String>,
+    #[allow(dead_code)]
     classes: Option<String>,
+    #[allow(dead_code)]
     variables: Option<String>,
 }
 
@@ -134,9 +147,12 @@ impl_quality_tool!(QualityCheckNamingTool, "cortex.quality.check_naming", "Check
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AnalyzeCouplingInput {
+    #[allow(dead_code)]
     scope_path: String,
     #[serde(default = "default_afferent")]
+    #[allow(dead_code)]
     coupling_type: String,
+    #[allow(dead_code)]
     threshold: Option<f32>,
 }
 
@@ -156,8 +172,10 @@ impl_quality_tool!(QualityAnalyzeCouplingTool, "cortex.quality.analyze_coupling"
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AnalyzeCohesionInput {
+    #[allow(dead_code)]
     module_path: String,
     #[serde(default = "default_lcom")]
+    #[allow(dead_code)]
     cohesion_type: String,
 }
 
@@ -172,7 +190,9 @@ impl_quality_tool!(QualityAnalyzeCohesionTool, "cortex.quality.analyze_cohesion"
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FindAntipatternsInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     pattern_types: Option<Vec<String>>,
 }
 
@@ -194,9 +214,12 @@ impl_quality_tool!(QualityFindAntipatternsTool, "cortex.quality.find_antipattern
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SuggestRefactoringsInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     refactoring_types: Option<Vec<String>>,
     #[serde(default = "default_confidence")]
+    #[allow(dead_code)]
     min_confidence: f32,
 }
 
@@ -218,9 +241,12 @@ impl_quality_tool!(QualitySuggestRefactoringsTool, "cortex.quality.suggest_refac
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CalculateMetricsInput {
+    #[allow(dead_code)]
     scope_path: String,
+    #[allow(dead_code)]
     metrics: Option<Vec<String>>,
     #[serde(default = "default_file_group")]
+    #[allow(dead_code)]
     group_by: String,
 }
 

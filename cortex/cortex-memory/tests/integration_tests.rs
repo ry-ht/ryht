@@ -5,13 +5,28 @@ use cortex_core::id::CortexId;
 use cortex_memory::prelude::*;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, PoolConfig, ConnectionMode, Credentials};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Create a test cognitive manager
 async fn create_test_manager() -> CognitiveManager {
     let config = DatabaseConfig {
-        connection_mode: connection_pool::ConnectionMode::Local { endpoint: "mem://".to_string() },
-        credentials: Credentials::default(),
-        pool_config: PoolConfig::default(),
+        connection_mode: ConnectionMode::Local { endpoint: "mem://".to_string() },
+        credentials: Credentials {
+            username: None,
+            password: None,
+        },
+        pool_config: PoolConfig {
+            min_connections: 1,
+            max_connections: 2,
+            connection_timeout: Duration::from_secs(5),
+            idle_timeout: Some(Duration::from_secs(30)),
+            max_lifetime: Some(Duration::from_secs(60)),
+            retry_policy: cortex_storage::connection_pool::RetryPolicy::default(),
+            warm_connections: false,
+            validate_on_checkout: false,
+            recycle_after_uses: Some(1000),
+            shutdown_grace_period: Duration::from_secs(5),
+        },
         namespace: "cortex".to_string(),
         database: "test".to_string(),
     };
@@ -116,7 +131,7 @@ async fn test_semantic_memory_workflow() {
     // Retrieve the unit
     let retrieved = manager
         .semantic()
-        .get_unit(unit_id)
+        .get_semantic_unit(unit_id)
         .await
         .expect("Failed to retrieve unit")
         .expect("Unit not found");
@@ -217,7 +232,7 @@ async fn test_pattern_learning() {
 async fn test_pattern_success_tracking() {
     let manager = create_test_manager().await;
 
-    let mut pattern = LearnedPattern::new(
+    let pattern = LearnedPattern::new(
         PatternType::Optimization,
         "Cache query results".to_string(),
         "Pattern for caching expensive queries".to_string(),
@@ -282,7 +297,6 @@ async fn test_memory_consolidation() {
 
     // consolidation should run without errors
     assert!(report.duration_ms > 0);
-    assert!(report.episodes_processed >= 0);
 }
 
 #[tokio::test]
@@ -345,11 +359,10 @@ async fn test_forget_low_importance() {
     }
 
     // Get initial stats
-    let initial_stats = manager
+    let _initial_stats = manager
         .get_statistics()
         .await
         .expect("Failed to get statistics");
-    let initial_count = initial_stats.episodic.total_episodes;
 
     // Forget low-importance episodes
     let forgotten = manager

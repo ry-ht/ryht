@@ -277,10 +277,9 @@ async fn test_2_episodic_memory_scale() {
 
     // Query random episodes
     println!("Querying 100 random episodes...");
-    let query_start = Instant::now();
     let mut query_times = Vec::new();
 
-    for i in (0..10_000).step_by(100) {
+    for _i in (0..10_000).step_by(100) {
         let q_start = Instant::now();
         let episodes = episodic.retrieve_by_outcome(EpisodeOutcome::Success, 10).await.expect("Failed to query");
         query_times.push(q_start.elapsed());
@@ -345,7 +344,7 @@ async fn test_3_semantic_memory_graph() {
         let file_path = format!("src/module_{}/handler_{}.rs", file_idx / 10, file_idx % 10);
         let unit = create_realistic_semantic_unit(i, &file_path);
         let id = unit.id;
-        semantic.store_unit(&unit).await.expect("Failed to store unit");
+        semantic.store_semantic_unit(&unit).await.expect("Failed to store unit");
         unit_ids.push(id);
 
         if (i + 1) % 5000 == 0 {
@@ -722,7 +721,7 @@ async fn test_7_memory_consolidation_performance() {
     println!("✓ Knowledge links: {}", report.knowledge_links_created);
 
     assert!(consolidate_duration < Duration::from_secs(10), "Consolidation too slow: {:?}", consolidate_duration);
-    assert!(report.patterns_extracted > 0 || report.memories_decayed >= 0, "Should extract patterns or decay memories");
+    // Consolidation should complete successfully (report is valid)
 
     println!("✅ PASS: Consolidation completes in <10s with meaningful results");
 }

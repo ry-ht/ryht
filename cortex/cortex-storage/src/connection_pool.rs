@@ -866,6 +866,7 @@ struct LoadBalancer {
 #[derive(Default)]
 struct EndpointStats {
     active_connections: AtomicUsize,
+    #[allow(dead_code)]
     total_requests: AtomicU64,
     failures: AtomicU64,
 }
@@ -943,6 +944,7 @@ impl LoadBalancer {
             .unwrap_or(&self.endpoints[0])
     }
 
+    #[allow(dead_code)]
     fn record_connection(&self, endpoint: &str) {
         if let Some(stats) = self.endpoint_stats.get(endpoint) {
             stats.active_connections.fetch_add(1, Ordering::Relaxed);
@@ -950,6 +952,7 @@ impl LoadBalancer {
         }
     }
 
+    #[allow(dead_code)]
     fn record_failure(&self, endpoint: &str) {
         if let Some(stats) = self.endpoint_stats.get(endpoint) {
             stats.failures.fetch_add(1, Ordering::Relaxed);
@@ -965,6 +968,7 @@ impl LoadBalancer {
 pub struct HealthMonitor {
     pool: Arc<ConnectionPool>,
     check_interval: Duration,
+    #[allow(dead_code)]
     unhealthy_threshold: u32,
     metrics: Arc<PoolMetrics>,
     running: Arc<AtomicBool>,

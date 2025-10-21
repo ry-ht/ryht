@@ -62,6 +62,7 @@ impl ConsolidationReport {
 /// Consolidates memories from working to long-term storage
 pub struct MemoryConsolidator {
     episodic: Arc<EpisodicMemorySystem>,
+    #[allow(dead_code)]
     semantic: Arc<SemanticMemorySystem>,
     procedural: Arc<ProceduralMemorySystem>,
     working: Arc<WorkingMemorySystem>,

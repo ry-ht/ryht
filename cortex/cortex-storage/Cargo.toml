@@ -55,3 +55,8 @@ tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
 futures = { workspace = true }
 reqwest = { version = "0.12.24", features = ["json"] }
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[[bench]]
+name = "storage_performance"
+harness = false

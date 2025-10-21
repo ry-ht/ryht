@@ -1,6 +1,5 @@
 //! Caching layer for embeddings and search results.
 
-use crate::error::Result;
 use crate::types::Vector;
 use moka::future::Cache;
 use std::hash::{Hash, Hasher};

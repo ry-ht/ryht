@@ -52,3 +52,7 @@ criterion = { version = "0.7.0", features = ["html_reports"] }
 [[bench]]
 name = "vfs_bench"
 harness = false
+
+[[bench]]
+name = "vfs_performance"
+harness = false

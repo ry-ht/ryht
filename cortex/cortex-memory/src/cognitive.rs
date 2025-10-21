@@ -225,7 +225,7 @@ impl CognitiveManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy, LoadBalancingStrategy};
+    use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
     use std::time::Duration;
 
     async fn create_test_manager() -> CognitiveManager {

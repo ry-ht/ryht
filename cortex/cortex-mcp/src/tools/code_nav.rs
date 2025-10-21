@@ -6,15 +6,13 @@
 
 use async_trait::async_trait;
 use cortex_core::id::CortexId;
-use cortex_core::types::CodeUnit;
-use cortex_memory::{CognitiveManager, types::{MemoryQuery, CodeUnitType}};
+use cortex_memory::CognitiveManager;
 use cortex_storage::ConnectionManager;
 use mcp_server::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{debug, error};
 
 // =============================================================================
 // Shared Context
@@ -56,6 +54,7 @@ struct GetUnitInput {
     #[serde(default = "default_true")]
     include_body: bool,
     #[serde(default)]
+    #[allow(dead_code)]
     include_ast: bool,
     #[serde(default)]
     include_dependencies: bool,
@@ -226,8 +225,10 @@ impl CodeListUnitsTool {
 struct ListUnitsInput {
     path: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     recursive: bool,
     #[serde(default)]
     unit_types: Option<Vec<String>>,
@@ -353,6 +354,7 @@ impl CodeGetSymbolsTool {
 struct GetSymbolsInput {
     scope: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -428,6 +430,7 @@ struct FindDefinitionInput {
     #[serde(default)]
     context_file: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -525,6 +528,7 @@ struct FindReferencesInput {
     unit_id: Option<String>,
     qualified_name: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -621,6 +625,7 @@ impl CodeGetSignatureTool {
 struct GetSignatureInput {
     unit_id: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -696,8 +701,10 @@ struct GetCallHierarchyInput {
     #[serde(default = "default_direction")]
     direction: String,
     #[serde(default = "default_depth")]
+    #[allow(dead_code)]
     max_depth: usize,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -810,6 +817,7 @@ struct GetTypeHierarchyInput {
     #[serde(default = "default_direction")]
     direction: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -916,6 +924,7 @@ impl CodeGetImportsTool {
 struct GetImportsInput {
     file_path: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 
@@ -1005,6 +1014,7 @@ impl CodeGetExportsTool {
 struct GetExportsInput {
     module_path: String,
     #[serde(default)]
+    #[allow(dead_code)]
     workspace_id: Option<String>,
 }
 

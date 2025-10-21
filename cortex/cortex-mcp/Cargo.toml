@@ -60,6 +60,9 @@ tree-sitter-javascript = "0.25.0"
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.23"
 
+[features]
+http = []
+
 [[bin]]
 name = "cortex-mcp"
 path = "src/bin/main.rs"

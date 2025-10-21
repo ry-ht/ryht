@@ -32,6 +32,11 @@ regex = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "manipulation_performance"
+harness = false
 
 [features]
 default = ["rust", "typescript"]

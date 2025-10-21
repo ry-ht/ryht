@@ -19,7 +19,7 @@
 
 use async_trait::async_trait;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter as CoreParameter, Complexity};
-use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile, RustParser};
+use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
 use mcp_server::prelude::*;
@@ -29,7 +29,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::debug;
 use uuid::Uuid;
-use anyhow::{Context as AnyhowContext, Result as AnyhowResult, bail};
+use anyhow::Result as AnyhowResult;
 
 // =============================================================================
 // Shared Context
@@ -284,7 +284,7 @@ impl Tool for CodeCreateUnitTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace_id: {}", e)))?;
 
         // Parse the file
-        let (parsed, content, language) = self.ctx.parse_file(&workspace_id, &input.file_path).await
+        let (_parsed, content, language) = self.ctx.parse_file(&workspace_id, &input.file_path).await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         // Create AST editor
@@ -421,6 +421,7 @@ struct UpdateUnitInput {
     visibility: Option<String>,
     expected_version: i64,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     preserve_comments: bool,
 }
 
@@ -583,6 +584,7 @@ impl CodeDeleteUnitTool {
 struct DeleteUnitInput {
     unit_id: String,
     #[serde(default)]
+    #[allow(dead_code)]
     cascade: bool,
     expected_version: i64,
 }
@@ -703,6 +705,7 @@ struct MoveUnitInput {
     target_file: String,
     position: Option<String>,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     update_imports: bool,
 }
 
@@ -846,8 +849,10 @@ struct RenameUnitInput {
     unit_id: String,
     new_name: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     update_references: bool,
     #[serde(default = "default_workspace_scope")]
+    #[allow(dead_code)]
     scope: String,
 }
 
@@ -959,6 +964,7 @@ struct ExtractFunctionInput {
     end_line: i32,
     function_name: String,
     #[serde(default = "default_before_position")]
+    #[allow(dead_code)]
     position: String,
 }
 
@@ -1079,6 +1085,7 @@ impl CodeInlineFunctionTool {
 #[derive(Debug, Deserialize, JsonSchema)]
 struct InlineFunctionInput {
     function_id: String,
+    #[allow(dead_code)]
     call_sites: Option<Vec<String>>,
 }
 
@@ -1239,6 +1246,7 @@ struct ChangeSignatureInput {
     #[serde(default = "default_true")]
     update_callers: bool,
     #[serde(default = "default_migration_strategy")]
+    #[allow(dead_code)]
     migration_strategy: String,
 }
 
@@ -1530,6 +1538,7 @@ struct RemoveParameterInput {
     unit_id: String,
     parameter_name: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     update_callers: bool,
 }
 
@@ -1678,6 +1687,7 @@ struct AddImportInput {
     file_path: String,
     import_spec: String,
     #[serde(default = "default_auto_position")]
+    #[allow(dead_code)]
     position: String,
     #[serde(default = "default_workspace_id")]
     workspace_id: String,
@@ -1763,10 +1773,13 @@ impl CodeOptimizeImportsTool {
 struct OptimizeImportsInput {
     file_path: String,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     remove_unused: bool,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     sort: bool,
     #[serde(default = "default_true")]
+    #[allow(dead_code)]
     group: bool,
     #[serde(default = "default_workspace_id")]
     workspace_id: String,

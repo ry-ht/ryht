@@ -258,3 +258,7 @@ harness = true
 [[bench]]
 name = "performance_benchmarks"
 harness = false
+
+[[bench]]
+name = "e2e_workflows"
+harness = false

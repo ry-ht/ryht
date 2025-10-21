@@ -11,8 +11,11 @@ use tracing::debug;
 
 #[derive(Clone)]
 pub struct CognitiveMemoryContext {
+    #[allow(dead_code)]
     storage: Arc<ConnectionManager>,
+    #[allow(dead_code)]
     episodic: Arc<EpisodicMemorySystem>,
+    #[allow(dead_code)]
     procedural: Arc<ProceduralMemorySystem>,
 }
 
@@ -27,6 +30,7 @@ impl CognitiveMemoryContext {
 macro_rules! impl_memory_tool {
     ($name:ident, $tool_name:expr, $desc:expr, $input:ty, $output:ty) => {
         pub struct $name {
+            #[allow(dead_code)]
             ctx: CognitiveMemoryContext,
         }
 
@@ -62,6 +66,7 @@ macro_rules! impl_memory_tool {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct FindSimilarEpisodesInput {
     query: String,
     #[serde(default = "default_episode_limit")]
@@ -88,6 +93,7 @@ pub struct EpisodeSummary {
 impl_memory_tool!(MemoryFindSimilarEpisodesTool, "cortex.memory.find_similar_episodes", "Find similar past development episodes", FindSimilarEpisodesInput, FindSimilarEpisodesOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct RecordEpisodeInput {
     task_description: String,
     solution_summary: String,
@@ -107,6 +113,7 @@ pub struct RecordEpisodeOutput {
 impl_memory_tool!(MemoryRecordEpisodeTool, "cortex.memory.record_episode", "Record a development episode", RecordEpisodeInput, RecordEpisodeOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct GetEpisodeInput {
     episode_id: String,
     #[serde(default = "default_true")]
@@ -125,6 +132,7 @@ pub struct GetEpisodeOutput {
 impl_memory_tool!(MemoryGetEpisodeTool, "cortex.memory.get_episode", "Retrieve episode details", GetEpisodeInput, GetEpisodeOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ExtractPatternsInput {
     #[serde(default = "default_min_frequency")]
     min_frequency: i32,
@@ -149,6 +157,7 @@ pub struct Pattern {
 impl_memory_tool!(MemoryExtractPatternsTool, "cortex.memory.extract_patterns", "Extract patterns from episodes", ExtractPatternsInput, ExtractPatternsOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ApplyPatternInput {
     pattern_id: String,
     target_context: serde_json::Value,
@@ -166,11 +175,13 @@ pub struct ApplyPatternOutput {
 impl_memory_tool!(MemoryApplyPatternTool, "cortex.memory.apply_pattern", "Apply a learned pattern", ApplyPatternInput, ApplyPatternOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct SearchEpisodesInput {
     filters: EpisodeFilters,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct EpisodeFilters {
     agent_id: Option<String>,
     outcome: Option<String>,
@@ -187,6 +198,7 @@ pub struct SearchEpisodesOutput {
 impl_memory_tool!(MemorySearchEpisodesTool, "cortex.memory.search_episodes", "Search episodes by criteria", SearchEpisodesInput, SearchEpisodesOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct GetStatisticsInput {
     #[serde(default = "default_agent_group")]
     group_by: String,
@@ -209,6 +221,7 @@ pub struct StatEntry {
 impl_memory_tool!(MemoryGetStatisticsTool, "cortex.memory.get_statistics", "Get memory system statistics", GetStatisticsInput, GetStatisticsOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ConsolidateInput {
     #[serde(default = "default_true")]
     merge_similar: bool,
@@ -227,6 +240,7 @@ pub struct ConsolidateOutput {
 impl_memory_tool!(MemoryConsolidateTool, "cortex.memory.consolidate", "Consolidate and optimize memory", ConsolidateInput, ConsolidateOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ExportKnowledgeInput {
     #[serde(default = "default_json_format")]
     format: String,
@@ -246,6 +260,7 @@ pub struct ExportKnowledgeOutput {
 impl_memory_tool!(MemoryExportKnowledgeTool, "cortex.memory.export_knowledge", "Export knowledge base", ExportKnowledgeInput, ExportKnowledgeOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct ImportKnowledgeInput {
     source: String,
     #[serde(default = "default_json_format")]
@@ -263,6 +278,7 @@ pub struct ImportKnowledgeOutput {
 impl_memory_tool!(MemoryImportKnowledgeTool, "cortex.memory.import_knowledge", "Import knowledge from another system", ImportKnowledgeInput, ImportKnowledgeOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct GetRecommendationsInput {
     context: serde_json::Value,
     recommendation_types: Option<Vec<String>>,
@@ -286,6 +302,7 @@ pub struct Recommendation {
 impl_memory_tool!(MemoryGetRecommendationsTool, "cortex.memory.get_recommendations", "Get recommendations based on context", GetRecommendationsInput, GetRecommendationsOutput);
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[allow(dead_code)]
 pub struct LearnFromFeedbackInput {
     pattern_id: String,
     #[serde(default = "default_positive")]
