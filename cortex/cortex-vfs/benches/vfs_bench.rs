@@ -143,11 +143,11 @@ fn bench_vnode_operations(c: &mut Criterion) {
     group.bench_function("mark_modified", |b| {
         let workspace_id = Uuid::new_v4();
         let path = VirtualPath::new("test.txt").unwrap();
-        let mut vnode = VNode::new_file(workspace_id, path, "hash".to_string(), 100);
 
         b.iter(|| {
+            let mut vnode = VNode::new_file(workspace_id, path.clone(), "hash".to_string(), 100);
             vnode.mark_modified();
-            black_box(&vnode)
+            black_box(vnode.is_modified)
         })
     });
 

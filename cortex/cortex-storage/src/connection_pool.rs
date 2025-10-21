@@ -1464,15 +1464,15 @@ pub struct PoolStatistics {
 impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            min_connections: 2,
-            max_connections: 10,
-            connection_timeout: Duration::from_secs(30),
+            min_connections: 5,                             // Optimized: More min connections (was 2)
+            max_connections: 20,                            // Optimized: Higher max for concurrency (was 10)
+            connection_timeout: Duration::from_secs(10),    // Optimized: Faster timeout (was 30)
             idle_timeout: Some(Duration::from_secs(300)), // 5 minutes
             max_lifetime: Some(Duration::from_secs(1800)), // 30 minutes
             retry_policy: RetryPolicy::default(),
             warm_connections: true,
-            validate_on_checkout: false,
-            recycle_after_uses: None,
+            validate_on_checkout: false,                    // Optimized: Disabled for speed
+            recycle_after_uses: Some(10000),               // Optimized: Recycle after 10k uses
             shutdown_grace_period: Duration::from_secs(30),
         }
     }
@@ -1482,9 +1482,9 @@ impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
             max_attempts: 3,
-            initial_backoff: Duration::from_millis(100),
-            max_backoff: Duration::from_secs(10),
-            multiplier: 2.0,
+            initial_backoff: Duration::from_millis(50),     // Optimized: Faster initial retry (was 100)
+            max_backoff: Duration::from_secs(5),            // Optimized: Lower max backoff (was 10)
+            multiplier: 1.5,                                 // Optimized: Gentler backoff (was 2.0)
         }
     }
 }

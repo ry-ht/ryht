@@ -40,7 +40,7 @@ impl VirtualFileSystem {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         Self {
             storage,
-            content_cache: ContentCache::new(256 * 1024 * 1024), // 256 MB default
+            content_cache: ContentCache::new(512 * 1024 * 1024), // 512 MB default (optimized)
             vnode_cache: Arc::new(DashMap::new()),
             path_cache: Arc::new(DashMap::new()),
         }
@@ -425,7 +425,7 @@ impl VirtualFileSystem {
 
         // Use UPSERT to atomically increment reference_count if exists, create if not
         let upsert_query = format!(
-            "UPSERT file_content:$hash CONTENT $content ON DUPLICATE KEY UPDATE reference_count += 1"
+            "UPSERT type::thing('file_content', $hash) CONTENT $content ON DUPLICATE KEY UPDATE reference_count += 1"
         );
 
         conn.connection()

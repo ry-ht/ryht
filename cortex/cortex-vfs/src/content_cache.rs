@@ -189,8 +189,14 @@ impl ContentCache {
     }
 
     /// Promote an entry in the LRU queue (mark as recently used).
+    /// Optimized to avoid full scan for frequently accessed items.
     fn promote_in_lru(&self, hash: &str) {
         let mut queue = self.lru_queue.write();
+
+        // Optimization: Check if already at the back (common for hot cache items)
+        if queue.back().map(|s| s.as_str()) == Some(hash) {
+            return;
+        }
 
         // Find and remove from current position
         if let Some(pos) = queue.iter().position(|k| k == hash) {

@@ -89,6 +89,8 @@ DEFINE FIELD last_accessed_at ON episodes TYPE option<datetime>;
 DEFINE INDEX episodes_project ON episodes FIELDS project_id;
 DEFINE INDEX episodes_session ON episodes FIELDS session_id;
 DEFINE INDEX episodes_importance ON episodes FIELDS importance;
+DEFINE INDEX episodes_created_at ON episodes FIELDS created_at;
+DEFINE INDEX episodes_outcome ON episodes FIELDS outcome;
 "#;
 
 /// Initialize the database schema

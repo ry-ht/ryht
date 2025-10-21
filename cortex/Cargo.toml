@@ -234,6 +234,11 @@ name = "test_real_world_development"
 path = "tests/test_real_world_development.rs"
 harness = true
 
+[[test]]
+name = "test_memory_system_integration"
+path = "tests/test_memory_system_integration.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"

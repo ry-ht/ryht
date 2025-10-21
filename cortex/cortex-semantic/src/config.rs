@@ -169,9 +169,9 @@ pub struct IndexConfig {
 impl Default for IndexConfig {
     fn default() -> Self {
         Self {
-            hnsw_m: 32,
-            hnsw_ef_construction: 100,
-            hnsw_ef_search: 100,
+            hnsw_m: 16,                     // Optimized: Lower M for faster search (was 32)
+            hnsw_ef_construction: 200,      // Optimized: Higher construction for better recall
+            hnsw_ef_search: 50,             // Optimized: Lower search for faster queries (was 100)
             similarity_metric: SimilarityMetric::Cosine,
             persist_path: None,
             auto_save_interval_seconds: 300, // 5 minutes
