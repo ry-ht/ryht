@@ -155,8 +155,7 @@ impl ExternalProjectLoader {
                 .strip_prefix(root)
                 .map_err(|e| CortexError::invalid_input(e.to_string()))?;
 
-            let virtual_path = VirtualPath::from_physical(path, root)
-                .map_err(|e| CortexError::invalid_input(e.to_string()))?;
+            let virtual_path = VirtualPath::from_physical(path, root)?;
 
             // Check if should be included
             if !self.should_include(relative_path, options) {

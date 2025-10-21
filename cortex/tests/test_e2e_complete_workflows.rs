@@ -88,7 +88,7 @@ impl E2EWorkflowMetrics {
     fn end_phase(&mut self, phase: &str, start: Instant) {
         let duration = start.elapsed().as_millis();
         self.phase_times.insert(phase.to_string(), duration);
-        info!("✅ [{}}] Phase completed: {} ({}ms)", self.workflow_name, phase, duration);
+        info!("✅ [{}] Phase completed: {} ({}ms)", self.workflow_name, phase, duration);
     }
 
     fn record_vfs_operation(&mut self, operation: &str, token_estimate: usize) {
@@ -153,9 +153,9 @@ impl E2EWorkflowMetrics {
    Conflicts Resolved: {}
 
 💰 TOKEN EFFICIENCY
-   Tokens Used (Cortex): {:,}
-   Tokens (Traditional): {:,}
-   Tokens Saved: {:,}
+   Tokens Used (Cortex): {}
+   Tokens (Traditional): {}
+   Tokens Saved: {}
    Efficiency: {:.1}%
 
 ╔═══════════════════════════════════════════════════════════════════════╗
@@ -218,9 +218,9 @@ async fn setup_test_infrastructure(db_name: &str) -> Result<(
     let vfs = Arc::new(VirtualFileSystem::new(connection_manager.clone()));
     let cognitive = Arc::new(CognitiveManager::new(connection_manager.clone()));
 
-    let db = connection_manager.get_connection().await?;
+    let conn = connection_manager.acquire().await?;
     let session_manager = Arc::new(SessionManager::new(
-        db,
+        conn.connection().clone(),
         "cortex_e2e_test".to_string(),
         db_name.to_string(),
     ));

@@ -595,6 +595,7 @@ async fn test_08_semantic_search() -> anyhow::Result<()> {
         similarity_threshold: 0.7,
         limit: 10,
         filters: HashMap::new(),
+        time_range: None,
     };
 
     let start = Instant::now();

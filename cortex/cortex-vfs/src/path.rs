@@ -244,6 +244,13 @@ pub enum VirtualPathError {
     EscapesRoot,
 }
 
+// Conversion to CortexError
+impl From<VirtualPathError> for cortex_core::error::CortexError {
+    fn from(err: VirtualPathError) -> Self {
+        cortex_core::error::CortexError::InvalidInput(err.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

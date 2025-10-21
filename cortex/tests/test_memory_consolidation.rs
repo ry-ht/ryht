@@ -82,7 +82,7 @@ async fn test_large_scale_episodic_memory_consolidation() {
         );
 
         episode.outcome = outcome;
-        episode.duration_seconds = (100 + (i * 13) % 5000) / 1000; // Varying durations in seconds
+        episode.duration_seconds = ((100 + (i * 13) % 5000) / 1000) as u64; // Varying durations in seconds
 
         // Add tool usage
         let tool_name = tools[i % tools.len()];
@@ -92,7 +92,7 @@ async fn test_large_scale_episodic_memory_consolidation() {
             total_duration_ms: episode.duration_seconds * 1000 / 2,
             parameters: {
                 let mut params = HashMap::new();
-                params.insert("mode".to_string(), "test".to_string());
+                params.insert("mode".to_string(), serde_json::json!("test"));
                 params
             },
         }];
@@ -294,9 +294,9 @@ async fn test_semantic_memory_operations() {
             qualified_name: format!("module::{}_{}", unit_type_name(unit_type), i),
             display_name: format!("{} {}", unit_type_name(unit_type), i),
             file_path: format!("src/module_{}.rs", i / 10),
-            start_line: (i * 10) % 1000,
+            start_line: ((i * 10) % 1000) as u32,
             start_column: 0,
-            end_line: ((i * 10) % 1000) + 20,
+            end_line: (((i * 10) % 1000) + 20) as u32,
             end_column: 1,
             signature: format!("pub {} {}(...)", unit_type_name(unit_type), i),
             body: format!("// Implementation for {}", i),

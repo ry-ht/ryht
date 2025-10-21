@@ -22,9 +22,11 @@ use cortex_memory::prelude::*;
 use cortex_memory::types::CodeUnitType;
 use cortex_semantic::prelude::*;
 use cortex_ingestion::prelude::*;
+use cortex_ingestion::ChunkType;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::fs;
 
@@ -40,14 +42,14 @@ fn create_test_db_config_from_global(global_config: &GlobalConfig) -> DatabaseCo
             endpoint: "mem://".to_string(),
         },
         credentials: Credentials {
-            username: db_config.username.clone(),
-            password: db_config.password.clone(),
+            username: Some(db_config.username.clone()),
+            password: Some(db_config.password.clone()),
         },
         pool_config: cortex_storage::prelude::PoolConfig {
-            min_connections: global_config.pool().min_connections,
-            max_connections: global_config.pool().max_connections,
-            connection_timeout_ms: global_config.pool().connection_timeout_ms,
-            idle_timeout_ms: global_config.pool().idle_timeout_ms,
+            min_connections: global_config.pool().min_connections as usize,
+            max_connections: global_config.pool().max_connections as usize,
+            connection_timeout: Duration::from_millis(global_config.pool().connection_timeout_ms),
+            idle_timeout: Some(Duration::from_millis(global_config.pool().idle_timeout_ms)),
             ..Default::default()
         },
         namespace: "cortex_integration_test".to_string(),
@@ -177,8 +179,8 @@ async fn test_core_storage_config_to_database() {
         .expect("Failed to create connection manager");
 
     // Verify connection manager is operational
-    let health = connection_manager.health_check().await;
-    assert_eq!(health.status, HealthStatus::Healthy);
+    let health = connection_manager.health_status();
+    assert!(health.healthy);
 }
 
 #[tokio::test]
@@ -255,11 +257,20 @@ async fn test_storage_vfs_connection_pool_usage() {
 
     // Create workspace
     let workspace_id = uuid::Uuid::new_v4();
-    let workspace = Workspace::new(
-        workspace_id,
-        "test-workspace".to_string(),
-        WorkspaceType::Code,
-    );
+    let now = chrono::Utc::now();
+    let workspace = Workspace {
+        id: workspace_id,
+        name: "test-workspace".to_string(),
+        workspace_type: WorkspaceType::Code,
+        source_type: SourceType::Local,
+        namespace: "cortex_integration_test".to_string(),
+        source_path: None,
+        read_only: false,
+        parent_workspace: None,
+        fork_metadata: None,
+        created_at: now,
+        updated_at: now,
+    };
 
     // Write a file to VFS (should use connection pool internally)
     let path = VirtualPath::new("test.txt").expect("Invalid path");
@@ -273,11 +284,11 @@ async fn test_storage_vfs_connection_pool_usage() {
         .await
         .expect("Failed to read file");
 
-    assert_eq!(content.data, b"Hello, VFS!");
+    assert_eq!(content, b"Hello, VFS!");
 
     // Verify connection pool health
-    let health = connection_manager.health_check().await;
-    assert_eq!(health.status, HealthStatus::Healthy);
+    let health = connection_manager.health_status();
+    assert!(health.healthy);
 }
 
 #[tokio::test]
@@ -342,7 +353,7 @@ async fn test_storage_vfs_batch_operations() {
 
     // Batch write operation: create directory structure
     let base_path = VirtualPath::new("src").expect("Invalid path");
-    vfs.create_directory(&workspace_id, &base_path)
+    vfs.create_directory(&workspace_id, &base_path, true)
         .await
         .expect("Failed to create directory");
 
@@ -359,7 +370,7 @@ async fn test_storage_vfs_batch_operations() {
 
     // List directory contents (batch read)
     let entries = vfs
-        .list_directory(&workspace_id, &base_path)
+        .list_directory(&workspace_id, &base_path, false)
         .await
         .expect("Failed to list directory");
 
@@ -989,7 +1000,7 @@ async fn test_e2e_create_workspace_ingest_search_modify_consolidate() {
         .await
         .expect("Failed to read modified file");
 
-    assert_eq!(content.data, new_content);
+    assert_eq!(content, new_content);
 }
 
 #[tokio::test]

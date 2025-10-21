@@ -1192,11 +1192,11 @@ async fn test_procedural_pattern_confidence_scoring() {
         if i < 8 {
             pattern.record_success();
         } else {
-//             pattern.record_failure();
-//         }
-//     }
-// 
-//     assert_eq!(pattern.times_applied, 10);
+            pattern.record_failure();
+        }
+    }
+
+    assert_eq!(pattern.times_applied, 10);
     assert!((pattern.success_rate - 0.8).abs() < 0.01);
 
     cognitive.remember_pattern(&pattern).await.unwrap();

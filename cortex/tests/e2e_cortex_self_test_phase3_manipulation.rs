@@ -53,11 +53,20 @@ impl TestContext {
 
         // Create workspace
         let workspace_id = Uuid::new_v4();
-        let workspace = Workspace::new(
-            workspace_id,
-            "cortex-manipulation-test".to_string(),
-            WorkspaceType::Code,
-        );
+        let now = chrono::Utc::now();
+        let workspace = Workspace {
+            id: workspace_id,
+            name: "cortex-manipulation-test".to_string(),
+            workspace_type: WorkspaceType::Code,
+            source_type: SourceType::Local,
+            namespace: "cortex_test".to_string(),
+            source_path: Some(temp_dir.path().to_path_buf()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
+            created_at: now,
+            updated_at: now,
+        };
 
         // Save workspace to DB (simulate)
         // In a real scenario, this would be saved to the database
@@ -100,7 +109,7 @@ impl TestContext {
     async fn read_file(&self, path: &str) -> Result<String> {
         let vpath = VirtualPath::new(path)?;
         let content = self.vfs.read_file(&self.workspace_id, &vpath).await?;
-        Ok(String::from_utf8(content)?)
+        String::from_utf8(content).map_err(|e| CortexError::internal(e.to_string()))
     }
 
     /// Write a file to VFS
@@ -112,7 +121,7 @@ impl TestContext {
     /// Parse a file and create AST editor
     async fn create_editor(&self, path: &str) -> Result<AstEditor> {
         let source = self.read_file(path).await?;
-        AstEditor::new(source, tree_sitter_rust::LANGUAGE.into())
+        Ok(AstEditor::new(source, tree_sitter_rust::LANGUAGE.into())?)
     }
 
     /// Apply editor changes back to VFS
@@ -340,9 +349,12 @@ fn process_data(input: &[u8]) -> Vec<u8> {
 }"#;
 
     // Find the function node and replace it
-    let functions = editor.query("(function_item) @func")?;
-    if let Some(func) = functions.first() {
-        editor.replace_node(func, new_body)?;
+    let func_node = {
+        let functions = editor.query("(function_item) @func")?;
+        functions.first().cloned()
+    };
+    if let Some(func) = func_node {
+        editor.replace_node(&func, new_body)?;
         editor.apply_edits()?;
 
         ctx.save_editor("test.rs", &editor).await?;
@@ -385,13 +397,14 @@ fn another_function() {
     let mut editor = ctx.create_editor("test.rs").await?;
 
     // Find and delete unused_helper
-    let functions = editor.query("(function_item) @func")?;
-    for func in &functions {
-        let func_text = editor.node_text(func);
-        if func_text.contains("unused_helper") {
-            editor.delete_node(func)?;
-            break;
-        }
+    let func_to_delete = {
+        let functions = editor.query("(function_item) @func")?;
+        functions.iter()
+            .find(|func| editor.node_text(func).contains("unused_helper"))
+            .cloned()
+    };
+    if let Some(func) = func_to_delete {
+        editor.delete_node(&func)?;
     }
 
     editor.apply_edits()?;
@@ -794,14 +807,17 @@ pub fn main() {
     let mut editor = ctx.create_editor("test.rs").await?;
 
     // Find helper function and make it public
-    let functions = editor.query("(function_item) @func")?;
-    for func in &functions {
-        let text = editor.node_text(func);
-        if text.contains("fn helper") && !text.contains("pub fn") {
-            let new_text = text.replace("fn helper", "pub fn helper");
-            editor.replace_node(func, &new_text)?;
-            break;
-        }
+    let func_to_modify = {
+        let functions = editor.query("(function_item) @func")?;
+        functions.iter()
+            .find(|func| {
+                let text = editor.node_text(func);
+                text.contains("fn helper") && !text.contains("pub fn")
+            })
+            .map(|func| (func.clone(), editor.node_text(func).replace("fn helper", "pub fn helper")))
+    };
+    if let Some((func, new_text)) = func_to_modify {
+        editor.replace_node(&func, &new_text)?;
     }
 
     editor.apply_edits()?;
@@ -1120,27 +1136,28 @@ pub struct Session {
 
     let mut editor = ctx.create_editor("test.rs").await?;
 
-    // Find all struct nodes
-    let structs = editor.query("(struct_item) @struct")?;
+    // Find all struct nodes and collect modifications
+    let modifications = {
+        let structs = editor.query("(struct_item) @struct")?;
+        let mut mods = Vec::new();
+        for struct_node in &structs {
+            let struct_text = editor.node_text(struct_node);
 
-    let mut modifications = Vec::new();
-    for struct_node in &structs {
-        let struct_text = editor.node_text(struct_node);
-
-        // Check if it already has Debug derive
-        if !struct_text.contains("Debug") {
-            // Add Debug derive
-            if struct_text.contains("#[derive(") {
-                // Already has derives, add Debug to the list
-                let new_text = struct_text.replace("#[derive(", "#[derive(Debug, ");
-                modifications.push((struct_node, new_text));
-            } else {
-                // No derives yet, add new derive attribute
-                let new_text = format!("#[derive(Debug)]\n{}", struct_text);
-                modifications.push((struct_node, new_text));
+            // Check if it already has Debug derive
+            if !struct_text.contains("Debug") {
+                // Add Debug derive
+                let new_text = if struct_text.contains("#[derive(") {
+                    // Already has derives, add Debug to the list
+                    struct_text.replace("#[derive(", "#[derive(Debug, ")
+                } else {
+                    // No derives yet, add new derive attribute
+                    format!("#[derive(Debug)]\n{}", struct_text)
+                };
+                mods.push((struct_node.clone(), new_text));
             }
         }
-    }
+        mods
+    };
 
     // Apply modifications
     for (node, new_text) in modifications {
@@ -1185,19 +1202,21 @@ fn helper() -> i32 {
 
     let mut editor = ctx.create_editor("test.rs").await?;
 
-    // Find all functions returning Result
-    let functions = editor.query("(function_item) @func")?;
+    // Find all functions returning Result and collect modifications
+    let modifications = {
+        let functions = editor.query("(function_item) @func")?;
+        let mut mods = Vec::new();
+        for func in &functions {
+            let func_text = editor.node_text(func);
 
-    let mut modifications = Vec::new();
-    for func in &functions {
-        let func_text = editor.node_text(func);
-
-        // Check if it returns Result and doesn't have #[must_use]
-        if func_text.contains("-> Result") && !func_text.contains("#[must_use]") {
-            let new_text = format!("#[must_use]\n{}", func_text);
-            modifications.push((func, new_text));
+            // Check if it returns Result and doesn't have #[must_use]
+            if func_text.contains("-> Result") && !func_text.contains("#[must_use]") {
+                let new_text = format!("#[must_use]\n{}", func_text);
+                mods.push((func.clone(), new_text));
+            }
         }
-    }
+        mods
+    };
 
     // Apply modifications
     for (node, new_text) in modifications {

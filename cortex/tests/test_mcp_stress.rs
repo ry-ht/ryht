@@ -18,6 +18,7 @@
 //! - <10GB memory for 100K units
 
 use cortex_core::prelude::*;
+use cortex_core::types::Language;
 use cortex_memory::prelude::*;
 // Explicitly use cortex_memory::types::CodeUnitType for SemanticUnit
 use cortex_memory::types::CodeUnitType;
@@ -454,7 +455,7 @@ async fn test_2_large_codebase_performance() {
 
             let start = Instant::now();
             let mut parser_lock = parser.lock().await;
-            let result = parser_lock.parse_file(&content_str, Language::Rust);
+            let result = parser_lock.parse_file(file_path.to_string().as_str(), &content_str, Language::Rust);
             drop(parser_lock);
             let latency = start.elapsed().as_millis() as u64;
 

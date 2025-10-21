@@ -31,9 +31,9 @@ fn create_test_db_config(db_name: &str) -> DatabaseConfig {
         pool_config: PoolConfig {
             max_connections: 20, // Higher for load testing
             min_connections: 5,
-            connection_timeout_secs: 30,
-            max_idle_time_secs: 300,
-            health_check_interval_secs: 60,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(300)),
+            ..Default::default()
         },
         namespace: "cortex_test".to_string(),
         database: db_name.to_string(),

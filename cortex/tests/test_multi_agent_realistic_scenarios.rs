@@ -28,7 +28,8 @@ use cortex_storage::session::{
     AgentSession, IsolationLevel, OperationType, SessionManager, SessionMetadata, SessionScope,
     SessionState,
 };
-use cortex_core::types::{CodeUnit, CodeUnitType, ComplexityMetrics, Language, Parameter};
+use cortex_core::types::{CodeUnit, CodeUnitType, Language, Parameter};
+use cortex_memory::prelude::ComplexityMetrics;
 use cortex_core::id::CortexId;
 use std::collections::HashMap;
 use std::sync::Arc;

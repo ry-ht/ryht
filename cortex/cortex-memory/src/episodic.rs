@@ -197,6 +197,31 @@ impl EpisodicMemorySystem {
         Ok(results)
     }
 
+    /// Retrieve episodes for a specific workspace/project
+    pub async fn get_episodes_for_project(&self, workspace_id: CortexId) -> Result<Vec<EpisodicMemory>> {
+        debug!(workspace_id = %workspace_id, "Retrieving episodes for workspace");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        let query = format!("{} FROM episode WHERE workspace_id = $workspace_id ORDER BY created_at ASC", Self::episode_select_clause());
+        let mut result = conn
+            .connection()
+            .query(&query)
+            .bind(("workspace_id", workspace_id.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let episodes_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        episodes_json.into_iter()
+            .map(Self::json_to_episode)
+            .collect()
+    }
+
     /// Retrieve episodes by outcome (successful, failed, etc.)
     pub async fn retrieve_by_outcome(
         &self,

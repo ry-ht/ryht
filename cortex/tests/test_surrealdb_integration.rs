@@ -13,7 +13,7 @@ use cortex_memory::prelude::*;
 use cortex_memory::types::CodeUnitType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::info;
 
 /// Helper to create test database config
@@ -49,7 +49,7 @@ async fn test_connection_pool_initialization() {
     );
 
     // Verify we can get a connection
-    let conn_result = connection_manager.get_connection().await;
+    let conn_result = connection_manager.acquire().await;
     assert!(conn_result.is_ok(), "Should get connection from pool");
 
     info!("Connection pool initialization test passed");
@@ -159,9 +159,9 @@ async fn test_connection_pool_exhaustion_recovery() {
         pool_config: PoolConfig {
             max_connections: 5, // Small pool for testing
             min_connections: 2,
-            connection_timeout_secs: 10,
-            max_idle_time_secs: 300,
-            health_check_interval_secs: 60,
+            connection_timeout: Duration::from_secs(10),
+            idle_timeout: Some(Duration::from_secs(300)),
+            ..Default::default()
         },
         namespace: "cortex_test".to_string(),
         database: "pool_exhaustion_test".to_string(),

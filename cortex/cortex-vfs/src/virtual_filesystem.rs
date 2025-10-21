@@ -163,8 +163,7 @@ impl VirtualFileSystem {
         if create_parents {
             let mut current = VirtualPath::root();
             for segment in path.segments() {
-                current = current.join(segment)
-                    .map_err(|e| CortexError::invalid_input(e.to_string()))?;
+                current = current.join(segment)?;
 
                 if self.get_vnode(workspace_id, &current).await?.is_none() {
                     let vnode = VNode::new_directory(*workspace_id, current.clone());
