@@ -67,9 +67,7 @@ impl ConnectionPool {
             self.connection_semaphore
                 .acquire()
                 .await
-                .map_err(|_| SdkError::InvalidState {
-                    message: "Failed to acquire connection permit".into(),
-                })?;
+                .map_err(|_| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to acquire connection permit".into())))?;
 
         let mut transport: Box<dyn Transport + Send> =
             Box::new(SubprocessTransport::new(self.base_options.clone())?);
@@ -169,7 +167,9 @@ impl OptimizedClient {
         let timeout_duration = Duration::from_secs(120);
         let messages = timeout(timeout_duration, self.collect_messages(&mut *transport))
             .await
-            .map_err(|_| SdkError::Timeout { seconds: 120 })??;
+            .map_err(|_| crate::errors::Error::Transport(crate::errors::TransportError::Timeout {
+                duration: Duration::from_secs(120),
+            }))??;
 
         // Return transport to pool
         self.pool.release(transport).await;
@@ -267,9 +267,10 @@ impl OptimizedClient {
     /// Start an interactive session
     pub async fn start_interactive_session(&self) -> Result<()> {
         if !matches!(self.mode, ClientMode::Interactive) {
-            return Err(SdkError::InvalidState {
-                message: "Client not in interactive mode".into(),
-            });
+            return Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "not in interactive mode".into(),
+                expected: "interactive mode".into(),
+            }));
         }
 
         // Acquire a transport for the session
@@ -337,15 +338,14 @@ impl OptimizedClient {
                 let message = InputMessage::user(prompt, "default".to_string());
                 transport.send_message(message).await?;
             } else {
-                return Err(SdkError::InvalidState {
-                    message: "Transport lost during operation".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
             Ok(())
         } else {
-            Err(SdkError::InvalidState {
-                message: "No active interactive session".into(),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "no active session".into(),
+                expected: "active interactive session".into(),
+            }))
         }
     }
 
@@ -366,9 +366,10 @@ impl OptimizedClient {
 
             Ok(messages)
         } else {
-            Err(SdkError::InvalidState {
-                message: "No active interactive session".into(),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "no active session".into(),
+                expected: "active interactive session".into(),
+            }))
         }
     }
 
@@ -377,9 +378,10 @@ impl OptimizedClient {
         let max_concurrent = match self.mode {
             ClientMode::Batch { max_concurrent } => max_concurrent,
             _ => {
-                return Err(SdkError::InvalidState {
-                    message: "Client not in batch mode".into(),
-                });
+                return Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                    current: "not in batch mode".into(),
+                    expected: "batch mode".into(),
+                }));
             }
         };
 
@@ -405,7 +407,7 @@ impl OptimizedClient {
             match handle.await {
                 Ok(result) => results.push(result),
                 Err(e) => {
-                    results.push(Err(SdkError::TransportError(format!("Task failed: {e}"))))
+                    results.push(Err(crate::errors::Error::Transport(crate::errors::TransportError::ChannelError(format!("Task failed: {e}")))))
                 }
             }
         }
@@ -426,16 +428,15 @@ impl OptimizedClient {
                 };
                 transport.send_control_request(request).await?;
             } else {
-                return Err(SdkError::InvalidState {
-                    message: "Transport lost during operation".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
             info!("Interrupt sent");
             Ok(())
         } else {
-            Err(SdkError::InvalidState {
-                message: "No active session".into(),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "no active session".into(),
+                expected: "active session".into(),
+            }))
         }
     }
 

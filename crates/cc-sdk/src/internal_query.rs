@@ -223,14 +223,16 @@ impl Query {
                 debug!("Received control response for {}", request_id);
                 Ok(response)
             }
-            Ok(Err(_)) => Err(SdkError::ControlRequestError(
-                "Response channel closed".to_string(),
-            )),
+            Ok(Err(_)) => Err(crate::errors::Error::Client(crate::errors::ClientError::ControlRequestFailed {
+                reason: "Response channel closed".to_string(),
+            })),
             Err(_) => {
                 // Clean up pending response
                 let mut pending = self.pending_responses.write().await;
                 pending.remove(&request_id);
-                Err(SdkError::Timeout { seconds: 60 })
+                Err(crate::errors::Error::Transport(crate::errors::TransportError::Timeout {
+                    duration: Duration::from_secs(60),
+                }))
             }
         }
     }
@@ -467,11 +469,11 @@ impl Query {
                                                 }
                                                 Err(parse_err) => {
                                                     error!("Failed to parse hook input: {}", parse_err);
-                                                    // Return error using MessageParseError
-                                                    Err(crate::errors::SdkError::MessageParseError {
-                                                        error: format!("Invalid hook input: {parse_err}"),
+                                                    // Return error using InvalidMessage
+                                                    Err(crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                                                        reason: format!("Invalid hook input: {parse_err}"),
                                                         raw: request.input.to_string(),
-                                                    })
+                                                    }))
                                                 }
                                             };
 
@@ -538,10 +540,10 @@ impl Query {
                                                     }
                                                     Err(parse_err) => {
                                                         error!("Failed to parse hook input (fallback): {}", parse_err);
-                                                        Err(crate::errors::SdkError::MessageParseError {
-                                                            error: format!("Invalid hook input: {parse_err}"),
+                                                        Err(crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                                                            reason: format!("Invalid hook input: {parse_err}"),
                                                             raw: input.to_string(),
-                                                        })
+                                                        }))
                                                     }
                                                 };
 
@@ -740,9 +742,10 @@ impl Query {
                 }
             }))
         } else {
-            Err(SdkError::InvalidState {
-                message: format!("No SDK MCP server found with name: {server_name}"),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "SDK MCP server not found".to_string(),
+                expected: format!("MCP server with name: {server_name}"),
+            }))
         }
     }
 

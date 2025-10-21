@@ -2,6 +2,23 @@
 //!
 //! This module contains all the core types used throughout the SDK,
 //! including messages, configuration options, and content blocks.
+//!
+//! # Modern Types (Phase 1)
+//!
+//! The SDK is being modernized with stronger typing and better ergonomics.
+//! New code should prefer the modern types in the `modern` module over
+//! the legacy types defined at the module root.
+//!
+//! ## Type Safety
+//!
+//! - Use newtypes (`SessionId`, `BinaryPath`, `ModelId`) instead of raw strings
+//! - Use strongly-typed enums instead of string constants
+//! - Leverage the type-state pattern for compile-time safety
+//!
+//! ## Migration
+//!
+//! Legacy types are maintained for backward compatibility but will be
+//! deprecated in future versions.
 
 #![allow(missing_docs)]
 use serde::{Deserialize, Serialize};
@@ -11,6 +28,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use std::io::Write;
 use tokio::sync::Mutex;
+
+// Re-export core types for convenience
+pub use crate::core::{BinaryPath, ModelId, SessionId, Version};
 
 /// Permission mode for tool execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

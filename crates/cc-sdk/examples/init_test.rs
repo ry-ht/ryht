@@ -19,7 +19,10 @@ async fn main() -> Result<()> {
     
     if let Some(server_info) = client.get_server_info().await {
         println!("   ✅ Server info received:");
-        println!("   {}", serde_json::to_string_pretty(&server_info)?);
+        match serde_json::to_string_pretty(&server_info) {
+            Ok(json) => println!("   {}", json),
+            Err(e) => println!("   Error serializing: {}", e),
+        }
     } else {
         println!("   ⚠️ No server info available");
     }

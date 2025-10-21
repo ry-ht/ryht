@@ -22,9 +22,9 @@ struct QuestionSetProcessor {
 
 impl QuestionSetProcessor {
     async fn new(annotations_dir: PathBuf) -> Result<Self> {
-        fs::create_dir_all(&annotations_dir).map_err(|e| cc_sdk::SdkError::InvalidState {
-            message: format!("Failed to create annotations directory: {e}"),
-        })?;
+        fs::create_dir_all(&annotations_dir).map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+            format!("Failed to create annotations directory: {e}")
+        )))?;
 
         let current_dir = std::env::current_dir().expect("Failed to get current directory");
 
@@ -71,15 +71,15 @@ impl QuestionSetProcessor {
         let basename = question_set_file
             .file_stem()
             .and_then(|s| s.to_str())
-            .ok_or_else(|| cc_sdk::SdkError::InvalidState {
-                message: "Invalid filename".to_string(),
-            })?;
+            .ok_or_else(|| cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+                "Invalid filename".to_string()
+            )))?;
 
         self.qs_number = basename
             .strip_prefix("qs")
-            .ok_or_else(|| cc_sdk::SdkError::InvalidState {
-                message: "Filename should start with 'qs'".to_string(),
-            })?
+            .ok_or_else(|| cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+                "Filename should start with 'qs'".to_string()
+            )))?
             .to_string();
 
         println!("Processing question set: {}", question_set_file.display());
@@ -90,9 +90,9 @@ impl QuestionSetProcessor {
         println!("================================================");
 
         let content =
-            fs::read_to_string(question_set_file).map_err(|e| cc_sdk::SdkError::InvalidState {
-                message: format!("Failed to read question set file: {e}"),
-            })?;
+            fs::read_to_string(question_set_file).map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+                format!("Failed to read question set file: {e}")
+            )))?;
 
         let question_regex = Regex::new(r"^(\d+)\.\s*(.+)$").expect("Failed to compile regex");
 
@@ -290,9 +290,9 @@ async fn process_all_question_sets(annotations_dir: PathBuf) -> Result<()> {
     let qs_dir = Path::new("qs");
 
     if !qs_dir.exists() {
-        return Err(cc_sdk::SdkError::InvalidState {
-            message: "Question sets directory 'qs/' not found!".to_string(),
-        });
+        return Err(cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+            "Question sets directory 'qs/' not found!".to_string()
+        )));
     }
 
     println!("Starting batch processing of all question sets...");
@@ -302,9 +302,9 @@ async fn process_all_question_sets(annotations_dir: PathBuf) -> Result<()> {
     let batch_start = Instant::now();
 
     let mut entries: Vec<_> = fs::read_dir(qs_dir)
-        .map_err(|e| cc_sdk::SdkError::InvalidState {
-            message: format!("Failed to read qs directory: {e}"),
-        })?
+        .map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+            format!("Failed to read qs directory: {e}")
+        )))?
         .filter_map(|e| e.ok())
         .collect();
 

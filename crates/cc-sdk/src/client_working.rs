@@ -152,9 +152,7 @@ impl ClaudeSDKClientWorking {
         {
             let state = self.state.read().await;
             if *state != ClientState::Connected {
-                return Err(SdkError::InvalidState {
-                    message: "Not connected".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
         }
 
@@ -168,9 +166,7 @@ impl ClaudeSDKClientWorking {
                 transport.send_message(message).await?;
                 debug!("User message sent");
             } else {
-                return Err(SdkError::InvalidState {
-                    message: "Transport not available".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
         }
 
@@ -183,9 +179,7 @@ impl ClaudeSDKClientWorking {
         if let Some(rx) = rx_guard.as_mut() {
             Ok(rx.recv().await)
         } else {
-            Err(SdkError::InvalidState {
-                message: "Not connected".into(),
-            })
+            Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected))
         }
     }
 

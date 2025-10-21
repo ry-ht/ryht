@@ -144,32 +144,24 @@ async fn process_single_question(question: &str, target_dir: &str) -> Result<()>
 /// Process a question set file
 async fn process_question_set(question_set_file: &Path, start_from: Option<u32>) -> Result<()> {
     if !question_set_file.exists() {
-        return Err(cc_sdk::SdkError::InvalidState {
-            message: format!(
-                "Question set file '{}' not found!",
-                question_set_file.display()
-            ),
-        });
+        return Err(cc_sdk::Error::Client(cc_sdk::ClientError::Other(format!(
+            "Question set file '{}' not found!",
+            question_set_file.display()
+        ))));
     }
 
     let content =
-        fs::read_to_string(question_set_file).map_err(|e| cc_sdk::SdkError::InvalidState {
-            message: format!("Failed to read question set file: {e}"),
-        })?;
+        fs::read_to_string(question_set_file).map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(format!("Failed to read question set file: {e}"))))?;
 
     // Extract question set number from filename
     let basename = question_set_file
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| cc_sdk::SdkError::InvalidState {
-            message: "Invalid filename".to_string(),
-        })?;
+        .ok_or_else(|| cc_sdk::Error::Client(cc_sdk::ClientError::Other("Invalid filename".to_string())))?;
 
     let qs_number = basename
         .strip_prefix("qs")
-        .ok_or_else(|| cc_sdk::SdkError::InvalidState {
-            message: "Filename should start with 'qs'".to_string(),
-        })?;
+        .ok_or_else(|| cc_sdk::Error::Client(cc_sdk::ClientError::Other("Filename should start with 'qs'".to_string())))?;
 
     println!("Processing question set: {}", question_set_file.display());
     println!("Question set number: {qs_number}");

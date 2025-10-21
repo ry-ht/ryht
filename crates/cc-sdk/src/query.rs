@@ -132,9 +132,9 @@ pub async fn query(
         QueryInput::Stream(_stream) => {
             // For streaming, use the interactive mode
             // TODO: Implement streaming mode
-            Err(crate::SdkError::NotSupported {
+            Err(crate::errors::Error::Client(crate::errors::ClientError::NotSupported {
                 feature: "Streaming input mode not yet implemented".into(),
-            })
+            }))
         }
     }
 }
@@ -265,16 +265,22 @@ async fn query_print_mode(
     info!("Starting Claude CLI with --print mode");
     debug!("Command: {:?}", cmd);
 
-    let mut child = cmd.spawn().map_err(crate::SdkError::ProcessError)?;
+    let mut child = cmd.spawn().map_err(|e| {
+        crate::errors::Error::Binary(crate::errors::BinaryError::SpawnFailed {
+            path: cli_path.clone(),
+            reason: format!("Failed to spawn process: {}", e),
+            source: e,
+        })
+    })?;
 
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| crate::SdkError::ConnectionError("Failed to get stdout".into()))?;
+        .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stdout".into())))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| crate::SdkError::ConnectionError("Failed to get stderr".into()))?;
+        .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stderr".into())))?;
 
     // Wrap child process in Arc<Mutex> for shared ownership
     let child = Arc::new(Mutex::new(child));
@@ -340,14 +346,14 @@ async fn query_print_mode(
             Ok(status) => {
                 if !status.success() {
                     let _ = tx
-                        .send(Err(crate::SdkError::ProcessExited {
+                        .send(Err(crate::errors::Error::Transport(crate::errors::TransportError::ProcessExited {
                             code: status.code(),
-                        }))
+                        })))
                         .await;
                 }
             }
             Err(e) => {
-                let _ = tx.send(Err(crate::SdkError::ProcessError(e))).await;
+                let _ = tx.send(Err(crate::errors::Error::Transport(crate::errors::TransportError::Io(e)))).await;
             }
         }
     });

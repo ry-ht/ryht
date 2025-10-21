@@ -274,9 +274,7 @@ impl ClaudeSDKClient {
         {
             let state = self.state.read().await;
             if *state != ClientState::Connected {
-                return Err(SdkError::InvalidState {
-                    message: "Not connected".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
         }
 
@@ -360,9 +358,7 @@ impl ClaudeSDKClient {
         {
             let state = self.state.read().await;
             if *state != ClientState::Connected {
-                return Err(SdkError::InvalidState {
-                    message: "Not connected".into(),
-                });
+                return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
             }
         }
 
@@ -409,22 +405,26 @@ impl ClaudeSDKClient {
                     if ack_id == request_id && success {
                         Ok(())
                     } else {
-                        Err(SdkError::ControlRequestError(
-                            "Interrupt not acknowledged successfully".into(),
-                        ))
+                        Err(crate::errors::Error::Client(crate::errors::ClientError::ControlRequestFailed {
+                            reason: "Interrupt not acknowledged successfully".into(),
+                        }))
                     }
                 }
-                Ok(Ok(None)) => Err(SdkError::ControlRequestError(
-                    "No interrupt acknowledgment received".into(),
-                )),
+                Ok(Ok(None)) => Err(crate::errors::Error::Client(crate::errors::ClientError::ControlRequestFailed {
+                    reason: "No interrupt acknowledgment received".into(),
+                })),
                 Ok(Err(e)) => Err(e),
-                Err(_) => Err(SdkError::timeout(5)),
+                Err(_) => Err(crate::errors::Error::Transport(crate::errors::TransportError::Timeout {
+                    duration: std::time::Duration::from_secs(5),
+                })),
             }
         });
 
         ack_task
             .await
-            .map_err(|_| SdkError::ControlRequestError("Interrupt task panicked".into()))?
+            .map_err(|_| crate::errors::Error::Client(crate::errors::ClientError::ControlRequestFailed {
+                reason: "Interrupt task panicked".into(),
+            }))?
     }
 
     /// Check if the client is connected
@@ -515,9 +515,10 @@ impl ClaudeSDKClient {
             let mut handler = query_handler.lock().await;
             handler.set_permission_mode(mode).await
         } else {
-            Err(SdkError::InvalidState {
-                message: "Query handler not initialized. Control protocol features required (enable can_use_tool, hooks, or mcp_servers).".to_string(),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "query handler not initialized".to_string(),
+                expected: "Control protocol features required (enable can_use_tool, hooks, or mcp_servers)".to_string(),
+            }))
         }
     }
 
@@ -548,9 +549,10 @@ impl ClaudeSDKClient {
             let mut handler = query_handler.lock().await;
             handler.set_model(model).await
         } else {
-            Err(SdkError::InvalidState {
-                message: "Query handler not initialized. Control protocol features required (enable can_use_tool, hooks, or mcp_servers).".to_string(),
-            })
+            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+                current: "query handler not initialized".to_string(),
+                expected: "Control protocol features required (enable can_use_tool, hooks, or mcp_servers)".to_string(),
+            }))
         }
     }
 

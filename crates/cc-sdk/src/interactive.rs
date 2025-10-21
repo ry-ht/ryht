@@ -51,9 +51,7 @@ impl InteractiveClient {
     /// Send a message and receive all messages until Result message
     pub async fn send_and_receive(&mut self, prompt: String) -> Result<Vec<Message>> {
         if !self.connected {
-            return Err(SdkError::InvalidState {
-                message: "Not connected".into(),
-            });
+            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
         }
 
         // Send message
@@ -100,9 +98,7 @@ impl InteractiveClient {
     /// Send a message without waiting for response
     pub async fn send_message(&mut self, prompt: String) -> Result<()> {
         if !self.connected {
-            return Err(SdkError::InvalidState {
-                message: "Not connected".into(),
-            });
+            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
         }
 
         let mut transport = self.transport.lock().await;
@@ -117,9 +113,7 @@ impl InteractiveClient {
     /// Receive messages until Result message (convenience method like Python SDK)
     pub async fn receive_response(&mut self) -> Result<Vec<Message>> {
         if !self.connected {
-            return Err(SdkError::InvalidState {
-                message: "Not connected".into(),
-            });
+            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
         }
 
         let mut messages = Vec::new();
@@ -237,9 +231,7 @@ impl InteractiveClient {
     /// Send interrupt signal to cancel current operation
     pub async fn interrupt(&mut self) -> Result<()> {
         if !self.connected {
-            return Err(SdkError::InvalidState {
-                message: "Not connected".into(),
-            });
+            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
         }
 
         let mut transport = self.transport.lock().await;

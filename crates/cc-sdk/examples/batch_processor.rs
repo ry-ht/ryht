@@ -19,9 +19,8 @@ struct ProcessingStats {
 
 /// Process a batch of questions from a file
 async fn process_question_batch(file_path: &Path) -> Result<ProcessingStats> {
-    let content = fs::read_to_string(file_path).map_err(|e| cc_sdk::SdkError::InvalidState {
-        message: format!("Failed to read file: {e}"),
-    })?;
+    let content = fs::read_to_string(file_path)
+        .map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(format!("Failed to read file: {e}"))))?;
 
     let questions: Vec<&str> = content
         .lines()
@@ -125,9 +124,9 @@ async fn process_single_question(
     });
 
     if !success {
-        return Err(cc_sdk::SdkError::InvalidState {
-            message: "Failed to create project".to_string(),
-        });
+        return Err(cc_sdk::Error::Client(cc_sdk::ClientError::Other(
+            "Failed to create project".to_string()
+        )));
     }
 
     // Quick verification

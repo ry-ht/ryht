@@ -12,6 +12,11 @@ keywords = ["claude", "claude-code", "sdk", "ai", "llm"]
 categories = ["api-bindings", "asynchronous", "development-tools"]
 exclude = ["examples/", "tests/", "doc/", "README_*.md", "*.sh", "*.py"]
 
+[features]
+default = []
+# Enable async variants of binary discovery functions
+async-discovery = []
+
 [dependencies]
 # Workspace dependencies
 tokio.workspace = true
@@ -21,8 +26,12 @@ thiserror.workspace = true
 tracing.workspace = true
 futures.workspace = true
 async-trait.workspace = true
+chrono = { workspace = true }
 
-# Local dependencies
+# Local dependencies (within workspace)
+mcp-sdk = { path = "../mcp-sdk" }
+
+# External dependencies
 tokio-stream = { version = "0.1", features = ["sync"] }
 bytes = "1"
 pin-project-lite = "0.2"

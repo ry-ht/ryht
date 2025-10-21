@@ -3,6 +3,11 @@
 //!
 //! This module provides an in-process MCP server that runs directly within your
 //! Rust application, eliminating the need for separate processes.
+//!
+//! # Note
+//!
+//! This is a legacy implementation. For new code, consider using the `mcp` module
+//! which provides integration with the full-featured mcp-sdk crate.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -10,6 +15,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+// Use legacy errors for backward compatibility
 use crate::errors::{Result, SdkError};
 
 /// Tool input schema definition
@@ -97,9 +103,10 @@ impl SdkMcpServer {
         let method = message
             .get("method")
             .and_then(|m| m.as_str())
-            .ok_or_else(|| SdkError::InvalidState {
-                message: "Missing method in MCP message".to_string(),
-            })?;
+            .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                reason: "Missing method in MCP message".to_string(),
+                raw: message.to_string(),
+            }))?;
 
         let id = message.get("id");
 
@@ -142,16 +149,18 @@ impl SdkMcpServer {
             }
 
             "tools/call" => {
-                let params = message.get("params").ok_or_else(|| SdkError::InvalidState {
-                    message: "Missing params in tools/call".to_string(),
-                })?;
+                let params = message.get("params").ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                    reason: "Missing params in tools/call".to_string(),
+                    raw: message.to_string(),
+                }))?;
 
                 let tool_name = params
                     .get("name")
                     .and_then(|n| n.as_str())
-                    .ok_or_else(|| SdkError::InvalidState {
-                        message: "Missing tool name in tools/call".to_string(),
-                    })?;
+                    .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                        reason: "Missing tool name in tools/call".to_string(),
+                        raw: params.to_string(),
+                    }))?;
 
                 let empty_args = json!({});
                 let arguments = params.get("arguments").unwrap_or(&empty_args);
@@ -161,9 +170,9 @@ impl SdkMcpServer {
                     .tools
                     .iter()
                     .find(|t| t.name == tool_name)
-                    .ok_or_else(|| SdkError::InvalidState {
-                        message: format!("Tool not found: {tool_name}"),
-                    })?;
+                    .ok_or_else(|| crate::errors::Error::Client(crate::errors::ClientError::NotSupported {
+                        feature: format!("Tool not found: {tool_name}"),
+                    }))?;
 
                 let result = tool.handler.execute(arguments.clone()).await?;
 

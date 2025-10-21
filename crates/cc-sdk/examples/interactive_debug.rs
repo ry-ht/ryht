@@ -111,10 +111,10 @@ async fn main() -> Result<()> {
 
     loop {
         print!("You: ");
-        io::stdout().flush()?;
+        io::stdout().flush().map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(e.to_string())))?;
 
         input.clear();
-        stdin.read_line(&mut input)?;
+        stdin.read_line(&mut input).map_err(|e| cc_sdk::Error::Client(cc_sdk::ClientError::Other(e.to_string())))?;
 
         let input = input.trim();
 
