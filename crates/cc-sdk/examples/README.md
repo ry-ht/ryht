@@ -1,212 +1,383 @@
 # Claude Code SDK Examples
 
-This directory contains examples demonstrating various features of the Claude Code SDK for Rust.
+Production-ready examples demonstrating the modern Claude Code SDK for Rust.
 
-## Prerequisites
+## Quick Start
 
-Before running any examples, ensure you have:
-
-1. **Claude Code CLI installed**:
+1. **Install Claude Code CLI**:
    ```bash
    npm install -g @anthropic-ai/claude-code
    ```
 
-2. **API credentials configured**:
+2. **Set API credentials**:
    ```bash
    export ANTHROPIC_API_KEY="your-api-key"
    ```
 
-## Running Examples
+3. **Run an example**:
+   ```bash
+   cargo run --example modern_client
+   ```
 
-All examples can be run using `cargo run --example`:
+## Examples by Category
+
+### 🚀 Getting Started
+
+Start here to learn the fundamentals of the SDK.
+
+#### **modern_client.rs** - Modern ClaudeClient API Basics
+The best starting point. Demonstrates type-safe state transitions, binary discovery, and message streaming.
 
 ```bash
-# Navigate to the SDK directory
-cd claude-code-sdk-rs
+cargo run --example modern_client
+```
 
-# Run a specific example
+**Key concepts:**
+- Type-safe builder pattern with state transitions
+- Automatic binary discovery
+- Sending messages and receiving streaming responses
+- Graceful disconnect/reconnect
+
+#### **modern_client_comprehensive.rs** - Full ClaudeClient Demo
+Comprehensive example showing all ClaudeClient features including multiple conversations, custom binary paths, and session management.
+
+```bash
+cargo run --example modern_client_comprehensive
+```
+
+#### **simple_query.rs** - One-Shot Queries
+Simplest possible usage: send a query, get a response.
+
+```bash
 cargo run --example simple_query
 ```
 
-## Available Examples
+**Key concepts:**
+- `query()` function for one-shot interactions
+- Custom options (model, system prompt)
+- Streaming responses
 
-### 1. Simple Query (`simple_query.rs`)
+---
 
-Basic usage of the `query()` function for one-shot queries.
+### 💬 Interactive & Stateful Usage
 
-```bash
-cargo run --example simple_query
-```
+Examples showing how to maintain conversation state.
 
-**Features demonstrated:**
-- Basic query without options
-- Query with custom options (model, system prompt)
-- Note: File operations are not supported in query mode
-
-### 2. Interactive Client (`interactive.rs`)
-
-Interactive REPL-style client for conversations with Claude.
+#### **interactive.rs** - Interactive REPL Client
+REPL-style client for multi-turn conversations with Claude.
 
 ```bash
 cargo run --example interactive
 ```
 
-**How to use:**
-1. The client will connect and show an initial greeting
-2. Type your messages and press Enter to send
-3. Claude will respond in real-time
-4. Special commands:
-   - `quit` - Exit the program
-   - `interrupt` - Interrupt the current operation
-5. Example conversation:
-   ```
-   You: What is the capital of France?
-   Claude: The capital of France is Paris.
-   
-   You: Tell me more about it
-   Claude: Paris is the capital and largest city of France...
-   
-   You: quit
-   ```
+**Key concepts:**
+- Interactive conversation loop with state
+- User input handling
+- Real-time streaming responses
 
-**Features demonstrated:**
-- Interactive conversation loop
-- Stateful conversation (context is maintained)
-- Interrupt handling
-- Real-time responses
+#### **streaming_output.rs** - Advanced Streaming Patterns
+Demonstrates various streaming patterns and message handling strategies.
 
-### 3. Permission Modes (`permission_modes.rs`)
+```bash
+cargo run --example streaming_output
+```
 
-Demonstrates different permission modes and their effects.
+**Key concepts:**
+- `receive_messages_stream()` for full control
+- `receive_response_stream()` for convenience
+- Multi-turn conversations with streaming
+- Concurrent message processing
+
+---
+
+### ⚙️ Advanced Features
+
+Production-ready patterns and optimizations.
+
+#### **session_management.rs** - Session Management
+Advanced session features: caching, filtering, searching, forking, and exporting.
+
+```bash
+cargo run --example session_management
+```
+
+**Key concepts:**
+- Session discovery with caching
+- Filtering and searching sessions
+- Forking sessions for branching conversations
+- Exporting sessions to different formats
+- Session statistics and metadata
+
+#### **optimized_client_demo.rs** - OptimizedClient Features
+Performance optimization patterns including connection pooling, batch processing, and retry logic.
+
+```bash
+cargo run --example optimized_client_demo
+```
+
+**Key concepts:**
+- Connection pooling for one-shot queries
+- Interactive mode optimization
+- Batch processing with concurrency control
+- Exponential backoff retry strategies
+
+#### **error_handling.rs** - Error Handling Best Practices
+Comprehensive error handling patterns using modern error types.
+
+```bash
+cargo run --example error_handling
+```
+
+**Key concepts:**
+- Handling binary discovery errors
+- Connection retry with exponential backoff
+- Stream error handling
+- Custom error mapping for application errors
+- Graceful degradation patterns
+
+#### **hooks_typed.rs** - Strongly-Typed Hooks
+Advanced hook system for intercepting and modifying SDK behavior.
+
+```bash
+cargo run --example hooks_typed
+```
+
+**Key concepts:**
+- Pre/Post tool use hooks
+- User prompt modification hooks
+- Tool blocking and filtering
+- Strongly-typed hook input/output
+
+#### **permission_modes.rs** - Permission Control
+Different permission modes and tool restrictions.
 
 ```bash
 cargo run --example permission_modes
 ```
 
-**Features demonstrated:**
-- `Default` mode - Would prompt for permissions (in interactive mode)
-- `AcceptEdits` mode - Auto-accepts edit prompts
-- `BypassPermissions` mode - Allows all operations
-- Tool restrictions with allowed/disallowed tools
+**Key concepts:**
+- `Default`, `AcceptEdits`, and `BypassPermissions` modes
+- Tool allow/deny lists
+- Security considerations
 
-### 4. Query with File Operations (`query_with_file_ops.rs`)
+---
 
-Shows how to use `query()` with `BypassPermissions` for file operations.
+### 🔌 MCP Integration
 
-```bash
-cargo run --example query_with_file_ops
-```
+Model Context Protocol (MCP) server integration examples.
 
-**Features demonstrated:**
-- Using `BypassPermissions` to allow file operations in query mode
-- Creating files with query()
-- Important security considerations
-
-### 5. File Operations (`file_operations.rs`)
-
-Demonstrates file operations using the interactive client.
+#### **sdk_mcp_calculator.rs** - Basic MCP Server
+In-process MCP server with calculator tools using the modern mcp-sdk crate.
 
 ```bash
-cargo run --example file_operations
+cargo run --example sdk_mcp_calculator
 ```
 
-**Features demonstrated:**
-- Creating files with `ClaudeSDKClient`
-- Reading and modifying files
-- Using `BypassPermissions` for automatic file operations
-- Cost tracking
+**Key concepts:**
+- Creating MCP tools with `Tool` trait
+- Registering tools with `McpServer`
+- Configuring Claude to use MCP servers
+- Tool use and response handling
 
-## Important Notes
-
-### Permission Modes
-
-- **Default**: CLI prompts for dangerous operations (only works in interactive mode)
-- **AcceptEdits**: Auto-accepts edit prompts but still checks permissions
-- **BypassPermissions**: Bypasses all permission checks - use with caution!
-
-### File Operations
-
-- The `query()` function uses `--print` mode which has limitations
-- For file operations in query mode, you must use `BypassPermissions`
-- For interactive permission prompts, use `ClaudeSDKClient`
-
-### Security
-
-- Never use `BypassPermissions` in production or untrusted environments
-- Always restrict tools using `allowed_tools` when possible
-- Be careful with file paths and operations
-
-## Troubleshooting
-
-### "Claude CLI not found"
-
-Ensure Claude CLI is installed and in your PATH:
-```bash
-which claude
-```
-
-### "API key not found"
-
-Set your Anthropic API key:
-```bash
-export ANTHROPIC_API_KEY="your-key-here"
-```
-
-### Permission errors
-
-- In query mode: Use `BypassPermissions`
-- In interactive mode: Respond to permission prompts or use appropriate permission mode
-
-### Model errors
-
-Ensure you're using a valid model name:
-- `claude-3-5-sonnet-20241022`
-- `claude-3-5-haiku-20241022`
-- Check the Claude documentation for the latest model names
-
-## New Advanced Examples
-
-### 6. Rust Question Processor (`rust_question_processor.rs`)
-
-A comprehensive example showing how to process Rust programming questions and generate complete solutions.
+#### **mcp_integration_patterns.rs** - Advanced MCP Patterns
+Production-ready MCP integration patterns.
 
 ```bash
-cargo run --example rust_question_processor
+cargo run --example mcp_integration_patterns
 ```
 
-**Features demonstrated:**
-- Multi-step processing (create project, verify, document)
-- Question set batch processing from files
-- Timing and progress tracking
-- Error handling with retry logic
-- Metadata collection and documentation generation
+**Key concepts:**
+- Stateful tools with context
+- Async tools with external API calls
+- Complex input validation
+- Structured JSON output
+- Multiple MCP servers in one session
+- Tool composition and chaining
 
-### 7. Code Generator (`code_generator.rs`)
+---
 
-A focused example on generating Rust code solutions with a clean API.
+### 🌐 Integration Examples
 
-```bash
-cargo run --example code_generator
-```
+Real-world integration patterns.
 
-**Features demonstrated:**
-- Simple, clean SDK usage
-- Step-by-step solution generation
-- Progress indicators and emojis
-- Multiple example problems
-- Concise output formatting
-
-### 8. Batch Processor (`batch_processor.rs`)
-
-Advanced batch processing with sophisticated error handling.
+#### **batch_processor.rs** - Batch Question Processor
+Process multiple questions with retry logic and progress tracking.
 
 ```bash
 cargo run --example batch_processor
 ```
 
-**Features demonstrated:**
-- Batch question processing from files
-- Rate limit detection and retry logic
-- Comprehensive statistics tracking
-- Efficient client reuse across questions
-- Progress tracking with percentages
+**Key concepts:**
+- Batch processing from files
+- Rate limit detection and retry
+- Statistics tracking
+- Progress reporting
+
+#### **rest_api_server.rs** - REST API Server
+Expose Claude Code SDK via REST API.
+
+```bash
+cargo run --example rest_api_server
+```
+
+**Key concepts:**
+- Axum web framework integration
+- Query and batch endpoints
+- Health checks and metrics
+- Mock mode for testing
+
+#### **openai_compatible_server.rs** - OpenAI API Compatible Server
+OpenAI API compatible wrapper around Claude Code.
+
+```bash
+cargo run --example openai_compatible_server
+```
+
+**Key concepts:**
+- OpenAI API compatibility layer
+- Chat completions endpoint
+- Model listing
+- Message format conversion
+
+---
+
+## Example Count Summary
+
+- **Total examples**: 15
+- **Getting Started**: 3 examples
+- **Interactive & Stateful**: 2 examples
+- **Advanced Features**: 5 examples
+- **MCP Integration**: 2 examples
+- **Integration Examples**: 3 examples
+
+**Before consolidation**: 47 examples (8,640 lines)
+**After consolidation**: 15 examples (~4,200 lines)
+**Reduction**: 68% fewer examples, focused on quality and real-world use cases
+
+---
+
+## Key Concepts
+
+### Modern API (Phase 3)
+
+The SDK uses a type-safe builder pattern with state transitions:
+
+```rust
+let client = ClaudeClient::builder()
+    .discover_binary().await?           // NoBinary -> WithBinary
+    .model(ModelId::from("..."))        // Configuration
+    .permission_mode(PermissionMode::AcceptEdits)
+    .configure()                        // WithBinary -> Configured
+    .connect().await?                   // Configured -> Connected
+    .build()?;                          // Build final client
+```
+
+### Error Handling
+
+Use the modern `error` module with structured error types:
+
+```rust
+use cc_sdk::error::{SdkError, ClientError, BinaryError};
+
+match result {
+    Err(SdkError::Binary(BinaryError::NotFound(path))) => {
+        // Handle binary not found
+    }
+    Err(SdkError::Client(ClientError::ConnectionFailed(msg))) => {
+        // Handle connection error
+    }
+    Ok(value) => {
+        // Success
+    }
+}
+```
+
+### Session Management
+
+Leverage the session module for advanced features:
+
+```rust
+use cc_sdk::session::{
+    cache::{SessionCache, CacheConfig},
+    filter::{SessionFilter, SortBy},
+    management::{fork_session, export_session, ExportFormat},
+};
+
+// List and filter sessions
+let filter = SessionFilter::default()
+    .with_date_range(start, end)
+    .with_sort_by(SortBy::CreatedDesc);
+let sessions = search_sessions(filter).await?;
+
+// Fork a session
+let new_id = fork_session(&session_id, Some("branched-conversation")).await?;
+```
+
+### MCP Integration
+
+Use the mcp-sdk crate for in-process MCP servers:
+
+```rust
+use cc_sdk::mcp::{McpServer, Tool, ToolContext, ToolResult};
+
+let server = McpServer::builder()
+    .name("my-tools")
+    .tool(Arc::new(MyTool))
+    .build()?;
+
+let config = create_sdk_server_config("my-tools", Arc::new(server));
+```
+
+---
+
+## Troubleshooting
+
+### "Claude CLI not found"
+```bash
+which claude
+# If not found, install:
+npm install -g @anthropic-ai/claude-code
+```
+
+### "API key not found"
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+```
+
+### Permission errors
+- Use `PermissionMode::AcceptEdits` for automatic edit acceptance
+- Use `PermissionMode::BypassPermissions` only in trusted environments
+- Restrict tools with `allowed_tools()` when possible
+
+### Model errors
+Available models (as of 2025):
+- `claude-opus-4-1-20250514` (most capable)
+- `claude-sonnet-4-5-20250929` (balanced)
+- `claude-3-5-sonnet-20241022` (fast)
+- `claude-3-5-haiku-20241022` (fastest)
+
+---
+
+## Best Practices
+
+1. **Use modern ClaudeClient API** - The type-safe builder pattern catches errors at compile time
+2. **Handle errors properly** - Use structured error types and implement retry logic
+3. **Leverage session management** - Cache, filter, and fork sessions for better performance
+4. **Use MCP for reusable tools** - Create modular, testable tools with the mcp-sdk
+5. **Monitor costs** - All responses include `total_cost_usd` field
+6. **Secure by default** - Use minimal permissions and explicit tool allow lists
+
+---
+
+## Contributing
+
+When adding new examples:
+
+1. Focus on **one clear concept** per example
+2. Use **modern API** (ClaudeClient, error::*, session::*)
+3. Include **comprehensive documentation** in file comments
+4. Add **error handling** patterns
+5. Keep it **runnable** with minimal setup
+6. Update this README with proper categorization
+
+Prefer quality over quantity - each example should demonstrate something unique and valuable.

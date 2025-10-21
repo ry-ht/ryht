@@ -289,22 +289,21 @@ impl Query {
         let transport = self.transport.clone();
         let can_use_tool = self.can_use_tool.clone();
         let hook_callbacks = self.hook_callbacks.clone();
-        let sdk_mcp_servers = self.sdk_mcp_servers.clone();
+        let _sdk_mcp_servers = self.sdk_mcp_servers.clone(); // Reserved for future MCP integration
         let pending_responses = self.pending_responses.clone();
-        
+
         // Take ownership of the SDK control receiver to avoid holding locks
         let sdk_control_rx = {
             let mut transport_lock = transport.lock().await;
             transport_lock.take_sdk_control_receiver()
         }; // Lock released here
-        
+
         if let Some(mut control_rx) = sdk_control_rx {
             tokio::spawn(async move {
                 // Now we can receive control requests without holding any locks
                 let transport_for_control = transport;
                 let can_use_tool_clone = can_use_tool;
                 let hook_callbacks_clone = hook_callbacks;
-                let sdk_mcp_servers_clone = sdk_mcp_servers;
                 let pending_responses_clone = pending_responses;
 
                 loop {
@@ -584,63 +583,18 @@ impl Query {
                                     }
                                 }
                                 "mcp_message" => {
-                                    // Handle MCP message
-                                    if let Some(server_name) = request_data.get("server_name").and_then(|v| v.as_str())
-                                        && let Some(message) = request_data.get("message") {
-                                            debug!("Processing MCP message for SDK server: {}", server_name);
-
-                                            // Check if we have an SDK server with this name
-                                            if let Some(server_arc) = sdk_mcp_servers_clone.get(server_name) {
-                                                // Try to downcast to SdkMcpServer
-                                                if let Some(sdk_server) = server_arc.downcast_ref::<crate::sdk_mcp::SdkMcpServer>() {
-                                                    // Call the SDK MCP server
-                                                    match sdk_server.handle_message(message.clone()).await {
-                                                        Ok(mcp_result) => {
-                                                            // Wrap response with proper structure
-                                                            let response = serde_json::json!({
-                                                                "subtype": "success",
-                                                                "request_id": Self::extract_request_id(&control_message),
-                                                                "response": {
-                                                                    "mcp_response": mcp_result
-                                                                }
-                                                            });
-
-                                                            let mut transport = transport_for_control.lock().await;
-                                                            if let Err(e) = transport.send_sdk_control_response(response).await {
-                                                                error!("Failed to send MCP response: {}", e);
-                                                            }
-                                                        }
-                                                        Err(e) => {
-                                                            error!("SDK MCP server error: {}", e);
-                                                            let error_response = serde_json::json!({
-                                                                "subtype": "error",
-                                                                "request_id": Self::extract_request_id(&control_message),
-                                                                "error": format!("MCP server error: {}", e)
-                                                            });
-
-                                                            let mut transport = transport_for_control.lock().await;
-                                                            if let Err(e) = transport.send_sdk_control_response(error_response).await {
-                                                                error!("Failed to send MCP error response: {}", e);
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    warn!("SDK server '{}' is not of type SdkMcpServer", server_name);
-                                                }
-                                            } else {
-                                                warn!("No SDK MCP server found with name: {}", server_name);
-                                                let error_response = serde_json::json!({
-                                                    "subtype": "error",
-                                                    "request_id": Self::extract_request_id(&control_message),
-                                                    "error": format!("Server '{}' not found", server_name)
-                                                });
-
-                                                let mut transport = transport_for_control.lock().await;
-                                                if let Err(e) = transport.send_sdk_control_response(error_response).await {
-                                                    error!("Failed to send MCP error response: {}", e);
-                                                }
-                                            }
-                                        }
+                                    // MCP message handling - legacy SDK MCP server support removed
+                                    // For MCP integration, use the modern mcp-sdk crate via the mcp/ module
+                                    warn!("Legacy SDK MCP server support removed. Use mcp-sdk crate instead.");
+                                    let error_response = serde_json::json!({
+                                        "subtype": "error",
+                                        "request_id": Self::extract_request_id(&control_message),
+                                        "error": "Legacy SDK MCP server support removed. Use mcp-sdk crate for MCP integration."
+                                    });
+                                    let mut transport = transport_for_control.lock().await;
+                                    if let Err(e) = transport.send_sdk_control_response(error_response).await {
+                                        error!("Failed to send MCP error response: {}", e);
+                                    }
                                 }
                                 _ => {
                                     debug!("Unknown SDK control subtype: {}", subtype);

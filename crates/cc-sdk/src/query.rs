@@ -38,9 +38,9 @@ impl From<&str> for QueryInput {
 ///
 /// This function is ideal for simple, stateless queries where you don't need
 /// bidirectional communication or conversation management. For interactive,
-/// stateful conversations, use [`ClaudeSDKClient`](crate::ClaudeSDKClient) instead.
+/// stateful conversations, use [`ClaudeClient`](crate::ClaudeClient) instead.
 ///
-/// # Key differences from ClaudeSDKClient:
+/// # Key differences from ClaudeClient:
 /// - **Unidirectional**: Send all messages upfront, receive all responses
 /// - **Stateless**: Each query is independent, no conversation state
 /// - **Simple**: Fire-and-forget style, no connection management
@@ -53,7 +53,7 @@ impl From<&str> for QueryInput {
 /// - Automated scripts and CI/CD pipelines
 /// - When you know all inputs upfront
 ///
-/// # When to use ClaudeSDKClient:
+/// # When to use ClaudeClient:
 /// - Interactive conversations with follow-ups
 /// - Chat applications or REPL-like interfaces
 /// - When you need to send messages based on responses

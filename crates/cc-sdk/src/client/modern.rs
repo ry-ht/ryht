@@ -12,7 +12,22 @@
 //! - `Connected`: Fully connected and ready to send messages
 //! - `Disconnected`: Previously connected, now disconnected
 //!
-//! # Examples
+//! # Advanced Features
+//!
+//! The modern client includes advanced capabilities inspired by the Claude CLI and mcp-sdk:
+//!
+//! - **Model Fallback**: Configure multiple models with automatic failover
+//! - **Tool Filtering**: Allow/disallow specific tools with fine-grained control
+//! - **Session Forking**: Create conversation branches from resume points
+//! - **MCP Integration**: Easy configuration of Model Context Protocol servers
+//! - **Dynamic Permissions**: Update permission modes without reconnecting
+//! - **Session Management**: List sessions, get history, resume conversations
+//! - **Rich Configuration**: System prompts, token limits, environment variables, etc.
+//!
+//! See [`MODERN_CLIENT_ENHANCEMENTS.md`](https://github.com/yourusername/cc-sdk/blob/main/crates/cc-sdk/MODERN_CLIENT_ENHANCEMENTS.md)
+//! for detailed documentation of all features.
+//!
+//! # Basic Example
 //!
 //! ```no_run
 //! use cc_sdk::ClaudeClient;
@@ -31,7 +46,7 @@
 //!         .add_allowed_tool("Bash")
 //!         .configure()                        // WithBinary -> Configured
 //!         .connect().await?                   // Configured -> Connected
-//!         .with_prompt("Hello, Claude!")?;   // Send initial prompt
+//!         .build()?;
 //!
 //!     // Send messages and receive responses
 //!     let mut stream = client.send("What's 2+2?").await?;
@@ -40,6 +55,61 @@
 //!     }
 //!
 //!     // Clean disconnect
+//!     client.disconnect().await?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Advanced Example
+//!
+//! ```no_run
+//! use cc_sdk::{ClaudeClient, core::ModelId};
+//! use cc_sdk::types::{PermissionMode, McpServerConfig};
+//! use futures::StreamExt;
+//! use std::path::PathBuf;
+//!
+//! #[tokio::main]
+//! async fn main() -> cc_sdk::Result<()> {
+//!     let client = ClaudeClient::builder()
+//!         .discover_binary().await?
+//!
+//!         // Model fallback support
+//!         .models(vec![
+//!             ModelId::from("claude-sonnet-4-5-20250929"),
+//!             ModelId::from("claude-opus-4-5-20250929"),
+//!         ])
+//!
+//!         // Tool filtering
+//!         .allowed_tools(vec!["Bash".to_string(), "Read".to_string()])
+//!         .disallow_tool("Delete")
+//!
+//!         // MCP server integration
+//!         .add_mcp_stdio_server(
+//!             "filesystem",
+//!             "npx",
+//!             vec!["-y", "@modelcontextprotocol/server-filesystem"]
+//!         )
+//!
+//!         // Advanced configuration
+//!         .max_output_tokens(8000)
+//!         .max_turns(20)
+//!         .system_prompt("You are a helpful coding assistant.")
+//!         .add_directory(PathBuf::from("/shared/libs"))
+//!         .include_partial_messages(true)
+//!
+//!         .configure()
+//!         .connect().await?
+//!         .build()?;
+//!
+//!     // Use the client
+//!     let mut stream = client.send("Help me with this code").await?;
+//!     while let Some(msg) = stream.next().await {
+//!         println!("{:?}", msg?);
+//!     }
+//!
+//!     // Dynamic permission update
+//!     client.set_permission_mode(PermissionMode::Default).await?;
+//!
 //!     client.disconnect().await?;
 //!     Ok(())
 //! }
@@ -54,12 +124,14 @@ use futures::stream::Stream;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
+use std::collections::HashMap;
+
 use crate::binary;
 use crate::core::{state::*, BinaryPath, ModelId, SessionId};
 use crate::error::{Error, BinaryError, ClientError, SessionError};
 use crate::result::Result;
 use crate::transport::{InputMessage, SubprocessTransport, Transport};
-use crate::types::{ClaudeCodeOptions, Message, PermissionMode};
+use crate::types::{ClaudeCodeOptions, Message, PermissionMode, McpServerConfig};
 
 /// Modern type-safe Claude client with compile-time state verification.
 ///
@@ -238,6 +310,56 @@ impl ClaudeClientBuilder<WithBinary> {
         self
     }
 
+    /// Set multiple models for fallback support.
+    ///
+    /// When the primary model is unavailable, the SDK will automatically
+    /// try the next model in the list. This is useful for ensuring high
+    /// availability.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::core::ModelId;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .models(vec![
+    ///         ModelId::from("claude-sonnet-4-5-20250929"),
+    ///         ModelId::from("claude-opus-4-5-20250929"),
+    ///     ]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn models(mut self, models: Vec<ModelId>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        // Set primary model and store fallbacks in extra_args
+        let mut options = inner.options.take().unwrap_or_default();
+        if let Some(primary) = models.first() {
+            options.model = Some(primary.clone().into_inner());
+        }
+
+        // Store fallback models in extra_args for now
+        // In the future, this could be a dedicated field in ClaudeCodeOptions
+        if models.len() > 1 {
+            let fallback_models: Vec<String> = models.iter()
+                .skip(1)
+                .map(|m| m.clone().into_inner())
+                .collect();
+            options.extra_args.insert(
+                "fallback-models".to_string(),
+                Some(fallback_models.join(","))
+            );
+        }
+
+        inner.options = Some(options);
+        self
+    }
+
     /// Set the permission mode.
     ///
     /// # Examples
@@ -339,6 +461,498 @@ impl ClaudeClientBuilder<WithBinary> {
 
         let mut options = inner.options.take().unwrap_or_default();
         options.allowed_tools = tools;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Add a disallowed tool.
+    ///
+    /// Disallowed tools take precedence over allowed tools, preventing
+    /// specific tools from being used even if they would otherwise be allowed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .disallow_tool("Bash")
+    ///     .disallow_tool("Write");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn disallow_tool(mut self, tool: impl Into<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.disallowed_tools.push(tool.into());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set disallowed tools (replaces existing list).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .disallowed_tools(vec!["Bash".to_string(), "Write".to_string()]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn disallowed_tools(mut self, tools: Vec<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.disallowed_tools = tools;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set maximum output tokens per response.
+    ///
+    /// This controls how long Claude's responses can be. Valid range is 1-32000.
+    /// This setting overrides the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .max_output_tokens(8000);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn max_output_tokens(mut self, tokens: u32) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.max_output_tokens = Some(tokens.clamp(1, 32000));
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set maximum number of conversation turns.
+    ///
+    /// Limits how many back-and-forth exchanges can occur in a single session.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .max_turns(20);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn max_turns(mut self, turns: i32) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.max_turns = Some(turns);
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set system prompt for Claude.
+    ///
+    /// The system prompt provides context and instructions that Claude will
+    /// follow throughout the conversation.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .system_prompt("You are a helpful coding assistant.");
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[allow(deprecated)]
+    pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.system_prompt = Some(prompt.into());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Continue from a previous conversation.
+    ///
+    /// When enabled, the client will attempt to continue the most recent
+    /// conversation in the current working directory.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .continue_conversation(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn continue_conversation(mut self, enable: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.continue_conversation = enable;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Resume from a specific session ID.
+    ///
+    /// Loads and continues a previous conversation identified by its session ID.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::core::SessionId;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let session_id = SessionId::new("previous-session-123");
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .resume_session(session_id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resume_session(mut self, session_id: SessionId) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.resume = Some(session_id.to_string());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Fork a session when resuming.
+    ///
+    /// When enabled, resuming a session creates a new branch from that point
+    /// rather than continuing the original session. This is useful for exploring
+    /// alternative approaches without modifying the original conversation history.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::core::SessionId;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let session_id = SessionId::new("previous-session-123");
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .resume_session(session_id)
+    ///     .fork_session(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn fork_session(mut self, enable: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.fork_session = enable;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Add an MCP (Model Context Protocol) server.
+    ///
+    /// MCP servers provide additional tools and resources to Claude.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::types::McpServerConfig;
+    /// use std::collections::HashMap;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .add_mcp_server(
+    ///         "filesystem",
+    ///         McpServerConfig::Stdio {
+    ///             command: "npx".to_string(),
+    ///             args: Some(vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()]),
+    ///             env: None,
+    ///         }
+    ///     );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_mcp_server(mut self, name: impl Into<String>, config: McpServerConfig) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.mcp_servers.insert(name.into(), config);
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set all MCP servers at once.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::types::McpServerConfig;
+    /// use std::collections::HashMap;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let mut servers = HashMap::new();
+    /// servers.insert(
+    ///     "filesystem".to_string(),
+    ///     McpServerConfig::Stdio {
+    ///         command: "npx".to_string(),
+    ///         args: Some(vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()]),
+    ///         env: None,
+    ///     }
+    /// );
+    ///
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .mcp_servers(servers);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn mcp_servers(mut self, servers: HashMap<String, McpServerConfig>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.mcp_servers = servers;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Add a stdio-based MCP server (convenience method).
+    ///
+    /// This is a helper for the common case of stdio-based MCP servers.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .add_mcp_stdio_server(
+    ///         "filesystem",
+    ///         "npx",
+    ///         vec!["-y", "@modelcontextprotocol/server-filesystem"]
+    ///     );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_mcp_stdio_server(
+        mut self,
+        name: impl Into<String>,
+        command: impl Into<String>,
+        args: Vec<impl Into<String>>,
+    ) -> Self {
+        let config = McpServerConfig::Stdio {
+            command: command.into(),
+            args: Some(args.into_iter().map(|a| a.into()).collect()),
+            env: None,
+        };
+
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.mcp_servers.insert(name.into(), config);
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Enable specific MCP tools.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .mcp_tools(vec!["filesystem__read".to_string(), "filesystem__write".to_string()]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn mcp_tools(mut self, tools: Vec<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.mcp_tools = tools;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Add environment variables for the Claude subprocess.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use std::collections::HashMap;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let mut env = HashMap::new();
+    /// env.insert("CUSTOM_VAR".to_string(), "value".to_string());
+    ///
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .env(env);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn env(mut self, env: HashMap<String, String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.env = env;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Add a single environment variable.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .add_env("CUSTOM_VAR", "value");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.env.insert(key.into(), value.into());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Include partial assistant messages in streaming output.
+    ///
+    /// When enabled, you'll receive incremental updates as Claude generates
+    /// its response, rather than waiting for the complete message.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .include_partial_messages(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn include_partial_messages(mut self, include: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.include_partial_messages = include;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set additional directories to include in the working context.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use std::path::PathBuf;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .add_directory(PathBuf::from("/path/to/extra/context"))
+    ///     .add_directory(PathBuf::from("/another/path"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_directory(mut self, path: impl Into<PathBuf>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.add_dirs.push(path.into());
         inner.options = Some(options);
 
         self
@@ -792,6 +1406,140 @@ impl ClaudeClient<Connected> {
         session::list_sessions(&project.id).await
     }
 
+    /// Update permission mode dynamically.
+    ///
+    /// Changes the permission mode for tool execution without reconnecting.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the permission update cannot be sent.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::types::PermissionMode;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// client.set_permission_mode(PermissionMode::Default).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_permission_mode(&self, mode: PermissionMode) -> Result<()> {
+        let transport = self.inner.transport.as_ref()
+            .ok_or_else(|| Error::Client(ClientError::NotConnected))?;
+
+        let mut transport_guard = transport.lock().await;
+
+        // Send permission mode update via SDK control request
+        use crate::requests::{SDKControlRequest, SDKControlSetPermissionModeRequest};
+        let mode_str = match mode {
+            PermissionMode::Default => "default",
+            PermissionMode::AcceptEdits => "acceptEdits",
+            PermissionMode::Plan => "plan",
+            PermissionMode::BypassPermissions => "bypassPermissions",
+        };
+
+        let req = SDKControlRequest::SetPermissionMode(SDKControlSetPermissionModeRequest {
+            subtype: "set_permission_mode".to_string(),
+            mode: mode_str.to_string(),
+        });
+
+        let req_json = serde_json::to_value(&req)
+            .map_err(|e| Error::Protocol(format!("Failed to serialize request: {}", e)))?;
+
+        transport_guard.send_sdk_control_request(req_json).await
+            .map_err(|e| Error::Protocol(format!("Permission mode update failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get conversation history for the current session.
+    ///
+    /// Retrieves all messages exchanged in this session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if history cannot be retrieved.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// let history = client.get_history().await?;
+    /// for msg in history {
+    ///     println!("{:?}", msg);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_history(&self) -> Result<Vec<Message>> {
+        use crate::session;
+
+        let session_id = self.session_id();
+        session::load_session_history(session_id).await
+    }
+
+    /// Check if the client is currently connected.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// assert!(client.is_connected());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn is_connected(&self) -> bool {
+        self.inner.transport.is_some()
+    }
+
+    /// Get the binary path being used.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// if let Some(path) = client.binary_path() {
+    ///     println!("Using Claude at: {:?}", path);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn binary_path(&self) -> Option<&BinaryPath> {
+        self.inner.binary_path.as_ref()
+    }
+
     /// Disconnect from Claude.
     ///
     /// Transitions to the `Disconnected` state.
@@ -894,5 +1642,224 @@ mod tests {
             .binary("/usr/local/bin/claude");
 
         assert!(builder.inner.binary_path.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_model_fallback_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .models(vec![
+                ModelId::from("claude-sonnet-4-5"),
+                ModelId::from("claude-opus-4-5"),
+                ModelId::from("claude-haiku-4-0"),
+            ])
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.model, Some("claude-sonnet-4-5".to_string()));
+        assert!(options.extra_args.contains_key("fallback-models"));
+    }
+
+    #[tokio::test]
+    async fn test_tool_filtering() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .allowed_tools(vec!["Bash".to_string(), "Read".to_string()])
+            .disallow_tool("Write")
+            .disallow_tool("Delete")
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.allowed_tools.len(), 2);
+        assert_eq!(options.disallowed_tools.len(), 2);
+        assert!(options.disallowed_tools.contains(&"Write".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_session_forking() {
+        let session_id = SessionId::new("test-session-123");
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .resume_session(session_id)
+            .fork_session(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.resume, Some("test-session-123".to_string()));
+        assert!(options.fork_session);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_server_configuration() {
+        let mut env = HashMap::new();
+        env.insert("NODE_ENV".to_string(), "production".to_string());
+
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .add_mcp_server(
+                "filesystem",
+                McpServerConfig::Stdio {
+                    command: "npx".to_string(),
+                    args: Some(vec!["-y".to_string(), "@modelcontextprotocol/server-filesystem".to_string()]),
+                    env: Some(env),
+                }
+            )
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.mcp_servers.contains_key("filesystem"));
+    }
+
+    #[tokio::test]
+    async fn test_mcp_stdio_server_helper() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .add_mcp_stdio_server(
+                "filesystem",
+                "npx",
+                vec!["-y", "@modelcontextprotocol/server-filesystem"]
+            )
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.mcp_servers.contains_key("filesystem"));
+
+        if let Some(McpServerConfig::Stdio { command, args, .. }) = options.mcp_servers.get("filesystem") {
+            assert_eq!(command, "npx");
+            assert!(args.is_some());
+        } else {
+            panic!("Expected Stdio MCP server config");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_advanced_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .max_output_tokens(8000)
+            .max_turns(20)
+            .system_prompt("You are a helpful assistant")
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.max_output_tokens, Some(8000));
+        assert_eq!(options.max_turns, Some(20));
+        #[allow(deprecated)]
+        {
+            assert_eq!(options.system_prompt, Some("You are a helpful assistant".to_string()));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_environment_variables() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .add_env("CUSTOM_VAR", "value1")
+            .add_env("ANOTHER_VAR", "value2")
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.env.len(), 2);
+        assert_eq!(options.env.get("CUSTOM_VAR"), Some(&"value1".to_string()));
+        assert_eq!(options.env.get("ANOTHER_VAR"), Some(&"value2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_directory_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .working_directory("/main/project")
+            .add_directory(PathBuf::from("/extra/context1"))
+            .add_directory(PathBuf::from("/extra/context2"))
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.cwd, Some(PathBuf::from("/main/project")));
+        assert_eq!(options.add_dirs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_permission_mode_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .permission_mode(PermissionMode::AcceptEdits)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.permission_mode, PermissionMode::AcceptEdits);
+    }
+
+    #[tokio::test]
+    async fn test_continue_conversation_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .continue_conversation(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.continue_conversation);
+    }
+
+    #[tokio::test]
+    async fn test_partial_messages_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .include_partial_messages(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.include_partial_messages);
+    }
+
+    #[tokio::test]
+    async fn test_max_output_tokens_clamping() {
+        // Test that max_output_tokens is clamped to valid range
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .max_output_tokens(50000) // Above max
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.max_output_tokens, Some(32000)); // Should be clamped
+
+        let builder2 = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .max_output_tokens(0) // Below min
+            .configure();
+
+        let options2 = builder2.inner.options.as_ref().unwrap();
+        assert_eq!(options2.max_output_tokens, Some(1)); // Should be clamped
+    }
+
+    #[tokio::test]
+    async fn test_fluent_builder_chaining() {
+        // Test that builder methods can be chained fluently
+        let _builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .model(ModelId::from("claude-sonnet-4-5"))
+            .permission_mode(PermissionMode::AcceptEdits)
+            .max_output_tokens(8000)
+            .max_turns(20)
+            .add_allowed_tool("Bash")
+            .add_allowed_tool("Read")
+            .disallow_tool("Write")
+            .add_directory(PathBuf::from("/extra"))
+            .add_env("VAR", "value")
+            .include_partial_messages(true)
+            .configure();
+
+        // If we got here without compiler errors, the fluent API works
+    }
+
+    #[tokio::test]
+    async fn test_mcp_tools_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .mcp_tools(vec!["fs__read".to_string(), "fs__write".to_string()])
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.mcp_tools.len(), 2);
+        assert!(options.mcp_tools.contains(&"fs__read".to_string()));
     }
 }

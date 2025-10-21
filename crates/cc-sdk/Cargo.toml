@@ -41,6 +41,7 @@ uuid = { workspace = true }
 async-stream = { workspace = true }
 rand = "0.9"
 crossbeam-channel = "0.5"
+regex = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

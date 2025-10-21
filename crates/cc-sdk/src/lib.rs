@@ -1,16 +1,19 @@
 //! # Claude Code SDK for Rust
 //!
-//! A Rust SDK for interacting with the Claude Code CLI, providing both simple query
-//! and modern type-safe client interfaces.
+//! A comprehensive Rust SDK for interacting with the Claude Code CLI, providing modern
+//! type-safe client interfaces, session management, and MCP integration.
 //!
 //! ## Features
 //!
-//! - **Modern Client API**: Type-safe client with compile-time state verification (Phase 3)
+//! - **Modern Client API**: Type-safe client with compile-time state verification
+//! - **Session Management**: Full CRUD operations on Claude Code sessions
+//! - **Settings Management**: Load and save settings with scope precedence
+//! - **MCP Integration**: Built-in support for Model Context Protocol servers
 //! - **Simple Query Interface**: One-shot queries with the `query` function
 //! - **Streaming Support**: Async streaming of responses
 //! - **Type Safety**: Strongly typed messages, errors, and state transitions
 //! - **Binary Discovery**: Automatic finding of Claude installations
-//! - **Flexible Configuration**: Extensive options for customization
+//! - **Hook System**: Extensible hooks for customizing Claude behavior
 //!
 //! ## Quick Start (Modern API - Recommended)
 //!
@@ -60,139 +63,257 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Module Organization
+//!
+//! The SDK is organized into focused modules:
+//!
+//! - [`client`] - Modern type-safe client API
+//! - [`session`] - Session discovery, caching, writing, filtering, and management
+//! - [`settings`] - Settings loading and saving with scope precedence
+//! - [`mcp`] - Model Context Protocol integration
+//! - [`binary`] - Claude binary discovery and version management
+//! - [`messages`] - Message and content type definitions
+//! - [`options`] - Configuration and builder types
+//! - [`permissions`] - Permission-related types and traits
+//! - [`hooks`] - Hook system for extending Claude behavior
+//! - [`requests`] - SDK Control Protocol request/response types
+//! - [`error`] - Modern error types with rich context
+//! - [`core`] - Core types (ModelId, SessionId, BinaryPath, Version)
+//!
+//! ## Prelude
+//!
+//! For convenience, import commonly used types with:
+//!
+//! ```rust
+//! use cc_sdk::prelude::*;
+//! ```
 
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 
-pub mod binary;
-pub mod client;  // Phase 3: Modern client module (now public)
-mod client_legacy;  // Legacy ClaudeSDKClient
-// mod client_v2;  // Has compilation errors
-// mod client_final;  // Has compilation errors
-mod client_working;
+// Core modules
 pub mod core;
 pub mod error;
-mod errors;
-mod interactive;
-mod internal_query;
-pub mod mcp;  // Phase 4: MCP integration module
-mod message_parser;
-pub mod model_recommendation;
-mod optimized_client;
-mod perf_utils;
-mod query;
 pub mod result;
-mod sdk_mcp;
-pub mod session;  // Phase 4: Session management module
-pub mod settings;  // Phase 4: Settings management module
-pub mod token_tracker;
-pub mod transport;
-mod types;
 
-// Re-export main types and functions
-// Phase 3: Modern client API (recommended)
+// Client and transport
+pub mod client;
+pub mod transport;
+
+// Type definitions (organized by domain)
+pub mod messages;
+pub mod options;
+pub mod permissions;
+pub mod hooks;
+pub mod requests;
+
+// Feature modules
+pub mod binary;
+pub mod mcp;
+pub mod session;
+pub mod settings;
+pub mod token_tracker;
+pub mod model_recommendation;
+
+// Internal modules
+mod errors;  // Deprecated: use error module
+mod types;   // Re-exports from submodules
+mod internal_query;
+mod message_parser;
+mod query;
+mod perf_utils;
+
+// ============================================================================
+// Public API Re-exports
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Modern Client API (Recommended)
+// ----------------------------------------------------------------------------
+
+/// Modern type-safe Claude client with compile-time state verification.
 pub use client::{ClaudeClient, ClaudeClientBuilder, MessageStream};
 
-// Legacy clients (backward compatibility)
-pub use client_legacy::ClaudeSDKClient;
-// pub use client_v2::ClaudeSDKClientV2;  // Has compilation errors
-// pub use client_final::ClaudeSDKClientFinal;  // Has compilation errors
-pub use client_working::ClaudeSDKClientWorking;
+// ----------------------------------------------------------------------------
+// Core Types
+// ----------------------------------------------------------------------------
 
-// Phase 1: Modern error types (preferred)
-pub use error::{
-    Error, BinaryError, ClientError, SessionError, SettingsError, TransportError,
-};
-
-// Legacy error types (backward compatibility)
-pub use errors::{Result as LegacyResult, SdkError};
-
-// Phase 1: Modern result type (preferred)
-pub use result::Result;
-
-// Core types
+/// Core strongly-typed identifiers and values.
 pub use core::{BinaryPath, ModelId, SessionId, Version};
 
-pub use interactive::InteractiveClient;
-pub use internal_query::Query;
-pub use query::query;
-// Keep the old name as an alias for backward compatibility
-pub use interactive::InteractiveClient as SimpleInteractiveClient;
-pub use model_recommendation::ModelRecommendation;
-pub use optimized_client::{ClientMode, OptimizedClient};
-pub use perf_utils::{MessageBatcher, PerformanceMetrics, RetryConfig};
-pub use token_tracker::{BudgetLimit, BudgetManager, BudgetStatus, TokenUsageTracker};
-/// Default interactive client - the recommended client for interactive use
-pub type ClaudeSDKClientDefault = InteractiveClient;
-pub use types::{
-    AssistantContent, AssistantMessage, ClaudeCodeOptions, ContentBlock, ContentValue,
-    ControlProtocolFormat, ControlRequest, ControlResponse, McpServerConfig, Message,
-    PermissionMode, ResultMessage, SystemMessage, TextContent, ThinkingContent,
-    ToolResultContent, ToolUseContent, UserContent, UserMessage,
-    // Permission types
-    PermissionBehavior, PermissionResult, PermissionResultAllow, PermissionResultDeny,
-    PermissionRuleValue, PermissionUpdate, PermissionUpdateDestination, PermissionUpdateType,
-    ToolPermissionContext, CanUseTool,
-    // Hook types (v0.3.0 - strongly-typed hooks)
-    HookCallback, HookContext, HookMatcher,
-    // Hook Input types (strongly-typed)
-    BaseHookInput, HookInput, PreToolUseHookInput, PostToolUseHookInput,
-    UserPromptSubmitHookInput, StopHookInput, SubagentStopHookInput, PreCompactHookInput,
-    // Hook Output types (strongly-typed)
-    HookJSONOutput, AsyncHookJSONOutput, SyncHookJSONOutput,
-    HookSpecificOutput, PreToolUseHookSpecificOutput, PostToolUseHookSpecificOutput,
-    UserPromptSubmitHookSpecificOutput, SessionStartHookSpecificOutput,
-    // SDK Control Protocol types
-    SDKControlInitializeRequest, SDKControlInterruptRequest, SDKControlMcpMessageRequest,
-    SDKControlPermissionRequest, SDKControlRequest, SDKControlSetPermissionModeRequest,
-    SDKHookCallbackRequest,
-    // Phase 2 enhancements
-    SettingSource, AgentDefinition, SystemPrompt,
+// ----------------------------------------------------------------------------
+// Error Handling (Modern)
+// ----------------------------------------------------------------------------
+
+/// Modern error type with rich context and error source tracking.
+pub use error::{
+    Error,
+    BinaryError,
+    ClientError,
+    SessionError,
+    SettingsError,
+    TransportError,
 };
 
-// Phase 3: Type aliases for naming consistency
-/// Alias for ClaudeCodeOptions (matches Python SDK naming)
+/// Modern result type (alias for `Result<T, Error>`).
+pub use result::Result;
+
+// ----------------------------------------------------------------------------
+// Message Types
+// ----------------------------------------------------------------------------
+
+/// Message and content type definitions.
+pub use messages::{
+    Message,
+    UserMessage,
+    AssistantMessage,
+    ContentBlock,
+    ContentValue,
+    TextContent,
+    ThinkingContent,
+    ToolUseContent,
+    ToolResultContent,
+    UserContent,
+    AssistantContent,
+};
+
+/// Convenience aliases for message variants.
+pub use messages::{
+    Message::Result as ResultMessage,
+    Message::System as SystemMessage,
+};
+
+// ----------------------------------------------------------------------------
+// Configuration Types
+// ----------------------------------------------------------------------------
+
+/// Configuration and builder types for Claude client options.
+pub use options::{
+    ClaudeCodeOptions,
+    ClaudeCodeOptionsBuilder,
+    ControlProtocolFormat,
+    McpServerConfig,
+    SettingSource,
+    AgentDefinition,
+    SystemPrompt,
+};
+
+/// Alias for ClaudeCodeOptions (matches Python SDK naming).
 pub type ClaudeAgentOptions = ClaudeCodeOptions;
-/// Alias for ClaudeCodeOptionsBuilder (matches Python SDK naming)
+
+/// Alias for ClaudeCodeOptionsBuilder (matches Python SDK naming).
 pub type ClaudeAgentOptionsBuilder = ClaudeCodeOptionsBuilder;
 
-// Re-export builder
-pub use types::ClaudeCodeOptionsBuilder;
+// ----------------------------------------------------------------------------
+// Permission Types
+// ----------------------------------------------------------------------------
 
-// Re-export transport types for convenience
-pub use transport::SubprocessTransport;
-
-// Re-export SDK MCP types
-pub use sdk_mcp::{
-    SdkMcpServer, SdkMcpServerBuilder, ToolDefinition, ToolHandler, ToolInputSchema,
-    ToolResult, create_simple_tool,
-    ToolResultContent as SdkToolResultContent,
+/// Permission-related types and traits.
+pub use permissions::{
+    PermissionMode,
+    PermissionBehavior,
+    PermissionResult,
+    PermissionResultAllow,
+    PermissionResultDeny,
+    PermissionRuleValue,
+    PermissionUpdate,
+    PermissionUpdateDestination,
+    PermissionUpdateType,
+    ToolPermissionContext,
+    CanUseTool,
 };
 
-/// Prelude module for convenient imports
-pub mod prelude {
-    // Phase 1: Modern types (preferred)
-    pub use crate::{
-        BinaryPath, Error, ModelId, Result, SessionId, Version,
-    };
+// ----------------------------------------------------------------------------
+// Hook System
+// ----------------------------------------------------------------------------
 
-    // Phase 3: Modern client API (recommended)
-    pub use crate::{ClaudeClient, ClaudeClientBuilder, MessageStream};
+/// Hook system for extending Claude behavior.
+pub use hooks::{
+    HookCallback,
+    HookContext,
+    HookMatcher,
+    // Input types
+    BaseHookInput,
+    HookInput,
+    PreToolUseHookInput,
+    PostToolUseHookInput,
+    UserPromptSubmitHookInput,
+    StopHookInput,
+    SubagentStopHookInput,
+    PreCompactHookInput,
+    // Output types
+    HookJSONOutput,
+    AsyncHookJSONOutput,
+    SyncHookJSONOutput,
+    HookSpecificOutput,
+    PreToolUseHookSpecificOutput,
+    PostToolUseHookSpecificOutput,
+    UserPromptSubmitHookSpecificOutput,
+    SessionStartHookSpecificOutput,
+};
 
-    // Phase 4: Session and settings management
-    pub use crate::session::{Project, Session, list_projects, list_sessions, load_session_history};
-    pub use crate::settings::{ClaudeSettings, SettingsScope, load_settings, save_settings};
+// ----------------------------------------------------------------------------
+// SDK Control Protocol
+// ----------------------------------------------------------------------------
 
-    // Legacy types (backward compatibility)
-    pub use crate::{
-        ClaudeCodeOptions, ClaudeSDKClientWorking, Message, PermissionMode,
-        LegacyResult, SdkError, query,
-    };
+/// SDK Control Protocol request and response types.
+pub use requests::{
+    SDKControlRequest,
+    SDKControlInitializeRequest,
+    SDKControlInterruptRequest,
+    SDKControlMcpMessageRequest,
+    SDKControlPermissionRequest,
+    SDKControlSetPermissionModeRequest,
+    SDKHookCallbackRequest,
+    ControlRequest,
+    ControlResponse,
+};
 
-    pub use crate::binary::{find_claude_binary, discover_installations, ClaudeInstallation};
+// ----------------------------------------------------------------------------
+// Utilities
+// ----------------------------------------------------------------------------
 
-    // Error types for pattern matching
-    pub use crate::error::{
-        BinaryError, ClientError, SessionError, SettingsError, TransportError,
-    };
-}
+/// Simple query interface for one-shot interactions.
+pub use query::query;
+
+/// Internal query builder (advanced usage).
+pub use internal_query::Query;
+
+/// Model recommendation system.
+pub use model_recommendation::ModelRecommendation;
+
+/// Performance utilities for batching and retry logic.
+pub use perf_utils::{MessageBatcher, PerformanceMetrics, RetryConfig};
+
+/// Token usage tracking and budget management.
+pub use token_tracker::{BudgetLimit, BudgetManager, BudgetStatus, TokenUsageTracker};
+
+/// Transport implementation.
+pub use transport::SubprocessTransport;
+
+// ----------------------------------------------------------------------------
+// Legacy Compatibility (Deprecated)
+// ----------------------------------------------------------------------------
+
+#[deprecated(since = "0.4.0", note = "Use `Result` instead")]
+#[doc(hidden)]
+pub use errors::Result as LegacyResult;
+
+#[deprecated(since = "0.4.0", note = "Use `Error` instead")]
+#[doc(hidden)]
+pub use errors::SdkError;
+
+// ============================================================================
+// Prelude Module
+// ============================================================================
+
+/// Prelude module for convenient imports.
+///
+/// This module re-exports the most commonly used types and functions.
+/// Import everything with:
+///
+/// ```rust
+/// use cc_sdk::prelude::*;
+/// ```
+pub mod prelude;

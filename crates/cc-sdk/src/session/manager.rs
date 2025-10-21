@@ -39,10 +39,17 @@ pub fn get_projects_dir() -> Result<PathBuf> {
 
 /// List all projects in the Claude projects directory.
 ///
+/// This function uses caching to avoid repeated filesystem scans.
+///
 /// # Errors
 ///
 /// Returns an error if the projects directory cannot be read.
 pub async fn list_projects() -> Result<Vec<Project>> {
+    // Check cache first
+    if let Some(cached) = super::cache::get_cached_projects() {
+        return Ok(cached);
+    }
+
     let projects_dir = get_projects_dir()?;
 
     // Return empty list if projects directory doesn't exist
@@ -104,6 +111,9 @@ pub async fn list_projects() -> Result<Vec<Project>> {
     .await
     .map_err(|e| Error::Protocol(format!("Task failed: {}", e)))??;
 
+    // Cache the results
+    super::cache::set_cached_projects(projects.clone());
+
     Ok(projects)
 }
 
@@ -158,10 +168,17 @@ fn list_sessions_sync(_project_id: &str, project_dir: &Path) -> Result<Vec<Sessi
 
 /// List all sessions for a given project ID.
 ///
+/// This function uses caching to avoid repeated filesystem scans.
+///
 /// # Errors
 ///
 /// Returns an error if the project directory cannot be read.
 pub async fn list_sessions(project_id: &str) -> Result<Vec<Session>> {
+    // Check cache first
+    if let Some(cached) = super::cache::get_cached_sessions(project_id) {
+        return Ok(cached);
+    }
+
     let projects_dir = get_projects_dir()?;
     let project_dir = projects_dir.join(project_id);
 
@@ -169,12 +186,16 @@ pub async fn list_sessions(project_id: &str) -> Result<Vec<Session>> {
         return Ok(Vec::new());
     }
 
-    let project_id = project_id.to_string();
+    let project_id_str = project_id.to_string();
+    let project_id_clone = project_id.to_string();
     let sessions = tokio::task::spawn_blocking(move || {
-        list_sessions_sync(&project_id, &project_dir)
+        list_sessions_sync(&project_id_str, &project_dir)
     })
     .await
     .map_err(|e| Error::Protocol(format!("Task failed: {}", e)))??;
+
+    // Cache the results
+    super::cache::set_cached_sessions(project_id_clone, sessions.clone());
 
     Ok(sessions)
 }
