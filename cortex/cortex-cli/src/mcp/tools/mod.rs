@@ -65,7 +65,7 @@ pub use ai_assisted::*;
 pub use advanced_testing::*;
 pub use architecture_analysis::*;
 
-use mcp_server::tool::ToolDefinition;
+use mcp_sdk::tool::ToolDefinition;
 
 /// Returns all available tool definitions for the MCP server
 pub fn get_tools() -> Vec<ToolDefinition> {

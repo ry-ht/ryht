@@ -1,12 +1,12 @@
 [package]
-name = "mcp-server"
+name = "mcp-sdk"
 version = "0.1.0"
 edition = "2021"
 authors = ["Meridian Contributors"]
-description = "Universal, type-safe, ergonomic Rust crate for building MCP (Model Context Protocol) servers"
+description = "Universal, type-safe, ergonomic Rust SDK for building MCP (Model Context Protocol) servers and clients"
 license = "MIT"
 repository = "https://github.com/omnitron-dev/meridian"
-keywords = ["mcp", "model-context-protocol", "ai", "llm"]
+keywords = ["mcp", "model-context-protocol", "ai", "llm", "sdk"]
 categories = ["development-tools", "api-bindings"]
 
 [dependencies]
@@ -53,7 +53,7 @@ websocket = []
 all = ["stdio", "http", "websocket"]
 
 [lib]
-name = "mcp_server"
+name = "mcp_sdk"
 path = "src/lib.rs"
 
 [[bench]]

@@ -1,6 +1,6 @@
 //! Cortex MCP Integration
 //!
-//! This crate integrates the mcp-server framework with Cortex, providing
+//! This crate integrates the mcp-sdk framework with Cortex, providing
 //! 30 production-ready MCP tools across three categories:
 //! - Workspace Management (8 tools)
 //! - Virtual Filesystem (12 tools)
@@ -35,6 +35,6 @@ pub mod prelude {
     pub use super::server::{CortexMcpServer, CortexMcpServerBuilder};
     pub use super::tools::*;
     pub use super::types::*;
-    // Re-export specific items from mcp_server to avoid conflicts
-    pub use mcp_server::prelude::{McpServer, Tool, ToolError, ToolResult};
+    // Re-export specific items from mcp_sdk to avoid conflicts
+    pub use mcp_sdk::prelude::{McpServer, Tool, ToolError, ToolResult};
 }

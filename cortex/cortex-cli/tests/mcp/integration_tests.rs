@@ -104,15 +104,15 @@ async fn test_all_tools_registered() {
 #[tokio::test]
 #[ignore] // Requires database
 async fn test_tool_execution_with_mock_transport() {
-    use mcp_server::transport::MockTransport;
-    use mcp_server::protocol::JsonRpcRequest;
+    use mcp_sdk::transport::MockTransport;
+    use mcp_sdk::protocol::JsonRpcRequest;
     use serde_json::json;
 
     let storage = create_test_storage().await;
     let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
 
     // Build server
-    let server = mcp_server::McpServer::builder()
+    let server = mcp_sdk::McpServer::builder()
         .name("test-server")
         .version("0.1.0")
         .tool(cortex_mcp::tools::vfs::VfsGetNodeTool::new(

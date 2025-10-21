@@ -22,7 +22,7 @@ use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter
 use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
-use mcp_server::prelude::*;
+use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

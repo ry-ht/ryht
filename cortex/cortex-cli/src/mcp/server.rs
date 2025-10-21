@@ -12,8 +12,8 @@ use anyhow::Result;
 use cortex_core::config::GlobalConfig;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig};
 use cortex_vfs::VirtualFileSystem;
-use mcp_server::prelude::*;
-use mcp_server::Transport;
+use mcp_sdk::prelude::*;
+use mcp_sdk::Transport;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -21,7 +21,7 @@ use tracing::{info, warn};
 ///
 /// Provides all Cortex functionality through the MCP protocol
 pub struct CortexMcpServer {
-    server: mcp_server::McpServer,
+    server: mcp_sdk::McpServer,
 }
 
 impl CortexMcpServer {
@@ -112,7 +112,7 @@ impl CortexMcpServer {
     async fn build_server(
         storage: Arc<ConnectionManager>,
         vfs: Arc<VirtualFileSystem>,
-    ) -> Result<mcp_server::McpServer> {
+    ) -> Result<mcp_sdk::McpServer> {
         info!("Registering MCP tools");
 
         // Create shared contexts
@@ -138,7 +138,7 @@ impl CortexMcpServer {
         let arch_ctx = ArchitectureAnalysisContext::new(storage.clone());
 
         // Build server with all tools
-        let server = mcp_server::McpServer::builder()
+        let server = mcp_sdk::McpServer::builder()
             .name("cortex-mcp")
             .version(env!("CARGO_PKG_VERSION"))
             // Workspace Management Tools (8)
@@ -385,7 +385,7 @@ impl CortexMcpServer {
         {
             info!("Starting Cortex MCP Server on HTTP: {}", _bind_addr);
             let addr: std::net::SocketAddr = _bind_addr.parse()?;
-            let mut transport = mcp_server::transport::HttpTransport::new(addr);
+            let mut transport = mcp_sdk::transport::HttpTransport::new(addr);
 
             // Server loop: read requests and send responses
             loop {
@@ -414,7 +414,7 @@ impl CortexMcpServer {
     }
 
     /// Get a reference to the underlying MCP server
-    pub fn server(&self) -> &mcp_server::McpServer {
+    pub fn server(&self) -> &mcp_sdk::McpServer {
         &self.server
     }
 }

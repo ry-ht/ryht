@@ -21,8 +21,8 @@ cortex-memory = { path = "../cortex-memory" }
 cortex-parser = { path = "../cortex-parser" }
 cortex-semantic = { path = "../cortex-semantic" }
 
-# MCP Server Framework
-mcp-server = { path = "../../crates/mcp-server", features = ["http"] }
+# MCP SDK Framework
+mcp-sdk = { path = "../../crates/mcp-sdk", features = ["http"] }
 
 # Async
 tokio = { workspace = true }

@@ -15,7 +15,7 @@
 
 use cortex_mcp::tools::{code_manipulation, code_nav, semantic_search};
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig};
-use mcp_server::prelude::*;
+use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;

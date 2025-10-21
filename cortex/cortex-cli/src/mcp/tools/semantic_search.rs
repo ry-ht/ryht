@@ -20,7 +20,7 @@ use cortex_semantic::{
 };
 use cortex_semantic::types::EntityType;
 use cortex_storage::ConnectionManager;
-use mcp_server::prelude::*;
+use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

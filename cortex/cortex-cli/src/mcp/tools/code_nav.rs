@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use cortex_core::id::CortexId;
 use cortex_memory::CognitiveManager;
 use cortex_storage::ConnectionManager;
-use mcp_server::prelude::*;
+use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;

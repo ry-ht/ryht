@@ -22,7 +22,7 @@ use cortex_mcp::tools::code_manipulation::*;
 use cortex_parser::{AstEditor, CodeParser, Language, RustParser, TypeScriptParser};
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig};
 use cortex_vfs::VirtualFileSystem;
-use mcp_server::prelude::*;
+use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;

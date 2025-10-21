@@ -2,7 +2,7 @@
 
 use axum::{Json, response::IntoResponse, http::StatusCode};
 use serde::{Deserialize, Serialize};
-use mcp_server::tool::ToolDefinition;
+use mcp_sdk::tool::ToolDefinition;
 
 /// Request to list tools
 #[derive(Debug, Deserialize)]

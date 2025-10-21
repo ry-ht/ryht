@@ -15,7 +15,7 @@ use cortex_storage::ConnectionManager;
 use cortex_storage::connection::ConnectionConfig;
 use cortex_vfs::VirtualFileSystem;
 use cortex_memory::SemanticMemorySystem;
-use mcp_server::Tool;
+use mcp_sdk::Tool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -120,7 +120,7 @@ async fn test_workspace_create_import() {
         "process_code": true,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let result = tool.execute(input, &context).await.unwrap();
 
     // Verify result
@@ -149,7 +149,7 @@ async fn test_workspace_create_without_import() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let result = tool.execute(input, &context).await.unwrap();
 
     assert!(result.is_success());
@@ -175,7 +175,7 @@ async fn test_workspace_get() {
         "process_code": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -212,7 +212,7 @@ async fn test_workspace_list() {
 
     // Create a couple of workspaces
     let create_tool = WorkspaceCreateTool::new(ctx.clone());
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
 
     for i in 1..=2 {
         let input = serde_json::json!({
@@ -263,7 +263,7 @@ async fn test_workspace_activate() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -300,7 +300,7 @@ async fn test_workspace_sync_from_disk() {
         "process_code": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -356,7 +356,7 @@ async fn test_workspace_export() {
         "process_code": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -401,7 +401,7 @@ async fn test_workspace_archive() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -448,7 +448,7 @@ async fn test_workspace_delete() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -494,7 +494,7 @@ async fn test_workspace_delete_requires_confirmation() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let create_result = create_tool.execute(input, &context).await.unwrap();
     let create_output: serde_json::Value = serde_json::from_str(&create_result.content[0].text).unwrap();
     let workspace_id = create_output["workspace_id"].as_str().unwrap();
@@ -526,7 +526,7 @@ async fn test_workspace_create_detects_project_type() {
         "auto_import": false,
     });
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
     let result = tool.execute(input, &context).await.unwrap();
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
 
@@ -540,7 +540,7 @@ async fn test_workspace_full_lifecycle() {
     fs::create_dir(&project_dir).await.unwrap();
     create_test_project(&project_dir).await.unwrap();
 
-    let context = mcp_server::prelude::ToolContext::default();
+    let context = mcp_sdk::prelude::ToolContext::default();
 
     // 1. Create workspace with import and parsing
     let create_tool = WorkspaceCreateTool::new(ctx.clone());
