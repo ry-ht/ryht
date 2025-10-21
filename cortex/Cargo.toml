@@ -141,6 +141,8 @@ tracing-subscriber = { workspace = true }
 blake3.workspace = true
 rand = "0.9.2"
 criterion = { workspace = true }
+tree-sitter-rust = "0.24.0"
+tree-sitter-typescript = "0.23.2"
 
 [[test]]
 name = "cross_crate_integration"
@@ -210,6 +212,26 @@ harness = true
 [[test]]
 name = "test_multi_agent_realistic_scenarios"
 path = "tests/test_multi_agent_realistic_scenarios.rs"
+harness = true
+
+[[test]]
+name = "test_ast_correctness"
+path = "tests/test_ast_correctness.rs"
+harness = true
+
+[[test]]
+name = "test_token_efficiency_benchmark"
+path = "tests/test_token_efficiency_benchmark.rs"
+harness = true
+
+[[test]]
+name = "test_mcp_stress"
+path = "tests/test_mcp_stress.rs"
+harness = true
+
+[[test]]
+name = "test_real_world_development"
+path = "tests/test_real_world_development.rs"
 harness = true
 
 # Benchmarks

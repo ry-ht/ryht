@@ -493,8 +493,12 @@ impl SemanticMemorySystem {
         let mut dep_json = serde_json::to_value(dependency.clone())
             .map_err(|e| CortexError::storage(format!("Failed to serialize dependency: {}", e)))?;
 
-        // Add SurrealDB edge fields (in and out)
+        // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
         if let Some(obj) = dep_json.as_object_mut() {
+            if let Some(id_val) = obj.remove("id") {
+                obj.insert("cortex_id".to_string(), id_val);
+            }
+            // Add SurrealDB edge fields (in and out)
             obj.insert("in".to_string(), serde_json::json!(format!("code_unit:{}", dependency.source_id)));
             obj.insert("out".to_string(), serde_json::json!(format!("code_unit:{}", dependency.target_id)));
         }
@@ -522,8 +526,8 @@ impl SemanticMemorySystem {
             .await?;
 
         // Use the RELATE statement syntax to query edges
-        // Since we store the dependency with source_id/target_id fields, query those
-        let query = "SELECT id, source_id, target_id, dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE source_id = $unit_id";
+        // Convert the enum field to string and use cortex_id for proper deserialization
+        let query = "SELECT cortex_id, source_id, target_id, type::string(dependency_type) as dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE source_id = $unit_id";
         let mut result = conn
             .connection()
             .query(query)
@@ -533,17 +537,16 @@ impl SemanticMemorySystem {
 
         let deps_json: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
 
-        // Deserialize each dependency, filtering out any that fail
-        let dependencies: Vec<Dependency> = deps_json.into_iter()
-            .filter_map(|dep_json| {
-                // Print for debugging
-                if let Err(e) = serde_json::from_value::<Dependency>(dep_json.clone()) {
-                    eprintln!("Skipping dependency due to deserialize error: {}", e);
-                    eprintln!("JSON was: {}", serde_json::to_string_pretty(&dep_json).unwrap_or_else(|_| format!("{:?}", dep_json)));
-                    None
-                } else {
-                    serde_json::from_value(dep_json).ok()
+        // Deserialize each dependency, restoring the id field from cortex_id
+        let dependencies = deps_json.into_iter()
+            .filter_map(|mut dep_json| {
+                // Restore the original id field from cortex_id
+                if let Some(obj) = dep_json.as_object_mut() {
+                    if let Some(cortex_id) = obj.remove("cortex_id") {
+                        obj.insert("id".to_string(), cortex_id);
+                    }
                 }
+                serde_json::from_value::<Dependency>(dep_json).ok()
             })
             .collect();
 
@@ -559,7 +562,8 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
-        let query = "SELECT id, source_id, target_id, dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE target_id = $unit_id";
+        // Convert the enum field to string and use cortex_id for proper deserialization
+        let query = "SELECT cortex_id, source_id, target_id, type::string(dependency_type) as dependency_type, is_direct, is_runtime, is_dev, metadata FROM DEPENDS_ON WHERE target_id = $unit_id";
         let mut result = conn
             .connection()
             .query(query)
@@ -569,9 +573,17 @@ impl SemanticMemorySystem {
 
         let deps_json: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
 
-        // Deserialize each dependency
+        // Deserialize each dependency, restoring the id field from cortex_id
         let dependencies = deps_json.into_iter()
-            .filter_map(|v| serde_json::from_value::<Dependency>(v).ok())
+            .filter_map(|mut dep_json| {
+                // Restore the original id field from cortex_id
+                if let Some(obj) = dep_json.as_object_mut() {
+                    if let Some(cortex_id) = obj.remove("cortex_id") {
+                        obj.insert("id".to_string(), cortex_id);
+                    }
+                }
+                serde_json::from_value::<Dependency>(dep_json).ok()
+            })
             .collect();
 
         Ok(dependencies)
