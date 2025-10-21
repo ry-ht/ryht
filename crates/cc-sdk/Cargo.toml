@@ -1,0 +1,43 @@
+[package]
+name = "cc-sdk"
+version = "0.3.0"
+edition = "2024"
+authors = ["ZhangHanDong", "LuxQuant"]
+license = "MIT"
+description = "Rust SDK for Claude Code CLI with full interactive capabilities"
+repository = "https://github.com/ry-ht/ryht"
+documentation = "https://docs.rs/cc-sdk"
+readme = "README.md"
+keywords = ["claude", "claude-code", "sdk", "ai", "llm"]
+categories = ["api-bindings", "asynchronous", "development-tools"]
+exclude = ["examples/", "tests/", "doc/", "README_*.md", "*.sh", "*.py"]
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+
+# Local dependencies
+tokio-stream = { version = "0.1", features = ["sync"] }
+bytes = "1"
+pin-project-lite = "0.2"
+which = "7"
+dirs = { workspace = true }
+uuid = { workspace = true }
+async-stream = { workspace = true }
+rand = "0.9"
+crossbeam-channel = "0.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tracing-subscriber = { workspace = true }
+tempfile = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
