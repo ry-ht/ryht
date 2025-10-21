@@ -254,6 +254,11 @@ name = "test_token_efficiency_measured"
 path = "tests/test_token_efficiency_measured.rs"
 harness = true
 
+[[test]]
+name = "e2e_cortex_self_test_phase1_ingestion"
+path = "tests/e2e_cortex_self_test_phase1_ingestion.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
