@@ -249,6 +249,11 @@ name = "test_performance_regression"
 path = "tests/test_performance_regression.rs"
 harness = true
 
+[[test]]
+name = "test_token_efficiency_measured"
+path = "tests/test_token_efficiency_measured.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
