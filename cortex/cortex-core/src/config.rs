@@ -1239,10 +1239,12 @@ mod tests {
         let mut config = GlobalConfig::default();
 
         // Set environment variables
-        env::set_var(ENV_LOG_LEVEL, "debug");
-        env::set_var(ENV_DB_MODE, "remote");
-        env::set_var(ENV_DB_URL, "ws://localhost:8001");
-        env::set_var(ENV_CACHE_SIZE_MB, "1024");
+        unsafe {
+            env::set_var(ENV_LOG_LEVEL, "debug");
+            env::set_var(ENV_DB_MODE, "remote");
+            env::set_var(ENV_DB_URL, "ws://localhost:8001");
+            env::set_var(ENV_CACHE_SIZE_MB, "1024");
+        }
 
         // Merge env vars
         config.merge_env_vars().unwrap();
@@ -1253,10 +1255,12 @@ mod tests {
         assert_eq!(config.cache.memory_size_mb, 1024);
 
         // Cleanup
-        env::remove_var(ENV_LOG_LEVEL);
-        env::remove_var(ENV_DB_MODE);
-        env::remove_var(ENV_DB_URL);
-        env::remove_var(ENV_CACHE_SIZE_MB);
+        unsafe {
+            env::remove_var(ENV_LOG_LEVEL);
+            env::remove_var(ENV_DB_MODE);
+            env::remove_var(ENV_DB_URL);
+            env::remove_var(ENV_CACHE_SIZE_MB);
+        }
     }
 
     #[tokio::test]
@@ -1264,13 +1268,17 @@ mod tests {
         let mut config = GlobalConfig::default();
 
         // Set invalid cache size
-        env::set_var(ENV_CACHE_SIZE_MB, "invalid");
+        unsafe {
+            env::set_var(ENV_CACHE_SIZE_MB, "invalid");
+        }
 
         let result = config.merge_env_vars();
         assert!(result.is_err());
 
         // Cleanup
-        env::remove_var(ENV_CACHE_SIZE_MB);
+        unsafe {
+            env::remove_var(ENV_CACHE_SIZE_MB);
+        }
     }
 
     #[tokio::test]

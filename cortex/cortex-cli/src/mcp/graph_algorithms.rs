@@ -299,7 +299,7 @@ pub fn topological_layers(graph: &Graph) -> Vec<Layer> {
         // Find all nodes with in-degree 0
         let mut current_layer: Vec<String> = in_degree
             .iter()
-            .filter(|(_, &degree)| degree == 0)
+            .filter(|(_, degree)| **degree == 0)
             .map(|(node, _)| node.clone())
             .collect();
 
