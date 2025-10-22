@@ -419,6 +419,6 @@ pub fn websocket_routes(manager: WsManager) -> Router {
     let ctx = WsContext { manager };
 
     Router::new()
-        .route("/api/v3/ws", get(ws_handler))
+        .route("/api/v1/ws", get(ws_handler))
         .with_state(ctx)
 }

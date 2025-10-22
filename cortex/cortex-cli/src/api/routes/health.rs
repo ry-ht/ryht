@@ -23,8 +23,8 @@ pub struct AppState {
 /// Create health check routes
 pub fn health_routes(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/api/v3/health", get(health_check))
-        .route("/api/v3/metrics", get(metrics))
+        .route("/api/v1/health", get(health_check))
+        .route("/api/v1/metrics", get(metrics))
         .with_state(state)
 }
 

@@ -25,6 +25,12 @@ pub enum ApiError {
     Conflict(String),
     /// Unprocessable entity
     UnprocessableEntity(String),
+    /// Version conflict (optimistic locking failure)
+    VersionConflict { expected: u64, current: u64, path: String, details: Option<serde_json::Value> },
+    /// Payload too large
+    PayloadTooLarge { size: u64, max_size: u64, details: Option<String> },
+    /// Insufficient storage
+    InsufficientStorage { used: u64, quota: u64, requested: u64, details: Option<String> },
 }
 
 impl fmt::Display for ApiError {
@@ -37,6 +43,12 @@ impl fmt::Display for ApiError {
             ApiError::Forbidden(msg) => write!(f, "Forbidden: {}", msg),
             ApiError::Conflict(msg) => write!(f, "Conflict: {}", msg),
             ApiError::UnprocessableEntity(msg) => write!(f, "Unprocessable entity: {}", msg),
+            ApiError::VersionConflict { expected, current, path, .. } =>
+                write!(f, "Version conflict for {}: expected {}, current {}", path, expected, current),
+            ApiError::PayloadTooLarge { size, max_size, .. } =>
+                write!(f, "Payload too large: {} bytes exceeds maximum of {} bytes", size, max_size),
+            ApiError::InsufficientStorage { used, quota, requested, .. } =>
+                write!(f, "Insufficient storage: {}/{} bytes used, {} bytes requested", used, quota, requested),
         }
     }
 }
@@ -68,6 +80,9 @@ impl ApiError {
             ApiError::Forbidden(_) => StatusCode::FORBIDDEN,
             ApiError::Conflict(_) => StatusCode::CONFLICT,
             ApiError::UnprocessableEntity(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            ApiError::VersionConflict { .. } => StatusCode::CONFLICT,
+            ApiError::PayloadTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
+            ApiError::InsufficientStorage { .. } => StatusCode::INSUFFICIENT_STORAGE,
         }
     }
 
@@ -80,6 +95,44 @@ impl ApiError {
             ApiError::Forbidden(_) => "FORBIDDEN",
             ApiError::Conflict(_) => "CONFLICT",
             ApiError::UnprocessableEntity(_) => "UNPROCESSABLE_ENTITY",
+            ApiError::VersionConflict { .. } => "VERSION_CONFLICT",
+            ApiError::PayloadTooLarge { .. } => "PAYLOAD_TOO_LARGE",
+            ApiError::InsufficientStorage { .. } => "INSUFFICIENT_STORAGE",
+        }
+    }
+
+    pub fn details(&self) -> Option<serde_json::Value> {
+        match self {
+            ApiError::VersionConflict { expected, current, path, details } => {
+                let mut map = serde_json::Map::new();
+                map.insert("expected_version".to_string(), serde_json::json!(expected));
+                map.insert("current_version".to_string(), serde_json::json!(current));
+                map.insert("path".to_string(), serde_json::json!(path));
+                if let Some(d) = details {
+                    map.insert("additional_details".to_string(), d.clone());
+                }
+                Some(serde_json::Value::Object(map))
+            }
+            ApiError::PayloadTooLarge { size, max_size, details } => {
+                let mut map = serde_json::Map::new();
+                map.insert("size".to_string(), serde_json::json!(size));
+                map.insert("max_size".to_string(), serde_json::json!(max_size));
+                if let Some(d) = details {
+                    map.insert("message".to_string(), serde_json::json!(d));
+                }
+                Some(serde_json::Value::Object(map))
+            }
+            ApiError::InsufficientStorage { used, quota, requested, details } => {
+                let mut map = serde_json::Map::new();
+                map.insert("used".to_string(), serde_json::json!(used));
+                map.insert("quota".to_string(), serde_json::json!(quota));
+                map.insert("requested".to_string(), serde_json::json!(requested));
+                if let Some(d) = details {
+                    map.insert("message".to_string(), serde_json::json!(d));
+                }
+                Some(serde_json::Value::Object(map))
+            }
+            _ => None,
         }
     }
 }
@@ -89,11 +142,12 @@ impl IntoResponse for ApiError {
         let status = self.status_code();
         let error_message = self.to_string();
         let error_code = self.error_code().to_string();
+        let details = self.details();
 
         let metadata = crate::api::types::ApiMetadata {
             request_id: uuid::Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now(),
-            version: "v3".to_string(),
+            version: "v1".to_string(),
             duration_ms: 0,
         };
 
@@ -102,7 +156,7 @@ impl IntoResponse for ApiError {
             error: ErrorDetail {
                 code: error_code,
                 message: error_message,
-                details: None,
+                details,
             },
             metadata,
         };

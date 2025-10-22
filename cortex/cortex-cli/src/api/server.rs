@@ -131,83 +131,92 @@ impl RestApiServer {
         info!("REST API server listening on http://{}", addr);
         info!("Available endpoints:");
         info!("");
-        info!("Authentication:");
-        info!("  POST /api/v3/auth/login");
-        info!("  POST /api/v3/auth/refresh");
-        info!("  POST /api/v3/auth/logout");
-        info!("  POST /api/v3/auth/api-key");
-        info!("  GET  /api/v3/auth/me");
+        info!("=== PUBLIC ENDPOINTS (No Authentication) ===");
         info!("");
-        info!("WebSocket:");
-        info!("  WS   /api/v3/ws");
+        info!("Authentication:");
+        info!("  POST /api/v1/auth/login          - User login");
+        info!("  POST /api/v1/auth/refresh        - Refresh access token");
         info!("");
         info!("Health & Monitoring:");
-        info!("  GET  /api/v3/health");
-        info!("  GET  /api/v3/metrics");
+        info!("  GET  /api/v1/health              - Health check");
+        info!("  GET  /api/v1/metrics             - System metrics");
+        info!("");
+        info!("=== PROTECTED ENDPOINTS (Authentication Required) ===");
+        info!("");
+        info!("Authentication:");
+        info!("  POST /api/v1/auth/logout         - Logout user");
+        info!("  POST /api/v1/auth/api-key        - Create API key");
+        info!("  GET  /api/v1/auth/me             - Get current user");
+        info!("");
+        info!("WebSocket:");
+        info!("  WS   /api/v1/ws                  - WebSocket connection");
         info!("");
         info!("Workspaces & Files:");
-        info!("  GET    /api/v3/workspaces");
-        info!("  POST   /api/v3/workspaces");
-        info!("  GET    /api/v3/workspaces/:id");
-        info!("  PUT    /api/v3/workspaces/:id");
-        info!("  DELETE /api/v3/workspaces/:id");
-        info!("  POST   /api/v3/workspaces/:id/sync");
-        info!("  GET    /api/v3/workspaces/:id/files");
-        info!("  POST   /api/v3/workspaces/:id/files");
-        info!("  GET    /api/v3/workspaces/:id/tree");
-        info!("  GET    /api/v3/files/:id");
-        info!("  PUT    /api/v3/files/:id");
-        info!("  DELETE /api/v3/files/:id");
+        info!("  GET    /api/v1/workspaces        - List workspaces");
+        info!("  POST   /api/v1/workspaces        - Create workspace");
+        info!("  GET    /api/v1/workspaces/:id    - Get workspace");
+        info!("  PUT    /api/v1/workspaces/:id    - Update workspace");
+        info!("  DELETE /api/v1/workspaces/:id    - Delete workspace");
+        info!("  POST   /api/v1/workspaces/:id/sync");
+        info!("  GET    /api/v1/workspaces/:id/files");
+        info!("  POST   /api/v1/workspaces/:id/files");
+        info!("  GET    /api/v1/workspaces/:id/tree");
+        info!("  GET    /api/v1/files/:id");
+        info!("  PUT    /api/v1/files/:id");
+        info!("  DELETE /api/v1/files/:id");
         info!("");
         info!("Sessions & Search:");
-        info!("  GET  /api/v3/sessions");
-        info!("  POST /api/v3/sessions");
-        info!("  GET  /api/v3/search");
-        info!("  GET  /api/v3/search/references/:unit_id");
-        info!("  POST /api/v3/search/pattern");
+        info!("  GET  /api/v1/sessions");
+        info!("  POST /api/v1/sessions");
+        info!("  GET  /api/v1/search");
+        info!("  GET  /api/v1/search/references/:unit_id");
+        info!("  POST /api/v1/search/pattern");
         info!("");
         info!("Memory & Code Units:");
-        info!("  GET  /api/v3/memory/episodes");
-        info!("  GET  /api/v3/memory/episodes/:id");
-        info!("  POST /api/v3/memory/consolidate");
-        info!("  POST /api/v3/memory/search");
-        info!("  GET  /api/v3/memory/patterns");
-        info!("  GET  /api/v3/workspaces/:id/units");
-        info!("  GET  /api/v3/units/:id");
-        info!("  PUT  /api/v3/units/:id");
+        info!("  GET  /api/v1/memory/episodes");
+        info!("  GET  /api/v1/memory/episodes/:id");
+        info!("  POST /api/v1/memory/consolidate");
+        info!("  POST /api/v1/memory/search");
+        info!("  GET  /api/v1/memory/patterns");
+        info!("  GET  /api/v1/workspaces/:id/units");
+        info!("  GET  /api/v1/units/:id");
+        info!("  PUT  /api/v1/units/:id");
         info!("");
         info!("Analysis & Build:");
-        info!("  GET  /api/v3/workspaces/:id/dependencies");
-        info!("  POST /api/v3/analysis/impact");
-        info!("  GET  /api/v3/analysis/cycles");
-        info!("  POST /api/v3/build/trigger");
-        info!("  GET  /api/v3/build/:id/status");
-        info!("  POST /api/v3/test/run");
-        info!("  GET  /api/v3/test/:id/results");
+        info!("  GET  /api/v1/workspaces/:id/dependencies");
+        info!("  POST /api/v1/analysis/impact");
+        info!("  GET  /api/v1/analysis/cycles");
+        info!("  POST /api/v1/build/trigger");
+        info!("  GET  /api/v1/build/:id/status");
+        info!("  POST /api/v1/test/run");
+        info!("  GET  /api/v1/test/:id/results");
         info!("");
         info!("Dashboard:");
-        info!("  GET  /api/v3/dashboard/overview");
-        info!("  GET  /api/v3/dashboard/activity");
-        info!("  GET  /api/v3/dashboard/metrics");
-        info!("  GET  /api/v3/dashboard/health");
+        info!("  GET  /api/v1/dashboard/overview");
+        info!("  GET  /api/v1/dashboard/activity");
+        info!("  GET  /api/v1/dashboard/metrics");
+        info!("  GET  /api/v1/dashboard/health");
         info!("");
         info!("Tasks:");
-        info!("  GET  /api/v3/tasks");
-        info!("  POST /api/v3/tasks");
-        info!("  GET  /api/v3/tasks/:id");
-        info!("  PUT  /api/v3/tasks/:id");
-        info!("  DELETE /api/v3/tasks/:id");
+        info!("  GET  /api/v1/tasks");
+        info!("  POST /api/v1/tasks");
+        info!("  GET  /api/v1/tasks/:id");
+        info!("  PUT  /api/v1/tasks/:id");
+        info!("  DELETE /api/v1/tasks/:id");
         info!("");
         info!("Export/Import:");
-        info!("  POST /api/v3/export");
-        info!("  GET  /api/v3/export/:id");
-        info!("  GET  /api/v3/export/:id/download");
-        info!("  POST /api/v3/import");
-        info!("  GET  /api/v3/import/:id");
+        info!("  POST /api/v1/export");
+        info!("  GET  /api/v1/export/:id");
+        info!("  GET  /api/v1/export/:id/download");
+        info!("  POST /api/v1/import");
+        info!("  GET  /api/v1/import/:id");
         info!("");
         info!("Locks & Merge:");
-        info!("  GET  /api/v3/locks");
-        info!("  POST /api/v3/sessions/:id/merge");
+        info!("  GET  /api/v1/locks");
+        info!("  POST /api/v1/sessions/:id/merge");
+        info!("");
+        info!("Authentication: Bearer <token> or ApiKey <key>");
+        info!("Supported roles: admin, developer, viewer, ci_cd");
         info!("");
         info!("Press Ctrl+C to stop");
 
@@ -226,6 +235,9 @@ impl RestApiServer {
             start_time: self.start_time,
             storage: self.storage.clone(),
         });
+
+        // Create authentication state for middleware
+        let auth_state = super::middleware::AuthState::new(self.storage.clone());
 
         // Create contexts for different route groups
         let workspace_context = WorkspaceContext {
@@ -282,14 +294,13 @@ impl RestApiServer {
             storage: self.storage.clone(),
         };
 
-        // Build the router with all routes
-        Router::new()
-            // Public routes (no auth required)
+        // Build public routes (no authentication required)
+        let public_routes = Router::new()
             .merge(super::routes::health_routes(app_state))
-            .merge(super::routes::auth_routes(auth_context))
-            // WebSocket route
-            .merge(super::websocket::websocket_routes(self.ws_manager.clone()))
-            // Protected routes (auth required)
+            .merge(super::routes::auth_routes(auth_context));
+
+        // Build protected routes (authentication required)
+        let protected_routes = Router::new()
             .merge(super::routes::workspace_routes(workspace_context))
             .merge(super::routes::vfs_routes(vfs_context))
             .merge(super::routes::session_routes(session_context))
@@ -301,6 +312,24 @@ impl RestApiServer {
             .merge(super::routes::dashboard_routes(dashboard_context))
             .merge(super::routes::task_routes(task_context))
             .merge(super::routes::export_routes(export_context))
+            .layer(middleware::from_fn_with_state(
+                auth_state.clone(),
+                super::middleware::AuthMiddleware::validate,
+            ));
+
+        // WebSocket route (optional auth - will check token if provided)
+        let ws_routes = Router::new()
+            .merge(super::websocket::websocket_routes(self.ws_manager.clone()))
+            .layer(middleware::from_fn_with_state(
+                auth_state,
+                super::middleware::AuthMiddleware::optional,
+            ));
+
+        // Combine all routes with global middleware
+        Router::new()
+            .merge(public_routes)
+            .merge(protected_routes)
+            .merge(ws_routes)
             .layer(
                 ServiceBuilder::new()
                     .layer(TraceLayer::new_for_http())

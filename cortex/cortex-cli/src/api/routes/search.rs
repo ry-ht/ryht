@@ -28,13 +28,13 @@ pub struct SearchContext {
 /// Create search routes
 pub fn search_routes(context: SearchContext) -> Router {
     Router::new()
-        .route("/api/v3/search", get(search))
-        .route("/api/v3/search/references/:unit_id", get(find_references))
-        .route("/api/v3/search/pattern", post(search_pattern))
+        .route("/api/v1/search", get(search))
+        .route("/api/v1/search/references/:unit_id", get(find_references))
+        .route("/api/v1/search/pattern", post(search_pattern))
         .with_state(context)
 }
 
-/// GET /api/v3/search - Search across memory
+/// GET /api/v1/search - Search across memory
 async fn search(
     State(ctx): State<SearchContext>,
     Query(params): Query<SearchRequest>,
@@ -252,7 +252,7 @@ fn extract_snippet(content: &str, query: &str, context_chars: usize) -> String {
     }
 }
 
-/// GET /api/v3/search/references/:unit_id - Find references to a code unit
+/// GET /api/v1/search/references/:unit_id - Find references to a code unit
 async fn find_references(
     State(ctx): State<SearchContext>,
     Path(unit_id): Path<String>,
@@ -332,7 +332,7 @@ async fn find_references(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// POST /api/v3/search/pattern - Search using tree-sitter patterns
+/// POST /api/v1/search/pattern - Search using tree-sitter patterns
 async fn search_pattern(
     State(ctx): State<SearchContext>,
     Json(payload): Json<PatternSearchRequest>,

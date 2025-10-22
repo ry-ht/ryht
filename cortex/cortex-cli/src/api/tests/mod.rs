@@ -30,7 +30,7 @@ mod types_tests {
         assert_eq!(response.data, Some(data));
         assert_eq!(response.error, None);
         assert_eq!(response.metadata.request_id, "test-request-id");
-        assert_eq!(response.metadata.version, "v3");
+        assert_eq!(response.metadata.version, "v1");
         assert_eq!(response.metadata.duration_ms, 100);
 
         // Test serialization
@@ -434,7 +434,7 @@ mod error_tests {
         let metadata = ApiMetadata {
             request_id: "req-123".to_string(),
             timestamp: Utc::now(),
-            version: "v3".to_string(),
+            version: "v1".to_string(),
             duration_ms: 0,
         };
 
@@ -514,13 +514,13 @@ mod metadata_tests {
         let metadata = ApiMetadata {
             request_id: "req-456".to_string(),
             timestamp: now,
-            version: "v3".to_string(),
+            version: "v1".to_string(),
             duration_ms: 150,
         };
 
         let json = serde_json::to_string(&metadata).unwrap();
         assert!(json.contains("req-456"));
-        assert!(json.contains("v3"));
+        assert!(json.contains("v1"));
         assert!(json.contains("150"));
     }
 
@@ -529,13 +529,13 @@ mod metadata_tests {
         let json = r#"{
             "request_id": "req-789",
             "timestamp": "2024-01-01T00:00:00Z",
-            "version": "v3",
+            "version": "v1",
             "duration_ms": 200
         }"#;
 
         let metadata: ApiMetadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.request_id, "req-789");
-        assert_eq!(metadata.version, "v3");
+        assert_eq!(metadata.version, "v1");
         assert_eq!(metadata.duration_ms, 200);
     }
 }

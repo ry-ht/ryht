@@ -67,14 +67,14 @@ impl BuildContext {
 /// Create build routes
 pub fn build_routes(context: BuildContext) -> Router {
     Router::new()
-        .route("/api/v3/build/trigger", post(trigger_build))
-        .route("/api/v3/build/:id/status", get(get_build_status))
-        .route("/api/v3/test/run", post(run_tests))
-        .route("/api/v3/test/:id/results", get(get_test_results))
+        .route("/api/v1/build/trigger", post(trigger_build))
+        .route("/api/v1/build/:id/status", get(get_build_status))
+        .route("/api/v1/test/run", post(run_tests))
+        .route("/api/v1/test/:id/results", get(get_test_results))
         .with_state(context)
 }
 
-/// POST /api/v3/build/trigger - Trigger a build
+/// POST /api/v1/build/trigger - Trigger a build
 async fn trigger_build(
     State(context): State<BuildContext>,
     Json(request): Json<BuildRequest>,
@@ -206,7 +206,7 @@ async fn execute_build(context: &BuildContext, job_id: &str) -> anyhow::Result<(
     Ok(())
 }
 
-/// GET /api/v3/build/{id}/status - Get build status
+/// GET /api/v1/build/{id}/status - Get build status
 async fn get_build_status(
     State(context): State<BuildContext>,
     Path(job_id): Path<String>,
@@ -253,7 +253,7 @@ async fn get_build_status_impl(
         status: job.status.clone(),
         progress: job.progress,
         current_step: job.current_step.clone(),
-        logs_url: Some(format!("/api/v3/build/{}/logs", job_id)),
+        logs_url: Some(format!("/api/v1/build/{}/logs", job_id)),
         started_at: job.started_at,
         completed_at: job.completed_at,
         duration_seconds,
@@ -261,7 +261,7 @@ async fn get_build_status_impl(
     })
 }
 
-/// POST /api/v3/test/run - Run tests
+/// POST /api/v1/test/run - Run tests
 async fn run_tests(
     State(context): State<BuildContext>,
     Json(request): Json<TestRunRequest>,
@@ -386,7 +386,7 @@ async fn execute_tests(context: &BuildContext, run_id: &str) -> anyhow::Result<(
     Ok(())
 }
 
-/// GET /api/v3/test/{id}/results - Get test results
+/// GET /api/v1/test/{id}/results - Get test results
 async fn get_test_results(
     State(context): State<BuildContext>,
     Path(run_id): Path<String>,

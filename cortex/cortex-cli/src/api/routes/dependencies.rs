@@ -25,15 +25,15 @@ pub struct DependencyContext {
 pub fn dependency_routes(context: DependencyContext) -> Router {
     Router::new()
         .route(
-            "/api/v3/workspaces/:id/dependencies",
+            "/api/v1/workspaces/:id/dependencies",
             get(get_dependency_graph),
         )
-        .route("/api/v3/analysis/impact", post(analyze_impact))
-        .route("/api/v3/analysis/cycles", get(detect_cycles))
+        .route("/api/v1/analysis/impact", post(analyze_impact))
+        .route("/api/v1/analysis/cycles", get(detect_cycles))
         .with_state(context)
 }
 
-/// GET /api/v3/workspaces/{id}/dependencies - Get dependency graph
+/// GET /api/v1/workspaces/{id}/dependencies - Get dependency graph
 async fn get_dependency_graph(
     State(context): State<DependencyContext>,
     Path(workspace_id): Path<String>,
@@ -168,7 +168,7 @@ async fn get_dependency_graph_impl(
     })
 }
 
-/// POST /api/v3/analysis/impact - Analyze impact of changes
+/// POST /api/v1/analysis/impact - Analyze impact of changes
 async fn analyze_impact(
     State(context): State<DependencyContext>,
     Json(request): Json<ImpactAnalysisRequest>,
@@ -327,7 +327,7 @@ async fn analyze_impact_impl(
     })
 }
 
-/// GET /api/v3/analysis/cycles - Detect circular dependencies
+/// GET /api/v1/analysis/cycles - Detect circular dependencies
 async fn detect_cycles(State(context): State<DependencyContext>) -> impl IntoResponse {
     let start_time = Instant::now();
     let request_id = Uuid::new_v4().to_string();

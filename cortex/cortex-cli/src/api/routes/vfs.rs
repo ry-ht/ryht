@@ -4,8 +4,9 @@ use crate::api::{
     error::{ApiError, ApiResult},
     types::{
         ApiResponse, CreateFileRequest, DirectoryTreeResponse, FileListRequest, FileResponse,
-        TreeNode, UpdateFileRequest,
+        TreeNode, UpdateFileRequest, PaginationParams, CursorData,
     },
+    pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
 };
 use axum::{
     extract::{Path, Query, State},
@@ -27,27 +28,41 @@ pub struct VfsContext {
 /// Create VFS routes
 pub fn vfs_routes(context: VfsContext) -> Router {
     Router::new()
-        .route("/api/v3/workspaces/:workspace_id/files", get(list_files))
-        .route("/api/v3/workspaces/:workspace_id/files", post(create_file))
-        .route("/api/v3/workspaces/:workspace_id/tree", get(get_tree))
-        .route("/api/v3/files/:file_id", get(get_file))
-        .route("/api/v3/files/:file_id", put(update_file))
-        .route("/api/v3/files/:file_id", delete(delete_file))
+        .route("/api/v1/workspaces/:workspace_id/files", get(list_files))
+        .route("/api/v1/workspaces/:workspace_id/files", post(create_file))
+        .route("/api/v1/workspaces/:workspace_id/tree", get(get_tree))
+        .route("/api/v1/files/:file_id", get(get_file))
+        .route("/api/v1/files/:file_id", put(update_file))
+        .route("/api/v1/files/:file_id", delete(delete_file))
         .with_state(context)
 }
 
-/// GET /api/v3/workspaces/:workspace_id/files - Browse VFS
+/// GET /api/v1/workspaces/:workspace_id/files - Browse VFS
 async fn list_files(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,
-    Query(params): Query<FileListRequest>,
+    Query(mut params): Query<FileListRequest>,
 ) -> ApiResult<Json<ApiResponse<Vec<FileResponse>>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
 
+    // Validate limit
+    if params.limit < 10 {
+        params.limit = 10;
+    } else if params.limit > 100 {
+        params.limit = 100;
+    }
+
     // Parse workspace ID
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
         .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
+
+    // Decode cursor if present
+    let cursor_data = if let Some(ref cursor) = params.cursor {
+        Some(decode_cursor(cursor).map_err(|e| ApiError::BadRequest(e))?)
+    } else {
+        None
+    };
 
     // List files from VFS root or recursively
     let root_path = cortex_vfs::VirtualPath::root();
@@ -55,7 +70,7 @@ async fn list_files(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Convert vnodes to FileResponse
+    // Convert vnodes to FileResponse and apply filters
     let mut files: Vec<FileResponse> = vnodes
         .into_iter()
         .filter(|vnode| {
@@ -84,6 +99,14 @@ async fn list_files(
                 }
             }
 
+            // Filter by cursor if present
+            if let Some(ref cursor) = cursor_data {
+                if vnode.created_at > cursor.last_timestamp ||
+                   (vnode.created_at == cursor.last_timestamp && vnode.id.to_string() >= cursor.last_id) {
+                    return false;
+                }
+            }
+
             true
         })
         .map(|vnode| FileResponse {
@@ -101,31 +124,110 @@ async fn list_files(
             content: None, // Don't include content in list view
             created_at: vnode.created_at,
             updated_at: vnode.updated_at,
+            // Session-specific fields (not applicable for VFS routes)
+            modified_in_session: None,
+            change_type: None,
+            session_version: None,
+            base_version: None,
+            encoding: None,
+            line_count: None,
+            hash: None,
+            metadata: None,
         })
         .collect();
 
-    // Apply pagination
+    // Sort by created_at DESC, id DESC for consistent pagination
+    files.sort_by(|a, b| {
+        b.created_at.cmp(&a.created_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+
+    // Apply pagination (cursor-based or legacy offset-based)
     let total = files.len();
-    if let Some(offset) = params.offset {
-        files = files.into_iter().skip(offset).collect();
-    }
-    if let Some(limit) = params.limit {
-        files = files.into_iter().take(limit).collect();
-    }
+    let paginated_files = if params.cursor.is_some() {
+        // Cursor-based pagination
+        let mut result = files.into_iter().take(params.limit + 1).collect::<Vec<_>>();
+        let has_more = result.len() > params.limit;
+        if has_more {
+            result.pop();
+        }
+        result
+    } else if let Some(offset) = params.offset {
+        // Legacy offset-based pagination
+        files.into_iter().skip(offset).take(params.limit).collect()
+    } else {
+        // Default: take first page
+        let mut result = files.into_iter().take(params.limit + 1).collect::<Vec<_>>();
+        let has_more = result.len() > params.limit;
+        if has_more {
+            result.pop();
+        }
+        result
+    };
+
+    // Check if there are more results
+    let has_more = if params.cursor.is_some() || params.offset.is_none() {
+        total > params.limit
+    } else {
+        total > params.offset.unwrap_or(0) + params.limit
+    };
+
+    // Generate next cursor if cursor-based pagination is used
+    let next_cursor = if params.cursor.is_some() || params.offset.is_none() {
+        if has_more && !paginated_files.is_empty() {
+            let last = paginated_files.last().unwrap();
+            generate_next_cursor(
+                last.id.clone(),
+                last.created_at,
+                cursor_data.map(|c| c.offset + params.limit).unwrap_or(params.limit),
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     tracing::debug!(
         workspace_id = %workspace_id,
         total_files = total,
-        returned = files.len(),
+        returned = paginated_files.len(),
+        has_more = has_more,
         "Listed VFS files"
     );
 
     let duration = start.elapsed().as_millis() as u64;
 
-    Ok(Json(ApiResponse::success(files, request_id, duration)))
+    // Build response with pagination if using cursor-based
+    if params.cursor.is_some() || params.offset.is_none() {
+        let pagination = build_pagination_info(
+            paginated_files.len(),
+            params.limit,
+            Some(total),
+            next_cursor.clone(),
+        );
+
+        let link_builder = LinkBuilder::new(format!("/api/v1/workspaces/{}/files", workspace_id));
+        let links = link_builder.build_list_links(
+            params.cursor.as_deref(),
+            next_cursor.as_deref(),
+            params.limit,
+        );
+
+        Ok(Json(ApiResponse::success_with_pagination(
+            paginated_files,
+            request_id,
+            duration,
+            pagination,
+            links,
+        )))
+    } else {
+        // Legacy response without pagination metadata
+        Ok(Json(ApiResponse::success(paginated_files, request_id, duration)))
+    }
 }
 
-/// GET /api/v3/files/:file_id - Get file details
+/// GET /api/v1/files/:file_id - Get file details
 async fn get_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -180,6 +282,15 @@ async fn get_file(
         content,
         created_at: vnode.created_at,
         updated_at: vnode.updated_at,
+        // Session-specific fields (not applicable for VFS routes)
+        modified_in_session: None,
+        change_type: None,
+        session_version: None,
+        base_version: None,
+        encoding: None,
+        line_count: None,
+        hash: None,
+        metadata: None,
     };
 
     tracing::debug!(file_id = %file_id, path = %vnode.path, "Retrieved file details");
@@ -189,7 +300,7 @@ async fn get_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// POST /api/v3/workspaces/:workspace_id/files - Create file
+/// POST /api/v1/workspaces/:workspace_id/files - Create file
 async fn create_file(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,
@@ -239,6 +350,15 @@ async fn create_file(
         content: Some(payload.content),
         created_at: vnode.created_at,
         updated_at: vnode.updated_at,
+        // Session-specific fields (not applicable for VFS routes)
+        modified_in_session: None,
+        change_type: None,
+        session_version: None,
+        base_version: None,
+        encoding: None,
+        line_count: None,
+        hash: None,
+        metadata: None,
     };
 
     tracing::info!(
@@ -253,7 +373,7 @@ async fn create_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// PUT /api/v3/files/:file_id - Update file
+/// PUT /api/v1/files/:file_id - Update file
 async fn update_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -307,6 +427,15 @@ async fn update_file(
         content: Some(payload.content),
         created_at: updated_vnode.created_at,
         updated_at: updated_vnode.updated_at,
+        // Session-specific fields (not applicable for VFS routes)
+        modified_in_session: None,
+        change_type: None,
+        session_version: None,
+        base_version: None,
+        encoding: None,
+        line_count: None,
+        hash: None,
+        metadata: None,
     };
 
     tracing::info!(
@@ -321,7 +450,7 @@ async fn update_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// DELETE /api/v3/files/:file_id - Delete file
+/// DELETE /api/v1/files/:file_id - Delete file
 async fn delete_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -367,7 +496,7 @@ async fn delete_file(
     Ok(Json(ApiResponse::success((), request_id, duration)))
 }
 
-/// GET /api/v3/workspaces/:workspace_id/tree - Get directory tree
+/// GET /api/v1/workspaces/:workspace_id/tree - Get directory tree
 async fn get_tree(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,

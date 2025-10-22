@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Standard API response wrapper
 #[derive(Debug, Serialize, Deserialize)]
@@ -10,6 +11,10 @@ pub struct ApiResponse<T> {
     pub data: Option<T>,
     pub error: Option<String>,
     pub metadata: ApiMetadata,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<PaginationInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub links: Option<HateoasLinks>,
 }
 
 impl<T> ApiResponse<T> {
@@ -21,9 +26,33 @@ impl<T> ApiResponse<T> {
             metadata: ApiMetadata {
                 request_id,
                 timestamp: Utc::now(),
-                version: "v3".to_string(),
+                version: "v1".to_string(),
                 duration_ms,
             },
+            pagination: None,
+            links: None,
+        }
+    }
+
+    pub fn success_with_pagination(
+        data: T,
+        request_id: String,
+        duration_ms: u64,
+        pagination: PaginationInfo,
+        links: HateoasLinks,
+    ) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+            metadata: ApiMetadata {
+                request_id,
+                timestamp: Utc::now(),
+                version: "v1".to_string(),
+                duration_ms,
+            },
+            pagination: Some(pagination),
+            links: Some(links),
         }
     }
 
@@ -35,9 +64,11 @@ impl<T> ApiResponse<T> {
             metadata: ApiMetadata {
                 request_id,
                 timestamp: Utc::now(),
-                version: "v3".to_string(),
+                version: "v1".to_string(),
                 duration_ms: 0,
             },
+            pagination: None,
+            links: None,
         }
     }
 }
@@ -51,6 +82,76 @@ pub struct ApiMetadata {
     pub duration_ms: u64,
 }
 
+/// Pagination information for cursor-based pagination
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaginationInfo {
+    /// Cursor for the next page (opaque string, base64-encoded)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Whether more results exist beyond this page
+    pub has_more: bool,
+    /// Total count of items (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<usize>,
+    /// Number of items in current page
+    pub count: usize,
+    /// Page size limit
+    pub limit: usize,
+}
+
+/// HATEOAS links for resource navigation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HateoasLinks {
+    /// Link to the current resource
+    pub self_link: String,
+    /// Link to the next page (for paginated lists)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+    /// Link to the previous page (for paginated lists)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev: Option<String>,
+    /// Links to related resources
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related: Option<HashMap<String, String>>,
+}
+
+/// Pagination query parameters
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PaginationParams {
+    /// Cursor for pagination (opaque string)
+    pub cursor: Option<String>,
+    /// Maximum number of items to return (10-100, default 20)
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+fn default_limit() -> usize {
+    20
+}
+
+impl PaginationParams {
+    /// Validate and normalize pagination parameters
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.limit < 10 {
+            self.limit = 10;
+        } else if self.limit > 100 {
+            self.limit = 100;
+        }
+        Ok(())
+    }
+}
+
+/// Internal cursor data structure (serialized to base64)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorData {
+    /// Last item ID from the previous page
+    pub last_id: String,
+    /// Timestamp of the last item (for ordering)
+    pub last_timestamp: DateTime<Utc>,
+    /// Page offset (for additional ordering)
+    pub offset: usize,
+}
+
 // ============================================================================
 // VFS Types
 // ============================================================================
@@ -61,8 +162,17 @@ pub struct FileListRequest {
     pub recursive: bool,
     pub file_type: Option<String>,
     pub language: Option<String>,
-    pub limit: Option<usize>,
+    // Cursor-based pagination
+    pub cursor: Option<String>,
+    #[serde(default = "default_file_limit")]
+    pub limit: usize,
+    // Legacy offset-based pagination (deprecated, but kept for backward compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<usize>,
+}
+
+fn default_file_limit() -> usize {
+    20
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,6 +186,23 @@ pub struct FileResponse {
     pub content: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Session-specific fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified_in_session: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_type: Option<String>, // created, modified, deleted
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_version: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_version: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,6 +230,54 @@ pub struct CreateFileRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateFileRequest {
     pub content: String,
+    #[serde(default = "default_encoding")]
+    pub encoding: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_version: Option<u64>,
+    #[serde(default = "default_create_if_missing")]
+    pub create_if_missing: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+fn default_encoding() -> String {
+    "utf-8".to_string()
+}
+
+fn default_create_if_missing() -> bool {
+    true
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileListResponse {
+    pub files: Vec<FileResponse>,
+    pub total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub lines_added: usize,
+    pub lines_removed: usize,
+    pub lines_changed: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FileWriteResponse {
+    pub id: String,
+    pub path: String,
+    pub change_type: String, // created, modified
+    pub session_version: u64,
+    pub base_version: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_version: Option<u64>,
+    pub size_bytes: u64,
+    pub hash: String,
+    pub modified_at: DateTime<Utc>,
+    pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff: Option<FileDiff>,
 }
 
 // ============================================================================
@@ -239,8 +414,17 @@ pub struct CodeUnitListRequest {
     pub max_complexity: Option<u32>,
     pub has_tests: Option<bool>,
     pub has_docs: Option<bool>,
-    pub limit: Option<usize>,
+    // Cursor-based pagination
+    pub cursor: Option<String>,
+    #[serde(default = "default_units_limit")]
+    pub limit: usize,
+    // Legacy offset-based pagination (deprecated, but kept for backward compatibility)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<usize>,
+}
+
+fn default_units_limit() -> usize {
+    20
 }
 
 #[derive(Debug, Serialize, Deserialize)]

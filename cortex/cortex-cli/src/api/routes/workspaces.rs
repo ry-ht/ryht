@@ -2,13 +2,16 @@
 
 use crate::api::{
     error::{ApiError, ApiResult},
+    middleware::AuthUser,
     types::{
         ApiResponse, CreateWorkspaceRequest, WorkspaceResponse,
         UpdateWorkspaceRequest, SyncWorkspaceRequest, SyncResponse, SyncChange,
+        PaginationParams, CursorData,
     },
+    pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
@@ -27,34 +30,93 @@ pub struct WorkspaceContext {
 /// Create workspace routes
 pub fn workspace_routes(context: WorkspaceContext) -> Router {
     Router::new()
-        .route("/api/v3/workspaces", get(list_workspaces))
-        .route("/api/v3/workspaces", post(create_workspace))
-        .route("/api/v3/workspaces/:workspace_id", get(get_workspace))
-        .route("/api/v3/workspaces/:workspace_id", put(update_workspace))
-        .route("/api/v3/workspaces/:workspace_id", delete(delete_workspace))
-        .route("/api/v3/workspaces/:workspace_id/sync", post(sync_workspace))
+        .route("/api/v1/workspaces", get(list_workspaces))
+        .route("/api/v1/workspaces", post(create_workspace))
+        .route("/api/v1/workspaces/:workspace_id", get(get_workspace))
+        .route("/api/v1/workspaces/:workspace_id", put(update_workspace))
+        .route("/api/v1/workspaces/:workspace_id", delete(delete_workspace))
+        .route("/api/v1/workspaces/:workspace_id/sync", post(sync_workspace))
         .with_state(context)
 }
 
-/// GET /api/v3/workspaces - List all workspaces
+/// GET /api/v1/workspaces - List all workspaces
 async fn list_workspaces(
+    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
+    Query(mut params): Query<PaginationParams>,
 ) -> ApiResult<Json<ApiResponse<Vec<WorkspaceResponse>>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
+
+    // Log authenticated operation
+    tracing::info!(
+        user_id = %auth_user.user_id,
+        email = %auth_user.email,
+        roles = ?auth_user.roles,
+        "User listing workspaces"
+    );
+
+    // Validate pagination params
+    params.validate().map_err(|e| ApiError::BadRequest(e))?;
+
+    // Decode cursor if present
+    let cursor_data = if let Some(ref cursor) = params.cursor {
+        Some(decode_cursor(cursor).map_err(|e| ApiError::BadRequest(e))?)
+    } else {
+        None
+    };
 
     // Query all workspaces from database
     let conn = ctx.storage.acquire().await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let query = "SELECT * FROM workspace ORDER BY created_at DESC";
-    let mut response = conn.connection()
-        .query(query)
-        .await
+    // Build query with cursor-based pagination
+    let query = if let Some(ref cursor) = cursor_data {
+        format!(
+            "SELECT * FROM workspace WHERE created_at < $timestamp OR (created_at = $timestamp AND id < $id) ORDER BY created_at DESC, id DESC LIMIT {}",
+            params.limit + 1 // Fetch one extra to check if there are more
+        )
+    } else {
+        format!(
+            "SELECT * FROM workspace ORDER BY created_at DESC, id DESC LIMIT {}",
+            params.limit + 1
+        )
+    };
+
+    let mut response = if let Some(ref cursor) = cursor_data {
+        conn.connection()
+            .query(&query)
+            .bind(("timestamp", cursor.last_timestamp))
+            .bind(("id", cursor.last_id.clone()))
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        conn.connection()
+            .query(&query)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    };
+
+    let mut workspaces: Vec<cortex_vfs::Workspace> = response.take(0)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let workspaces: Vec<cortex_vfs::Workspace> = response.take(0)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Check if there are more results
+    let has_more = workspaces.len() > params.limit;
+    if has_more {
+        workspaces.pop(); // Remove the extra item
+    }
+
+    // Generate next cursor if there are more results
+    let next_cursor = if has_more && !workspaces.is_empty() {
+        let last = workspaces.last().unwrap();
+        generate_next_cursor(
+            last.id.to_string(),
+            last.created_at,
+            cursor_data.map(|c| c.offset + params.limit).unwrap_or(params.limit),
+        )
+    } else {
+        None
+    };
 
     let workspace_responses: Vec<WorkspaceResponse> = workspaces
         .into_iter()
@@ -71,14 +133,35 @@ async fn list_workspaces(
         })
         .collect();
 
-    tracing::debug!(count = workspace_responses.len(), "Listed workspaces");
+    tracing::debug!(count = workspace_responses.len(), has_more = has_more, "Listed workspaces");
 
     let duration = start.elapsed().as_millis() as u64;
 
-    Ok(Json(ApiResponse::success(workspace_responses, request_id, duration)))
+    // Build pagination info and HATEOAS links
+    let pagination = build_pagination_info(
+        workspace_responses.len(),
+        params.limit,
+        None, // Total count would require additional query
+        next_cursor.clone(),
+    );
+
+    let link_builder = LinkBuilder::new("/api/v1/workspaces");
+    let links = link_builder.build_list_links(
+        params.cursor.as_deref(),
+        next_cursor.as_deref(),
+        params.limit,
+    );
+
+    Ok(Json(ApiResponse::success_with_pagination(
+        workspace_responses,
+        request_id,
+        duration,
+        pagination,
+        links,
+    )))
 }
 
-/// GET /api/v3/workspaces/:workspace_id - Get workspace details
+/// GET /api/v1/workspaces/:workspace_id - Get workspace details
 async fn get_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
@@ -119,16 +202,28 @@ async fn get_workspace(
 
     let duration = start.elapsed().as_millis() as u64;
 
-    Ok(Json(ApiResponse::success(workspace_response, request_id, duration)))
+    // Add HATEOAS links for workspace
+    let links = LinkBuilder::build_workspace_links(&workspace_id);
+    let mut response = ApiResponse::success(workspace_response, request_id, duration);
+    response.links = Some(links);
+
+    Ok(Json(response))
 }
 
-/// POST /api/v3/workspaces - Create workspace
+/// POST /api/v1/workspaces - Create workspace
 async fn create_workspace(
+    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
     Json(payload): Json<CreateWorkspaceRequest>,
 ) -> ApiResult<Json<ApiResponse<WorkspaceResponse>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
+
+    tracing::info!(
+        user_id = %auth_user.user_id,
+        workspace_name = %payload.name,
+        "User creating workspace"
+    );
 
     // Parse workspace type
     let workspace_type = match payload.workspace_type.to_lowercase().as_str() {
@@ -194,13 +289,32 @@ async fn create_workspace(
     Ok(Json(ApiResponse::success(workspace_response, request_id, duration)))
 }
 
-/// DELETE /api/v3/workspaces/:workspace_id - Delete workspace
+/// DELETE /api/v1/workspaces/:workspace_id - Delete workspace
 async fn delete_workspace(
+    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<()>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
+
+    // Check if user is admin (deletion is sensitive operation)
+    if !auth_user.is_admin() {
+        tracing::warn!(
+            user_id = %auth_user.user_id,
+            workspace_id = %workspace_id,
+            "Non-admin user attempted to delete workspace"
+        );
+        return Err(ApiError::Forbidden(
+            "Only administrators can delete workspaces".to_string()
+        ));
+    }
+
+    tracing::info!(
+        user_id = %auth_user.user_id,
+        workspace_id = %workspace_id,
+        "Admin deleting workspace"
+    );
 
     // Parse workspace ID
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
@@ -231,7 +345,7 @@ async fn delete_workspace(
     Ok(Json(ApiResponse::success((), request_id, duration)))
 }
 
-/// PUT /api/v3/workspaces/:workspace_id - Update workspace
+/// PUT /api/v1/workspaces/:workspace_id - Update workspace
 async fn update_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
@@ -310,7 +424,7 @@ async fn update_workspace(
     Ok(Json(ApiResponse::success(workspace_response, request_id, duration)))
 }
 
-/// POST /api/v3/workspaces/:workspace_id/sync - Sync workspace with filesystem
+/// POST /api/v1/workspaces/:workspace_id/sync - Sync workspace with filesystem
 async fn sync_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,

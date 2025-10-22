@@ -134,15 +134,15 @@ pub struct TaskListQuery {
 /// Create task routes
 pub fn task_routes(context: TaskContext) -> Router {
     Router::new()
-        .route("/api/v3/tasks", get(list_tasks))
-        .route("/api/v3/tasks", post(create_task))
-        .route("/api/v3/tasks/:id", get(get_task))
-        .route("/api/v3/tasks/:id", put(update_task))
-        .route("/api/v3/tasks/:id", delete(delete_task))
+        .route("/api/v1/tasks", get(list_tasks))
+        .route("/api/v1/tasks", post(create_task))
+        .route("/api/v1/tasks/:id", get(get_task))
+        .route("/api/v1/tasks/:id", put(update_task))
+        .route("/api/v1/tasks/:id", delete(delete_task))
         .with_state(context)
 }
 
-/// GET /api/v3/tasks - List tasks
+/// GET /api/v1/tasks - List tasks
 async fn list_tasks(
     State(ctx): State<TaskContext>,
     Query(params): Query<TaskListQuery>,
@@ -227,7 +227,7 @@ async fn list_tasks(
     Ok(Json(ApiResponse::success(task_responses, request_id, duration)))
 }
 
-/// GET /api/v3/tasks/:id - Get task details
+/// GET /api/v1/tasks/:id - Get task details
 async fn get_task(
     State(ctx): State<TaskContext>,
     Path(task_id): Path<String>,
@@ -275,7 +275,7 @@ async fn get_task(
     Ok(Json(ApiResponse::success(task_response, request_id, duration)))
 }
 
-/// POST /api/v3/tasks - Create task
+/// POST /api/v1/tasks - Create task
 async fn create_task(
     State(ctx): State<TaskContext>,
     Json(payload): Json<CreateTaskRequest>,
@@ -345,7 +345,7 @@ async fn create_task(
     Ok(Json(ApiResponse::success(task_response, request_id, duration)))
 }
 
-/// PUT /api/v3/tasks/:id - Update task
+/// PUT /api/v1/tasks/:id - Update task
 async fn update_task(
     State(ctx): State<TaskContext>,
     Path(task_id): Path<String>,
@@ -439,7 +439,7 @@ async fn update_task(
     Ok(Json(ApiResponse::success(task_response, request_id, duration)))
 }
 
-/// DELETE /api/v3/tasks/:id - Delete task
+/// DELETE /api/v1/tasks/:id - Delete task
 async fn delete_task(
     State(ctx): State<TaskContext>,
     Path(task_id): Path<String>,

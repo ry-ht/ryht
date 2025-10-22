@@ -132,7 +132,7 @@ struct ApiKey {
     created_at: chrono::DateTime<Utc>,
 }
 
-/// POST /api/v3/auth/login - User login
+/// POST /api/v1/auth/login - User login
 async fn login(
     State(ctx): State<AuthContext>,
     Json(req): Json<LoginRequest>,
@@ -213,7 +213,7 @@ async fn login(
     Ok((StatusCode::OK, Json(ApiResponse::success(response, request_id, duration))))
 }
 
-/// POST /api/v3/auth/refresh - Refresh access token
+/// POST /api/v1/auth/refresh - Refresh access token
 async fn refresh_token(
     State(ctx): State<AuthContext>,
     Json(req): Json<RefreshTokenRequest>,
@@ -286,7 +286,7 @@ async fn refresh_token(
     Ok((StatusCode::OK, Json(ApiResponse::success(response, request_id, duration))))
 }
 
-/// POST /api/v3/auth/api-key - Create API key
+/// POST /api/v1/auth/api-key - Create API key
 async fn create_api_key(
     State(ctx): State<AuthContext>,
     claims: Claims, // Extracted by auth middleware
@@ -344,7 +344,7 @@ async fn create_api_key(
     Ok((StatusCode::CREATED, Json(ApiResponse::success(response, request_id, duration))))
 }
 
-/// POST /api/v3/auth/logout - Logout and invalidate session
+/// POST /api/v1/auth/logout - Logout and invalidate session
 async fn logout(
     State(ctx): State<AuthContext>,
     claims: Claims, // Extracted by auth middleware
@@ -375,7 +375,7 @@ async fn logout(
     Ok((StatusCode::OK, Json(ApiResponse::success(response, request_id, duration))))
 }
 
-/// GET /api/v3/auth/me - Get current user info
+/// GET /api/v1/auth/me - Get current user info
 async fn me(
     State(ctx): State<AuthContext>,
     claims: Claims, // Extracted by auth middleware
@@ -461,10 +461,10 @@ fn generate_refresh_token(ctx: &AuthContext, user: &User) -> Result<String, ApiE
 /// Create authentication routes
 pub fn auth_routes(ctx: AuthContext) -> Router {
     Router::new()
-        .route("/api/v3/auth/login", post(login))
-        .route("/api/v3/auth/refresh", post(refresh_token))
-        .route("/api/v3/auth/logout", post(logout))
-        .route("/api/v3/auth/api-key", post(create_api_key))
-        .route("/api/v3/auth/me", get(me))
+        .route("/api/v1/auth/login", post(login))
+        .route("/api/v1/auth/refresh", post(refresh_token))
+        .route("/api/v1/auth/logout", post(logout))
+        .route("/api/v1/auth/api-key", post(create_api_key))
+        .route("/api/v1/auth/me", get(me))
         .with_state(ctx)
 }

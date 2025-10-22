@@ -9,11 +9,13 @@ pub mod types;
 pub mod error;
 pub mod websocket;
 pub mod db_schema;
+pub mod pagination;
 
 #[cfg(test)]
 mod tests;
 
 pub use server::RestApiServer;
-pub use types::{ApiResponse, ApiMetadata};
+pub use types::{ApiResponse, ApiMetadata, PaginationInfo, HateoasLinks, PaginationParams};
 pub use error::{ApiError, ApiResult};
 pub use websocket::{WsManager, WsEvent};
+pub use pagination::LinkBuilder;

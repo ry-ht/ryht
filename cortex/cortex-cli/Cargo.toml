@@ -70,6 +70,7 @@ regex = { workspace = true }
 num_cpus = "1.16"
 ignore = "0.4"
 sys-info = "0.9.1"
+md5 = "0.8.0"
 
 # Authentication & Security
 jsonwebtoken = { version = "10.1.0", default-features = false, features = ["rust_crypto"] }
@@ -83,6 +84,8 @@ tree-sitter-javascript = "0.25.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+reqwest = { version = "0.12.24", features = ["json", "blocking"] }
+portpicker = "0.1.1"
 
 [features]
 http = []

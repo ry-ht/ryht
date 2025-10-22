@@ -27,15 +27,15 @@ pub struct MemoryContext {
 /// Create memory routes
 pub fn memory_routes(context: MemoryContext) -> Router {
     Router::new()
-        .route("/api/v3/memory/episodes", get(list_episodes))
-        .route("/api/v3/memory/consolidate", post(consolidate_memory))
-        .route("/api/v3/memory/episodes/:episode_id", get(get_episode))
-        .route("/api/v3/memory/search", post(search_episodes))
-        .route("/api/v3/memory/patterns", get(get_patterns))
+        .route("/api/v1/memory/episodes", get(list_episodes))
+        .route("/api/v1/memory/consolidate", post(consolidate_memory))
+        .route("/api/v1/memory/episodes/:episode_id", get(get_episode))
+        .route("/api/v1/memory/search", post(search_episodes))
+        .route("/api/v1/memory/patterns", get(get_patterns))
         .with_state(context)
 }
 
-/// GET /api/v3/memory/episodes - List memory episodes
+/// GET /api/v1/memory/episodes - List memory episodes
 async fn list_episodes(
     State(ctx): State<MemoryContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<MemoryEpisode>>>> {
@@ -100,7 +100,7 @@ async fn list_episodes(
     Ok(Json(ApiResponse::success(episodes, request_id, duration)))
 }
 
-/// GET /api/v3/memory/episodes/:episode_id - Get episode details
+/// GET /api/v1/memory/episodes/:episode_id - Get episode details
 async fn get_episode(
     State(ctx): State<MemoryContext>,
     Path(episode_id): Path<String>,
@@ -203,7 +203,7 @@ async fn get_episode(
     Ok(Json(ApiResponse::success(episode, request_id, duration)))
 }
 
-/// POST /api/v3/memory/consolidate - Consolidate memory
+/// POST /api/v1/memory/consolidate - Consolidate memory
 async fn consolidate_memory(
     State(ctx): State<MemoryContext>,
     Json(payload): Json<ConsolidateMemoryRequest>,
@@ -244,7 +244,7 @@ async fn consolidate_memory(
     Ok(Json(ApiResponse::success(response_data, request_id, duration)))
 }
 
-/// POST /api/v3/memory/search - Search similar episodes using embeddings
+/// POST /api/v1/memory/search - Search similar episodes using embeddings
 async fn search_episodes(
     State(ctx): State<MemoryContext>,
     Json(payload): Json<EpisodeSearchRequest>,
@@ -350,7 +350,7 @@ async fn search_episodes(
     Ok(Json(ApiResponse::success(episodes, request_id, duration)))
 }
 
-/// GET /api/v3/memory/patterns - Get learned patterns from memory
+/// GET /api/v1/memory/patterns - Get learned patterns from memory
 async fn get_patterns(
     State(ctx): State<MemoryContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<LearnedPattern>>>> {

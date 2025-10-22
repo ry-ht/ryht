@@ -146,14 +146,14 @@ fn default_granularity() -> String {
 /// Create dashboard routes
 pub fn dashboard_routes(context: DashboardContext) -> Router {
     Router::new()
-        .route("/api/v3/dashboard/overview", get(get_overview))
-        .route("/api/v3/dashboard/activity", get(get_activity))
-        .route("/api/v3/dashboard/metrics", get(get_metrics))
-        .route("/api/v3/dashboard/health", get(get_health))
+        .route("/api/v1/dashboard/overview", get(get_overview))
+        .route("/api/v1/dashboard/activity", get(get_activity))
+        .route("/api/v1/dashboard/metrics", get(get_metrics))
+        .route("/api/v1/dashboard/health", get(get_health))
         .with_state(context)
 }
 
-/// GET /api/v3/dashboard/overview - Get dashboard overview
+/// GET /api/v1/dashboard/overview - Get dashboard overview
 async fn get_overview(
     State(ctx): State<DashboardContext>,
 ) -> ApiResult<Json<ApiResponse<DashboardOverview>>> {
@@ -282,7 +282,7 @@ async fn get_overview(
     Ok(Json(ApiResponse::success(overview, request_id, duration)))
 }
 
-/// GET /api/v3/dashboard/activity - Get activity feed
+/// GET /api/v1/dashboard/activity - Get activity feed
 async fn get_activity(
     State(ctx): State<DashboardContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<ActivityItem>>>> {
@@ -300,7 +300,7 @@ async fn get_activity(
     Ok(Json(ApiResponse::success(activities, request_id, duration)))
 }
 
-/// GET /api/v3/dashboard/metrics - Get detailed metrics
+/// GET /api/v1/dashboard/metrics - Get detailed metrics
 async fn get_metrics(
     State(ctx): State<DashboardContext>,
     Query(params): Query<MetricsQuery>,
@@ -333,7 +333,7 @@ async fn get_metrics(
     Ok(Json(ApiResponse::success(metrics, request_id, duration)))
 }
 
-/// GET /api/v3/dashboard/health - Get system health
+/// GET /api/v1/dashboard/health - Get system health
 async fn get_health(
     State(ctx): State<DashboardContext>,
 ) -> ApiResult<Json<ApiResponse<SystemHealth>>> {

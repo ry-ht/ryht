@@ -137,15 +137,15 @@ pub struct CreateImportRequest {
 /// Create export/import routes
 pub fn export_routes(context: ExportContext) -> Router {
     Router::new()
-        .route("/api/v3/export", post(create_export))
-        .route("/api/v3/export/:id", get(get_export_status))
-        .route("/api/v3/export/:id/download", get(download_export))
-        .route("/api/v3/import", post(create_import))
-        .route("/api/v3/import/:id", get(get_import_status))
+        .route("/api/v1/export", post(create_export))
+        .route("/api/v1/export/:id", get(get_export_status))
+        .route("/api/v1/export/:id/download", get(download_export))
+        .route("/api/v1/import", post(create_import))
+        .route("/api/v1/import/:id", get(get_import_status))
         .with_state(context)
 }
 
-/// POST /api/v3/export - Create export job
+/// POST /api/v1/export - Create export job
 async fn create_export(
     State(ctx): State<ExportContext>,
     Json(payload): Json<CreateExportRequest>,
@@ -217,7 +217,7 @@ async fn create_export(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// GET /api/v3/export/:id - Get export job status
+/// GET /api/v1/export/:id - Get export job status
 async fn get_export_status(
     State(ctx): State<ExportContext>,
     Path(export_id): Path<String>,
@@ -247,7 +247,7 @@ async fn get_export_status(
     Ok(Json(ApiResponse::success(export_job, request_id, duration)))
 }
 
-/// GET /api/v3/export/:id/download - Download export
+/// GET /api/v1/export/:id/download - Download export
 async fn download_export(
     State(ctx): State<ExportContext>,
     Path(export_id): Path<String>,
@@ -275,7 +275,7 @@ async fn download_export(
     }
 
     // Generate download URL (in production, this would be a signed S3 URL or similar)
-    let download_url = format!("/api/v3/export/{}/download/file", export_id);
+    let download_url = format!("/api/v1/export/{}/download/file", export_id);
     let expires_at = Utc::now() + chrono::Duration::hours(24);
 
     let response = ExportDownloadResponse {
@@ -291,7 +291,7 @@ async fn download_export(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// POST /api/v3/import - Create import job
+/// POST /api/v1/import - Create import job
 async fn create_import(
     State(ctx): State<ExportContext>,
     Json(payload): Json<CreateImportRequest>,
@@ -368,7 +368,7 @@ async fn create_import(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// GET /api/v3/import/:id - Get import job status
+/// GET /api/v1/import/:id - Get import job status
 async fn get_import_status(
     State(ctx): State<ExportContext>,
     Path(import_id): Path<String>,

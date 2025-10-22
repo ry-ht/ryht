@@ -3,9 +3,9 @@
 use crate::api::routes::auth::Claims;
 use axum::{
     extract::{FromRequestParts, Request},
-    http::{header::AUTHORIZATION, request::Parts, StatusCode},
+    http::{header::{AUTHORIZATION, WWW_AUTHENTICATE}, request::Parts, StatusCode, HeaderValue},
     middleware::Next,
-    response::Response,
+    response::{Response, IntoResponse},
     Json,
 };
 use bcrypt::verify;
@@ -13,6 +13,43 @@ use cortex_storage::ConnectionManager;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+/// Authenticated user information stored in request extensions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthUser {
+    pub user_id: String,
+    pub email: String,
+    pub roles: Vec<String>,
+    pub session_id: Option<String>,
+}
+
+impl AuthUser {
+    /// Check if user has a specific role
+    pub fn has_role(&self, role: &str) -> bool {
+        self.roles.iter().any(|r| r == role)
+    }
+
+    /// Check if user is an admin
+    pub fn is_admin(&self) -> bool {
+        self.has_role("admin")
+    }
+
+    /// Check if user has any of the specified roles
+    pub fn has_any_role(&self, roles: &[&str]) -> bool {
+        self.roles.iter().any(|r| roles.contains(&r.as_str()))
+    }
+}
+
+impl From<&Claims> for AuthUser {
+    fn from(claims: &Claims) -> Self {
+        Self {
+            user_id: claims.sub.clone(),
+            email: claims.email.clone(),
+            roles: claims.roles.clone(),
+            session_id: None,
+        }
+    }
+}
 
 /// Authentication middleware state
 #[derive(Clone)]
@@ -53,7 +90,7 @@ impl AuthMiddleware {
         state: AuthState,
         mut req: Request,
         next: Next,
-    ) -> Result<Response, StatusCode> {
+    ) -> Result<Response, impl IntoResponse> {
         // Extract authorization header
         let auth_header = req
             .headers()
@@ -67,11 +104,26 @@ impl AuthMiddleware {
 
                 match validate_jwt(token, &state.jwt_secret) {
                     Ok(claims) => {
-                        // Insert claims into request extensions
+                        // Create AuthUser from claims
+                        let auth_user = AuthUser::from(&claims);
+
+                        // Log authentication
+                        tracing::debug!(
+                            user_id = %auth_user.user_id,
+                            email = %auth_user.email,
+                            roles = ?auth_user.roles,
+                            "User authenticated via JWT"
+                        );
+
+                        // Insert both claims and AuthUser into request extensions
                         req.extensions_mut().insert(claims);
+                        req.extensions_mut().insert(auth_user);
                         return Ok(next.run(req).await);
                     }
-                    Err(_) => return Err(StatusCode::UNAUTHORIZED),
+                    Err(e) => {
+                        tracing::warn!("JWT validation failed: {}", e);
+                        return Err(unauthorized_response("Invalid or expired token"));
+                    }
                 }
             }
             // Try API key
@@ -80,15 +132,28 @@ impl AuthMiddleware {
 
                 match validate_api_key(api_key, &state).await {
                     Ok(claims) => {
+                        let auth_user = AuthUser::from(&claims);
+
+                        tracing::debug!(
+                            user_id = %auth_user.user_id,
+                            email = %auth_user.email,
+                            roles = ?auth_user.roles,
+                            "User authenticated via API key"
+                        );
+
                         req.extensions_mut().insert(claims);
+                        req.extensions_mut().insert(auth_user);
                         return Ok(next.run(req).await);
                     }
-                    Err(_) => return Err(StatusCode::UNAUTHORIZED),
+                    Err(e) => {
+                        tracing::warn!("API key validation failed: {}", e);
+                        return Err(unauthorized_response("Invalid API key"));
+                    }
                 }
             }
         }
 
-        Err(StatusCode::UNAUTHORIZED)
+        Err(unauthorized_response("Authentication required"))
     }
 
     /// Optional authentication - doesn't fail if no token provided
@@ -107,13 +172,17 @@ impl AuthMiddleware {
                 let token = auth_header.trim_start_matches("Bearer ");
 
                 if let Ok(claims) = validate_jwt(token, &state.jwt_secret) {
+                    let auth_user = AuthUser::from(&claims);
                     req.extensions_mut().insert(claims);
+                    req.extensions_mut().insert(auth_user);
                 }
             } else if auth_header.starts_with("ApiKey ") {
                 let api_key = auth_header.trim_start_matches("ApiKey ");
 
                 if let Ok(claims) = validate_api_key(api_key, &state).await {
+                    let auth_user = AuthUser::from(&claims);
                     req.extensions_mut().insert(claims);
+                    req.extensions_mut().insert(auth_user);
                 }
             }
         }
@@ -121,17 +190,97 @@ impl AuthMiddleware {
         next.run(req).await
     }
 
-    /// Role-based access control middleware
-    pub fn require_role(required_role: String) -> impl Fn(Claims, Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>> + Clone {
-        move |claims: Claims, req: Request, next: Next| {
-            let required_role = required_role.clone();
-            Box::pin(async move {
-                if claims.roles.contains(&required_role) || claims.roles.contains(&"admin".to_string()) {
-                    Ok(next.run(req).await)
-                } else {
-                    Err(StatusCode::FORBIDDEN)
-                }
-            })
+    /// Role-based access control middleware - requires specific role
+    pub async fn require_role(
+        required_role: String,
+        mut req: Request,
+        next: Next,
+    ) -> Result<Response, impl IntoResponse> {
+        // Get AuthUser from request extensions
+        let auth_user = req
+            .extensions()
+            .get::<AuthUser>()
+            .ok_or_else(|| forbidden_response("Authentication required"))?;
+
+        // Check if user has required role or is admin
+        if auth_user.has_role(&required_role) || auth_user.is_admin() {
+            tracing::debug!(
+                user_id = %auth_user.user_id,
+                required_role = %required_role,
+                "Role check passed"
+            );
+            Ok(next.run(req).await)
+        } else {
+            tracing::warn!(
+                user_id = %auth_user.user_id,
+                required_role = %required_role,
+                user_roles = ?auth_user.roles,
+                "Insufficient permissions"
+            );
+            Err(forbidden_response(&format!(
+                "Insufficient permissions. Required role: {}",
+                required_role
+            )))
+        }
+    }
+
+    /// Admin-only access control middleware
+    pub async fn require_admin(
+        mut req: Request,
+        next: Next,
+    ) -> Result<Response, impl IntoResponse> {
+        let auth_user = req
+            .extensions()
+            .get::<AuthUser>()
+            .ok_or_else(|| forbidden_response("Authentication required"))?;
+
+        if auth_user.is_admin() {
+            tracing::debug!(
+                user_id = %auth_user.user_id,
+                "Admin check passed"
+            );
+            Ok(next.run(req).await)
+        } else {
+            tracing::warn!(
+                user_id = %auth_user.user_id,
+                user_roles = ?auth_user.roles,
+                "Admin access denied"
+            );
+            Err(forbidden_response("Admin access required"))
+        }
+    }
+
+    /// Check if user has any of the specified roles
+    pub async fn require_any_role(
+        required_roles: Vec<String>,
+        mut req: Request,
+        next: Next,
+    ) -> Result<Response, impl IntoResponse> {
+        let auth_user = req
+            .extensions()
+            .get::<AuthUser>()
+            .ok_or_else(|| forbidden_response("Authentication required"))?;
+
+        let role_refs: Vec<&str> = required_roles.iter().map(|s| s.as_str()).collect();
+
+        if auth_user.has_any_role(&role_refs) || auth_user.is_admin() {
+            tracing::debug!(
+                user_id = %auth_user.user_id,
+                required_roles = ?required_roles,
+                "Role check passed"
+            );
+            Ok(next.run(req).await)
+        } else {
+            tracing::warn!(
+                user_id = %auth_user.user_id,
+                required_roles = ?required_roles,
+                user_roles = ?auth_user.roles,
+                "Insufficient permissions"
+            );
+            Err(forbidden_response(&format!(
+                "Insufficient permissions. Required one of: {}",
+                required_roles.join(", ")
+            )))
         }
     }
 }
@@ -203,12 +352,44 @@ async fn validate_api_key(api_key: &str, state: &AuthState) -> Result<Claims, Bo
     Err("Invalid API key".into())
 }
 
-/// Extractor for authenticated requests
+/// Create unauthorized response with WWW-Authenticate header
+fn unauthorized_response(message: &str) -> (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(
+            WWW_AUTHENTICATE,
+            HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+        )],
+        Json(AuthErrorResponse {
+            success: false,
+            error: AuthErrorDetail {
+                code: "UNAUTHORIZED".to_string(),
+                message: message.to_string(),
+            },
+        }),
+    )
+}
+
+/// Create forbidden response
+fn forbidden_response(message: &str) -> (StatusCode, Json<AuthErrorResponse>) {
+    (
+        StatusCode::FORBIDDEN,
+        Json(AuthErrorResponse {
+            success: false,
+            error: AuthErrorDetail {
+                code: "FORBIDDEN".to_string(),
+                message: message.to_string(),
+            },
+        }),
+    )
+}
+
+/// Extractor for authenticated requests - extracts Claims
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, Json<AuthErrorResponse>);
+    type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
     fn from_request_parts(
         parts: &mut Parts,
@@ -221,6 +402,46 @@ where
             .ok_or_else(|| {
                 (
                     StatusCode::UNAUTHORIZED,
+                    [(
+                        WWW_AUTHENTICATE,
+                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                    )],
+                    Json(AuthErrorResponse {
+                        success: false,
+                        error: AuthErrorDetail {
+                            code: "UNAUTHORIZED".to_string(),
+                            message: "Missing or invalid authentication token".to_string(),
+                        },
+                    }),
+                )
+            });
+
+        async move { result }
+    }
+}
+
+/// Extractor for authenticated requests - extracts AuthUser
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        let result = parts
+            .extensions
+            .get::<AuthUser>()
+            .cloned()
+            .ok_or_else(|| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    [(
+                        WWW_AUTHENTICATE,
+                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                    )],
                     Json(AuthErrorResponse {
                         success: false,
                         error: AuthErrorDetail {
