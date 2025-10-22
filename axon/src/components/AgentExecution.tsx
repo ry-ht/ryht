@@ -279,6 +279,39 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
     setTotalTokens(tokens);
   }, [messages]);
 
+  // Poll agent status as a safety mechanism to detect completion if events are missed
+  useEffect(() => {
+    if (!isRunning || !runId) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch current status from database
+        const currentRun = await api.getAgentRun(runId);
+
+        if (currentRun && (currentRun.status === 'completed' || currentRun.status === 'failed')) {
+          console.log(`[Polling] Detected agent run ${runId} is ${currentRun.status}, updating UI`);
+          setIsRunning(false);
+          setExecutionStartTime(null);
+
+          if (currentRun.status === 'failed') {
+            setError("Agent execution failed");
+            if (tabId) {
+              updateTabStatus(tabId, 'error');
+            }
+          } else {
+            if (tabId) {
+              updateTabStatus(tabId, 'complete');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Polling] Failed to check agent status:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [isRunning, runId, tabId, updateTabStatus]);
+
 
   // Project path selection is handled upstream when opening an execution tab
 
@@ -335,7 +368,16 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       const errorUnlisten = await listen<string>(`agent-error:${executionRunId}`, (event) => {
         console.error("Agent error:", event.payload);
         setError(event.payload);
-        
+
+        // Stop execution on error
+        setIsRunning(false);
+        setExecutionStartTime(null);
+
+        // Update tab status to error
+        if (tabId) {
+          updateTabStatus(tabId, 'error');
+        }
+
         // Track agent error
         trackEvent.agentError({
           error_type: 'runtime_error',

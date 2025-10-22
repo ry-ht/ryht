@@ -856,6 +856,11 @@ async fn spawn_agent_system(
     tokio::spawn(async move {
         info!("📡 Starting Claude stream for agent run {}...", run_id);
 
+        // Wait for frontend to set up event listeners to avoid race condition
+        // where events are emitted before listeners are ready
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        info!("⏳ Frontend listener setup delay complete for run {}", run_id);
+
         // Send combined prompt and get stream
         let stream_result = client
             .send(&combined_prompt)
