@@ -23,18 +23,18 @@ use commands::agents::{
     stream_session_output, update_agent, AgentDb,
 };
 use commands::claude::{
-    cancel_claude_execution, cancel_claude_execution_v2, check_auto_checkpoint,
+    cancel_claude_execution, check_auto_checkpoint,
     check_claude_version, cleanup_old_checkpoints, clear_checkpoint_manager, continue_claude_code,
-    continue_claude_code_v2, create_checkpoint, create_project, execute_claude_code,
-    execute_claude_code_v2, find_claude_md_files, fork_from_checkpoint, get_checkpoint_diff,
+    create_checkpoint, create_project, execute_claude_code,
+    find_claude_md_files, fork_from_checkpoint, get_checkpoint_diff,
     get_checkpoint_settings, get_checkpoint_state_stats, get_claude_session_output,
     get_claude_settings, get_home_directory, get_hooks_config, get_project_sessions,
     get_recently_modified_files, get_session_timeline, get_system_prompt, list_checkpoints,
     list_directory_contents, list_projects, list_running_claude_sessions, load_session_history,
     open_new_session, read_claude_md_file, restore_checkpoint, resume_claude_code,
-    resume_claude_code_v2, save_claude_md_file, save_claude_settings, save_system_prompt,
+    save_claude_md_file, save_claude_settings, save_system_prompt,
     search_files, track_checkpoint_message, track_session_messages, update_checkpoint_settings,
-    update_hooks_config, validate_hook_command, ClaudeProcessState,
+    update_hooks_config, validate_hook_command,
 };
 use commands::mcp::{
     mcp_add, mcp_add_from_claude_desktop, mcp_add_json, mcp_get, mcp_get_server_status, mcp_list,
@@ -153,9 +153,6 @@ fn main() {
             // Initialize process registry
             app.manage(ProcessRegistryState::default());
 
-            // Initialize Claude process state
-            app.manage(ClaudeProcessState::default());
-
             // Initialize Claude client registry
             app.manage(ClaudeClientRegistryState::default());
 
@@ -215,11 +212,6 @@ fn main() {
             continue_claude_code,
             resume_claude_code,
             cancel_claude_execution,
-            // V2 commands using ClaudeClient
-            execute_claude_code_v2,
-            continue_claude_code_v2,
-            resume_claude_code_v2,
-            cancel_claude_execution_v2,
             list_running_claude_sessions,
             get_claude_session_output,
             list_directory_contents,

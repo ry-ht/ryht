@@ -1297,15 +1297,15 @@ mod tests {
         let handle = ProcessHandle::new(session_id, child, pid);
 
         // Test appending output
-        handle.append_output("Line 1\n").expect("Failed to append");
-        handle.append_output("Line 2\n").expect("Failed to append");
+        handle.append_output("Line 1\n").await.expect("Failed to append");
+        handle.append_output("Line 2\n").await.expect("Failed to append");
 
-        let output = handle.get_output().expect("Failed to get output");
+        let output = handle.get_output().await.expect("Failed to get output");
         assert_eq!(output, "Line 1\nLine 2\n");
 
         // Test clearing
-        handle.clear_output().expect("Failed to clear");
-        let output = handle.get_output().expect("Failed to get output");
+        handle.clear_output().await.expect("Failed to clear");
+        let output = handle.get_output().await.expect("Failed to get output");
         assert!(output.is_empty());
     }
 
@@ -1426,10 +1426,10 @@ mod tests {
             .expect("Failed to register");
 
         // Append some output
-        handle.append_output("test output").expect("Failed to append");
+        handle.append_output("test output").await.expect("Failed to append");
 
         // Get output through registry
-        let output = registry.get_output(&session_id);
+        let output = registry.get_output(&session_id).await;
         assert!(output.is_some());
         assert_eq!(output.unwrap(), "test output");
     }
@@ -1499,7 +1499,7 @@ mod tests {
             "/test/project".to_string(),
             "Test task".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         assert_eq!(handle.session_id, session_id);
         assert!(handle.info.is_some());
@@ -1523,7 +1523,7 @@ mod tests {
             "/test/project".to_string(),
             "Sidecar task".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         assert_eq!(handle.session_id, session_id);
         assert_eq!(handle.pid, 12345);
@@ -1545,7 +1545,7 @@ mod tests {
             "/test/project".to_string(),
             "Interactive coding".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         assert_eq!(handle.session_id, session_id);
         assert_eq!(handle.pid, 54321);
@@ -1575,7 +1575,7 @@ mod tests {
                 "/test/project".to_string(),
                 "Test".to_string(),
                 "claude-3-5-sonnet-20241022".to_string(),
-            ).expect("Failed to register");
+            ).await.expect("Failed to register");
         }
 
         // Register one Claude session
@@ -1586,7 +1586,7 @@ mod tests {
             "/test/project".to_string(),
             "Test".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         let agents = registry.get_running_agent_processes();
         assert_eq!(agents.len(), 2);
@@ -1615,7 +1615,7 @@ mod tests {
             "/test/project".to_string(),
             "Test".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         // Register two Claude sessions
         for i in 0..2 {
@@ -1626,7 +1626,7 @@ mod tests {
                 "/test/project".to_string(),
                 "Test".to_string(),
                 "claude-3-5-sonnet-20241022".to_string(),
-            ).expect("Failed to register");
+            ).await.expect("Failed to register");
         }
 
         let sessions = registry.get_running_claude_sessions();
@@ -1648,7 +1648,7 @@ mod tests {
             "/test/project".to_string(),
             "Specific task".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         let found = registry.get_claude_session_by_id(&session_id);
         assert!(found.is_some());
@@ -1671,9 +1671,9 @@ mod tests {
     async fn test_generate_run_id() {
         let registry = ProcessRegistry::new();
 
-        let id1 = registry.generate_run_id().expect("Failed to generate ID");
-        let id2 = registry.generate_run_id().expect("Failed to generate ID");
-        let id3 = registry.generate_run_id().expect("Failed to generate ID");
+        let id1 = registry.generate_run_id().await.expect("Failed to generate ID");
+        let id2 = registry.generate_run_id().await.expect("Failed to generate ID");
+        let id3 = registry.generate_run_id().await.expect("Failed to generate ID");
 
         assert_eq!(id1, 1);
         assert_eq!(id2, 2);
@@ -1787,7 +1787,7 @@ mod tests {
             "/test".to_string(),
             "Task".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         // Register Claude session
         let claude_id = SessionId::new("claude");
@@ -1797,7 +1797,7 @@ mod tests {
             "/test".to_string(),
             "Task".to_string(),
             "claude-3-5-sonnet-20241022".to_string(),
-        ).expect("Failed to register");
+        ).await.expect("Failed to register");
 
         // All should appear in list_active
         let active = registry.list_active();
@@ -1975,7 +1975,7 @@ mod tests {
         let missing_id = SessionId::new("does-not-exist");
 
         assert!(registry.get(&missing_id).is_none());
-        assert!(registry.get_output(&missing_id).is_none());
+        assert!(registry.get_output(&missing_id).await.is_none());
         assert!(registry.unregister(&missing_id).is_none());
 
         let result = registry.kill(&missing_id, false).await;
@@ -2040,10 +2040,10 @@ mod tests {
 
         let large_string = "X".repeat(10000);
         for _ in 0..10 {
-            handle.append_output(&large_string).expect("Failed to append");
+            handle.append_output(&large_string).await.expect("Failed to append");
         }
 
-        let output = handle.get_output().expect("Failed to get output");
+        let output = handle.get_output().await.expect("Failed to get output");
         assert_eq!(output.len(), 100000);
     }
 
@@ -2058,14 +2058,14 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        handle.append_output("first\n").expect("Failed to append");
-        assert_eq!(handle.get_output().unwrap(), "first\n");
+        handle.append_output("first\n").await.expect("Failed to append");
+        assert_eq!(handle.get_output().await.unwrap(), "first\n");
 
-        handle.clear_output().expect("Failed to clear");
-        assert_eq!(handle.get_output().unwrap(), "");
+        handle.clear_output().await.expect("Failed to clear");
+        assert_eq!(handle.get_output().await.unwrap(), "");
 
-        handle.append_output("second\n").expect("Failed to append");
-        assert_eq!(handle.get_output().unwrap(), "second\n");
+        handle.append_output("second\n").await.expect("Failed to append");
+        assert_eq!(handle.get_output().await.unwrap(), "second\n");
     }
 
     #[tokio::test]
@@ -2083,8 +2083,8 @@ mod tests {
         assert_eq!(handle1.session_id, handle2.session_id);
         assert_eq!(handle1.pid, handle2.pid);
 
-        handle1.append_output("shared\n").expect("Failed to append");
-        assert_eq!(handle2.get_output().unwrap(), "shared\n");
+        handle1.append_output("shared\n").await.expect("Failed to append");
+        assert_eq!(handle2.get_output().await.unwrap(), "shared\n");
     }
 
     #[tokio::test]
@@ -2157,6 +2157,7 @@ mod tests {
             let handle = Arc::clone(&handle);
             let task = tokio::spawn(async move {
                 handle.append_output(&format!("line-{}\n", i))
+                    .await
                     .expect("Failed to append");
             });
             handles.push(task);
@@ -2166,7 +2167,7 @@ mod tests {
             task.await.expect("Task panicked");
         }
 
-        let output = handle.get_output().expect("Failed to get output");
+        let output = handle.get_output().await.expect("Failed to get output");
         let line_count = output.lines().count();
         assert_eq!(line_count, 50);
     }
@@ -2252,7 +2253,7 @@ mod tests {
         let registry = ProcessRegistry::new();
         let session_id = SessionId::new("unregistered");
 
-        let output = registry.get_output(&session_id);
+        let output = registry.get_output(&session_id).await;
         assert!(output.is_none());
     }
 }

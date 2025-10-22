@@ -124,10 +124,10 @@ mod tests {
             .expect("Failed to register");
 
         // 2. Append output
-        handle.append_output("test output\n").expect("Failed to append");
+        handle.append_output("test output\n").await.expect("Failed to append");
 
         // 3. Get output through registry
-        let output = registry.get_output(&session_id);
+        let output = registry.get_output(&session_id).await;
         assert!(output.is_some());
         assert_eq!(output.unwrap(), "test output\n");
 
