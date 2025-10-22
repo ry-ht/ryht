@@ -527,11 +527,11 @@ impl Default for ProcessRegistry {
     }
 }
 
-/// Global process registry state
-pub struct ProcessRegistryState(pub Arc<ProcessRegistry>);
+/// Global process registry state - now using cc-sdk's ProcessRegistry
+pub struct ProcessRegistryState(pub Arc<cc_sdk::process::ProcessRegistry>);
 
 impl Default for ProcessRegistryState {
     fn default() -> Self {
-        Self(Arc::new(ProcessRegistry::new()))
+        Self(Arc::new(cc_sdk::process::ProcessRegistry::new()))
     }
 }

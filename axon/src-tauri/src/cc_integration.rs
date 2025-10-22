@@ -1,7 +1,7 @@
 //! Integration layer between axon and cc-sdk
 //! Provides Tauri-specific wrappers and conversions
 
-use cc_sdk::{ClaudeClient, Result as CcResult, Error as CcError};
+use cc_sdk::{Result as CcResult, Error as CcError};
 use anyhow::Result;
 
 /// Convert cc-sdk Error to anyhow::Error

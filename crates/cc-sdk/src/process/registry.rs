@@ -6,9 +6,88 @@
 use crate::core::SessionId;
 use crate::result::Result;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::process::Child;
+use tokio::sync::Mutex;
+
+/// Type of process being tracked in the registry.
+///
+/// This enum distinguishes between different types of processes to enable
+/// type-specific filtering and management.
+///
+/// # Examples
+///
+/// ```rust
+/// use cc_sdk::process::ProcessType;
+///
+/// let agent_type = ProcessType::AgentRun {
+///     agent_id: 1,
+///     agent_name: "code-assistant".to_string(),
+/// };
+///
+/// let session_type = ProcessType::ClaudeSession {
+///     session_id: "session-123".to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone)]
+pub enum ProcessType {
+    /// An agent run process with associated agent metadata
+    AgentRun {
+        /// Unique identifier for the agent
+        agent_id: i64,
+        /// Display name of the agent
+        agent_name: String,
+    },
+    /// A Claude interactive session
+    ClaudeSession {
+        /// Session identifier
+        session_id: String,
+    },
+}
+
+/// Rich metadata about a running process.
+///
+/// `ProcessInfo` extends basic process information with task context,
+/// project information, and model details. This enables detailed tracking
+/// and reporting of process activities.
+///
+/// # Examples
+///
+/// ```rust
+/// use cc_sdk::process::{ProcessInfo, ProcessType};
+/// use std::time::SystemTime;
+///
+/// let info = ProcessInfo {
+///     run_id: 1,
+///     process_type: ProcessType::AgentRun {
+///         agent_id: 1,
+///         agent_name: "code-assistant".to_string(),
+///     },
+///     pid: 12345,
+///     started_at: SystemTime::now(),
+///     project_path: "/home/user/project".to_string(),
+///     task: "Implement feature X".to_string(),
+///     model: "claude-3-5-sonnet-20241022".to_string(),
+/// };
+/// ```
+#[derive(Debug, Clone)]
+pub struct ProcessInfo {
+    /// Unique run identifier for this process
+    pub run_id: i64,
+    /// Type of process (agent run or Claude session)
+    pub process_type: ProcessType,
+    /// Operating system process ID
+    pub pid: u32,
+    /// Timestamp when the process was started
+    pub started_at: SystemTime,
+    /// Absolute path to the project directory
+    pub project_path: String,
+    /// Description of the task being executed
+    pub task: String,
+    /// Model identifier (e.g., "claude-3-5-sonnet-20241022")
+    pub model: String,
+}
 
 /// Handle to a registered process with live output buffering.
 ///
@@ -54,6 +133,9 @@ pub struct ProcessHandle {
 
     /// Child process handle (wrapped for thread-safe access)
     pub child: Arc<Mutex<Option<Child>>>,
+
+    /// Optional rich process information (None for legacy processes)
+    pub info: Option<ProcessInfo>,
 }
 
 impl ProcessHandle {
@@ -89,6 +171,78 @@ impl ProcessHandle {
             started_at: SystemTime::now(),
             output_buffer: Arc::new(Mutex::new(String::new())),
             child: Arc::new(Mutex::new(Some(child))),
+            info: None,
+        }
+    }
+
+    /// Create a new process handle with rich process information.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `child` - The spawned child process
+    /// * `pid` - Process ID
+    /// * `info` - Rich process metadata
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use cc_sdk::process::{ProcessHandle, ProcessInfo, ProcessType};
+    /// use cc_sdk::core::SessionId;
+    /// use tokio::process::Command;
+    /// use std::time::SystemTime;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let session_id = SessionId::new("my-session");
+    /// let child = Command::new("echo").arg("hello").spawn()?;
+    /// let pid = child.id().unwrap();
+    ///
+    /// let info = ProcessInfo {
+    ///     run_id: 1,
+    ///     process_type: ProcessType::AgentRun {
+    ///         agent_id: 1,
+    ///         agent_name: "assistant".to_string(),
+    ///     },
+    ///     pid,
+    ///     started_at: SystemTime::now(),
+    ///     project_path: "/path/to/project".to_string(),
+    ///     task: "Build project".to_string(),
+    ///     model: "claude-3-5-sonnet-20241022".to_string(),
+    /// };
+    ///
+    /// let handle = ProcessHandle::with_info(session_id, child, pid, info);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_info(session_id: SessionId, child: Child, pid: u32, info: ProcessInfo) -> Self {
+        Self {
+            session_id,
+            pid,
+            started_at: info.started_at,
+            output_buffer: Arc::new(Mutex::new(String::new())),
+            child: Arc::new(Mutex::new(Some(child))),
+            info: Some(info),
+        }
+    }
+
+    /// Create a process handle without a child process.
+    ///
+    /// This is useful for sidecar processes or processes managed externally.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `pid` - Process ID
+    /// * `info` - Rich process metadata
+    pub fn without_child(session_id: SessionId, pid: u32, info: ProcessInfo) -> Self {
+        Self {
+            session_id,
+            pid,
+            started_at: info.started_at,
+            output_buffer: Arc::new(Mutex::new(String::new())),
+            child: Arc::new(Mutex::new(None)),
+            info: Some(info),
         }
     }
 
@@ -123,10 +277,8 @@ impl ProcessHandle {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn append_output(&self, output: &str) -> Result<()> {
-        let mut buffer = self.output_buffer
-            .lock()
-            .map_err(|e| crate::Error::protocol(format!("Failed to lock output buffer: {}", e)))?;
+    pub async fn append_output(&self, output: &str) -> Result<()> {
+        let mut buffer = self.output_buffer.lock().await;
         buffer.push_str(output);
         Ok(())
     }
@@ -155,10 +307,8 @@ impl ProcessHandle {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_output(&self) -> Result<String> {
-        let buffer = self.output_buffer
-            .lock()
-            .map_err(|e| crate::Error::protocol(format!("Failed to lock output buffer: {}", e)))?;
+    pub async fn get_output(&self) -> Result<String> {
+        let buffer = self.output_buffer.lock().await;
         Ok(buffer.clone())
     }
 
@@ -188,10 +338,8 @@ impl ProcessHandle {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn clear_output(&self) -> Result<()> {
-        let mut buffer = self.output_buffer
-            .lock()
-            .map_err(|e| crate::Error::protocol(format!("Failed to lock output buffer: {}", e)))?;
+    pub async fn clear_output(&self) -> Result<()> {
+        let mut buffer = self.output_buffer.lock().await;
         buffer.clear();
         Ok(())
     }
@@ -223,9 +371,7 @@ impl ProcessHandle {
     /// # }
     /// ```
     pub async fn is_running(&self) -> Result<bool> {
-        let mut child_guard = self.child
-            .lock()
-            .map_err(|e| crate::Error::protocol(format!("Failed to lock child: {}", e)))?;
+        let mut child_guard = self.child.lock().await;
 
         if let Some(ref mut child) = *child_guard {
             match child.try_wait() {
@@ -330,6 +476,8 @@ impl ProcessHandle {
 pub struct ProcessRegistry {
     /// Internal process storage (SessionId -> ProcessHandle)
     processes: Arc<RwLock<HashMap<SessionId, ProcessHandle>>>,
+    /// Auto-incrementing ID for generating unique run IDs
+    next_run_id: Arc<Mutex<i64>>,
 }
 
 impl ProcessRegistry {
@@ -345,10 +493,31 @@ impl ProcessRegistry {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(RwLock::new(HashMap::new())),
+            next_run_id: Arc::new(Mutex::new(1)),
         }
     }
 
-    /// Register a new process.
+    /// Generate a unique run ID for a process.
+    ///
+    /// This is used internally by methods that need to create new ProcessInfo instances.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cc_sdk::process::ProcessRegistry;
+    ///
+    /// let registry = ProcessRegistry::new();
+    /// let run_id = registry.generate_run_id().unwrap();
+    /// assert!(run_id > 0);
+    /// ```
+    pub async fn generate_run_id(&self) -> Result<i64> {
+        let mut next_id = self.next_run_id.lock().await;
+        let id = *next_id;
+        *next_id += 1;
+        Ok(id)
+    }
+
+    /// Register a new process (legacy method for backward compatibility).
     ///
     /// Adds a process to the registry and returns a handle for accessing it.
     /// If a process with the same session ID already exists, it will be replaced.
@@ -394,6 +563,331 @@ impl ProcessRegistry {
         processes.insert(session_id, handle.clone());
 
         Ok(handle)
+    }
+
+    /// Register a new agent process with rich metadata.
+    ///
+    /// This method extends the basic `register()` to include task context, agent information,
+    /// and other metadata useful for tracking and reporting.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `child` - The spawned child process
+    /// * `agent_id` - Unique identifier for the agent
+    /// * `agent_name` - Display name of the agent
+    /// * `project_path` - Absolute path to the project directory
+    /// * `task` - Description of the task being executed
+    /// * `model` - Model identifier (e.g., "claude-3-5-sonnet-20241022")
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use cc_sdk::process::ProcessRegistry;
+    /// use cc_sdk::core::SessionId;
+    /// use tokio::process::Command;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = ProcessRegistry::new();
+    /// let session_id = SessionId::generate();
+    /// let child = Command::new("claude").spawn()?;
+    ///
+    /// let handle = registry.register_process(
+    ///     session_id,
+    ///     child,
+    ///     1,
+    ///     "code-assistant".to_string(),
+    ///     "/home/user/project".to_string(),
+    ///     "Implement feature X".to_string(),
+    ///     "claude-3-5-sonnet-20241022".to_string(),
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn register_process(
+        &self,
+        session_id: SessionId,
+        child: Child,
+        agent_id: i64,
+        agent_name: String,
+        project_path: String,
+        task: String,
+        model: String,
+    ) -> Result<ProcessHandle> {
+        let pid = child.id().ok_or_else(|| {
+            crate::Error::protocol("Failed to get process ID from child")
+        })?;
+
+        let run_id = self.generate_run_id().await?;
+
+        let info = ProcessInfo {
+            run_id,
+            process_type: ProcessType::AgentRun {
+                agent_id,
+                agent_name,
+            },
+            pid,
+            started_at: SystemTime::now(),
+            project_path,
+            task,
+            model,
+        };
+
+        let handle = ProcessHandle::with_info(session_id.clone(), child, pid, info);
+
+        let mut processes = self.processes
+            .write()
+            .map_err(|e| crate::Error::protocol(format!("Failed to lock registry: {}", e)))?;
+
+        processes.insert(session_id, handle.clone());
+
+        Ok(handle)
+    }
+
+    /// Register a sidecar process without a child handle.
+    ///
+    /// This is useful for processes that are managed externally (e.g., through Tauri sidecar)
+    /// but still need to be tracked in the registry.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `pid` - Process ID
+    /// * `agent_id` - Unique identifier for the agent
+    /// * `agent_name` - Display name of the agent
+    /// * `project_path` - Absolute path to the project directory
+    /// * `task` - Description of the task being executed
+    /// * `model` - Model identifier
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cc_sdk::process::ProcessRegistry;
+    /// use cc_sdk::core::SessionId;
+    ///
+    /// let registry = ProcessRegistry::new();
+    /// let session_id = SessionId::generate();
+    ///
+    /// let handle = registry.register_sidecar_process(
+    ///     session_id,
+    ///     12345,
+    ///     1,
+    ///     "sidecar-agent".to_string(),
+    ///     "/home/user/project".to_string(),
+    ///     "Background task".to_string(),
+    ///     "claude-3-5-sonnet-20241022".to_string(),
+    /// ).unwrap();
+    /// ```
+    pub async fn register_sidecar_process(
+        &self,
+        session_id: SessionId,
+        pid: u32,
+        agent_id: i64,
+        agent_name: String,
+        project_path: String,
+        task: String,
+        model: String,
+    ) -> Result<ProcessHandle> {
+        let run_id = self.generate_run_id().await?;
+
+        let info = ProcessInfo {
+            run_id,
+            process_type: ProcessType::AgentRun {
+                agent_id,
+                agent_name,
+            },
+            pid,
+            started_at: SystemTime::now(),
+            project_path,
+            task,
+            model,
+        };
+
+        let handle = ProcessHandle::without_child(session_id.clone(), pid, info);
+
+        let mut processes = self.processes
+            .write()
+            .map_err(|e| crate::Error::protocol(format!("Failed to lock registry: {}", e)))?;
+
+        processes.insert(session_id, handle.clone());
+
+        Ok(handle)
+    }
+
+    /// Register a Claude session.
+    ///
+    /// Claude sessions are interactive sessions that may not have a direct child process
+    /// but still need to be tracked.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Unique identifier for the session
+    /// * `pid` - Process ID
+    /// * `project_path` - Absolute path to the project directory
+    /// * `task` - Description of the task being executed
+    /// * `model` - Model identifier
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cc_sdk::process::ProcessRegistry;
+    /// use cc_sdk::core::SessionId;
+    ///
+    /// let registry = ProcessRegistry::new();
+    /// let session_id = SessionId::generate();
+    ///
+    /// let handle = registry.register_claude_session(
+    ///     session_id.clone(),
+    ///     12345,
+    ///     "/home/user/project".to_string(),
+    ///     "Interactive coding session".to_string(),
+    ///     "claude-3-5-sonnet-20241022".to_string(),
+    /// ).unwrap();
+    /// ```
+    pub async fn register_claude_session(
+        &self,
+        session_id: SessionId,
+        pid: u32,
+        project_path: String,
+        task: String,
+        model: String,
+    ) -> Result<ProcessHandle> {
+        let run_id = self.generate_run_id().await?;
+
+        let info = ProcessInfo {
+            run_id,
+            process_type: ProcessType::ClaudeSession {
+                session_id: session_id.to_string(),
+            },
+            pid,
+            started_at: SystemTime::now(),
+            project_path,
+            task,
+            model,
+        };
+
+        let handle = ProcessHandle::without_child(session_id.clone(), pid, info);
+
+        let mut processes = self.processes
+            .write()
+            .map_err(|e| crate::Error::protocol(format!("Failed to lock registry: {}", e)))?;
+
+        processes.insert(session_id, handle.clone());
+
+        Ok(handle)
+    }
+
+    /// Get all running agent processes.
+    ///
+    /// Returns a vector of ProcessInfo for all processes of type AgentRun.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use cc_sdk::process::ProcessRegistry;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let registry = ProcessRegistry::new();
+    /// // ... register some agent processes ...
+    ///
+    /// let agents = registry.get_running_agent_processes();
+    /// println!("Found {} running agents", agents.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn get_running_agent_processes(&self) -> Vec<ProcessInfo> {
+        let processes = match self.processes.read() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        processes
+            .values()
+            .filter_map(|handle| {
+                if let Some(ref info) = handle.info {
+                    match &info.process_type {
+                        ProcessType::AgentRun { .. } => Some(info.clone()),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all running Claude sessions.
+    ///
+    /// Returns a vector of ProcessInfo for all processes of type ClaudeSession.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cc_sdk::process::ProcessRegistry;
+    ///
+    /// let registry = ProcessRegistry::new();
+    /// // ... register some Claude sessions ...
+    ///
+    /// let sessions = registry.get_running_claude_sessions();
+    /// println!("Found {} running Claude sessions", sessions.len());
+    /// ```
+    pub fn get_running_claude_sessions(&self) -> Vec<ProcessInfo> {
+        let processes = match self.processes.read() {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+
+        processes
+            .values()
+            .filter_map(|handle| {
+                if let Some(ref info) = handle.info {
+                    match &info.process_type {
+                        ProcessType::ClaudeSession { .. } => Some(info.clone()),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get a Claude session by its session ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - The session identifier to look up
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use cc_sdk::process::ProcessRegistry;
+    /// use cc_sdk::core::SessionId;
+    ///
+    /// let registry = ProcessRegistry::new();
+    /// let session_id = SessionId::new("my-session");
+    ///
+    /// // ... register a Claude session with this ID ...
+    ///
+    /// if let Some(info) = registry.get_claude_session_by_id(&session_id) {
+    ///     println!("Found Claude session: {}", info.task);
+    /// }
+    /// ```
+    pub fn get_claude_session_by_id(&self, session_id: &SessionId) -> Option<ProcessInfo> {
+        let processes = self.processes.read().ok()?;
+
+        processes.get(session_id).and_then(|handle| {
+            if let Some(ref info) = handle.info {
+                match &info.process_type {
+                    ProcessType::ClaudeSession { .. } => Some(info.clone()),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
     }
 
     /// Get a process handle by session ID.
@@ -515,9 +1009,9 @@ impl ProcessRegistry {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_output(&self, session_id: &SessionId) -> Option<String> {
+    pub async fn get_output(&self, session_id: &SessionId) -> Option<String> {
         let handle = self.get(session_id)?;
-        handle.get_output().ok()
+        handle.get_output().await.ok()
     }
 
     /// Kill a process with optional graceful shutdown.
@@ -577,9 +1071,7 @@ impl ProcessRegistry {
     async fn kill_graceful(&self, handle: &ProcessHandle) -> Result<()> {
         // Try to terminate gracefully first
         {
-            let mut child_guard = handle.child
-                .lock()
-                .map_err(|e| crate::Error::protocol(format!("Failed to lock child: {}", e)))?;
+            let mut child_guard = handle.child.lock().await;
 
             if let Some(ref mut child) = *child_guard {
                 // Send termination signal
@@ -613,9 +1105,7 @@ impl ProcessRegistry {
     async fn kill_forced(&self, handle: &ProcessHandle) -> Result<()> {
         // Try direct child.kill() first
         {
-            let mut child_guard = handle.child
-                .lock()
-                .map_err(|e| crate::Error::protocol(format!("Failed to lock child: {}", e)))?;
+            let mut child_guard = handle.child.lock().await;
 
             if let Some(ref mut child) = *child_guard {
                 let _ = child.start_kill();
@@ -989,9 +1479,341 @@ mod tests {
         assert!(registry.get(&session_id).is_none());
     }
 
-    // ===== NEW COMPREHENSIVE TESTS =====
+    // ===== NEW TESTS FOR EXTENDED FUNCTIONALITY =====
 
-    /// Test concurrent registration of multiple processes from different threads
+    #[tokio::test]
+    async fn test_register_process_with_metadata() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("agent-session");
+
+        let child = tokio::process::Command::new("echo")
+            .arg("hello")
+            .spawn()
+            .expect("Failed to spawn process");
+
+        let handle = registry.register_process(
+            session_id.clone(),
+            child,
+            1,
+            "test-agent".to_string(),
+            "/test/project".to_string(),
+            "Test task".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        assert_eq!(handle.session_id, session_id);
+        assert!(handle.info.is_some());
+
+        let info = handle.info.unwrap();
+        assert!(matches!(info.process_type, ProcessType::AgentRun { .. }));
+        assert_eq!(info.task, "Test task");
+        assert_eq!(info.model, "claude-3-5-sonnet-20241022");
+    }
+
+    #[tokio::test]
+    async fn test_register_sidecar_process() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("sidecar-session");
+
+        let handle = registry.register_sidecar_process(
+            session_id.clone(),
+            12345,
+            2,
+            "sidecar-agent".to_string(),
+            "/test/project".to_string(),
+            "Sidecar task".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        assert_eq!(handle.session_id, session_id);
+        assert_eq!(handle.pid, 12345);
+        assert!(handle.info.is_some());
+
+        // Verify child is None for sidecar
+        let child_guard = handle.child.lock().await;
+        assert!(child_guard.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_register_claude_session() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("claude-session-123");
+
+        let handle = registry.register_claude_session(
+            session_id.clone(),
+            54321,
+            "/test/project".to_string(),
+            "Interactive coding".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        assert_eq!(handle.session_id, session_id);
+        assert_eq!(handle.pid, 54321);
+        assert!(handle.info.is_some());
+
+        let info = handle.info.unwrap();
+        assert!(matches!(info.process_type, ProcessType::ClaudeSession { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_get_running_agent_processes() {
+        let registry = ProcessRegistry::new();
+
+        // Register two agent processes
+        for i in 0..2 {
+            let session_id = SessionId::new(format!("agent-{}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("hello")
+                .spawn()
+                .expect("Failed to spawn");
+
+            registry.register_process(
+                session_id,
+                child,
+                i,
+                format!("agent-{}", i),
+                "/test/project".to_string(),
+                "Test".to_string(),
+                "claude-3-5-sonnet-20241022".to_string(),
+            ).expect("Failed to register");
+        }
+
+        // Register one Claude session
+        let session_id = SessionId::new("claude-session");
+        registry.register_claude_session(
+            session_id,
+            99999,
+            "/test/project".to_string(),
+            "Test".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        let agents = registry.get_running_agent_processes();
+        assert_eq!(agents.len(), 2);
+
+        for info in &agents {
+            assert!(matches!(info.process_type, ProcessType::AgentRun { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_running_claude_sessions() {
+        let registry = ProcessRegistry::new();
+
+        // Register one agent process
+        let agent_session = SessionId::new("agent-session");
+        let child = tokio::process::Command::new("echo")
+            .arg("hello")
+            .spawn()
+            .expect("Failed to spawn");
+
+        registry.register_process(
+            agent_session,
+            child,
+            1,
+            "agent".to_string(),
+            "/test/project".to_string(),
+            "Test".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        // Register two Claude sessions
+        for i in 0..2 {
+            let session_id = SessionId::new(format!("claude-{}", i));
+            registry.register_claude_session(
+                session_id,
+                10000 + i as u32,
+                "/test/project".to_string(),
+                "Test".to_string(),
+                "claude-3-5-sonnet-20241022".to_string(),
+            ).expect("Failed to register");
+        }
+
+        let sessions = registry.get_running_claude_sessions();
+        assert_eq!(sessions.len(), 2);
+
+        for info in &sessions {
+            assert!(matches!(info.process_type, ProcessType::ClaudeSession { .. }));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_claude_session_by_id() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("my-claude-session");
+
+        registry.register_claude_session(
+            session_id.clone(),
+            11111,
+            "/test/project".to_string(),
+            "Specific task".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        let found = registry.get_claude_session_by_id(&session_id);
+        assert!(found.is_some());
+
+        let info = found.unwrap();
+        assert_eq!(info.task, "Specific task");
+        assert_eq!(info.pid, 11111);
+    }
+
+    #[tokio::test]
+    async fn test_get_claude_session_by_id_not_found() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("non-existent");
+
+        let found = registry.get_claude_session_by_id(&session_id);
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_generate_run_id() {
+        let registry = ProcessRegistry::new();
+
+        let id1 = registry.generate_run_id().expect("Failed to generate ID");
+        let id2 = registry.generate_run_id().expect("Failed to generate ID");
+        let id3 = registry.generate_run_id().expect("Failed to generate ID");
+
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+        assert_eq!(id3, 3);
+    }
+
+    #[tokio::test]
+    async fn test_backward_compatibility() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("legacy-session");
+
+        // Use old register method
+        let child = tokio::process::Command::new("echo")
+            .arg("hello")
+            .spawn()
+            .expect("Failed to spawn");
+
+        let handle = registry.register(session_id.clone(), child)
+            .expect("Failed to register");
+
+        // Should work with legacy API
+        assert_eq!(handle.session_id, session_id);
+        assert!(handle.info.is_none()); // No metadata for legacy registration
+
+        // Should still appear in list_active
+        let active = registry.list_active();
+        assert_eq!(active.len(), 1);
+        assert!(active.contains(&session_id));
+    }
+
+    #[tokio::test]
+    async fn test_process_handle_with_info() {
+        let session_id = SessionId::new("info-test");
+        let child = tokio::process::Command::new("echo")
+            .arg("hello")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let info = ProcessInfo {
+            run_id: 42,
+            process_type: ProcessType::AgentRun {
+                agent_id: 7,
+                agent_name: "test-agent".to_string(),
+            },
+            pid,
+            started_at: SystemTime::now(),
+            project_path: "/test".to_string(),
+            task: "Test task".to_string(),
+            model: "claude-3-5-sonnet-20241022".to_string(),
+        };
+
+        let handle = ProcessHandle::with_info(session_id.clone(), child, pid, info);
+
+        assert!(handle.info.is_some());
+        let stored_info = handle.info.unwrap();
+        assert_eq!(stored_info.run_id, 42);
+        assert_eq!(stored_info.task, "Test task");
+    }
+
+    #[tokio::test]
+    async fn test_process_handle_without_child() {
+        let session_id = SessionId::new("no-child-test");
+        let pid = 99999;
+
+        let info = ProcessInfo {
+            run_id: 100,
+            process_type: ProcessType::ClaudeSession {
+                session_id: session_id.to_string(),
+            },
+            pid,
+            started_at: SystemTime::now(),
+            project_path: "/test".to_string(),
+            task: "Test task".to_string(),
+            model: "claude-3-5-sonnet-20241022".to_string(),
+        };
+
+        let handle = ProcessHandle::without_child(session_id, pid, info);
+
+        // Verify no child handle
+        let child_guard = handle.child.lock().await;
+        assert!(child_guard.is_none());
+
+        // Verify info is present
+        assert!(handle.info.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mixed_process_types() {
+        let registry = ProcessRegistry::new();
+
+        // Register legacy process
+        let legacy_id = SessionId::new("legacy");
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        registry.register(legacy_id.clone(), child).expect("Failed to register");
+
+        // Register agent process
+        let agent_id = SessionId::new("agent");
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        registry.register_process(
+            agent_id.clone(),
+            child,
+            1,
+            "agent".to_string(),
+            "/test".to_string(),
+            "Task".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        // Register Claude session
+        let claude_id = SessionId::new("claude");
+        registry.register_claude_session(
+            claude_id.clone(),
+            12345,
+            "/test".to_string(),
+            "Task".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+        ).expect("Failed to register");
+
+        // All should appear in list_active
+        let active = registry.list_active();
+        assert_eq!(active.len(), 3);
+
+        // Only agent should appear in get_running_agent_processes
+        let agents = registry.get_running_agent_processes();
+        assert_eq!(agents.len(), 1);
+
+        // Only Claude session should appear in get_running_claude_sessions
+        let sessions = registry.get_running_claude_sessions();
+        assert_eq!(sessions.len(), 1);
+    }
+
+    // ===== ORIGINAL COMPREHENSIVE TESTS =====
+
     #[tokio::test]
     async fn test_concurrent_registration() {
         use std::sync::Arc;
@@ -999,7 +1821,6 @@ mod tests {
         let registry = Arc::new(ProcessRegistry::new());
         let mut handles = vec![];
 
-        // Spawn 20 concurrent registration tasks
         for i in 0..20 {
             let registry = Arc::clone(&registry);
             let handle = tokio::spawn(async move {
@@ -1012,29 +1833,24 @@ mod tests {
                 registry.register(session_id.clone(), child)
                     .expect("Failed to register");
 
-                // Also test concurrent reads
                 assert!(registry.get(&session_id).is_some());
             });
             handles.push(handle);
         }
 
-        // Wait for all tasks
         for handle in handles {
             handle.await.expect("Task panicked");
         }
 
-        // Verify all registered
         assert_eq!(registry.list_active().len(), 20);
     }
 
-    /// Test concurrent reads and writes
     #[tokio::test]
     async fn test_concurrent_reads_and_writes() {
         use std::sync::Arc;
 
         let registry = Arc::new(ProcessRegistry::new());
 
-        // Pre-register some processes
         for i in 0..5 {
             let session_id = SessionId::new(format!("session-{}", i));
             let child = tokio::process::Command::new("echo")
@@ -1046,7 +1862,6 @@ mod tests {
 
         let mut handles = vec![];
 
-        // Spawn reader tasks
         for _ in 0..10 {
             let registry = Arc::clone(&registry);
             let handle = tokio::spawn(async move {
@@ -1059,7 +1874,6 @@ mod tests {
             handles.push(handle);
         }
 
-        // Spawn writer tasks
         for i in 5..10 {
             let registry = Arc::clone(&registry);
             let handle = tokio::spawn(async move {
@@ -1073,22 +1887,18 @@ mod tests {
             handles.push(handle);
         }
 
-        // Wait for all tasks
         for handle in handles {
             handle.await.expect("Task panicked");
         }
 
-        // Should have 10 registered processes
         assert_eq!(registry.list_active().len(), 10);
     }
 
-    /// Test registry iteration and filtering
     #[tokio::test]
     async fn test_registry_iteration() {
         let registry = ProcessRegistry::new();
         let mut expected_ids = Vec::new();
 
-        // Register processes with specific naming pattern
         for i in 0..10 {
             let session_id = SessionId::new(format!("test-{:03}", i));
             let child = tokio::process::Command::new("echo")
@@ -1103,13 +1913,11 @@ mod tests {
         let active = registry.list_active();
         assert_eq!(active.len(), 10);
 
-        // Verify we can find each expected ID
         for expected_id in &expected_ids {
             assert!(active.contains(expected_id), "Missing ID: {:?}", expected_id);
         }
     }
 
-    /// Test process lookup by PID through handle
     #[tokio::test]
     async fn test_process_lookup_by_pid() {
         let registry = ProcessRegistry::new();
@@ -1124,18 +1932,15 @@ mod tests {
         let handle = registry.register(session_id.clone(), child)
             .expect("Failed to register");
 
-        // Verify we can look up by session and get correct PID
         let retrieved_handle = registry.get(&session_id).expect("Handle not found");
         assert_eq!(retrieved_handle.pid, expected_pid);
         assert_eq!(handle.pid, expected_pid);
     }
 
-    /// Test registry cleanup with mixed finished/running processes
     #[tokio::test]
     async fn test_cleanup_mixed_processes() {
         let registry = ProcessRegistry::new();
 
-        // Register short-lived processes
         for i in 0..3 {
             let session_id = SessionId::new(format!("short-{}", i));
             let child = tokio::process::Command::new("echo")
@@ -1145,7 +1950,6 @@ mod tests {
             registry.register(session_id, child).expect("Failed to register");
         }
 
-        // Register longer-lived processes
         for i in 0..3 {
             let session_id = SessionId::new(format!("long-{}", i));
             let child = tokio::process::Command::new("sleep")
@@ -1155,41 +1959,29 @@ mod tests {
             registry.register(session_id, child).expect("Failed to register");
         }
 
-        // Wait for short-lived to finish
         tokio::time::sleep(Duration::from_millis(150)).await;
 
-        // Cleanup
         let cleaned = registry.cleanup_finished().await;
 
-        // Should have cleaned up the echo processes
         assert!(cleaned >= 3, "Expected at least 3 cleaned, got {}", cleaned);
 
-        // Should still have the sleep processes
         let remaining = registry.list_active().len();
         assert!(remaining <= 3, "Expected at most 3 remaining, got {}", remaining);
     }
 
-    /// Test error handling for missing processes
     #[tokio::test]
     async fn test_error_missing_process() {
         let registry = ProcessRegistry::new();
         let missing_id = SessionId::new("does-not-exist");
 
-        // Try to get non-existent process
         assert!(registry.get(&missing_id).is_none());
-
-        // Try to get output from non-existent process
         assert!(registry.get_output(&missing_id).is_none());
-
-        // Try to unregister non-existent process
         assert!(registry.unregister(&missing_id).is_none());
 
-        // Try to kill non-existent process
         let result = registry.kill(&missing_id, false).await;
         assert!(result.is_err());
     }
 
-    /// Test registry cleanup edge case: empty registry
     #[tokio::test]
     async fn test_cleanup_empty_registry() {
         let registry = ProcessRegistry::new();
@@ -1197,12 +1989,10 @@ mod tests {
         assert_eq!(cleaned, 0);
     }
 
-    /// Test registry cleanup edge case: all processes still running
     #[tokio::test]
     async fn test_cleanup_all_running() {
         let registry = ProcessRegistry::new();
 
-        // Register processes that will still be running
         for i in 0..3 {
             let session_id = SessionId::new(format!("running-{}", i));
             let child = tokio::process::Command::new("sleep")
@@ -1215,11 +2005,9 @@ mod tests {
         let cleaned = registry.cleanup_finished().await;
         assert_eq!(cleaned, 0);
 
-        // All should still be active
         assert_eq!(registry.list_active().len(), 3);
     }
 
-    /// Test process state transitions
     #[tokio::test]
     async fn test_process_state_transitions() {
         let session_id = SessionId::new("state-test");
@@ -1231,20 +2019,14 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        // Initially running
         assert!(handle.is_running().await.expect("Failed to check status"));
 
-        // Wait for completion
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        // Should be finished
         assert!(!handle.is_running().await.expect("Failed to check status"));
-
-        // Second check should also return false
         assert!(!handle.is_running().await.expect("Failed to check status"));
     }
 
-    /// Test output buffer with large content
     #[tokio::test]
     async fn test_output_buffer_large_content() {
         let session_id = SessionId::new("large-output");
@@ -1256,7 +2038,6 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        // Append large content
         let large_string = "X".repeat(10000);
         for _ in 0..10 {
             handle.append_output(&large_string).expect("Failed to append");
@@ -1266,7 +2047,6 @@ mod tests {
         assert_eq!(output.len(), 100000);
     }
 
-    /// Test output buffer clearing
     #[tokio::test]
     async fn test_output_buffer_clear_and_reuse() {
         let session_id = SessionId::new("clear-test");
@@ -1278,7 +2058,6 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        // Add, clear, add pattern
         handle.append_output("first\n").expect("Failed to append");
         assert_eq!(handle.get_output().unwrap(), "first\n");
 
@@ -1289,7 +2068,6 @@ mod tests {
         assert_eq!(handle.get_output().unwrap(), "second\n");
     }
 
-    /// Test ProcessHandle cloning
     #[tokio::test]
     async fn test_process_handle_clone() {
         let session_id = SessionId::new("clone-test");
@@ -1302,22 +2080,18 @@ mod tests {
         let handle1 = ProcessHandle::new(session_id.clone(), child, pid);
         let handle2 = handle1.clone();
 
-        // Both should have same metadata
         assert_eq!(handle1.session_id, handle2.session_id);
         assert_eq!(handle1.pid, handle2.pid);
 
-        // Output should be shared
         handle1.append_output("shared\n").expect("Failed to append");
         assert_eq!(handle2.get_output().unwrap(), "shared\n");
     }
 
-    /// Test registry replacement of existing session
     #[tokio::test]
     async fn test_registry_replace_existing_session() {
         let registry = ProcessRegistry::new();
         let session_id = SessionId::new("replace-test");
 
-        // Register first process
         let child1 = tokio::process::Command::new("echo")
             .arg("first")
             .spawn()
@@ -1328,7 +2102,6 @@ mod tests {
             .expect("Failed to register");
         assert_eq!(handle1.pid, pid1);
 
-        // Register second process with same session ID (should replace)
         let child2 = tokio::process::Command::new("echo")
             .arg("second")
             .spawn()
@@ -1339,15 +2112,12 @@ mod tests {
             .expect("Failed to register");
         assert_eq!(handle2.pid, pid2);
 
-        // Should only have one entry
         assert_eq!(registry.list_active().len(), 1);
 
-        // Should have the second process
         let retrieved = registry.get(&session_id).expect("Not found");
         assert_eq!(retrieved.pid, pid2);
     }
 
-    /// Test uptime calculation accuracy
     #[tokio::test]
     async fn test_uptime_accuracy() {
         let session_id = SessionId::new("uptime-test");
@@ -1359,20 +2129,16 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        // Check uptime immediately
         let uptime1 = handle.uptime().expect("Failed to get uptime");
         assert!(uptime1 < Duration::from_millis(100));
 
-        // Wait 200ms
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        // Check uptime again
         let uptime2 = handle.uptime().expect("Failed to get uptime");
         assert!(uptime2 >= Duration::from_millis(200));
         assert!(uptime2 < Duration::from_millis(500));
     }
 
-    /// Test thread safety with output buffer
     #[tokio::test]
     async fn test_thread_safe_output_buffer() {
         use std::sync::Arc;
@@ -1387,7 +2153,6 @@ mod tests {
         let handle = Arc::new(ProcessHandle::new(session_id, child, pid));
         let mut handles = vec![];
 
-        // Spawn multiple tasks that append concurrently
         for i in 0..50 {
             let handle = Arc::clone(&handle);
             let task = tokio::spawn(async move {
@@ -1397,18 +2162,15 @@ mod tests {
             handles.push(task);
         }
 
-        // Wait for all tasks
         for task in handles {
             task.await.expect("Task panicked");
         }
 
-        // Verify we have all 50 lines
         let output = handle.get_output().expect("Failed to get output");
         let line_count = output.lines().count();
         assert_eq!(line_count, 50);
     }
 
-    /// Test is_running after process completes
     #[tokio::test]
     async fn test_is_running_after_completion() {
         let session_id = SessionId::new("completion-test");
@@ -1420,23 +2182,18 @@ mod tests {
 
         let handle = ProcessHandle::new(session_id, child, pid);
 
-        // Should be running initially
         assert!(handle.is_running().await.expect("Failed to check"));
 
-        // Wait for completion
         tokio::time::sleep(Duration::from_millis(150)).await;
 
-        // Should not be running anymore
         assert!(!handle.is_running().await.expect("Failed to check"));
     }
 
-    /// Test registry with SessionId::generate()
     #[tokio::test]
     async fn test_registry_with_generated_ids() {
         let registry = ProcessRegistry::new();
         let mut generated_ids = Vec::new();
 
-        // Register processes with generated IDs
         for _ in 0..5 {
             let session_id = SessionId::generate();
             let child = tokio::process::Command::new("echo")
@@ -1449,21 +2206,17 @@ mod tests {
             generated_ids.push(session_id);
         }
 
-        // Verify all registered
         assert_eq!(registry.list_active().len(), 5);
 
-        // Verify each ID is unique and retrievable
         for id in &generated_ids {
             assert!(registry.get(id).is_some());
         }
     }
 
-    /// Test multiple cleanup cycles
     #[tokio::test]
     async fn test_multiple_cleanup_cycles() {
         let registry = ProcessRegistry::new();
 
-        // First batch
         for i in 0..3 {
             let session_id = SessionId::new(format!("batch1-{}", i));
             let child = tokio::process::Command::new("echo")
@@ -1477,7 +2230,6 @@ mod tests {
         let cleaned1 = registry.cleanup_finished().await;
         assert!(cleaned1 > 0);
 
-        // Second batch
         for i in 0..3 {
             let session_id = SessionId::new(format!("batch2-{}", i));
             let child = tokio::process::Command::new("echo")
@@ -1491,12 +2243,10 @@ mod tests {
         let cleaned2 = registry.cleanup_finished().await;
         assert!(cleaned2 > 0);
 
-        // Cleanup again should return 0
         let cleaned3 = registry.cleanup_finished().await;
         assert_eq!(cleaned3, 0);
     }
 
-    /// Test get_output returns None for unregistered session
     #[tokio::test]
     async fn test_get_output_unregistered() {
         let registry = ProcessRegistry::new();

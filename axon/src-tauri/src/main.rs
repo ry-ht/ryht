@@ -1,12 +1,17 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod adapters;
+mod cc_integration;
 mod checkpoint;
 mod claude_binary;
+mod claude_client_registry;
 mod commands;
 mod process;
+mod web_server;
 
 use checkpoint::state::CheckpointState;
+use claude_client_registry::ClaudeClientRegistryState;
 use commands::agents::{
     cleanup_finished_processes, create_agent, delete_agent, execute_agent, export_agent,
     export_agent_to_file, fetch_github_agent_content, fetch_github_agents, get_agent,
@@ -18,16 +23,17 @@ use commands::agents::{
     stream_session_output, update_agent, AgentDb,
 };
 use commands::claude::{
-    cancel_claude_execution, check_auto_checkpoint, check_claude_version, cleanup_old_checkpoints,
-    clear_checkpoint_manager, continue_claude_code, create_checkpoint, create_project,
-    execute_claude_code, find_claude_md_files, fork_from_checkpoint, get_checkpoint_diff,
+    cancel_claude_execution, cancel_claude_execution_v2, check_auto_checkpoint,
+    check_claude_version, cleanup_old_checkpoints, clear_checkpoint_manager, continue_claude_code,
+    continue_claude_code_v2, create_checkpoint, create_project, execute_claude_code,
+    execute_claude_code_v2, find_claude_md_files, fork_from_checkpoint, get_checkpoint_diff,
     get_checkpoint_settings, get_checkpoint_state_stats, get_claude_session_output,
     get_claude_settings, get_home_directory, get_hooks_config, get_project_sessions,
     get_recently_modified_files, get_session_timeline, get_system_prompt, list_checkpoints,
     list_directory_contents, list_projects, list_running_claude_sessions, load_session_history,
     open_new_session, read_claude_md_file, restore_checkpoint, resume_claude_code,
-    save_claude_md_file, save_claude_settings, save_system_prompt, search_files,
-    track_checkpoint_message, track_session_messages, update_checkpoint_settings,
+    resume_claude_code_v2, save_claude_md_file, save_claude_settings, save_system_prompt,
+    search_files, track_checkpoint_message, track_session_messages, update_checkpoint_settings,
     update_hooks_config, validate_hook_command, ClaudeProcessState,
 };
 use commands::mcp::{
@@ -43,6 +49,9 @@ use commands::storage::{
 };
 use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
+};
+use commands::slash_commands::{
+    slash_commands_list, slash_command_get, slash_command_save, slash_command_delete,
 };
 use process::ProcessRegistryState;
 use std::sync::Mutex;
@@ -87,16 +96,16 @@ fn main() {
                                 match field {
                                     "enabled" => settings.enabled = value == "true",
                                     "http_proxy" => {
-                                        settings.http_proxy = Some(value).filter(|s| !s.is_empty())
+                                        settings.http_proxy = Some(value).filter(|s: &String| !s.is_empty())
                                     }
                                     "https_proxy" => {
-                                        settings.https_proxy = Some(value).filter(|s| !s.is_empty())
+                                        settings.https_proxy = Some(value).filter(|s: &String| !s.is_empty())
                                     }
                                     "no_proxy" => {
-                                        settings.no_proxy = Some(value).filter(|s| !s.is_empty())
+                                        settings.no_proxy = Some(value).filter(|s: &String| !s.is_empty())
                                     }
                                     "all_proxy" => {
-                                        settings.all_proxy = Some(value).filter(|s| !s.is_empty())
+                                        settings.all_proxy = Some(value).filter(|s: &String| !s.is_empty())
                                     }
                                     _ => {}
                                 }
@@ -146,6 +155,9 @@ fn main() {
 
             // Initialize Claude process state
             app.manage(ClaudeProcessState::default());
+
+            // Initialize Claude client registry
+            app.manage(ClaudeClientRegistryState::default());
 
             // Apply window vibrancy with rounded corners on macOS
             #[cfg(target_os = "macos")]
@@ -203,6 +215,11 @@ fn main() {
             continue_claude_code,
             resume_claude_code,
             cancel_claude_execution,
+            // V2 commands using ClaudeClient
+            execute_claude_code_v2,
+            continue_claude_code_v2,
+            resume_claude_code_v2,
+            cancel_claude_execution_v2,
             list_running_claude_sessions,
             get_claude_session_output,
             list_directory_contents,
@@ -282,10 +299,10 @@ fn main() {
             storage_execute_sql,
             storage_reset_database,
             // Slash Commands
-            commands::slash_commands::slash_commands_list,
-            commands::slash_commands::slash_command_get,
-            commands::slash_commands::slash_command_save,
-            commands::slash_commands::slash_command_delete,
+            slash_commands_list,
+            slash_command_get,
+            slash_command_save,
+            slash_command_delete,
             // Proxy Settings
             get_proxy_settings,
             save_proxy_settings,

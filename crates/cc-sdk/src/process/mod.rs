@@ -52,7 +52,7 @@
 
 pub mod registry;
 
-pub use registry::{ProcessHandle, ProcessRegistry};
+pub use registry::{ProcessHandle, ProcessInfo, ProcessRegistry, ProcessType};
 
 #[cfg(test)]
 mod tests {

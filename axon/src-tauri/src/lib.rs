@@ -1,9 +1,11 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 // Declare modules
+pub mod adapters;
 pub mod cc_integration;
 pub mod checkpoint;
 pub mod claude_binary;
+pub mod claude_client_registry;
 pub mod commands;
 pub mod process;
 pub mod web_server;

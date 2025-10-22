@@ -872,6 +872,9 @@ async fn spawn_agent_system(
     let session_id_clone = session_id.clone();
     let live_output_clone = live_output.clone();
     let registry_clone = registry.0.clone();
+    // Create the session_id that will be used for registry lookup
+    let process_session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+    let process_session_id_clone = process_session_id.clone();
     let first_output = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let first_output_clone = first_output.clone();
     let db_path_for_stdout = db_path.clone(); // Clone the db_path for the stdout task
@@ -905,8 +908,11 @@ async fn spawn_agent_system(
                 output.push('\n');
             }
 
-            // Also store in process registry for cross-session access
-            let _ = registry_clone.append_live_output(run_id, &line);
+            // Also store in process registry for cross-session access using cc-sdk API
+            if let Some(handle) = registry_clone.get(&process_session_id_clone) {
+                let _ = handle.append_output(&line);
+                let _ = handle.append_output("\n");
+            }
 
             // Extract session ID from JSONL output
             if let Ok(json) = serde_json::from_str::<JsonValue>(&line) {
@@ -993,18 +999,20 @@ async fn spawn_agent_system(
     });
 
     // Register the process in the registry for live output tracking (after stdout/stderr setup)
+    // Use cc-sdk's register_process which accepts a Child and generates a unique run_id internally
+    // We use the process_session_id that was created earlier for the stdout task
     registry
         .0
         .register_process(
-            run_id,
+            process_session_id,
+            child,
             agent_id,
             agent_name,
-            pid,
             project_path.clone(),
             task.clone(),
             execution_model.clone(),
-            child,
         )
+        .await
         .map_err(|e| format!("Failed to register process: {}", e))?;
     info!("📋 Registered process in registry");
 
@@ -1176,8 +1184,8 @@ pub async fn list_running_sessions(
     drop(conn);
 
     // Cross-check with the process registry to ensure accuracy
-    // Get actually running processes from the registry
-    let registry_processes = registry.0.get_running_agent_processes()?;
+    // Get actually running agent processes from the cc-sdk registry
+    let registry_processes = registry.0.get_running_agent_processes();
     let registry_run_ids: std::collections::HashSet<i64> =
         registry_processes.iter().map(|p| p.run_id).collect();
 
@@ -1204,16 +1212,14 @@ pub async fn kill_agent_session(
 ) -> Result<bool, String> {
     info!("Attempting to kill agent session {}", run_id);
 
-    // First try to kill using the process registry
-    let killed_via_registry = match registry.0.kill_process(run_id).await {
-        Ok(success) => {
-            if success {
-                info!("Successfully killed process {} via registry", run_id);
-                true
-            } else {
-                warn!("Process {} not found in registry", run_id);
-                false
-            }
+    // Convert run_id to session_id format used by cc-sdk registry
+    let session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+
+    // First try to kill using the cc-sdk process registry
+    let killed_via_registry = match registry.0.kill(&session_id, true).await {
+        Ok(_) => {
+            info!("Successfully killed process {} via registry", run_id);
+            true
         }
         Err(e) => {
             warn!("Failed to kill process {} via registry: {}", run_id, e);
@@ -1221,7 +1227,7 @@ pub async fn kill_agent_session(
         }
     };
 
-    // If registry kill didn't work, try fallback with PID from database
+    // If registry kill didn't work, try fallback with system kill by PID
     if !killed_via_registry {
         let pid_result = {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1234,8 +1240,29 @@ pub async fn kill_agent_session(
         };
 
         if let Some(pid) = pid_result {
-            info!("Attempting fallback kill for PID {} from database", pid);
-            let _ = registry.0.kill_process_by_pid(run_id, pid as u32)?;
+            info!("Attempting fallback system kill for PID {} from database", pid);
+            // Use system kill command as fallback
+            let kill_result = if cfg!(target_os = "windows") {
+                std::process::Command::new("taskkill")
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .output()
+            } else {
+                std::process::Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .output()
+            };
+
+            match kill_result {
+                Ok(output) if output.status.success() => {
+                    info!("Successfully killed process via system command");
+                }
+                Ok(output) => {
+                    warn!("System kill failed: {}", String::from_utf8_lossy(&output.stderr));
+                }
+                Err(e) => {
+                    warn!("Failed to execute system kill: {}", e);
+                }
+            }
         }
     }
 
@@ -1343,7 +1370,15 @@ pub async fn get_live_session_output(
     registry: State<'_, crate::process::ProcessRegistryState>,
     run_id: i64,
 ) -> Result<String, String> {
-    registry.0.get_live_output(run_id)
+    // Convert run_id to session_id format used by cc-sdk registry
+    let session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+
+    // Use cc-sdk's get_output method
+    registry
+        .0
+        .get_output(&session_id)
+        .await
+        .ok_or_else(|| format!("No output found for session {}", run_id))
 }
 
 /// Get real-time output for a running session by reading its JSONL file with live output fallback
@@ -1358,9 +1393,11 @@ pub async fn get_session_output(
 
     // If no session ID yet, try to get live output from registry
     if run.session_id.is_empty() {
-        let live_output = registry.0.get_live_output(run_id)?;
-        if !live_output.is_empty() {
-            return Ok(live_output);
+        let session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+        if let Some(live_output) = registry.0.get_output(&session_id).await {
+            if !live_output.is_empty() {
+                return Ok(live_output);
+            }
         }
         return Ok(String::new());
     }
@@ -1418,7 +1455,8 @@ pub async fn get_session_output(
                     e
                 );
                 // Fallback to live output if file read fails
-                let live_output = registry.0.get_live_output(run_id)?;
+                let session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+                let live_output = registry.0.get_output(&session_id).await.unwrap_or_default();
                 Ok(live_output)
             }
         }
@@ -1432,7 +1470,8 @@ pub async fn get_session_output(
             Ok(content) => Ok(content),
             Err(_) => {
                 // Final fallback to live output
-                let live_output = registry.0.get_live_output(run_id)?;
+                let session_id = cc_sdk::core::SessionId::new(format!("agent-run-{}", run_id));
+                let live_output = registry.0.get_output(&session_id).await.unwrap_or_default();
                 Ok(live_output)
             }
         }

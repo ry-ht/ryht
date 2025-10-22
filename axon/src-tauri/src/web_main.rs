@@ -1,10 +1,6 @@
 use clap::Parser;
 
-mod checkpoint;
-mod claude_binary;
-mod commands;
-mod process;
-mod web_server;
+use axon_lib::web_server;
 
 #[derive(Parser)]
 #[command(name = "opcode-web")]

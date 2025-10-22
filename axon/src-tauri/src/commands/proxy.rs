@@ -49,10 +49,10 @@ pub async fn get_proxy_settings(db: State<'_, AgentDb>) -> Result<ProxySettings,
         ) {
             match field {
                 "enabled" => settings.enabled = value == "true",
-                "http_proxy" => settings.http_proxy = Some(value).filter(|s| !s.is_empty()),
-                "https_proxy" => settings.https_proxy = Some(value).filter(|s| !s.is_empty()),
-                "no_proxy" => settings.no_proxy = Some(value).filter(|s| !s.is_empty()),
-                "all_proxy" => settings.all_proxy = Some(value).filter(|s| !s.is_empty()),
+                "http_proxy" => settings.http_proxy = Some(value).filter(|s: &String| !s.is_empty()),
+                "https_proxy" => settings.https_proxy = Some(value).filter(|s: &String| !s.is_empty()),
+                "no_proxy" => settings.no_proxy = Some(value).filter(|s: &String| !s.is_empty()),
+                "all_proxy" => settings.all_proxy = Some(value).filter(|s: &String| !s.is_empty()),
                 _ => {}
             }
         }
