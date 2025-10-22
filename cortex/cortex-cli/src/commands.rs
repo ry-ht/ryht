@@ -10,7 +10,7 @@ use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
-    Workspace, WorkspaceType, SourceType,
+    VirtualPath, VNode, Workspace, WorkspaceType, SourceType,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -65,8 +65,17 @@ pub async fn init_workspace(
         updated_at: chrono::Utc::now(),
     };
 
-    // TODO: Save workspace to database via VFS
-    // vfs.create_workspace(workspace).await?;
+    // Save workspace metadata to database
+    let conn = storage.acquire().await?;
+    let _: Option<Workspace> = conn.connection().create("workspace")
+        .content(workspace)
+        .await
+        .context("Failed to create workspace in database")?;
+
+    // Initialize root directory in VFS
+    let root_path = VirtualPath::new(".")?;
+    vfs.create_directory(&workspace_id, &root_path, true).await
+        .context("Failed to create root directory in VFS")?;
 
     spinner.finish_and_clear();
 
@@ -89,7 +98,7 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
 
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
-    let vfs = VirtualFileSystem::new(storage);
+    let vfs = VirtualFileSystem::new(storage.clone());
 
     let workspace_id = Uuid::new_v4();
     let workspace = Workspace {
@@ -106,8 +115,17 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
         updated_at: chrono::Utc::now(),
     };
 
-    // TODO: Save workspace
-    // vfs.create_workspace(workspace).await?;
+    // Save workspace to database
+    let conn = storage.acquire().await?;
+    let _: Option<Workspace> = conn.connection().create("workspace")
+        .content(workspace)
+        .await
+        .context("Failed to create workspace in database")?;
+
+    // Initialize root directory in VFS
+    let root_path = VirtualPath::new(".")?;
+    vfs.create_directory(&workspace_id, &root_path, true).await
+        .context("Failed to create root directory in VFS")?;
 
     spinner.finish_and_clear();
     output::success(format!("Created workspace: {}", name));
@@ -121,13 +139,13 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
 pub async fn workspace_list(format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
-    let vfs = VirtualFileSystem::new(storage);
+    let _vfs = VirtualFileSystem::new(storage.clone());
 
-    // TODO: Fetch workspaces from database
-    // let workspaces = vfs.list_workspaces().await?;
-
-    // Mock data for now
-    let workspaces: Vec<Workspace> = vec![];
+    // Fetch workspaces from database
+    let conn = storage.acquire().await?;
+    let workspaces: Vec<Workspace> = conn.connection().select("workspace")
+        .await
+        .context("Failed to fetch workspaces from database")?;
 
     match format {
         OutputFormat::Json => {
@@ -139,14 +157,48 @@ pub async fn workspace_list(format: OutputFormat) -> Result<()> {
                 return Ok(());
             }
 
-            TableBuilder::new()
-                .header(vec!["ID", "Name", "Type", "Created", "Root Path"])
-                .row(vec!["mock-id", "example", "Agent", "2 hours ago", "/path/to/workspace"])
-                .print();
+            let table = TableBuilder::new()
+                .header(vec!["ID", "Name", "Type", "Created", "Root Path"]);
+
+            let mut table_with_rows = table;
+            for ws in &workspaces {
+                let path_str = ws.source_path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "N/A".to_string());
+
+                let created = format_relative_time(&ws.created_at);
+
+                table_with_rows = table_with_rows.row(vec![
+                    ws.id.to_string(),
+                    ws.name.clone(),
+                    format!("{:?}", ws.workspace_type),
+                    created,
+                    path_str,
+                ]);
+            }
+
+            table_with_rows.print();
         }
     }
 
     Ok(())
+}
+
+/// Format a timestamp as relative time (e.g., "2 hours ago")
+fn format_relative_time(dt: &chrono::DateTime<chrono::Utc>) -> String {
+    let now = chrono::Utc::now();
+    let duration = now.signed_duration_since(*dt);
+
+    if duration.num_days() > 0 {
+        format!("{} days ago", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{} hours ago", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{} minutes ago", duration.num_minutes())
+    } else {
+        "just now".to_string()
+    }
 }
 
 /// Delete a workspace
@@ -160,10 +212,42 @@ pub async fn workspace_delete(name_or_id: String, force: bool) -> Result<()> {
 
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
-    let vfs = VirtualFileSystem::new(storage);
+    let _vfs = VirtualFileSystem::new(storage.clone());
 
-    // TODO: Delete workspace
-    // vfs.delete_workspace(&name_or_id).await?;
+    // Find workspace by name or ID
+    let conn = storage.acquire().await?;
+
+    // Try to parse as UUID first
+    let workspace_id = if let Ok(uuid) = Uuid::parse_str(&name_or_id) {
+        uuid
+    } else {
+        // Search by name
+        let mut response = conn.connection()
+            .query("SELECT * FROM workspace WHERE name = $name")
+            .bind(("name", name_or_id.clone()))
+            .await
+            .context("Failed to query workspace")?;
+        let workspaces: Vec<Workspace> = response.take(0)?;
+
+        if workspaces.is_empty() {
+            return Err(anyhow::anyhow!("Workspace not found: {}", name_or_id));
+        }
+
+        workspaces[0].id
+    };
+
+    // Delete all VNodes in this workspace
+    let mut _response = conn.connection()
+        .query("DELETE FROM vnode WHERE workspace_id = $workspace_id")
+        .bind(("workspace_id", workspace_id))
+        .await
+        .context("Failed to delete workspace vnodes")?;
+
+    // Delete the workspace
+    let _: Option<Workspace> = conn.connection()
+        .delete(("workspace", workspace_id.to_string()))
+        .await
+        .context("Failed to delete workspace from database")?;
 
     spinner.finish_and_clear();
     output::success(format!("Deleted workspace: {}", name_or_id));
@@ -265,20 +349,84 @@ pub async fn search_memory(
     let storage = create_storage(&config).await?;
     let memory = CognitiveManager::new(storage);
 
-    // TODO: Implement semantic search
-    // let results = memory.search(&query, workspace_name.as_deref(), limit).await?;
+    // Create a memory query
+    let memory_query = cortex_memory::types::MemoryQuery::new(query.clone())
+        .with_limit(limit)
+        .with_threshold(0.6);
+
+    // Generate a simple embedding for the query (placeholder - in production use a proper embedding model)
+    // For now, create a zero vector as we don't have an embedding service configured
+    let embedding = vec![0.0f32; 384]; // Standard embedding dimension
+
+    // Perform cross-memory search
+    let cross_query = cortex_memory::CrossMemoryQuery::new(std::sync::Arc::new(memory));
+    let results = cross_query.search_all(&memory_query, &embedding).await
+        .context("Failed to search memory")?;
 
     spinner.finish_and_clear();
 
-    // Mock results for now
+    // Filter by workspace if specified
+    let filtered_results: Vec<_> = if let Some(ref ws_name) = workspace_name {
+        results.into_iter()
+            .filter(|r| match r {
+                cortex_memory::query::UnifiedMemoryResult::Episode(ep) => {
+                    ep.item.agent_id.contains(ws_name)
+                }
+                cortex_memory::query::UnifiedMemoryResult::SemanticUnit(unit) => {
+                    unit.item.file_path.contains(ws_name)
+                }
+                cortex_memory::query::UnifiedMemoryResult::Pattern(pattern) => {
+                    pattern.item.context.contains(ws_name)
+                }
+            })
+            .collect()
+    } else {
+        results
+    };
+
     match format {
         OutputFormat::Json => {
-            let mock_results: Vec<serde_json::Value> = vec![];
-            output::output(&mock_results, format)?;
+            let json_results: Vec<serde_json::Value> = filtered_results.iter().map(|r| {
+                serde_json::json!({
+                    "type": match r {
+                        cortex_memory::query::UnifiedMemoryResult::Episode(_) => "episode",
+                        cortex_memory::query::UnifiedMemoryResult::SemanticUnit(_) => "code_unit",
+                        cortex_memory::query::UnifiedMemoryResult::Pattern(_) => "pattern",
+                    },
+                    "relevance": r.relevance(),
+                    "similarity": r.similarity(),
+                })
+            }).collect();
+            output::output(&json_results, format)?;
         }
         _ => {
-            output::header("Search Results");
-            output::info("No results found");
+            output::header(format!("Search Results for '{}'", query));
+
+            if filtered_results.is_empty() {
+                output::info("No results found");
+            } else {
+                for (idx, result) in filtered_results.iter().enumerate() {
+                    println!("\n{}. [Score: {:.2}]", idx + 1, result.combined_score());
+                    match result {
+                        cortex_memory::query::UnifiedMemoryResult::Episode(ep) => {
+                            println!("   Type: Episode");
+                            println!("   Task: {}", ep.item.task_description);
+                            println!("   Agent: {}", ep.item.agent_id);
+                        }
+                        cortex_memory::query::UnifiedMemoryResult::SemanticUnit(unit) => {
+                            println!("   Type: Code Unit");
+                            println!("   Name: {}", unit.item.name);
+                            println!("   File: {}", unit.item.file_path);
+                        }
+                        cortex_memory::query::UnifiedMemoryResult::Pattern(pattern) => {
+                            println!("   Type: Pattern");
+                            println!("   Name: {}", pattern.item.name);
+                            println!("   Pattern Type: {:?}", pattern.item.pattern_type);
+                        }
+                    }
+                }
+                println!();
+            }
         }
     }
 
@@ -292,15 +440,40 @@ pub async fn search_memory(
 /// List projects in workspace
 pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
+    let workspace_name = workspace.or(config.active_workspace.clone());
+
+    let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
+
+    // Get workspaces (projects are represented as workspaces in our system)
+    let mut workspaces: Vec<Workspace> = conn.connection().select("workspace")
+        .await
+        .context("Failed to fetch workspaces from database")?;
+
+    // Filter by workspace name if specified
+    if let Some(ref ws_name) = workspace_name {
+        workspaces.retain(|w| w.name == *ws_name || w.id.to_string() == *ws_name);
+    }
 
     match format {
         OutputFormat::Json => {
-            let projects: Vec<serde_json::Value> = vec![];
-            output::output(&projects, format)?;
+            output::output(&workspaces, format)?;
         }
         _ => {
             output::header("Projects");
-            output::info("No projects found");
+
+            if workspaces.is_empty() {
+                output::info("No projects found");
+            } else {
+                for ws in &workspaces {
+                    println!("  {} - {} ({:?})", ws.name, ws.id, ws.workspace_type);
+                    if let Some(path) = &ws.source_path {
+                        println!("    Path: {}", path.display());
+                    }
+                    println!("    Namespace: {}", ws.namespace);
+                    println!();
+                }
+            }
         }
     }
 
@@ -310,15 +483,61 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
 /// List documents in workspace
 pub async fn list_documents(workspace: Option<String>, format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
+    let workspace_name = workspace.or(config.active_workspace.clone());
+
+    let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
+
+    // Find workspace ID if workspace name is provided
+    let workspace_id = if let Some(ref ws_name) = workspace_name {
+        let mut response = conn.connection()
+            .query("SELECT * FROM workspace WHERE name = $name LIMIT 1")
+            .bind(("name", ws_name.clone()))
+            .await
+            .context("Failed to query workspace")?;
+        let workspaces: Vec<Workspace> = response.take(0)?;
+
+        if workspaces.is_empty() {
+            return Err(anyhow::anyhow!("Workspace not found: {}", ws_name));
+        }
+
+        Some(workspaces[0].id)
+    } else {
+        None
+    };
+
+    // Query vnodes of type Document
+    let mut response = if let Some(ws_id) = workspace_id {
+        conn.connection().query("SELECT * FROM vnode WHERE workspace_id = $workspace_id AND node_type = 'document'")
+            .bind(("workspace_id", ws_id))
+            .await
+            .context("Failed to fetch documents from database")?
+    } else {
+        conn.connection().query("SELECT * FROM vnode WHERE node_type = 'document'")
+            .await
+            .context("Failed to fetch documents from database")?
+    };
+    let documents: Vec<VNode> = response.take(0)?;
 
     match format {
         OutputFormat::Json => {
-            let docs: Vec<serde_json::Value> = vec![];
-            output::output(&docs, format)?;
+            output::output(&documents, format)?;
         }
         _ => {
             output::header("Documents");
-            output::info("No documents found");
+
+            if documents.is_empty() {
+                output::info("No documents found");
+            } else {
+                for doc in &documents {
+                    println!("  {} ({})", doc.path, format_bytes(doc.size_bytes as u64));
+                    println!("    Workspace: {}", doc.workspace_id);
+                    if let Some(ref lang) = doc.language {
+                        println!("    Language: {:?}", lang);
+                    }
+                    println!();
+                }
+            }
         }
     }
 
@@ -332,15 +551,54 @@ pub async fn list_episodes(
     format: OutputFormat,
 ) -> Result<()> {
     let config = CortexConfig::load()?;
+    let workspace_name = workspace.or(config.active_workspace.clone());
+
+    let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
+
+    // Query episodes from database
+    let mut response = if let Some(ref ws_name) = workspace_name {
+        conn.connection().query("SELECT * FROM episodic_memory WHERE agent_id = $workspace ORDER BY created_at DESC LIMIT $limit")
+            .bind(("workspace", ws_name.clone()))
+            .bind(("limit", limit))
+            .await
+            .context("Failed to fetch episodes from database")?
+    } else {
+        conn.connection().query("SELECT * FROM episodic_memory ORDER BY created_at DESC LIMIT $limit")
+            .bind(("limit", limit))
+            .await
+            .context("Failed to fetch episodes from database")?
+    };
+    let mut episodes: Vec<cortex_memory::types::EpisodicMemory> = response.take(0)?;
+
+    // Limit results
+    episodes.truncate(limit);
 
     match format {
         OutputFormat::Json => {
-            let episodes: Vec<serde_json::Value> = vec![];
             output::output(&episodes, format)?;
         }
         _ => {
             output::header(format!("Recent Episodes (limit: {})", limit));
-            output::info("No episodes found");
+
+            if episodes.is_empty() {
+                output::info("No episodes found");
+            } else {
+                for (idx, episode) in episodes.iter().enumerate() {
+                    println!("\n{}. {} [{}]",
+                        idx + 1,
+                        episode.task_description,
+                        format_relative_time(&episode.created_at)
+                    );
+                    println!("   ID: {}", episode.id);
+                    println!("   Agent: {}", episode.agent_id);
+                    println!("   Type: {:?}", episode.episode_type);
+                    println!("   Outcome: {:?}", episode.outcome);
+                    println!("   Duration: {}s", episode.duration_seconds);
+                    println!("   Files touched: {}", episode.files_touched.len());
+                }
+                println!();
+            }
         }
     }
 
