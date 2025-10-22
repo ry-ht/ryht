@@ -130,10 +130,14 @@ pub async fn query(
             query_print_mode(text, options).await
         }
         QueryInput::Stream(_stream) => {
-            // For streaming, use the interactive mode
-            // TODO: Implement streaming mode
+            // Streaming input mode is reserved for future implementation.
+            // This would enable continuous message streaming to Claude, but requires:
+            // - Interactive mode transport setup
+            // - Bidirectional communication channel management
+            // - Input stream to CLI stdin forwarding
+            // For now, use ClaudeClient for interactive bidirectional communication.
             Err(crate::error::Error::Client(crate::error::ClientError::NotSupported {
-                feature: "Streaming input mode not yet implemented".into(),
+                feature: "Streaming input mode not yet implemented. Use ClaudeClient for bidirectional streaming.".into(),
             }))
         }
     }

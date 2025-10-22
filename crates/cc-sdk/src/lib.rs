@@ -111,6 +111,7 @@ pub mod requests;
 
 // Feature modules
 pub mod binary;
+pub mod cache;  // Generic caching infrastructure
 pub mod mcp;
 pub mod process;
 pub mod session;

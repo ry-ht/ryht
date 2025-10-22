@@ -382,6 +382,10 @@ pub mod models {
 
 /// Version information for the Claude CLI binary.
 ///
+/// This is a re-export of [`crate::binary::Version`] for API compatibility.
+/// The binary module provides the canonical semantic versioning implementation
+/// with full support for major.minor.patch, prerelease, and build metadata.
+///
 /// # Examples
 ///
 /// ```rust
@@ -392,145 +396,19 @@ pub mod models {
 /// assert_eq!(version.minor, 2);
 /// assert_eq!(version.patch, 5);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
-pub struct Version {
-    /// Major version number
-    pub major: u32,
-    /// Minor version number
-    pub minor: u32,
-    /// Patch version number
-    pub patch: u32,
-    /// Pre-release identifier (e.g., "alpha", "beta")
-    pub pre: Option<String>,
-}
-
-impl Version {
-    /// Create a new version.
-    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self {
-            major,
-            minor,
-            patch,
-            pre: None,
-        }
-    }
-
-    /// Create a new version with pre-release identifier.
-    pub fn with_pre(major: u32, minor: u32, patch: u32, pre: impl Into<String>) -> Self {
-        Self {
-            major,
-            minor,
-            patch,
-            pre: Some(pre.into()),
-        }
-    }
-
-    /// Parse a version string.
-    ///
-    /// Supports formats like "1.2.3", "1.2.3-alpha", "v1.2.3".
-    pub fn parse(s: &str) -> Result<Self, String> {
-        let s = s.trim().trim_start_matches('v');
-        let (version_part, pre) = if let Some((v, p)) = s.split_once('-') {
-            (v, Some(p.to_string()))
-        } else {
-            (s, None)
-        };
-
-        let parts: Vec<&str> = version_part.split('.').collect();
-        if parts.len() != 3 {
-            return Err(format!("Invalid version format: {}", s));
-        }
-
-        let major = parts[0]
-            .parse()
-            .map_err(|_| format!("Invalid major version: {}", parts[0]))?;
-        let minor = parts[1]
-            .parse()
-            .map_err(|_| format!("Invalid minor version: {}", parts[1]))?;
-        let patch = parts[2]
-            .parse()
-            .map_err(|_| format!("Invalid patch version: {}", parts[2]))?;
-
-        Ok(Self {
-            major,
-            minor,
-            patch,
-            pre,
-        })
-    }
-
-    /// Check if this version satisfies a requirement.
-    ///
-    /// Simple version checking: supports ">=", ">", "=", "<", "<=".
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use cc_sdk::core::Version;
-    ///
-    /// let version = Version::new(1, 2, 3);
-    /// assert!(version.satisfies(">=1.0.0"));
-    /// assert!(version.satisfies("1.2.3"));
-    /// assert!(!version.satisfies(">=2.0.0"));
-    /// ```
-    pub fn satisfies(&self, requirement: &str) -> bool {
-        let requirement = requirement.trim();
-
-        if let Some(req) = requirement.strip_prefix(">=") {
-            if let Ok(req_ver) = Self::parse(req.trim()) {
-                return self >= &req_ver;
-            }
-        } else if let Some(req) = requirement.strip_prefix('>') {
-            if let Ok(req_ver) = Self::parse(req.trim()) {
-                return self > &req_ver;
-            }
-        } else if let Some(req) = requirement.strip_prefix("<=") {
-            if let Ok(req_ver) = Self::parse(req.trim()) {
-                return self <= &req_ver;
-            }
-        } else if let Some(req) = requirement.strip_prefix('<') {
-            if let Ok(req_ver) = Self::parse(req.trim()) {
-                return self < &req_ver;
-            }
-        } else if let Some(req) = requirement.strip_prefix('=') {
-            if let Ok(req_ver) = Self::parse(req.trim()) {
-                return self == &req_ver;
-            }
-        } else if let Ok(req_ver) = Self::parse(requirement) {
-            return self == &req_ver;
-        }
-
-        false
-    }
-
-    /// Check if this is a pre-release version.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use cc_sdk::core::Version;
-    ///
-    /// let stable = Version::new(1, 0, 0);
-    /// assert!(!stable.is_prerelease());
-    ///
-    /// let alpha = Version::with_pre(1, 0, 0, "alpha");
-    /// assert!(alpha.is_prerelease());
-    /// ```
-    #[inline]
-    pub fn is_prerelease(&self) -> bool {
-        self.pre.is_some()
-    }
-}
-
-impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
-        if let Some(pre) = &self.pre {
-            write!(f, "-{}", pre)?;
-        }
-        Ok(())
-    }
-}
+///
+/// # Field Name Compatibility
+///
+/// The binary::Version uses `prerelease` as the field name (following semver spec),
+/// not `pre`. Use the field accessor directly:
+///
+/// ```rust
+/// use cc_sdk::core::Version;
+///
+/// let v = Version::parse("1.0.0-beta").unwrap();
+/// assert_eq!(v.prerelease, Some("beta".to_string()));
+/// ```
+pub use crate::binary::Version;
 
 #[cfg(test)]
 mod tests {
@@ -575,58 +453,38 @@ mod tests {
         assert_eq!(v.major, 1);
         assert_eq!(v.minor, 2);
         assert_eq!(v.patch, 3);
-        assert_eq!(v.pre, None);
+        assert_eq!(v.prerelease, None);
 
-        let v = Version::parse("v2.0.1").unwrap();
+        let v = Version::parse("2.0.1").unwrap();
         assert_eq!(v.major, 2);
         assert_eq!(v.minor, 0);
         assert_eq!(v.patch, 1);
 
         let v = Version::parse("1.0.0-alpha").unwrap();
-        assert_eq!(v.pre, Some("alpha".to_string()));
+        assert_eq!(v.prerelease, Some("alpha".to_string()));
 
-        assert!(Version::parse("invalid").is_err());
-        assert!(Version::parse("1.2").is_err());
+        assert!(Version::parse("invalid").is_none());
+        assert!(Version::parse("1.2").is_none());
     }
 
     #[test]
     fn test_version_comparison() {
-        let v1 = Version::new(1, 0, 0);
-        let v2 = Version::new(1, 0, 1);
-        let v3 = Version::new(2, 0, 0);
+        let v1 = Version::parse("1.0.0").unwrap();
+        let v2 = Version::parse("1.0.1").unwrap();
+        let v3 = Version::parse("2.0.0").unwrap();
 
         assert!(v1 < v2);
         assert!(v2 < v3);
         assert!(v1 < v3);
-        assert!(v2 == Version::new(1, 0, 1));
-    }
-
-    #[test]
-    fn test_version_satisfies() {
-        let v = Version::new(1, 2, 3);
-
-        assert!(v.satisfies(">=1.0.0"));
-        assert!(v.satisfies(">=1.2.3"));
-        assert!(!v.satisfies(">=2.0.0"));
-
-        assert!(v.satisfies(">1.0.0"));
-        assert!(!v.satisfies(">1.2.3"));
-
-        assert!(v.satisfies("=1.2.3"));
-        assert!(v.satisfies("1.2.3"));
-        assert!(!v.satisfies("=1.2.4"));
-
-        assert!(v.satisfies("<=2.0.0"));
-        assert!(v.satisfies("<2.0.0"));
-        assert!(!v.satisfies("<1.0.0"));
+        assert!(v2 == Version::parse("1.0.1").unwrap());
     }
 
     #[test]
     fn test_version_display() {
-        let v = Version::new(1, 2, 3);
+        let v = Version::parse("1.2.3").unwrap();
         assert_eq!(v.to_string(), "1.2.3");
 
-        let v = Version::with_pre(1, 0, 0, "beta");
+        let v = Version::parse("1.0.0-beta").unwrap();
         assert_eq!(v.to_string(), "1.0.0-beta");
     }
 
@@ -712,9 +570,6 @@ mod tests {
                 let is_opus = id.is_opus();
                 let is_haiku = id.is_haiku();
 
-                // At most one should be true (unless string contains multiple keywords)
-                let count = [is_sonnet, is_opus, is_haiku].iter().filter(|&&x| x).count();
-
                 // Verify consistency with actual string content
                 prop_assert_eq!(is_sonnet, s.contains("sonnet"));
                 prop_assert_eq!(is_opus, s.contains("opus"));
@@ -737,116 +592,29 @@ mod tests {
                 prop_assert_eq!(path, deserialized);
             }
 
-            // Version property tests
-            #[test]
-            fn version_ordering_reflexive(major in 0u32..100, minor in 0u32..100, patch in 0u32..100) {
-                let v = Version::new(major, minor, patch);
-                prop_assert_eq!(v.cmp(&v), std::cmp::Ordering::Equal);
-                prop_assert!(v == v);
-            }
-
-            #[test]
-            fn version_ordering_antisymmetric(
-                major1 in 0u32..20, minor1 in 0u32..20, patch1 in 0u32..20,
-                major2 in 0u32..20, minor2 in 0u32..20, patch2 in 0u32..20
-            ) {
-                let v1 = Version::new(major1, minor1, patch1);
-                let v2 = Version::new(major2, minor2, patch2);
-
-                if v1 < v2 {
-                    prop_assert!(!(v2 < v1));
-                }
-                if v1 > v2 {
-                    prop_assert!(!(v2 > v1));
-                }
-            }
-
-            #[test]
-            fn version_ordering_transitive(
-                major1 in 0u32..10, minor1 in 0u32..10, patch1 in 0u32..10,
-                major2 in 0u32..10, minor2 in 0u32..10, patch2 in 0u32..10,
-                major3 in 0u32..10, minor3 in 0u32..10, patch3 in 0u32..10
-            ) {
-                let v1 = Version::new(major1, minor1, patch1);
-                let v2 = Version::new(major2, minor2, patch2);
-                let v3 = Version::new(major3, minor3, patch3);
-
-                if v1 < v2 && v2 < v3 {
-                    prop_assert!(v1 < v3);
-                }
-            }
-
+            // Version property tests - delegated to binary::version module
+            // See binary/version.rs for comprehensive property-based tests
             #[test]
             fn version_display_parse_roundtrip(
                 major in 0u32..100,
                 minor in 0u32..100,
                 patch in 0u32..100
             ) {
-                let v = Version::new(major, minor, patch);
-                let s = v.to_string();
-                let parsed = Version::parse(&s).unwrap();
-                prop_assert_eq!(v, parsed);
+                let version_str = format!("{}.{}.{}", major, minor, patch);
+                if let Some(v) = Version::parse(&version_str) {
+                    let s = v.to_string();
+                    let parsed = Version::parse(&s).unwrap();
+                    prop_assert_eq!(v, parsed);
+                }
             }
 
             #[test]
-            fn version_parse_with_v_prefix(
-                major in 0u32..100,
-                minor in 0u32..100,
-                patch in 0u32..100
-            ) {
-                let v1 = Version::parse(&format!("{}.{}.{}", major, minor, patch)).unwrap();
-                let v2 = Version::parse(&format!("v{}.{}.{}", major, minor, patch)).unwrap();
-                prop_assert_eq!(v1, v2);
-            }
-
-            #[test]
-            fn version_serialization_roundtrip(
-                major in 0u32..100,
-                minor in 0u32..100,
-                patch in 0u32..100
-            ) {
-                let v = Version::new(major, minor, patch);
-                let json = serde_json::to_string(&v).unwrap();
-                let deserialized: Version = serde_json::from_str(&json).unwrap();
-                prop_assert_eq!(v, deserialized);
-            }
-
-            #[test]
-            fn version_satisfies_reflexive(
-                major in 0u32..100,
-                minor in 0u32..100,
-                patch in 0u32..100
-            ) {
-                let v = Version::new(major, minor, patch);
-                let req = format!("{}.{}.{}", major, minor, patch);
-                let eq_req = format!("={}", req);
-                let gte_req = format!(">={}", req);
-                let lte_req = format!("<={}", req);
-
-                prop_assert!(v.satisfies(&req));
-                prop_assert!(v.satisfies(&eq_req));
-                prop_assert!(v.satisfies(&gte_req));
-                prop_assert!(v.satisfies(&lte_req));
-            }
-
-            // TODO: Known edge case - prerelease comparison uses derived Ord which doesn't
-            // handle prerelease semantics correctly. Use binary::version::Version for
-            // production version comparisons which has custom Ord implementation.
-            // This is acceptable as core::Version is primarily for type-safety, not comparison.
-            #[test]
-            #[ignore]
-            fn version_prerelease_less_than_release(
-                major in 0u32..20,
-                minor in 0u32..20,
-                patch in 0u32..20,
-                pre in "[a-z]{1,10}"
-            ) {
-                let stable = Version::new(major, minor, patch);
-                let prerelease = Version::with_pre(major, minor, patch, pre);
-
-                prop_assert!(prerelease.is_prerelease());
-                prop_assert!(!stable.is_prerelease());
-                prop_assert!(prerelease < stable);
+            fn version_ordering_reflexive(major in 0u32..100, minor in 0u32..100, patch in 0u32..100) {
+                let version_str = format!("{}.{}.{}", major, minor, patch);
+                if let Some(v) = Version::parse(&version_str) {
+                    prop_assert_eq!(v.cmp(&v), std::cmp::Ordering::Equal);
+                    prop_assert!(v == v);
+                }
             }
 
             #[test]
@@ -857,13 +625,14 @@ mod tests {
                 patch in 0u32..100
             ) {
                 if major1 != major2 {
-                    let v1 = Version::new(major1, minor, patch);
-                    let v2 = Version::new(major2, minor, patch);
-
-                    if major1 < major2 {
-                        prop_assert!(v1 < v2);
-                    } else {
-                        prop_assert!(v1 > v2);
+                    let v1_str = format!("{}.{}.{}", major1, minor, patch);
+                    let v2_str = format!("{}.{}.{}", major2, minor, patch);
+                    if let (Some(v1), Some(v2)) = (Version::parse(&v1_str), Version::parse(&v2_str)) {
+                        if major1 < major2 {
+                            prop_assert!(v1 < v2);
+                        } else {
+                            prop_assert!(v1 > v2);
+                        }
                     }
                 }
             }

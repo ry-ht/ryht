@@ -78,15 +78,9 @@ pub struct BaseHookInput {
 /// Input data for PreToolUse hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreToolUseHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// Name of the tool being used
     pub tool_name: String,
     /// Input parameters for the tool
@@ -96,15 +90,9 @@ pub struct PreToolUseHookInput {
 /// Input data for PostToolUse hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostToolUseHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// Name of the tool that was used
     pub tool_name: String,
     /// Input parameters that were passed to the tool
@@ -116,15 +104,9 @@ pub struct PostToolUseHookInput {
 /// Input data for UserPromptSubmit hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPromptSubmitHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// The prompt submitted by the user
     pub prompt: String,
 }
@@ -132,15 +114,9 @@ pub struct UserPromptSubmitHookInput {
 /// Input data for Stop hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// Whether stop hook is active
     pub stop_hook_active: bool,
 }
@@ -148,15 +124,9 @@ pub struct StopHookInput {
 /// Input data for SubagentStop hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubagentStopHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// Whether stop hook is active
     pub stop_hook_active: bool,
 }
@@ -164,15 +134,9 @@ pub struct SubagentStopHookInput {
 /// Input data for PreCompact hook events
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreCompactHookInput {
-    /// Session ID for this conversation
-    pub session_id: String,
-    /// Path to the transcript file
-    pub transcript_path: String,
-    /// Current working directory
-    pub cwd: String,
-    /// Permission mode (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub permission_mode: Option<String>,
+    /// Base hook input fields (session_id, transcript_path, cwd, permission_mode)
+    #[serde(flatten)]
+    pub base: BaseHookInput,
     /// Trigger type: "manual" or "auto"
     pub trigger: String,
     /// Custom instructions for compaction (optional)

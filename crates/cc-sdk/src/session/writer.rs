@@ -223,6 +223,13 @@ pub async fn write_message(session_id: &SessionId, message: &Message) -> Result<
 ///
 /// This updates the metadata.json file for the session's project.
 ///
+/// # Errors
+///
+/// Returns an error if:
+/// - The session cannot be found
+/// - The metadata file cannot be read or written
+/// - JSON serialization fails
+///
 /// # Examples
 ///
 /// ```no_run
@@ -231,16 +238,74 @@ pub async fn write_message(session_id: &SessionId, message: &Message) -> Result<
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("session-id");
-/// // Custom metadata update logic here
+/// let metadata = serde_json::json!({
+///     "custom_field": "value",
+///     "tags": ["important", "production"]
+/// });
+/// update_session_metadata(&session_id, metadata).await?;
 /// # Ok(())
 /// # }
 /// ```
 pub async fn update_session_metadata(
-    _session_id: &SessionId,
-    _metadata: serde_json::Value,
+    session_id: &SessionId,
+    metadata: serde_json::Value,
 ) -> Result<()> {
-    // TODO: Implement metadata update logic
-    // This would update the project's metadata.json file
+    use super::manager::{list_projects, list_sessions};
+    use tokio::fs;
+
+    // Find the session across all projects
+    let projects = list_projects().await?;
+    let mut session = None;
+
+    for project in projects {
+        let sessions = list_sessions(&project.id).await?;
+        if let Some(found) = sessions.into_iter().find(|s| &s.id == session_id) {
+            session = Some(found);
+            break;
+        }
+    }
+
+    let session = session.ok_or_else(|| {
+        Error::Session(crate::error::SessionError::NotFound {
+            session_id: session_id.clone(),
+        })
+    })?;
+
+    // Get the project directory from the session's project_path
+    let project_dir = session.project_path;
+    let metadata_path = project_dir.join("metadata.json");
+
+    // Read existing metadata or create new
+    let mut existing_metadata = if metadata_path.exists() {
+        let content = fs::read_to_string(&metadata_path).await.map_err(|e| {
+            Error::Session(crate::error::SessionError::IoError(e))
+        })?;
+        serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    // Merge new metadata into existing
+    if let (Some(existing_obj), Some(new_obj)) = (existing_metadata.as_object_mut(), metadata.as_object()) {
+        for (key, value) in new_obj {
+            existing_obj.insert(key.clone(), value.clone());
+        }
+    }
+
+    // Write updated metadata
+    let metadata_content = serde_json::to_string_pretty(&existing_metadata).map_err(|e| {
+        Error::Session(crate::error::SessionError::ParseError(
+            format!("Failed to serialize metadata: {}", e)
+        ))
+    })?;
+
+    fs::write(&metadata_path, metadata_content)
+        .await
+        .map_err(|e| {
+            Error::Session(crate::error::SessionError::IoError(e))
+        })?;
+
+    // Clear cache to ensure next read gets updated data
     cache::clear_cache();
     Ok(())
 }

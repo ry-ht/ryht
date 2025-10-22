@@ -243,9 +243,39 @@ pub async fn search_sessions(filter: SessionFilter) -> Result<Vec<SessionInfo>> 
                     }
                 }
 
-                (count, None) // TODO: Get actual last modified from file metadata
+                // Get file metadata for last modified time
+                let last_modified = if let Some(ref file_path) = session.file_path {
+                    tokio::fs::metadata(file_path)
+                        .await
+                        .ok()
+                        .and_then(|metadata| metadata.modified().ok())
+                        .and_then(|modified| {
+                            use std::time::SystemTime;
+                            let duration = modified.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+                            DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
+                        })
+                } else {
+                    None
+                };
+
+                (count, last_modified)
             } else {
-                (0, None)
+                // Even without full load, try to get last modified from file metadata
+                let last_modified = if let Some(ref file_path) = session.file_path {
+                    tokio::fs::metadata(file_path)
+                        .await
+                        .ok()
+                        .and_then(|metadata| metadata.modified().ok())
+                        .and_then(|modified| {
+                            use std::time::SystemTime;
+                            let duration = modified.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+                            DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
+                        })
+                } else {
+                    None
+                };
+
+                (0, last_modified)
             };
 
             results.push(SessionInfo {

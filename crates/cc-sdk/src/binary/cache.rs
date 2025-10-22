@@ -7,56 +7,21 @@
 //! # Examples
 //!
 //! ```no_run
-//! use cc_sdk::binary::cache::{DiscoveryCache, CacheConfig};
+//! use cc_sdk::binary::cache::DiscoveryCache;
+//! use cc_sdk::cache::CacheConfig;
 //! use std::time::Duration;
 //!
-//! let config = CacheConfig {
-//!     ttl: Duration::from_secs(3600), // 1 hour
-//!     enabled: true,
-//! };
-//!
+//! let config = CacheConfig::new(Duration::from_secs(3600), true);
 //! let mut cache = DiscoveryCache::new(config);
 //! ```
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::time::{Duration, Instant};
 
 use super::discovery::ClaudeInstallation;
 
-/// Configuration for discovery caching.
-#[derive(Debug, Clone)]
-pub struct CacheConfig {
-    /// Time-to-live for cache entries
-    pub ttl: Duration,
-    /// Whether caching is enabled
-    pub enabled: bool,
-}
-
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            ttl: Duration::from_secs(3600), // 1 hour default
-            enabled: true,
-        }
-    }
-}
-
-/// Cached discovery result.
-#[derive(Debug, Clone)]
-struct CachedEntry {
-    /// The cached installations
-    installations: Vec<ClaudeInstallation>,
-    /// When this entry was cached
-    cached_at: Instant,
-}
-
-impl CachedEntry {
-    /// Check if this entry is still valid based on TTL.
-    fn is_valid(&self, ttl: Duration) -> bool {
-        self.cached_at.elapsed() < ttl
-    }
-}
+/// Re-export generic cache types for backward compatibility and convenience
+pub use crate::cache::{CachedEntry, CacheConfig};
 
 /// Cache key based on discovery configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -123,7 +88,7 @@ pub struct DiscoveryCache {
     /// Configuration
     config: CacheConfig,
     /// Cached entries indexed by configuration hash
-    entries: HashMap<CacheKey, CachedEntry>,
+    entries: HashMap<CacheKey, CachedEntry<Vec<ClaudeInstallation>>>,
 }
 
 impl DiscoveryCache {
@@ -203,7 +168,7 @@ impl DiscoveryCache {
     fn get_with_key(&self, key: &CacheKey) -> Option<&Vec<ClaudeInstallation>> {
         self.entries.get(key).and_then(|entry| {
             if entry.is_valid(self.config.ttl) {
-                Some(&entry.installations)
+                Some(entry.data())
             } else {
                 None
             }
@@ -258,12 +223,7 @@ impl DiscoveryCache {
 
     /// Internal method to cache an entry.
     fn set_with_key(&mut self, key: CacheKey, installations: Vec<ClaudeInstallation>) {
-        let entry = CachedEntry {
-            installations,
-            cached_at: Instant::now(),
-        };
-
-        self.entries.insert(key, entry);
+        self.entries.insert(key, CachedEntry::new(installations));
     }
 
     /// Clear all cached entries.
@@ -363,7 +323,8 @@ impl DiscoveryCache {
 
 impl Default for DiscoveryCache {
     fn default() -> Self {
-        Self::new(CacheConfig::default())
+        // Use longer TTL for binary discovery (1 hour) since binaries change infrequently
+        Self::new(CacheConfig::new(std::time::Duration::from_secs(3600), true))
     }
 }
 
@@ -434,12 +395,18 @@ pub fn clear_cache() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_cache_config_default() {
+        // Generic cache default is 300 seconds
         let config = CacheConfig::default();
         assert!(config.enabled);
-        assert_eq!(config.ttl, Duration::from_secs(3600));
+        assert_eq!(config.ttl, Duration::from_secs(300));
+
+        // DiscoveryCache default uses 1-hour TTL (binaries change infrequently)
+        let discovery_cache = DiscoveryCache::default();
+        assert_eq!(discovery_cache.config().ttl, Duration::from_secs(3600));
     }
 
     #[test]

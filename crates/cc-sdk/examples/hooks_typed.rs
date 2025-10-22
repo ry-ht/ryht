@@ -29,8 +29,8 @@ impl HookCallback for ToolUseLogger {
                 // Strongly-typed access to hook input
                 println!("🔧 About to use tool: {}", pre_tool_use.tool_name);
                 println!("   Input: {}", serde_json::to_string_pretty(&pre_tool_use.tool_input).unwrap_or_default());
-                println!("   CWD: {}", pre_tool_use.cwd);
-                println!("   Session ID: {}", pre_tool_use.session_id);
+                println!("   CWD: {}", pre_tool_use.base.cwd);
+                println!("   Session ID: {}", pre_tool_use.base.session_id);
 
                 // Return sync hook output allowing the tool use
                 Ok(HookJSONOutput::Sync(SyncHookJSONOutput {

@@ -1229,12 +1229,21 @@ impl ClaudeClient<Connected> {
 
     /// Send a message with attached files.
     ///
+    /// **Note**: File attachment support is reserved for future implementation.
+    /// This method currently only sends the message text and ignores the files
+    /// parameter. To work with files, mention file paths in your message text
+    /// and Claude Code's Read tool will access them directly.
+    ///
+    /// Future implementation would require:
+    /// - Protocol extensions in Claude CLI for multipart message handling
+    /// - File content encoding and embedding in message protocol
+    /// - Binary file support with base64 encoding
+    ///
     /// # Errors
     ///
     /// Returns an error if:
     /// - The transport is not connected
     /// - Sending the message fails
-    /// - File paths are invalid
     ///
     /// # Examples
     ///
@@ -1249,8 +1258,13 @@ impl ClaudeClient<Connected> {
     /// #     .configure()
     /// #     .connect().await?
     /// #     .build()?;
+    /// // Files parameter is currently ignored - future feature
     /// let files = vec![PathBuf::from("file1.txt"), PathBuf::from("file2.txt")];
     /// let stream = client.send_with_files("Analyze these files", files).await?;
+    ///
+    /// // Current workaround: mention files in message text
+    /// let message = "Please read and analyze file1.txt and file2.txt";
+    /// let stream = client.send(message).await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -1259,9 +1273,9 @@ impl ClaudeClient<Connected> {
         message: String,
         _files: Vec<PathBuf>,
     ) -> Result<MessageStream> {
-        // For now, just send the message text
-        // File attachment would require additional protocol support
-        // TODO: Implement file attachment in the message protocol
+        // File attachment is reserved for future implementation.
+        // Requires protocol support from Claude CLI for multipart messages.
+        // Current workaround: mention file paths in message text.
         self.send(message).await
     }
 

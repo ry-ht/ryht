@@ -7,73 +7,22 @@
 //! # Examples
 //!
 //! ```no_run
-//! use cc_sdk::session::cache::{SessionCache, CacheConfig};
+//! use cc_sdk::session::cache::SessionCache;
+//! use cc_sdk::cache::CacheConfig;
 //! use std::time::Duration;
 //!
-//! let config = CacheConfig {
-//!     ttl: Duration::from_secs(300), // 5 minutes
-//!     enabled: true,
-//! };
-//!
-//! let mut cache = SessionCache::new(config);
+//! let config = CacheConfig::new(Duration::from_secs(300), true);
+//! let cache = SessionCache::new(config);
 //! ```
 
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
 
 use super::types::{Project, Session};
 
-/// Configuration for session caching.
-#[derive(Debug, Clone)]
-pub struct CacheConfig {
-    /// Time-to-live for cache entries
-    pub ttl: Duration,
-    /// Whether caching is enabled
-    pub enabled: bool,
-}
-
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            ttl: Duration::from_secs(300), // 5 minutes default (sessions change less frequently)
-            enabled: true,
-        }
-    }
-}
-
-/// Cached entry for projects.
-#[derive(Debug, Clone)]
-struct CachedProjectsEntry {
-    /// The cached projects
-    projects: Vec<Project>,
-    /// When this entry was cached
-    cached_at: Instant,
-}
-
-impl CachedProjectsEntry {
-    /// Check if this entry is still valid based on TTL.
-    fn is_valid(&self, ttl: Duration) -> bool {
-        self.cached_at.elapsed() < ttl
-    }
-}
-
-/// Cached entry for sessions.
-#[derive(Debug, Clone)]
-struct CachedSessionsEntry {
-    /// The cached sessions
-    sessions: Vec<Session>,
-    /// When this entry was cached
-    cached_at: Instant,
-}
-
-impl CachedSessionsEntry {
-    /// Check if this entry is still valid based on TTL.
-    fn is_valid(&self, ttl: Duration) -> bool {
-        self.cached_at.elapsed() < ttl
-    }
-}
+/// Re-export generic cache types for backward compatibility and convenience
+pub use crate::cache::{CachedEntry, CacheConfig};
 
 /// Cache key for session queries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -109,9 +58,9 @@ pub struct SessionCache {
     /// Configuration
     config: CacheConfig,
     /// Cached projects
-    projects_cache: Arc<RwLock<Option<CachedProjectsEntry>>>,
+    projects_cache: Arc<RwLock<Option<CachedEntry<Vec<Project>>>>>,
     /// Cached sessions by project ID
-    sessions_cache: Arc<RwLock<HashMap<String, CachedSessionsEntry>>>,
+    sessions_cache: Arc<RwLock<HashMap<String, CachedEntry<Vec<Session>>>>>,
 }
 
 impl SessionCache {
@@ -159,13 +108,7 @@ impl SessionCache {
         }
 
         let cache = self.projects_cache.read().ok()?;
-        cache.as_ref().and_then(|entry| {
-            if entry.is_valid(self.config.ttl) {
-                Some(entry.projects.clone())
-            } else {
-                None
-            }
-        })
+        cache.as_ref()?.get_if_valid(self.config.ttl)
     }
 
     /// Cache projects.
@@ -184,10 +127,7 @@ impl SessionCache {
         }
 
         if let Ok(mut cache) = self.projects_cache.write() {
-            *cache = Some(CachedProjectsEntry {
-                projects,
-                cached_at: Instant::now(),
-            });
+            *cache = Some(CachedEntry::new(projects));
         }
     }
 
@@ -212,13 +152,7 @@ impl SessionCache {
         }
 
         let cache = self.sessions_cache.read().ok()?;
-        cache.get(project_id).and_then(|entry| {
-            if entry.is_valid(self.config.ttl) {
-                Some(entry.sessions.clone())
-            } else {
-                None
-            }
-        })
+        cache.get(project_id)?.get_if_valid(self.config.ttl)
     }
 
     /// Cache sessions for a project.
@@ -237,13 +171,7 @@ impl SessionCache {
         }
 
         if let Ok(mut cache) = self.sessions_cache.write() {
-            cache.insert(
-                project_id,
-                CachedSessionsEntry {
-                    sessions,
-                    cached_at: Instant::now(),
-                },
-            );
+            cache.insert(project_id, CachedEntry::new(sessions));
         }
     }
 
@@ -512,6 +440,7 @@ mod tests {
     use crate::core::SessionId;
     use chrono::Utc;
     use std::path::PathBuf;
+    use std::time::Duration;
 
     #[test]
     fn test_cache_config_default() {
