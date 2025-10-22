@@ -790,13 +790,13 @@ async fn spawn_agent_system(
 
     info!("🚀 Creating ClaudeClient for agent execution...");
 
-    // Build ClaudeClient with appropriate configuration
+    // Build ClaudeClient WITHOUT system_prompt to avoid interactive mode hang
+    // System prompt will be combined with task and sent via .send() instead
     let client = cc_sdk::ClaudeClient::builder()
         .binary(cc_sdk::core::BinaryPath::new(claude_path))
         .model(ModelId::from(execution_model.as_str()))
         .permission_mode(PermissionMode::BypassPermissions)
         .working_directory(&project_path)
-        .system_prompt(system_prompt)
         .configure()
         .connect()
         .await
@@ -843,15 +843,22 @@ async fn spawn_agent_system(
 
     // Send prompt and handle streaming
     let app_handle = app.clone();
-    let task_clone = task.clone();
     let db_path_for_stream = db_path.clone();
+
+    // Combine system prompt and task into a single prompt
+    // This mimics the old behavior of passing -p <prompt> with --system-prompt
+    let combined_prompt = if !system_prompt.is_empty() {
+        format!("{}\n\n{}", system_prompt, task)
+    } else {
+        task.clone()
+    };
 
     tokio::spawn(async move {
         info!("📡 Starting Claude stream for agent run {}...", run_id);
 
-        // Send prompt and get stream
+        // Send combined prompt and get stream
         let stream_result = client
-            .send(&task_clone)
+            .send(&combined_prompt)
             .await;
 
         match stream_result {
