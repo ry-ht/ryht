@@ -1,13 +1,27 @@
 use anyhow::{Context, Result};
-use cc_sdk::core::SessionId;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
+use tokio::process::{Child, Command};
+use tokio::sync::Mutex;
 
+/// Global state to track current Claude process
+pub struct ClaudeProcessState {
+    pub current_process: Arc<Mutex<Option<Child>>>,
+}
+
+impl Default for ClaudeProcessState {
+    fn default() -> Self {
+        Self {
+            current_process: Arc::new(Mutex::new(None)),
+        }
+    }
+}
 
 /// Represents a project in the ~/.claude/projects directory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +229,81 @@ fn extract_first_user_message(jsonl_path: &PathBuf) -> (Option<String>, Option<S
     (None, None)
 }
 
+/// Helper function to create a tokio Command with proper environment variables
+/// This ensures commands like Claude can find Node.js and other dependencies
+fn create_command_with_env(program: &str) -> Command {
+    // Convert std::process::Command to tokio::process::Command
+    let _std_cmd = crate::claude_binary::create_command_with_env(program);
+
+    // Create a new tokio Command from the program path
+    let mut tokio_cmd = Command::new(program);
+
+    // Copy over all environment variables
+    for (key, value) in std::env::vars() {
+        if key == "PATH"
+            || key == "HOME"
+            || key == "USER"
+            || key == "SHELL"
+            || key == "LANG"
+            || key == "LC_ALL"
+            || key.starts_with("LC_")
+            || key == "NODE_PATH"
+            || key == "NVM_DIR"
+            || key == "NVM_BIN"
+            || key == "HOMEBREW_PREFIX"
+            || key == "HOMEBREW_CELLAR"
+        {
+            log::debug!("Inheriting env var: {}={}", key, value);
+            tokio_cmd.env(&key, &value);
+        }
+    }
+
+    // Add NVM support if the program is in an NVM directory
+    if program.contains("/.nvm/versions/node/") {
+        if let Some(node_bin_dir) = std::path::Path::new(program).parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let node_bin_str = node_bin_dir.to_string_lossy();
+            if !current_path.contains(&node_bin_str.as_ref()) {
+                let new_path = format!("{}:{}", node_bin_str, current_path);
+                tokio_cmd.env("PATH", new_path);
+            }
+        }
+    }
+
+    // Add Homebrew support if the program is in a Homebrew directory
+    if program.contains("/homebrew/") || program.contains("/opt/homebrew/") {
+        if let Some(program_dir) = std::path::Path::new(program).parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let homebrew_bin_str = program_dir.to_string_lossy();
+            if !current_path.contains(&homebrew_bin_str.as_ref()) {
+                let new_path = format!("{}:{}", homebrew_bin_str, current_path);
+                log::debug!(
+                    "Adding Homebrew bin directory to PATH: {}",
+                    homebrew_bin_str
+                );
+                tokio_cmd.env("PATH", new_path);
+            }
+        }
+    }
+
+    tokio_cmd
+}
+
+/// Creates a system binary command with the given arguments
+fn create_system_command(claude_path: &str, args: Vec<String>, project_path: &str) -> Command {
+    let mut cmd = create_command_with_env(claude_path);
+
+    // Add all arguments
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    cmd.current_dir(project_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    cmd
+}
 
 /// Gets the user's home directory path
 #[tauri::command]
@@ -227,37 +316,243 @@ pub async fn get_home_directory() -> Result<String, String> {
 /// Lists all projects in the ~/.claude/projects directory
 #[tauri::command]
 pub async fn list_projects() -> Result<Vec<Project>, String> {
-    // Use the adapter to list projects via cc-sdk
-    crate::adapters::session::list_projects_adapter()
-        .await
-        .map_err(|e| {
-            log::error!("Failed to list projects via adapter: {}", e);
-            format!("Failed to list projects: {}", e)
-        })
+    log::info!("Listing projects from ~/.claude/projects");
+
+    let claude_dir = get_claude_dir().map_err(|e| e.to_string())?;
+    let projects_dir = claude_dir.join("projects");
+
+    if !projects_dir.exists() {
+        log::warn!("Projects directory does not exist: {:?}", projects_dir);
+        return Ok(Vec::new());
+    }
+
+    let mut projects = Vec::new();
+
+    // Read all directories in the projects folder
+    let entries = fs::read_dir(&projects_dir)
+        .map_err(|e| format!("Failed to read projects directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            let dir_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| "Invalid directory name".to_string())?;
+
+            // Get directory creation time
+            let metadata = fs::metadata(&path)
+                .map_err(|e| format!("Failed to read directory metadata: {}", e))?;
+
+            let created_at = metadata
+                .created()
+                .or_else(|_| metadata.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH)
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            // Get the actual project path from JSONL files
+            let project_path = match get_project_path_from_sessions(&path) {
+                Ok(path) => path,
+                Err(e) => {
+                    log::warn!("Failed to get project path from sessions for {}: {}, falling back to decode", dir_name, e);
+                    decode_project_path(dir_name)
+                }
+            };
+
+            // List all JSONL files (sessions) in this project directory
+            let mut sessions = Vec::new();
+            let mut most_recent_session: Option<u64> = None;
+
+            if let Ok(session_entries) = fs::read_dir(&path) {
+                for session_entry in session_entries.flatten() {
+                    let session_path = session_entry.path();
+                    if session_path.is_file()
+                        && session_path.extension().and_then(|s| s.to_str()) == Some("jsonl")
+                    {
+                        if let Some(session_id) = session_path.file_stem().and_then(|s| s.to_str())
+                        {
+                            sessions.push(session_id.to_string());
+
+                            // Track the most recent session timestamp
+                            if let Ok(metadata) = fs::metadata(&session_path) {
+                                let modified = metadata
+                                    .modified()
+                                    .unwrap_or(SystemTime::UNIX_EPOCH)
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+
+                                most_recent_session = Some(match most_recent_session {
+                                    Some(current) => current.max(modified),
+                                    None => modified,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            projects.push(Project {
+                id: dir_name.to_string(),
+                path: project_path,
+                sessions,
+                created_at,
+                most_recent_session,
+            });
+        }
+    }
+
+    // Sort projects by most recent session activity, then by creation time
+    projects.sort_by(|a, b| {
+        // First compare by most recent session
+        match (a.most_recent_session, b.most_recent_session) {
+            (Some(a_time), Some(b_time)) => b_time.cmp(&a_time),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => b.created_at.cmp(&a.created_at),
+        }
+    });
+
+    log::info!("Found {} projects", projects.len());
+    Ok(projects)
 }
 
 /// Creates a new project for the given directory path
 #[tauri::command]
 pub async fn create_project(path: String) -> Result<Project, String> {
-    // Use the adapter to create a project
-    crate::adapters::session::create_project_adapter(path)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to create project via adapter: {}", e);
-            format!("Failed to create project: {}", e)
-        })
+    log::info!("Creating project for path: {}", path);
+
+    // Encode the path to create a project ID
+    let project_id = path.replace('/', "-");
+
+    // Get claude directory
+    let claude_dir = get_claude_dir().map_err(|e| e.to_string())?;
+    let projects_dir = claude_dir.join("projects");
+
+    // Create projects directory if it doesn't exist
+    if !projects_dir.exists() {
+        fs::create_dir_all(&projects_dir)
+            .map_err(|e| format!("Failed to create projects directory: {}", e))?;
+    }
+
+    // Create project directory if it doesn't exist
+    let project_dir = projects_dir.join(&project_id);
+    if !project_dir.exists() {
+        fs::create_dir_all(&project_dir)
+            .map_err(|e| format!("Failed to create project directory: {}", e))?;
+    }
+
+    // Get creation time
+    let metadata = fs::metadata(&project_dir)
+        .map_err(|e| format!("Failed to read directory metadata: {}", e))?;
+
+    let created_at = metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .unwrap_or(SystemTime::UNIX_EPOCH)
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    // Return the created project
+    Ok(Project {
+        id: project_id,
+        path,
+        sessions: Vec::new(),
+        created_at,
+        most_recent_session: None,
+    })
 }
 
 /// Gets sessions for a specific project
 #[tauri::command]
 pub async fn get_project_sessions(project_id: String) -> Result<Vec<Session>, String> {
-    // Use the adapter to get project sessions via cc-sdk
-    crate::adapters::session::get_project_sessions_adapter(project_id)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to get project sessions via adapter: {}", e);
-            format!("Failed to get project sessions: {}", e)
-        })
+    log::info!("Getting sessions for project: {}", project_id);
+
+    let claude_dir = get_claude_dir().map_err(|e| e.to_string())?;
+    let project_dir = claude_dir.join("projects").join(&project_id);
+    let todos_dir = claude_dir.join("todos");
+
+    if !project_dir.exists() {
+        return Err(format!("Project directory not found: {}", project_id));
+    }
+
+    // Get the actual project path from JSONL files
+    let project_path = match get_project_path_from_sessions(&project_dir) {
+        Ok(path) => path,
+        Err(e) => {
+            log::warn!(
+                "Failed to get project path from sessions for {}: {}, falling back to decode",
+                project_id,
+                e
+            );
+            decode_project_path(&project_id)
+        }
+    };
+
+    let mut sessions = Vec::new();
+
+    // Read all JSONL files in the project directory
+    let entries = fs::read_dir(&project_dir)
+        .map_err(|e| format!("Failed to read project directory: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+            if let Some(session_id) = path.file_stem().and_then(|s| s.to_str()) {
+                // Get file creation time
+                let metadata = fs::metadata(&path)
+                    .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+
+                let created_at = metadata
+                    .created()
+                    .or_else(|_| metadata.modified())
+                    .unwrap_or(SystemTime::UNIX_EPOCH)
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                // Extract first user message and timestamp
+                let (first_message, message_timestamp) = extract_first_user_message(&path);
+
+                // Try to load associated todo data
+                let todo_path = todos_dir.join(format!("{}.json", session_id));
+                let todo_data = if todo_path.exists() {
+                    fs::read_to_string(&todo_path)
+                        .ok()
+                        .and_then(|content| serde_json::from_str(&content).ok())
+                } else {
+                    None
+                };
+
+                sessions.push(Session {
+                    id: session_id.to_string(),
+                    project_id: project_id.clone(),
+                    project_path: project_path.clone(),
+                    todo_data,
+                    created_at,
+                    first_message,
+                    message_timestamp,
+                });
+            }
+        }
+    }
+
+    // Sort sessions by creation time (newest first)
+    sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    log::info!(
+        "Found {} sessions for project {}",
+        sessions.len(),
+        project_id
+    );
+    Ok(sessions)
 }
 
 /// Reads the Claude settings file
@@ -588,39 +883,277 @@ pub async fn load_session_history(
     session_id: String,
     project_id: String,
 ) -> Result<Vec<serde_json::Value>, String> {
-    // Use the adapter to load session history via cc-sdk
-    crate::adapters::session::load_session_history_adapter(session_id, project_id)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to load session history via adapter: {}", e);
-            format!("Failed to load session history: {}", e)
-        })
+    log::info!(
+        "Loading session history for session: {} in project: {}",
+        session_id,
+        project_id
+    );
+
+    let claude_dir = get_claude_dir().map_err(|e| e.to_string())?;
+    let session_path = claude_dir
+        .join("projects")
+        .join(&project_id)
+        .join(format!("{}.jsonl", session_id));
+
+    if !session_path.exists() {
+        return Err(format!("Session file not found: {}", session_id));
+    }
+
+    let file =
+        fs::File::open(&session_path).map_err(|e| format!("Failed to open session file: {}", e))?;
+
+    let reader = BufReader::new(file);
+    let mut messages = Vec::new();
+
+    for line in reader.lines() {
+        if let Ok(line) = line {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                messages.push(json);
+            }
+        }
+    }
+
+    Ok(messages)
 }
 
+/// Execute a new interactive Claude Code session with streaming output
+#[tauri::command]
+pub async fn execute_claude_code(
+    app: AppHandle,
+    project_path: String,
+    prompt: String,
+    model: String,
+) -> Result<(), String> {
+    log::info!(
+        "Starting new Claude Code session in: {} with model: {}",
+        project_path,
+        model
+    );
+
+    let claude_path = find_claude_binary(&app)?;
+
+    let args = vec![
+        "-p".to_string(),
+        prompt.clone(),
+        "--model".to_string(),
+        model.clone(),
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        "--verbose".to_string(),
+        "--dangerously-skip-permissions".to_string(),
+    ];
+
+    let cmd = create_system_command(&claude_path, args, &project_path);
+    spawn_claude_process(app, cmd, prompt, model, project_path).await
+}
+
+/// Continue an existing Claude Code conversation with streaming output
+#[tauri::command]
+pub async fn continue_claude_code(
+    app: AppHandle,
+    project_path: String,
+    prompt: String,
+    model: String,
+) -> Result<(), String> {
+    log::info!(
+        "Continuing Claude Code conversation in: {} with model: {}",
+        project_path,
+        model
+    );
+
+    let claude_path = find_claude_binary(&app)?;
+
+    let args = vec![
+        "-c".to_string(), // Continue flag
+        "-p".to_string(),
+        prompt.clone(),
+        "--model".to_string(),
+        model.clone(),
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        "--verbose".to_string(),
+        "--dangerously-skip-permissions".to_string(),
+    ];
+
+    let cmd = create_system_command(&claude_path, args, &project_path);
+    spawn_claude_process(app, cmd, prompt, model, project_path).await
+}
+
+/// Resume an existing Claude Code session by ID with streaming output
+#[tauri::command]
+pub async fn resume_claude_code(
+    app: AppHandle,
+    project_path: String,
+    session_id: String,
+    prompt: String,
+    model: String,
+) -> Result<(), String> {
+    log::info!(
+        "Resuming Claude Code session: {} in: {} with model: {}",
+        session_id,
+        project_path,
+        model
+    );
+
+    let claude_path = find_claude_binary(&app)?;
+
+    let args = vec![
+        "--resume".to_string(),
+        session_id.clone(),
+        "-p".to_string(),
+        prompt.clone(),
+        "--model".to_string(),
+        model.clone(),
+        "--output-format".to_string(),
+        "stream-json".to_string(),
+        "--verbose".to_string(),
+        "--dangerously-skip-permissions".to_string(),
+    ];
+
+    let cmd = create_system_command(&claude_path, args, &project_path);
+    spawn_claude_process(app, cmd, prompt, model, project_path).await
+}
+
+/// Cancel the currently running Claude Code execution
+#[tauri::command]
+pub async fn cancel_claude_execution(
+    app: AppHandle,
+    session_id: Option<String>,
+) -> Result<(), String> {
+    log::info!(
+        "Cancelling Claude Code execution for session: {:?}",
+        session_id
+    );
+
+    let mut killed = false;
+    let mut attempted_methods = Vec::new();
+
+    // Method 1: Try to find and kill via ProcessRegistry using session ID
+    if let Some(sid) = &session_id {
+        let registry = app.state::<crate::process::ProcessRegistryState>();
+        match registry.0.get_claude_session_by_id(sid) {
+            Ok(Some(process_info)) => {
+                log::info!(
+                    "Found process in registry for session {}: run_id={}, PID={}",
+                    sid,
+                    process_info.run_id,
+                    process_info.pid
+                );
+                match registry.0.kill_process(process_info.run_id).await {
+                    Ok(success) => {
+                        if success {
+                            log::info!("Successfully killed process via registry");
+                            killed = true;
+                        } else {
+                            log::warn!("Registry kill returned false");
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to kill via registry: {}", e);
+                    }
+                }
+                attempted_methods.push("registry");
+            }
+            Ok(None) => {
+                log::warn!("Session {} not found in ProcessRegistry", sid);
+            }
+            Err(e) => {
+                log::error!("Error querying ProcessRegistry: {}", e);
+            }
+        }
+    }
+
+    // Method 2: Try the legacy approach via ClaudeProcessState
+    if !killed {
+        let claude_state = app.state::<ClaudeProcessState>();
+        let mut current_process = claude_state.current_process.lock().await;
+
+        if let Some(mut child) = current_process.take() {
+            // Try to get the PID before killing
+            let pid = child.id();
+            log::info!(
+                "Attempting to kill Claude process via ClaudeProcessState with PID: {:?}",
+                pid
+            );
+
+            // Kill the process
+            match child.kill().await {
+                Ok(_) => {
+                    log::info!("Successfully killed Claude process via ClaudeProcessState");
+                    killed = true;
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to kill Claude process via ClaudeProcessState: {}",
+                        e
+                    );
+
+                    // Method 3: If we have a PID, try system kill as last resort
+                    if let Some(pid) = pid {
+                        log::info!("Attempting system kill as last resort for PID: {}", pid);
+                        let kill_result = if cfg!(target_os = "windows") {
+                            std::process::Command::new("taskkill")
+                                .args(["/F", "/PID", &pid.to_string()])
+                                .output()
+                        } else {
+                            std::process::Command::new("kill")
+                                .args(["-KILL", &pid.to_string()])
+                                .output()
+                        };
+
+                        match kill_result {
+                            Ok(output) if output.status.success() => {
+                                log::info!("Successfully killed process via system command");
+                                killed = true;
+                            }
+                            Ok(output) => {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                log::error!("System kill failed: {}", stderr);
+                            }
+                            Err(e) => {
+                                log::error!("Failed to execute system kill command: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+            attempted_methods.push("claude_state");
+        } else {
+            log::warn!("No active Claude process in ClaudeProcessState");
+        }
+    }
+
+    if !killed && attempted_methods.is_empty() {
+        log::warn!("No active Claude process found to cancel");
+    }
+
+    // Always emit cancellation events for UI consistency
+    if let Some(sid) = session_id {
+        let _ = app.emit(&format!("claude-cancelled:{}", sid), true);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        let _ = app.emit(&format!("claude-complete:{}", sid), false);
+    }
+
+    // Also emit generic events for backward compatibility
+    let _ = app.emit("claude-cancelled", true);
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = app.emit("claude-complete", false);
+
+    if killed {
+        log::info!("Claude process cancellation completed successfully");
+    } else if !attempted_methods.is_empty() {
+        log::warn!("Claude process cancellation attempted but process may have already exited. Attempted methods: {:?}", attempted_methods);
+    }
+
+    Ok(())
+}
 
 /// Get all running Claude sessions
 #[tauri::command]
 pub async fn list_running_claude_sessions(
     registry: tauri::State<'_, crate::process::ProcessRegistryState>,
 ) -> Result<Vec<crate::process::ProcessInfo>, String> {
-    // Get cc_sdk::process::ProcessInfo and convert to crate::process::ProcessInfo
-    let sessions = registry.0.get_running_claude_sessions();
-    Ok(sessions.into_iter().map(|info| crate::process::ProcessInfo {
-        run_id: info.run_id,
-        process_type: match info.process_type {
-            cc_sdk::process::ProcessType::ClaudeSession { session_id } => {
-                crate::process::ProcessType::ClaudeSession { session_id }
-            }
-            cc_sdk::process::ProcessType::AgentRun { agent_id, agent_name } => {
-                crate::process::ProcessType::AgentRun { agent_id, agent_name }
-            }
-        },
-        pid: info.pid,
-        started_at: chrono::DateTime::<chrono::Utc>::from(info.started_at),
-        project_path: info.project_path,
-        task: info.task,
-        model: info.model,
-    }).collect())
+    registry.0.get_running_claude_sessions()
 }
 
 /// Get live output from a Claude session
@@ -630,14 +1163,181 @@ pub async fn get_claude_session_output(
     session_id: String,
 ) -> Result<String, String> {
     // Find the process by session ID
-    let session_id_obj = SessionId::new(&session_id);
-    if let Some(handle) = registry.0.get(&session_id_obj) {
-        handle.get_output().await.map_err(|e| e.to_string())
+    if let Some(process_info) = registry.0.get_claude_session_by_id(&session_id)? {
+        registry.0.get_live_output(process_info.run_id)
     } else {
         Ok(String::new())
     }
 }
 
+/// Helper function to spawn Claude process and handle streaming
+async fn spawn_claude_process(
+    app: AppHandle,
+    mut cmd: Command,
+    prompt: String,
+    model: String,
+    project_path: String,
+) -> Result<(), String> {
+    use std::sync::Mutex;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    // Spawn the process
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn Claude: {}", e))?;
+
+    // Get stdout and stderr
+    let stdout = child.stdout.take().ok_or("Failed to get stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to get stderr")?;
+
+    // Get the child PID for logging
+    let pid = child.id().unwrap_or(0);
+    log::info!("Spawned Claude process with PID: {:?}", pid);
+
+    // Create readers first (before moving child)
+    let stdout_reader = BufReader::new(stdout);
+    let stderr_reader = BufReader::new(stderr);
+
+    // We'll extract the session ID from Claude's init message
+    let session_id_holder: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let run_id_holder: Arc<Mutex<Option<i64>>> = Arc::new(Mutex::new(None));
+
+    // Store the child process in the global state (for backward compatibility)
+    let claude_state = app.state::<ClaudeProcessState>();
+    {
+        let mut current_process = claude_state.current_process.lock().await;
+        // If there's already a process running, kill it first
+        if let Some(mut existing_child) = current_process.take() {
+            log::warn!("Killing existing Claude process before starting new one");
+            let _ = existing_child.kill().await;
+        }
+        *current_process = Some(child);
+    }
+
+    // Spawn tasks to read stdout and stderr
+    let app_handle = app.clone();
+    let session_id_holder_clone = session_id_holder.clone();
+    let run_id_holder_clone = run_id_holder.clone();
+    let registry = app.state::<crate::process::ProcessRegistryState>();
+    let registry_clone = registry.0.clone();
+    let project_path_clone = project_path.clone();
+    let prompt_clone = prompt.clone();
+    let model_clone = model.clone();
+    let stdout_task = tokio::spawn(async move {
+        let mut lines = stdout_reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            log::debug!("Claude stdout: {}", line);
+
+            // Parse the line to check for init message with session ID
+            if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&line) {
+                if msg["type"] == "system" && msg["subtype"] == "init" {
+                    if let Some(claude_session_id) = msg["session_id"].as_str() {
+                        let mut session_id_guard = session_id_holder_clone.lock().unwrap();
+                        if session_id_guard.is_none() {
+                            *session_id_guard = Some(claude_session_id.to_string());
+                            log::info!("Extracted Claude session ID: {}", claude_session_id);
+
+                            // Now register with ProcessRegistry using Claude's session ID
+                            match registry_clone.register_claude_session(
+                                claude_session_id.to_string(),
+                                pid,
+                                project_path_clone.clone(),
+                                prompt_clone.clone(),
+                                model_clone.clone(),
+                            ) {
+                                Ok(run_id) => {
+                                    log::info!("Registered Claude session with run_id: {}", run_id);
+                                    let mut run_id_guard = run_id_holder_clone.lock().unwrap();
+                                    *run_id_guard = Some(run_id);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to register Claude session: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Store live output in registry if we have a run_id
+            if let Some(run_id) = *run_id_holder_clone.lock().unwrap() {
+                let _ = registry_clone.append_live_output(run_id, &line);
+            }
+
+            // Emit the line to the frontend with session isolation if we have session ID
+            if let Some(ref session_id) = *session_id_holder_clone.lock().unwrap() {
+                let _ = app_handle.emit(&format!("claude-output:{}", session_id), &line);
+            }
+            // Also emit to the generic event for backward compatibility
+            let _ = app_handle.emit("claude-output", &line);
+        }
+    });
+
+    let app_handle_stderr = app.clone();
+    let session_id_holder_clone2 = session_id_holder.clone();
+    let stderr_task = tokio::spawn(async move {
+        let mut lines = stderr_reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            log::error!("Claude stderr: {}", line);
+            // Emit error lines to the frontend with session isolation if we have session ID
+            if let Some(ref session_id) = *session_id_holder_clone2.lock().unwrap() {
+                let _ = app_handle_stderr.emit(&format!("claude-error:{}", session_id), &line);
+            }
+            // Also emit to the generic event for backward compatibility
+            let _ = app_handle_stderr.emit("claude-error", &line);
+        }
+    });
+
+    // Wait for the process to complete
+    let app_handle_wait = app.clone();
+    let claude_state_wait = claude_state.current_process.clone();
+    let session_id_holder_clone3 = session_id_holder.clone();
+    let run_id_holder_clone2 = run_id_holder.clone();
+    let registry_clone2 = registry.0.clone();
+    tokio::spawn(async move {
+        let _ = stdout_task.await;
+        let _ = stderr_task.await;
+
+        // Get the child from the state to wait on it
+        let mut current_process = claude_state_wait.lock().await;
+        if let Some(mut child) = current_process.take() {
+            match child.wait().await {
+                Ok(status) => {
+                    log::info!("Claude process exited with status: {}", status);
+                    // Add a small delay to ensure all messages are processed
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if let Some(ref session_id) = *session_id_holder_clone3.lock().unwrap() {
+                        let _ = app_handle_wait
+                            .emit(&format!("claude-complete:{}", session_id), status.success());
+                    }
+                    // Also emit to the generic event for backward compatibility
+                    let _ = app_handle_wait.emit("claude-complete", status.success());
+                }
+                Err(e) => {
+                    log::error!("Failed to wait for Claude process: {}", e);
+                    // Add a small delay to ensure all messages are processed
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if let Some(ref session_id) = *session_id_holder_clone3.lock().unwrap() {
+                        let _ =
+                            app_handle_wait.emit(&format!("claude-complete:{}", session_id), false);
+                    }
+                    // Also emit to the generic event for backward compatibility
+                    let _ = app_handle_wait.emit("claude-complete", false);
+                }
+            }
+        }
+
+        // Unregister from ProcessRegistry if we have a run_id
+        if let Some(run_id) = *run_id_holder_clone2.lock().unwrap() {
+            let _ = registry_clone2.unregister_process(run_id);
+        }
+
+        // Clear the process from state
+        *current_process = None;
+    });
+
+    Ok(())
+}
 
 /// Lists files and directories in a given path
 #[tauri::command]
@@ -1486,275 +2186,6 @@ pub async fn validate_hook_command(command: String) -> Result<serde_json::Value,
         }
         Err(e) => Err(format!("Failed to validate command: {}", e)),
     }
-}
-
-// ============================================================================
-// ClaudeClient-based implementation using cc-sdk
-// ============================================================================
-
-/// Helper function to create a ClaudeClient with the appropriate configuration
-async fn create_claude_client(
-    app: &AppHandle,
-    model: String,
-    project_path: String,
-    continue_conversation: bool,
-    resume_session_id: Option<String>,
-) -> Result<Arc<cc_sdk::ClaudeClient<cc_sdk::core::state::Connected>>, String> {
-    use cc_sdk::core::ModelId;
-    use cc_sdk::permissions::PermissionMode;
-
-    log::info!(
-        "Creating ClaudeClient: model={}, project={}, continue={}, resume={:?}",
-        model,
-        project_path,
-        continue_conversation,
-        resume_session_id
-    );
-
-    // Find claude binary
-    let claude_path = find_claude_binary(app)?;
-
-    // Build client
-    let mut builder = cc_sdk::ClaudeClient::builder()
-        .binary(cc_sdk::core::BinaryPath::new(claude_path))
-        .model(ModelId::from(model.as_str()))
-        .permission_mode(PermissionMode::BypassPermissions)
-        .working_directory(&project_path);
-
-    // Handle continue/resume
-    if let Some(session_id) = resume_session_id {
-        builder = builder.resume_session(cc_sdk::core::SessionId::from(session_id));
-    } else if continue_conversation {
-        builder = builder.continue_conversation(true);
-    }
-
-    let client = builder
-        .configure()
-        .connect()
-        .await
-        .map_err(|e| format!("Failed to connect client: {}", e))?
-        .build()
-        .map_err(|e| format!("Failed to build client: {}", e))?;
-
-    log::info!("ClaudeClient created successfully, session_id: {}", client.session_id());
-
-    Ok(Arc::new(client))
-}
-
-/// Helper function to handle streaming from ClaudeClient
-async fn handle_claude_stream(
-    app: AppHandle,
-    client: Arc<cc_sdk::ClaudeClient<cc_sdk::core::state::Connected>>,
-    prompt: String,
-    model: String,
-    project_path: String,
-) -> Result<(), String> {
-    use futures::StreamExt;
-
-    let session_id = client.session_id().to_string();
-    let client_session_id = session_id.clone();
-    let app_clone = app.clone();
-
-    log::info!("Starting stream handler for session: {}", session_id);
-
-    // Send prompt
-    let mut stream = client
-        .send(&prompt)
-        .await
-        .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-    // Spawn task to handle streaming
-    tokio::spawn(async move {
-        log::info!("Stream processing started for session: {}", client_session_id);
-
-        while let Some(message_result) = stream.next().await {
-            match message_result {
-                Ok(message) => {
-                    // Convert message to JSON string
-                    let json_str = match serde_json::to_string(&message) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            log::error!("Failed to serialize message: {}", e);
-                            continue;
-                        }
-                    };
-
-                    log::debug!("Claude output ({}): {}", client_session_id, json_str);
-
-                    // Emit to frontend with session isolation
-                    let _ = app_clone.emit(&format!("claude-output:{}", client_session_id), &json_str);
-                    // Also emit generic for backward compatibility
-                    let _ = app_clone.emit("claude-output", &json_str);
-
-                    // Check if this is a result message (conversation complete)
-                    if let cc_sdk::messages::Message::Result { .. } = message {
-                        log::info!("Received Result message, session complete: {}", client_session_id);
-
-                        // Small delay to ensure all messages are processed
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-                        let _ = app_clone.emit(&format!("claude-complete:{}", client_session_id), true);
-                        let _ = app_clone.emit("claude-complete", true);
-                        break;
-                    }
-                }
-                Err(e) => {
-                    log::error!("Stream error for session {}: {}", client_session_id, e);
-                    let error_msg = format!("Error: {}", e);
-                    let _ = app_clone.emit(&format!("claude-error:{}", client_session_id), &error_msg);
-                    let _ = app_clone.emit("claude-error", &error_msg);
-
-                    // Emit complete with error status
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let _ = app_clone.emit(&format!("claude-complete:{}", client_session_id), false);
-                    let _ = app_clone.emit("claude-complete", false);
-                    break;
-                }
-            }
-        }
-
-        log::info!("Stream processing completed for session: {}", client_session_id);
-
-        // Note: Client will be disconnected when removed from registry or when the Arc is dropped
-    });
-
-    Ok(())
-}
-
-/// Execute a new Claude Code session using ClaudeClient
-#[tauri::command]
-pub async fn execute_claude_code(
-    app: AppHandle,
-    project_path: String,
-    prompt: String,
-    model: String,
-) -> Result<String, String> {
-    log::info!(
-        "execute_claude_code: project={}, model={}",
-        project_path,
-        model
-    );
-
-    let client = create_claude_client(&app, model.clone(), project_path.clone(), false, None).await?;
-    let session_id = client.session_id().to_string();
-
-    // Store client in registry
-    use crate::claude_client_registry::ClaudeClientRegistryState;
-    let registry = app.state::<ClaudeClientRegistryState>();
-    registry.0.register_client(session_id.clone(), client.clone()).await;
-
-    // Handle streaming
-    handle_claude_stream(app, client, prompt, model, project_path).await?;
-
-    Ok(session_id)
-}
-
-/// Continue an existing Claude Code conversation using ClaudeClient
-#[tauri::command]
-pub async fn continue_claude_code(
-    app: AppHandle,
-    project_path: String,
-    prompt: String,
-    model: String,
-) -> Result<String, String> {
-    log::info!(
-        "continue_claude_code: project={}, model={}",
-        project_path,
-        model
-    );
-
-    let client = create_claude_client(&app, model.clone(), project_path.clone(), true, None).await?;
-    let session_id = client.session_id().to_string();
-
-    // Store client in registry
-    use crate::claude_client_registry::ClaudeClientRegistryState;
-    let registry = app.state::<ClaudeClientRegistryState>();
-    registry.0.register_client(session_id.clone(), client.clone()).await;
-
-    // Handle streaming
-    handle_claude_stream(app, client, prompt, model, project_path).await?;
-
-    Ok(session_id)
-}
-
-/// Resume an existing Claude Code session by ID using ClaudeClient
-#[tauri::command]
-pub async fn resume_claude_code(
-    app: AppHandle,
-    project_path: String,
-    session_id: String,
-    prompt: String,
-    model: String,
-) -> Result<String, String> {
-    log::info!(
-        "resume_claude_code: session={}, project={}, model={}",
-        session_id,
-        project_path,
-        model
-    );
-
-    let client = create_claude_client(
-        &app,
-        model.clone(),
-        project_path.clone(),
-        false,
-        Some(session_id.clone()),
-    )
-    .await?;
-
-    // Store client in registry
-    use crate::claude_client_registry::ClaudeClientRegistryState;
-    let registry = app.state::<ClaudeClientRegistryState>();
-    registry.0.register_client(session_id.clone(), client.clone()).await;
-
-    // Handle streaming
-    handle_claude_stream(app, client, prompt, model, project_path).await?;
-
-    Ok(session_id)
-}
-
-/// Cancel a Claude Code execution using ClaudeClient
-#[tauri::command]
-pub async fn cancel_claude_execution(
-    app: AppHandle,
-    session_id: String,
-) -> Result<(), String> {
-    log::info!("cancel_claude_execution: session={}", session_id);
-
-    // Get client from registry
-    use crate::claude_client_registry::ClaudeClientRegistryState;
-    let registry = app.state::<ClaudeClientRegistryState>();
-
-    if let Some(_client) = registry.0.get_client(&session_id).await {
-        log::info!("Found client for session {}, removing from registry...", session_id);
-
-        // Remove from registry - the client will be dropped and disconnected
-        registry.0.remove_client(&session_id).await;
-
-        // Emit cancellation events
-        let _ = app.emit(&format!("claude-cancelled:{}", session_id), true);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        let _ = app.emit(&format!("claude-complete:{}", session_id), false);
-
-        // Also emit generic events
-        let _ = app.emit("claude-cancelled", true);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        let _ = app.emit("claude-complete", false);
-
-        log::info!("Client disconnected successfully for session: {}", session_id);
-    } else {
-        log::warn!("No active client found for session: {}", session_id);
-
-        // Still emit cancellation events for UI consistency
-        let _ = app.emit(&format!("claude-cancelled:{}", session_id), true);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        let _ = app.emit(&format!("claude-complete:{}", session_id), false);
-        let _ = app.emit("claude-cancelled", true);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        let _ = app.emit("claude-complete", false);
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

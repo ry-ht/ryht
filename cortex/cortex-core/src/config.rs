@@ -87,6 +87,7 @@ pub const ENV_DB_DATABASE: &str = "CORTEX_DB_DATABASE";
 pub const ENV_MCP_SERVER_BIND: &str = "CORTEX_MCP_SERVER_BIND";
 pub const ENV_CACHE_SIZE_MB: &str = "CORTEX_CACHE_SIZE_MB";
 pub const ENV_CACHE_REDIS_URL: &str = "CORTEX_CACHE_REDIS_URL";
+pub const ENV_JWT_SECRET: &str = "JWT_SECRET";
 
 /// Configuration profile enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +152,7 @@ pub struct GlobalConfig {
     vfs: VfsConfig,
     ingestion: IngestionConfig,
     mcp: McpConfig,
+    auth: AuthConfig,
     /// Configuration profile (dev, prod, test)
     #[serde(default)]
     profile: ConfigProfile,
@@ -257,6 +259,25 @@ pub struct McpConfig {
     pub max_request_size_mb: u64,
 }
 
+/// Authentication and security configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// JWT secret key (override with JWT_SECRET env var)
+    pub jwt_secret: String,
+    /// Access token expiration time in minutes
+    pub access_token_expiry_mins: i64,
+    /// Refresh token expiration time in days
+    pub refresh_token_expiry_days: i64,
+    /// JWT issuer
+    pub jwt_issuer: String,
+    /// JWT audience
+    pub jwt_audience: String,
+    /// Enable API key authentication
+    pub api_keys_enabled: bool,
+    /// Maximum number of active sessions per user
+    pub max_sessions_per_user: usize,
+}
+
 impl Default for ConfigProfile {
     fn default() -> Self {
         Self::Dev
@@ -340,6 +361,20 @@ impl Default for McpConfig {
     }
 }
 
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            jwt_secret: "cortex-dev-secret-change-in-production".to_string(),
+            access_token_expiry_mins: 15,
+            refresh_token_expiry_days: 7,
+            jwt_issuer: "cortex-api".to_string(),
+            jwt_audience: "cortex-client".to_string(),
+            api_keys_enabled: true,
+            max_sessions_per_user: 5,
+        }
+    }
+}
+
 impl Default for GlobalConfig {
     fn default() -> Self {
         Self {
@@ -350,6 +385,7 @@ impl Default for GlobalConfig {
             vfs: VfsConfig::default(),
             ingestion: IngestionConfig::default(),
             mcp: McpConfig::default(),
+            auth: AuthConfig::default(),
             profile: ConfigProfile::default(),
         }
     }
@@ -678,6 +714,12 @@ impl GlobalConfig {
             self.cache.redis_url = redis_url;
         }
 
+        // Authentication
+        if let Ok(jwt_secret) = std::env::var(ENV_JWT_SECRET) {
+            debug!("Overriding JWT secret from environment");
+            self.auth.jwt_secret = jwt_secret;
+        }
+
         Ok(())
     }
 
@@ -905,6 +947,16 @@ impl GlobalConfig {
     /// Get mutable MCP configuration
     pub fn mcp_mut(&mut self) -> &mut McpConfig {
         &mut self.mcp
+    }
+
+    /// Get authentication configuration
+    pub fn auth(&self) -> &AuthConfig {
+        &self.auth
+    }
+
+    /// Get mutable authentication configuration
+    pub fn auth_mut(&mut self) -> &mut AuthConfig {
+        &mut self.auth
     }
 
     /// Export configuration to a JSON string

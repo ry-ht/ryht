@@ -15,6 +15,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
 use cortex_core::prelude::*;
+use cortex_core::CodeUnitType; // Explicit import to avoid ambiguity
 use cortex_memory::prelude::*;
 use cortex_semantic::prelude::*;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
@@ -36,9 +37,9 @@ fn create_test_db_config(db_name: &str) -> DatabaseConfig {
         pool_config: PoolConfig {
             max_connections: 20,
             min_connections: 5,
-            connection_timeout_secs: 30,
-            max_idle_time_secs: 300,
-            health_check_interval_secs: 60,
+            connection_timeout: std::time::Duration::from_secs(30),
+            idle_timeout: Some(std::time::Duration::from_secs(300)),
+            ..Default::default()
         },
         namespace: "cortex_bench".to_string(),
         database: db_name.to_string(),

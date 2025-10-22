@@ -41,9 +41,11 @@ impl EnvGuard {
 
 impl Drop for EnvGuard {
     fn drop(&mut self) {
-        match &self.old_value {
-            Some(val) => env::set_var(&self.key, val),
-            None => env::remove_var(&self.key),
+        unsafe {
+            match &self.old_value {
+                Some(val) => env::set_var(&self.key, val),
+                None => env::remove_var(&self.key),
+            }
         }
     }
 }

@@ -201,6 +201,21 @@ enum Commands {
         #[arg(short, long, default_value = "menu")]
         mode: String,
     },
+
+    /// Start the REST API server
+    Server {
+        /// Server host address
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Server port
+        #[arg(long, default_value = "8080")]
+        port: u16,
+
+        /// Number of worker threads
+        #[arg(long)]
+        workers: Option<usize>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -732,6 +747,10 @@ async fn run() -> Result<()> {
                 }
             }
         },
+
+        Commands::Server { host, port, workers } => {
+            commands::server_start(host, port, workers).await?;
+        }
     }
 
     Ok(())

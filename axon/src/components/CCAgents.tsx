@@ -193,7 +193,7 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
       const filePath = await save({
         defaultPath: `${agent.name.toLowerCase().replace(/\s+/g, '-')}.axon.json`,
         filters: [{
-          name: 'Axon Agent',
+          name: 'axon Agent',
           extensions: ['axon.json']
         }]
       });
@@ -222,7 +222,7 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
       const filePath = await open({
         multiple: false,
         filters: [{
-          name: 'Axon Agent',
+          name: 'axon Agent',
           extensions: ['axon.json', 'json']
         }]
       });

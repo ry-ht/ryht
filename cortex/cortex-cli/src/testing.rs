@@ -5,7 +5,7 @@
 use crate::output::{self, OutputFormat};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Test result
 #[derive(Debug, Clone, Serialize, Deserialize)]

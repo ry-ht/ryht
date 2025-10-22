@@ -57,7 +57,7 @@ pub use index::{VectorIndex, HNSWIndex, IndexStats};
 pub use query::{QueryProcessor, QueryExpander, QueryIntent};
 pub use search::{SemanticSearchEngine, SearchResult, SearchFilter};
 pub use ranking::{Ranker, RankingStrategy, ScoringAlgorithm};
-pub use types::{Vector, DocumentId, EmbeddingModel};
+pub use types::{Vector, DocumentId, EmbeddingModel, EntityType};
 pub use error::{SemanticError, Result};
 
 /// Re-export commonly used types

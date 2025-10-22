@@ -3,18 +3,16 @@
 //! This module contains the complete implementation of all Cortex CLI commands.
 
 use crate::config::CortexConfig;
-use crate::mcp::{CortexMcpServer, CortexMcpServerBuilder};
-use crate::output::{self, format_bytes, format_timestamp, OutputFormat, TableBuilder};
+use crate::mcp::CortexMcpServer;
+use crate::output::{self, format_bytes, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
-use cortex_core::error::CortexError;
-use cortex_ingestion::{ProjectImportOptions, ProjectLoader};
 use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
     Workspace, WorkspaceType, SourceType,
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -809,7 +807,7 @@ pub async fn db_install() -> Result<()> {
 
 /// Create a storage connection manager from config
 async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>> {
-    use cortex_storage::{PoolConnectionMode, LoadBalancingStrategy};
+    use cortex_storage::PoolConnectionMode;
 
     let db_config = DatabaseConfig {
         connection_mode: PoolConnectionMode::Local {
@@ -1130,6 +1128,35 @@ pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
     if category.is_none() {
         output::info("Use --category <name> to filter by category");
     }
+
+    Ok(())
+}
+
+// ============================================================================
+// REST API Server Commands
+// ============================================================================
+
+/// Start the REST API server
+pub async fn server_start(host: String, port: u16, workers: Option<usize>) -> Result<()> {
+    output::header("Starting Cortex REST API Server");
+    output::kv("Host", &host);
+    output::kv("Port", port);
+    if let Some(w) = workers {
+        output::kv("Workers", w);
+    }
+
+    let config = crate::api::server::ServerConfig {
+        host,
+        port,
+        workers,
+    };
+
+    let server = crate::api::RestApiServer::with_config(config).await?;
+
+    output::success("REST API server started successfully");
+    output::info("Press Ctrl+C to stop");
+
+    server.serve().await?;
 
     Ok(())
 }

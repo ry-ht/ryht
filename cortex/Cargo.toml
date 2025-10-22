@@ -14,7 +14,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.75"
+rust-version = "1.85"
 authors = ["Luxquant"]
 license = "MIT"
 repository = "https://github.com/ry-ht/ryht"
@@ -25,7 +25,7 @@ tokio = { version = "1.48.0", features = ["full"] }
 tokio-util = { version = "0.7.16", features = ["full"] }
 
 # Database
-surrealdb = { version = "2.3.10", features = ["kv-mem", "kv-rocksdb"] }
+surrealdb = { version = "2.3.10", features = ["kv-mem"] }
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
@@ -144,6 +144,8 @@ tree-sitter = "0.25.10"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 anyhow.workspace = true
+surrealdb.workspace = true
+parking_lot.workspace = true
 
 [[test]]
 name = "cross_crate_integration"

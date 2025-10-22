@@ -70,7 +70,7 @@ export const AnalyticsConsent: React.FC<AnalyticsConsentProps> = ({
               <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
                 <BarChart3 className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
-              <DialogTitle className="text-2xl">Help Improve Axon</DialogTitle>
+              <DialogTitle className="text-2xl">Help Improve axon</DialogTitle>
             </div>
             <DialogDescription className="text-base mt-2">
               We'd like to collect anonymous usage data to improve your experience.

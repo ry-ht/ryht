@@ -8,6 +8,7 @@ pub mod interactive;
 pub mod output;
 pub mod testing;
 pub mod mcp;
+pub mod api;
 
 pub use commands::*;
 pub use config::*;
@@ -19,3 +20,6 @@ pub use testing::*;
 
 // Re-export MCP server types
 pub use mcp::{CortexMcpServer, CortexMcpServerBuilder};
+
+// Re-export REST API server types
+pub use api::{RestApiServer, ApiResponse, ApiMetadata, ApiError, ApiResult};

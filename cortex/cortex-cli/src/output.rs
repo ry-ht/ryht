@@ -8,7 +8,7 @@
 //! - User prompts and confirmations
 
 use anyhow::{Context, Result};
-use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Row, Table};
+use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 use console::style;
 use dialoguer::{Confirm, Input, Select};
 use indicatif::{ProgressBar, ProgressStyle};

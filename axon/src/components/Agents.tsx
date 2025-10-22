@@ -123,7 +123,7 @@ export const Agents: React.FC = () => {
     try {
       const selected = await openDialog({
         filters: [
-          { name: 'Axon Agent', extensions: ['axon.json', 'json'] },
+          { name: 'axon Agent', extensions: ['axon.json', 'json'] },
           { name: 'All Files', extensions: ['*'] }
         ],
         multiple: false,
@@ -145,7 +145,7 @@ export const Agents: React.FC = () => {
       const path = await save({
         defaultPath: `${agent.name.toLowerCase().replace(/\s+/g, '-')}.axon.json`,
         filters: [
-          { name: 'Axon Agent', extensions: ['axon.json'] }
+          { name: 'axon Agent', extensions: ['axon.json'] }
         ]
       });
 

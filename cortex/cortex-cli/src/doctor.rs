@@ -2,10 +2,9 @@
 //!
 //! The doctor module provides comprehensive system health checks and automatic fixes for common issues.
 
-use crate::output::{self, OutputFormat};
+use crate::output::{self};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Doctor check result
 #[derive(Debug, Clone, Serialize, Deserialize)]

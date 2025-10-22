@@ -19,7 +19,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use surrealdb::engine::any::Any;
-use surrealdb::engine::local::Mem;
 use surrealdb::Surreal;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::time::timeout;

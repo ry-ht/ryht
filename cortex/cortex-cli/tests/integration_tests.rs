@@ -78,9 +78,11 @@ async fn test_config_env_overrides() {
     assert_eq!(config.storage.cache_size_mb, 512);
 
     // Clean up
-    std::env::remove_var("CORTEX_DB_NAMESPACE");
-    std::env::remove_var("CORTEX_DB_POOL_SIZE");
-    std::env::remove_var("CORTEX_CACHE_SIZE_MB");
+    unsafe {
+        std::env::remove_var("CORTEX_DB_NAMESPACE");
+        std::env::remove_var("CORTEX_DB_POOL_SIZE");
+        std::env::remove_var("CORTEX_CACHE_SIZE_MB");
+    }
 }
 
 #[test]

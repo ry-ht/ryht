@@ -240,7 +240,7 @@ brew install pkg-config
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/getAsterisk/opcode.git
+   git clone https://github.com/getAsterisk/axon.git
    cd axon
    ```
 
@@ -415,13 +415,13 @@ This project is licensed under the AGPL License - see the [LICENSE](LICENSE) fil
     <strong>Made with ❤️ by the <a href="https://asterisk.so/">Asterisk</a></strong>
   </p>
   <p>
-    <a href="https://github.com/getAsterisk/opcode/issues">Report Bug</a>
+    <a href="https://github.com/getAsterisk/axon/issues">Report Bug</a>
     ·
-    <a href="https://github.com/getAsterisk/opcode/issues">Request Feature</a>
+    <a href="https://github.com/getAsterisk/axon/issues">Request Feature</a>
   </p>
 </div>
 
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=getAsterisk/opcode&type=Date)](https://www.star-history.com/#getAsterisk/opcode&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=getAsterisk/axon&type=Date)](https://www.star-history.com/#getAsterisk/axon&Date)
