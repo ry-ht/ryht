@@ -25,10 +25,10 @@
 //! - [`SDKHookCallbackRequest`] - Hook callback request
 //! - [`SDKControlMcpMessageRequest`] - MCP message request
 //!
-//! # Legacy Types
+//! # Response Types
 //!
-//! - [`ControlRequest`] - Legacy control request (backward compatibility)
-//! - [`ControlResponse`] - Legacy control response (backward compatibility)
+//! - [`ControlRequest`] - Control request
+//! - [`ControlResponse`] - Control response
 //!
 //! # Example
 //!
@@ -155,7 +155,7 @@ pub enum SDKControlRequest {
     McpMessage(SDKControlMcpMessageRequest),
 }
 
-/// Control request types (legacy, keeping for compatibility)
+/// Control request types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ControlRequest {
@@ -166,7 +166,7 @@ pub enum ControlRequest {
     },
 }
 
-/// Control response types (legacy, keeping for compatibility)
+/// Control response types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ControlResponse {

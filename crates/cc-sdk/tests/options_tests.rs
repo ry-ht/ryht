@@ -95,21 +95,21 @@ fn test_claude_code_options_builder_additional_directories() {
 #[test]
 fn test_control_protocol_format_default() {
     let format = ControlProtocolFormat::default();
-    assert_eq!(format, ControlProtocolFormat::Legacy);
+    assert_eq!(format, ControlProtocolFormat::SdkControlRequest);
 }
 
 #[test]
 fn test_control_protocol_format_variants() {
-    let legacy = ControlProtocolFormat::Legacy;
+    let sdk_control_request = ControlProtocolFormat::SdkControlRequest;
     let control = ControlProtocolFormat::Control;
     let auto = ControlProtocolFormat::Auto;
 
-    assert_eq!(legacy, ControlProtocolFormat::Legacy);
+    assert_eq!(sdk_control_request, ControlProtocolFormat::SdkControlRequest);
     assert_eq!(control, ControlProtocolFormat::Control);
     assert_eq!(auto, ControlProtocolFormat::Auto);
 
-    assert_ne!(legacy, control);
-    assert_ne!(legacy, auto);
+    assert_ne!(sdk_control_request, control);
+    assert_ne!(sdk_control_request, auto);
     assert_ne!(control, auto);
 }
 
@@ -348,11 +348,11 @@ fn test_mcp_server_config_clone() {
 
 #[test]
 fn test_control_protocol_format_copy() {
-    let format1 = ControlProtocolFormat::Legacy;
+    let format1 = ControlProtocolFormat::SdkControlRequest;
     let format2 = format1; // Should copy, not move
 
     assert_eq!(format1, format2);
-    assert_eq!(format1, ControlProtocolFormat::Legacy); // format1 still usable
+    assert_eq!(format1, ControlProtocolFormat::SdkControlRequest); // format1 still usable
 }
 
 #[test]

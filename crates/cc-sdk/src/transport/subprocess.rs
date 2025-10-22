@@ -225,9 +225,9 @@ impl SubprocessTransport {
             }
         }
 
-        // System prompts - use v2 API
-        if let Some(ref prompt_v2) = self.options.system_prompt_v2 {
-            match prompt_v2 {
+        // System prompts
+        if let Some(ref prompt) = self.options.system_prompt {
+            match prompt {
                 crate::types::SystemPrompt::String(s) => {
                     cmd.arg("--system-prompt").arg(s);
                 }
@@ -512,7 +512,7 @@ impl SubprocessTransport {
                                 // Send to sdk_control channel for control protocol mode
                                 let _ = sdk_control_tx_clone.send(json.clone()).await;
 
-                                // Also parse and send to legacy control_tx for non-control-protocol mode
+                                // Also parse and send to control_tx for non-control-protocol mode
                                 // (needed for interrupt functionality when query_handler is None)
                                 // CLI returns: {"type":"control_response","response":{"subtype":"success","request_id":"..."}}
                                 // or: {"type":"control_response","response":{"subtype":"error","request_id":"...","error":"..."}}
@@ -550,10 +550,10 @@ impl SubprocessTransport {
                                     continue;
                                 }
 
-                            // Handle SDK control requests FROM CLI (legacy format)
+                            // Handle SDK control requests FROM CLI
                             if msg_type == "sdk_control_request" {
                                 // Send the FULL message including requestId
-                                debug!("Received SDK control request (legacy): {:?}", json);
+                                debug!("Received SDK control request: {:?}", json);
                                 let _ = sdk_control_tx_clone.send(json.clone()).await;
                                 continue;
                             }

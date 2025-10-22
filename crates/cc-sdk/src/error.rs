@@ -1,4 +1,4 @@
-//! Modern error system for the Claude Code SDK
+//! Error system for the Claude Code SDK
 //!
 //! This module provides a comprehensive error hierarchy for all aspects of the SDK,
 //! including binary discovery, transport, sessions, settings, and client operations.

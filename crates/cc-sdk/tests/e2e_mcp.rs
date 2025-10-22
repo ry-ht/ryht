@@ -27,8 +27,8 @@ async fn e2e_mcp_server_not_found_sends_error() -> Result<()> {
     let resp = &outer["response"];
     assert_eq!(resp["subtype"], "error");
     assert_eq!(resp["request_id"], "req_mcp_1");
-    // Legacy SDK MCP server support has been removed
-    assert!(resp["error"].as_str().unwrap_or("").contains("Legacy SDK MCP server support removed"));
+    // SDK MCP server support has been removed
+    assert!(resp["error"].as_str().unwrap_or("").contains("SDK MCP server support removed"));
 
     Ok(())
 }

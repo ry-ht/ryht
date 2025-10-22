@@ -1,6 +1,6 @@
-//! Modern type-safe client API with type-state pattern.
+//! Type-safe client API with type-state pattern.
 //!
-//! This module provides a modern, ergonomic API for interacting with Claude Code
+//! This module provides an ergonomic API for interacting with Claude Code
 //! using the type-state pattern to ensure compile-time safety.
 //!
 //! # Type States
@@ -12,9 +12,9 @@
 //! - `Connected`: Fully connected and ready to send messages
 //! - `Disconnected`: Previously connected, now disconnected
 //!
-//! # Advanced Features
+//! # Features
 //!
-//! The modern client includes advanced capabilities inspired by the Claude CLI and mcp-sdk:
+//! The client includes comprehensive capabilities:
 //!
 //! - **Model Fallback**: Configure multiple models with automatic failover
 //! - **Tool Filtering**: Allow/disallow specific tools with fine-grained control
@@ -23,9 +23,6 @@
 //! - **Dynamic Permissions**: Update permission modes without reconnecting
 //! - **Session Management**: List sessions, get history, resume conversations
 //! - **Rich Configuration**: System prompts, token limits, environment variables, etc.
-//!
-//! See [`MODERN_CLIENT_ENHANCEMENTS.md`](https://github.com/yourusername/cc-sdk/blob/main/crates/cc-sdk/MODERN_CLIENT_ENHANCEMENTS.md)
-//! for detailed documentation of all features.
 //!
 //! # Basic Example
 //!
@@ -135,7 +132,7 @@ use crate::types::{ClaudeCodeOptions, Message, PermissionMode, McpServerConfig};
 use crate::metrics::SessionMetrics;
 use crate::streaming::OutputBuffer;
 
-/// Modern type-safe Claude client with compile-time state verification.
+/// Type-safe Claude client with compile-time state verification.
 ///
 /// The client uses the type-state pattern to prevent invalid operations:
 /// - Cannot connect without a binary
@@ -607,27 +604,27 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    /// Set the system prompt (modern API).
+    /// Set the system prompt from a string.
     ///
-    /// Use `system_prompt_v2` for the new SystemPrompt enum API.
+    /// For more control, use `system_prompt_with` with a `SystemPrompt` enum.
     pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
         let mut options = inner.options.take().unwrap_or_default();
-        options.system_prompt_v2 = Some(crate::options::SystemPrompt::String(prompt.into()));
+        options.system_prompt = Some(crate::options::SystemPrompt::String(prompt.into()));
         inner.options = Some(options);
 
         self
     }
 
-    /// Set the system prompt using the v2 API.
-    pub fn system_prompt_v2(mut self, prompt: crate::options::SystemPrompt) -> Self {
+    /// Set the system prompt using the SystemPrompt enum.
+    pub fn system_prompt_with(mut self, prompt: crate::options::SystemPrompt) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
         let mut options = inner.options.take().unwrap_or_default();
-        options.system_prompt_v2 = Some(prompt);
+        options.system_prompt = Some(prompt);
         inner.options = Some(options);
 
         self
@@ -1964,7 +1961,7 @@ mod tests {
         assert_eq!(options.max_output_tokens, Some(8000));
         assert_eq!(options.max_turns, Some(20));
         assert!(matches!(
-            options.system_prompt_v2,
+            options.system_prompt,
             Some(crate::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
         ));
     }

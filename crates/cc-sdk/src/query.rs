@@ -162,8 +162,8 @@ async fn query_print_mode(
     cmd.arg("--verbose");
 
     // Add all options to match Python SDK exactly
-    if let Some(ref prompt_v2) = options.system_prompt_v2 {
-        match prompt_v2 {
+    if let Some(ref prompt) = options.system_prompt {
+        match prompt {
             crate::options::SystemPrompt::String(s) => {
                 cmd.arg("--system-prompt").arg(s);
             }

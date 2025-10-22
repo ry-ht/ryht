@@ -53,7 +53,7 @@
 // Client API (Most Important)
 // ============================================================================
 
-/// Modern type-safe Claude client.
+/// Type-safe Claude client.
 pub use crate::client::ClaudeClient;
 
 /// Builder for creating a Claude client with type-safe state transitions.

@@ -1,11 +1,11 @@
 //! # Claude Code SDK for Rust
 //!
-//! A comprehensive Rust SDK for interacting with the Claude Code CLI, providing modern
+//! A comprehensive Rust SDK for interacting with the Claude Code CLI, providing
 //! type-safe client interfaces, session management, and MCP integration.
 //!
 //! ## Features
 //!
-//! - **Modern Client API**: Type-safe client with compile-time state verification
+//! - **Client API**: Type-safe client with compile-time state verification
 //! - **Session Management**: Full CRUD operations on Claude Code sessions
 //! - **Settings Management**: Load and save settings with scope precedence
 //! - **MCP Integration**: Built-in support for Model Context Protocol servers
@@ -15,7 +15,7 @@
 //! - **Binary Discovery**: Automatic finding of Claude installations
 //! - **Hook System**: Extensible hooks for customizing Claude behavior
 //!
-//! ## Quick Start (Modern API - Recommended)
+//! ## Quick Start
 //!
 //! ```rust,no_run
 //! use cc_sdk::{ClaudeClient, Result};
@@ -68,7 +68,7 @@
 //!
 //! The SDK is organized into focused modules:
 //!
-//! - [`client`] - Modern type-safe client API
+//! - [`client`] - Type-safe client API
 //! - [`session`] - Session discovery, caching, writing, filtering, and management
 //! - [`settings`] - Settings loading and saving with scope precedence
 //! - [`mcp`] - Model Context Protocol integration
@@ -133,10 +133,10 @@ mod perf_utils;
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// Modern Client API (Recommended)
+// Client API
 // ----------------------------------------------------------------------------
 
-/// Modern type-safe Claude client with compile-time state verification.
+/// Type-safe Claude client with compile-time state verification.
 pub use client::{ClaudeClient, ClaudeClientBuilder, MessageStream};
 
 // ----------------------------------------------------------------------------
@@ -147,10 +147,10 @@ pub use client::{ClaudeClient, ClaudeClientBuilder, MessageStream};
 pub use core::{BinaryPath, ModelId, SessionId, Version};
 
 // ----------------------------------------------------------------------------
-// Error Handling (Modern)
+// Error Handling
 // ----------------------------------------------------------------------------
 
-/// Modern error type with rich context and error source tracking.
+/// Error type with rich context and error source tracking.
 pub use error::{
     Error,
     BinaryError,
@@ -160,7 +160,7 @@ pub use error::{
     TransportError,
 };
 
-/// Modern result type (alias for `Result<T, Error>`).
+/// Result type (alias for `Result<T, Error>`).
 pub use result::Result;
 
 // ----------------------------------------------------------------------------

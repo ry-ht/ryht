@@ -545,13 +545,13 @@ impl Query {
                                     }
                                 }
                                 "mcp_message" => {
-                                    // MCP message handling - legacy SDK MCP server support removed
-                                    // For MCP integration, use the modern mcp-sdk crate via the mcp/ module
-                                    warn!("Legacy SDK MCP server support removed. Use mcp-sdk crate instead.");
+                                    // MCP message handling - SDK MCP server support removed
+                                    // For MCP integration, use the mcp-sdk crate via the mcp/ module
+                                    warn!("SDK MCP server support removed. Use mcp-sdk crate instead.");
                                     let error_response = serde_json::json!({
                                         "subtype": "error",
                                         "request_id": Self::extract_request_id(&control_message),
-                                        "error": "Legacy SDK MCP server support removed. Use mcp-sdk crate for MCP integration."
+                                        "error": "SDK MCP server support removed. Use mcp-sdk crate for MCP integration."
                                     });
                                     let mut transport = transport_for_control.lock().await;
                                     if let Err(e) = transport.send_sdk_control_response(error_response).await {
@@ -644,10 +644,9 @@ impl Query {
 
     /// Handle MCP message for SDK servers
     ///
-    /// NOTE: Legacy SDK MCP server support has been intentionally removed in favor of
-    /// using the modern mcp-sdk crate for MCP integration. This method remains as a
-    /// stub for API compatibility but will return an error directing users to use
-    /// the mcp-sdk crate instead.
+    /// NOTE: SDK MCP server support has been removed in favor of using the mcp-sdk
+    /// crate for MCP integration. This method remains for compatibility but will
+    /// return an error directing users to use the mcp-sdk crate instead.
     ///
     /// For MCP integration, use:
     /// - The mcp-sdk crate directly for full MCP protocol support
@@ -657,10 +656,10 @@ impl Query {
     async fn handle_mcp_message(&mut self, server_name: &str, _message: &JsonValue) -> Result<JsonValue> {
         // Check if we have an SDK server with this name
         if self.sdk_mcp_servers.contains_key(server_name) {
-            // Legacy SDK MCP server support removed - direct users to mcp-sdk
+            // SDK MCP server support removed - direct users to mcp-sdk
             Err(crate::error::Error::Client(crate::error::ClientError::NotSupported {
                 feature: format!(
-                    "Legacy SDK MCP server support removed. Use mcp-sdk crate for MCP integration. \
+                    "SDK MCP server support removed. Use mcp-sdk crate for MCP integration. \
                      For server '{}', configure via ClaudeCodeOptions.mcp_servers instead.",
                     server_name
                 ),

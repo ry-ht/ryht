@@ -28,7 +28,7 @@ pub struct MockTransport {
     connected: AtomicBool,
     // Message broadcast channel (CLI -> SDK)
     message_tx: broadcast::Sender<Message>,
-    // Control response channel (legacy) (CLI -> SDK)
+    // Control response channel (CLI -> SDK)
     control_resp_rx: Option<mpsc::Receiver<ControlResponse>>,
     // SDK control inbound channel (CLI -> SDK)
     sdk_control_rx: Option<mpsc::Receiver<serde_json::Value>>,

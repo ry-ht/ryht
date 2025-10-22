@@ -1,10 +1,10 @@
-//! Modern client module for Claude Code SDK.
+//! Client module for Claude Code SDK.
 //!
-//! This module provides the modern, type-safe client API using the type-state pattern.
+//! This module provides the type-safe client API using the type-state pattern.
 //!
-//! # Phase 3: Modern Client API
+//! # Client API
 //!
-//! The modern client API (`ClaudeClient`) is the recommended way to interact with
+//! The client API (`ClaudeClient`) is the recommended way to interact with
 //! Claude Code. It provides compile-time safety through type-states and an ergonomic
 //! builder pattern.
 //!
@@ -40,6 +40,6 @@
 //! }
 //! ```
 
-mod modern;
+mod client;
 
-pub use modern::{ClaudeClient, ClaudeClientBuilder, MessageStream};
+pub use client::{ClaudeClient, ClaudeClientBuilder, MessageStream};

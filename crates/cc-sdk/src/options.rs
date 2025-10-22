@@ -44,18 +44,17 @@ use crate::permissions::PermissionMode;
 /// Control protocol format for sending messages
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlProtocolFormat {
-    /// Legacy format: {"type":"sdk_control_request","request":{...}}
-    Legacy,
-    /// New format: {"type":"control","control":{...}}
+    /// SDK control request format: {"type":"sdk_control_request","request":{...}}
+    SdkControlRequest,
+    /// Control format: {"type":"control","control":{...}}
     Control,
-    /// Auto-detect based on CLI capabilities (default to Legacy for compatibility)
+    /// Auto-detect based on CLI capabilities
     Auto,
 }
 
 impl Default for ControlProtocolFormat {
     fn default() -> Self {
-        // Default to Legacy for maximum compatibility
-        Self::Legacy
+        Self::SdkControlRequest
     }
 }
 
@@ -256,10 +255,9 @@ pub enum SystemPrompt {
 /// Configuration options for Claude Code SDK
 #[derive(Clone, Default)]
 pub struct ClaudeCodeOptions {
-    /// System prompt configuration (simplified in v0.1.12+)
+    /// System prompt configuration
     /// Can be either a string or a preset configuration
-    /// Replaces the old system_prompt and append_system_prompt fields
-    pub system_prompt_v2: Option<SystemPrompt>,
+    pub system_prompt: Option<SystemPrompt>,
     /// List of allowed tools
     pub allowed_tools: Vec<String>,
     /// List of disallowed tools
@@ -302,10 +300,9 @@ pub struct ClaudeCodeOptions {
     pub can_use_tool: Option<Arc<dyn CanUseTool>>,
     /// Hook configurations
     pub hooks: Option<HashMap<String, Vec<HookMatcher>>>,
-    /// Control protocol format (defaults to Legacy for compatibility)
+    /// Control protocol format
     pub control_protocol_format: ControlProtocolFormat,
 
-    // ========== Phase 2 Enhancements ==========
     /// Setting sources to load (user, project, local)
     /// When None, no filesystem settings are loaded (matches Python SDK v0.1.0 behavior)
     pub setting_sources: Option<Vec<SettingSource>>,
@@ -324,7 +321,7 @@ pub struct ClaudeCodeOptions {
 impl std::fmt::Debug for ClaudeCodeOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClaudeCodeOptions")
-            .field("system_prompt_v2", &self.system_prompt_v2)
+            .field("system_prompt", &self.system_prompt)
             .field("allowed_tools", &self.allowed_tools)
             .field("disallowed_tools", &self.disallowed_tools)
             .field("permission_mode", &self.permission_mode)
@@ -365,9 +362,9 @@ pub struct ClaudeCodeOptionsBuilder {
 }
 
 impl ClaudeCodeOptionsBuilder {
-    /// Set system prompt v2 (modern API)
-    pub fn system_prompt_v2(mut self, prompt: SystemPrompt) -> Self {
-        self.options.system_prompt_v2 = Some(prompt);
+    /// Set system prompt (modern API)
+    pub fn system_prompt(mut self, prompt: SystemPrompt) -> Self {
+        self.options.system_prompt = Some(prompt);
         self
     }
 
@@ -562,7 +559,7 @@ mod tests {
     #[test]
     fn test_options_builder() {
         let options = ClaudeCodeOptions::builder()
-            .system_prompt_v2(SystemPrompt::String("Test prompt".to_string()))
+            .system_prompt(SystemPrompt::String("Test prompt".to_string()))
             .model("claude-3-opus")
             .permission_mode(PermissionMode::AcceptEdits)
             .allow_tool("read")
@@ -570,7 +567,7 @@ mod tests {
             .max_turns(10)
             .build();
 
-        assert!(matches!(options.system_prompt_v2, Some(SystemPrompt::String(_))));
+        assert!(matches!(options.system_prompt, Some(SystemPrompt::String(_))));
         assert_eq!(options.model, Some("claude-3-opus".to_string()));
         assert_eq!(options.permission_mode, PermissionMode::AcceptEdits);
         assert_eq!(options.allowed_tools, vec!["read", "write"]);

@@ -1,14 +1,11 @@
 //! MCP Server Example - Calculator
 //!
 //! This example demonstrates how to create an in-process MCP server with
-//! calculator tools using the Claude Code Rust SDK with the modern mcp-sdk crate.
+//! calculator tools using the Claude Code Rust SDK with the mcp-sdk crate.
 //!
 //! Unlike external MCP servers that require separate processes, this server
 //! runs directly within your Rust application, providing better performance
 //! and simpler deployment.
-//!
-//! NOTE: This example has been updated to use the modern mcp-sdk crate
-//! instead of the legacy sdk_mcp module.
 
 use cc_sdk::{
     ClaudeCodeOptions, InteractiveClient, Message, Result,
