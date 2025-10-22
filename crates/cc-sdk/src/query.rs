@@ -162,14 +162,18 @@ async fn query_print_mode(
     cmd.arg("--verbose");
 
     // Add all options to match Python SDK exactly
-    #[allow(deprecated)]
-    if let Some(ref system_prompt) = options.system_prompt {
-        cmd.arg("--system-prompt").arg(system_prompt);
-    }
-
-    #[allow(deprecated)]
-    if let Some(ref append_prompt) = options.append_system_prompt {
-        cmd.arg("--append-system-prompt").arg(append_prompt);
+    if let Some(ref prompt_v2) = options.system_prompt_v2 {
+        match prompt_v2 {
+            crate::options::SystemPrompt::String(s) => {
+                cmd.arg("--system-prompt").arg(s);
+            }
+            crate::options::SystemPrompt::Preset { preset, append, .. } => {
+                cmd.arg("--system-prompt-preset").arg(preset);
+                if let Some(append_text) = append {
+                    cmd.arg("--append-system-prompt").arg(append_text);
+                }
+            }
+        }
     }
 
     if !options.allowed_tools.is_empty() {

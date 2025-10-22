@@ -988,4 +988,521 @@ mod tests {
         // Verify it's unregistered
         assert!(registry.get(&session_id).is_none());
     }
+
+    // ===== NEW COMPREHENSIVE TESTS =====
+
+    /// Test concurrent registration of multiple processes from different threads
+    #[tokio::test]
+    async fn test_concurrent_registration() {
+        use std::sync::Arc;
+
+        let registry = Arc::new(ProcessRegistry::new());
+        let mut handles = vec![];
+
+        // Spawn 20 concurrent registration tasks
+        for i in 0..20 {
+            let registry = Arc::clone(&registry);
+            let handle = tokio::spawn(async move {
+                let session_id = SessionId::new(format!("concurrent-{}", i));
+                let child = tokio::process::Command::new("echo")
+                    .arg(format!("test-{}", i))
+                    .spawn()
+                    .expect("Failed to spawn");
+
+                registry.register(session_id.clone(), child)
+                    .expect("Failed to register");
+
+                // Also test concurrent reads
+                assert!(registry.get(&session_id).is_some());
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks
+        for handle in handles {
+            handle.await.expect("Task panicked");
+        }
+
+        // Verify all registered
+        assert_eq!(registry.list_active().len(), 20);
+    }
+
+    /// Test concurrent reads and writes
+    #[tokio::test]
+    async fn test_concurrent_reads_and_writes() {
+        use std::sync::Arc;
+
+        let registry = Arc::new(ProcessRegistry::new());
+
+        // Pre-register some processes
+        for i in 0..5 {
+            let session_id = SessionId::new(format!("session-{}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("test")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        let mut handles = vec![];
+
+        // Spawn reader tasks
+        for _ in 0..10 {
+            let registry = Arc::clone(&registry);
+            let handle = tokio::spawn(async move {
+                for i in 0..5 {
+                    let session_id = SessionId::new(format!("session-{}", i));
+                    let _ = registry.get(&session_id);
+                    let _ = registry.list_active();
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Spawn writer tasks
+        for i in 5..10 {
+            let registry = Arc::clone(&registry);
+            let handle = tokio::spawn(async move {
+                let session_id = SessionId::new(format!("session-{}", i));
+                let child = tokio::process::Command::new("echo")
+                    .arg("test")
+                    .spawn()
+                    .expect("Failed to spawn");
+                registry.register(session_id, child).expect("Failed to register");
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks
+        for handle in handles {
+            handle.await.expect("Task panicked");
+        }
+
+        // Should have 10 registered processes
+        assert_eq!(registry.list_active().len(), 10);
+    }
+
+    /// Test registry iteration and filtering
+    #[tokio::test]
+    async fn test_registry_iteration() {
+        let registry = ProcessRegistry::new();
+        let mut expected_ids = Vec::new();
+
+        // Register processes with specific naming pattern
+        for i in 0..10 {
+            let session_id = SessionId::new(format!("test-{:03}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("test")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id.clone(), child)
+                .expect("Failed to register");
+            expected_ids.push(session_id);
+        }
+
+        let active = registry.list_active();
+        assert_eq!(active.len(), 10);
+
+        // Verify we can find each expected ID
+        for expected_id in &expected_ids {
+            assert!(active.contains(expected_id), "Missing ID: {:?}", expected_id);
+        }
+    }
+
+    /// Test process lookup by PID through handle
+    #[tokio::test]
+    async fn test_process_lookup_by_pid() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("test-pid-lookup");
+
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        let expected_pid = child.id().expect("No PID");
+
+        let handle = registry.register(session_id.clone(), child)
+            .expect("Failed to register");
+
+        // Verify we can look up by session and get correct PID
+        let retrieved_handle = registry.get(&session_id).expect("Handle not found");
+        assert_eq!(retrieved_handle.pid, expected_pid);
+        assert_eq!(handle.pid, expected_pid);
+    }
+
+    /// Test registry cleanup with mixed finished/running processes
+    #[tokio::test]
+    async fn test_cleanup_mixed_processes() {
+        let registry = ProcessRegistry::new();
+
+        // Register short-lived processes
+        for i in 0..3 {
+            let session_id = SessionId::new(format!("short-{}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("quick")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        // Register longer-lived processes
+        for i in 0..3 {
+            let session_id = SessionId::new(format!("long-{}", i));
+            let child = tokio::process::Command::new("sleep")
+                .arg("0.5")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        // Wait for short-lived to finish
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // Cleanup
+        let cleaned = registry.cleanup_finished().await;
+
+        // Should have cleaned up the echo processes
+        assert!(cleaned >= 3, "Expected at least 3 cleaned, got {}", cleaned);
+
+        // Should still have the sleep processes
+        let remaining = registry.list_active().len();
+        assert!(remaining <= 3, "Expected at most 3 remaining, got {}", remaining);
+    }
+
+    /// Test error handling for missing processes
+    #[tokio::test]
+    async fn test_error_missing_process() {
+        let registry = ProcessRegistry::new();
+        let missing_id = SessionId::new("does-not-exist");
+
+        // Try to get non-existent process
+        assert!(registry.get(&missing_id).is_none());
+
+        // Try to get output from non-existent process
+        assert!(registry.get_output(&missing_id).is_none());
+
+        // Try to unregister non-existent process
+        assert!(registry.unregister(&missing_id).is_none());
+
+        // Try to kill non-existent process
+        let result = registry.kill(&missing_id, false).await;
+        assert!(result.is_err());
+    }
+
+    /// Test registry cleanup edge case: empty registry
+    #[tokio::test]
+    async fn test_cleanup_empty_registry() {
+        let registry = ProcessRegistry::new();
+        let cleaned = registry.cleanup_finished().await;
+        assert_eq!(cleaned, 0);
+    }
+
+    /// Test registry cleanup edge case: all processes still running
+    #[tokio::test]
+    async fn test_cleanup_all_running() {
+        let registry = ProcessRegistry::new();
+
+        // Register processes that will still be running
+        for i in 0..3 {
+            let session_id = SessionId::new(format!("running-{}", i));
+            let child = tokio::process::Command::new("sleep")
+                .arg("1")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        let cleaned = registry.cleanup_finished().await;
+        assert_eq!(cleaned, 0);
+
+        // All should still be active
+        assert_eq!(registry.list_active().len(), 3);
+    }
+
+    /// Test process state transitions
+    #[tokio::test]
+    async fn test_process_state_transitions() {
+        let session_id = SessionId::new("state-test");
+        let child = tokio::process::Command::new("sleep")
+            .arg("0.1")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = ProcessHandle::new(session_id, child, pid);
+
+        // Initially running
+        assert!(handle.is_running().await.expect("Failed to check status"));
+
+        // Wait for completion
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Should be finished
+        assert!(!handle.is_running().await.expect("Failed to check status"));
+
+        // Second check should also return false
+        assert!(!handle.is_running().await.expect("Failed to check status"));
+    }
+
+    /// Test output buffer with large content
+    #[tokio::test]
+    async fn test_output_buffer_large_content() {
+        let session_id = SessionId::new("large-output");
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = ProcessHandle::new(session_id, child, pid);
+
+        // Append large content
+        let large_string = "X".repeat(10000);
+        for _ in 0..10 {
+            handle.append_output(&large_string).expect("Failed to append");
+        }
+
+        let output = handle.get_output().expect("Failed to get output");
+        assert_eq!(output.len(), 100000);
+    }
+
+    /// Test output buffer clearing
+    #[tokio::test]
+    async fn test_output_buffer_clear_and_reuse() {
+        let session_id = SessionId::new("clear-test");
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = ProcessHandle::new(session_id, child, pid);
+
+        // Add, clear, add pattern
+        handle.append_output("first\n").expect("Failed to append");
+        assert_eq!(handle.get_output().unwrap(), "first\n");
+
+        handle.clear_output().expect("Failed to clear");
+        assert_eq!(handle.get_output().unwrap(), "");
+
+        handle.append_output("second\n").expect("Failed to append");
+        assert_eq!(handle.get_output().unwrap(), "second\n");
+    }
+
+    /// Test ProcessHandle cloning
+    #[tokio::test]
+    async fn test_process_handle_clone() {
+        let session_id = SessionId::new("clone-test");
+        let child = tokio::process::Command::new("echo")
+            .arg("test")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle1 = ProcessHandle::new(session_id.clone(), child, pid);
+        let handle2 = handle1.clone();
+
+        // Both should have same metadata
+        assert_eq!(handle1.session_id, handle2.session_id);
+        assert_eq!(handle1.pid, handle2.pid);
+
+        // Output should be shared
+        handle1.append_output("shared\n").expect("Failed to append");
+        assert_eq!(handle2.get_output().unwrap(), "shared\n");
+    }
+
+    /// Test registry replacement of existing session
+    #[tokio::test]
+    async fn test_registry_replace_existing_session() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("replace-test");
+
+        // Register first process
+        let child1 = tokio::process::Command::new("echo")
+            .arg("first")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid1 = child1.id().expect("No PID");
+
+        let handle1 = registry.register(session_id.clone(), child1)
+            .expect("Failed to register");
+        assert_eq!(handle1.pid, pid1);
+
+        // Register second process with same session ID (should replace)
+        let child2 = tokio::process::Command::new("echo")
+            .arg("second")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid2 = child2.id().expect("No PID");
+
+        let handle2 = registry.register(session_id.clone(), child2)
+            .expect("Failed to register");
+        assert_eq!(handle2.pid, pid2);
+
+        // Should only have one entry
+        assert_eq!(registry.list_active().len(), 1);
+
+        // Should have the second process
+        let retrieved = registry.get(&session_id).expect("Not found");
+        assert_eq!(retrieved.pid, pid2);
+    }
+
+    /// Test uptime calculation accuracy
+    #[tokio::test]
+    async fn test_uptime_accuracy() {
+        let session_id = SessionId::new("uptime-test");
+        let child = tokio::process::Command::new("sleep")
+            .arg("1")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = ProcessHandle::new(session_id, child, pid);
+
+        // Check uptime immediately
+        let uptime1 = handle.uptime().expect("Failed to get uptime");
+        assert!(uptime1 < Duration::from_millis(100));
+
+        // Wait 200ms
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Check uptime again
+        let uptime2 = handle.uptime().expect("Failed to get uptime");
+        assert!(uptime2 >= Duration::from_millis(200));
+        assert!(uptime2 < Duration::from_millis(500));
+    }
+
+    /// Test thread safety with output buffer
+    #[tokio::test]
+    async fn test_thread_safe_output_buffer() {
+        use std::sync::Arc;
+
+        let session_id = SessionId::new("thread-safe-output");
+        let child = tokio::process::Command::new("sleep")
+            .arg("1")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = Arc::new(ProcessHandle::new(session_id, child, pid));
+        let mut handles = vec![];
+
+        // Spawn multiple tasks that append concurrently
+        for i in 0..50 {
+            let handle = Arc::clone(&handle);
+            let task = tokio::spawn(async move {
+                handle.append_output(&format!("line-{}\n", i))
+                    .expect("Failed to append");
+            });
+            handles.push(task);
+        }
+
+        // Wait for all tasks
+        for task in handles {
+            task.await.expect("Task panicked");
+        }
+
+        // Verify we have all 50 lines
+        let output = handle.get_output().expect("Failed to get output");
+        let line_count = output.lines().count();
+        assert_eq!(line_count, 50);
+    }
+
+    /// Test is_running after process completes
+    #[tokio::test]
+    async fn test_is_running_after_completion() {
+        let session_id = SessionId::new("completion-test");
+        let child = tokio::process::Command::new("echo")
+            .arg("done")
+            .spawn()
+            .expect("Failed to spawn");
+        let pid = child.id().expect("No PID");
+
+        let handle = ProcessHandle::new(session_id, child, pid);
+
+        // Should be running initially
+        assert!(handle.is_running().await.expect("Failed to check"));
+
+        // Wait for completion
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // Should not be running anymore
+        assert!(!handle.is_running().await.expect("Failed to check"));
+    }
+
+    /// Test registry with SessionId::generate()
+    #[tokio::test]
+    async fn test_registry_with_generated_ids() {
+        let registry = ProcessRegistry::new();
+        let mut generated_ids = Vec::new();
+
+        // Register processes with generated IDs
+        for _ in 0..5 {
+            let session_id = SessionId::generate();
+            let child = tokio::process::Command::new("echo")
+                .arg("test")
+                .spawn()
+                .expect("Failed to spawn");
+
+            registry.register(session_id.clone(), child)
+                .expect("Failed to register");
+            generated_ids.push(session_id);
+        }
+
+        // Verify all registered
+        assert_eq!(registry.list_active().len(), 5);
+
+        // Verify each ID is unique and retrievable
+        for id in &generated_ids {
+            assert!(registry.get(id).is_some());
+        }
+    }
+
+    /// Test multiple cleanup cycles
+    #[tokio::test]
+    async fn test_multiple_cleanup_cycles() {
+        let registry = ProcessRegistry::new();
+
+        // First batch
+        for i in 0..3 {
+            let session_id = SessionId::new(format!("batch1-{}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("test")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let cleaned1 = registry.cleanup_finished().await;
+        assert!(cleaned1 > 0);
+
+        // Second batch
+        for i in 0..3 {
+            let session_id = SessionId::new(format!("batch2-{}", i));
+            let child = tokio::process::Command::new("echo")
+                .arg("test")
+                .spawn()
+                .expect("Failed to spawn");
+            registry.register(session_id, child).expect("Failed to register");
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let cleaned2 = registry.cleanup_finished().await;
+        assert!(cleaned2 > 0);
+
+        // Cleanup again should return 0
+        let cleaned3 = registry.cleanup_finished().await;
+        assert_eq!(cleaned3, 0);
+    }
+
+    /// Test get_output returns None for unregistered session
+    #[tokio::test]
+    async fn test_get_output_unregistered() {
+        let registry = ProcessRegistry::new();
+        let session_id = SessionId::new("unregistered");
+
+        let output = registry.get_output(&session_id);
+        assert!(output.is_none());
+    }
 }

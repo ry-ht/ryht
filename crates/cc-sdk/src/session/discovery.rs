@@ -1,7 +1,8 @@
-//! Session management implementation.
+//! Session discovery implementation.
 //!
 //! This module provides functions for discovering projects, listing sessions,
-//! and loading session history from JSONL files.
+//! and loading session history from JSONL files. It handles the core discovery
+//! operations for Claude Code sessions stored in the `~/.claude` directory.
 
 use std::fs;
 use std::io::{BufRead, BufReader};

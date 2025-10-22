@@ -260,14 +260,6 @@ pub struct ClaudeCodeOptions {
     /// Can be either a string or a preset configuration
     /// Replaces the old system_prompt and append_system_prompt fields
     pub system_prompt_v2: Option<SystemPrompt>,
-    /// [DEPRECATED] System prompt to prepend to all messages
-    /// Use system_prompt_v2 instead
-    #[deprecated(since = "0.1.12", note = "Use system_prompt_v2 instead")]
-    pub system_prompt: Option<String>,
-    /// [DEPRECATED] Additional system prompt to append
-    /// Use system_prompt_v2 instead
-    #[deprecated(since = "0.1.12", note = "Use system_prompt_v2 instead")]
-    pub append_system_prompt: Option<String>,
     /// List of allowed tools
     pub allowed_tools: Vec<String>,
     /// List of disallowed tools
@@ -330,11 +322,9 @@ pub struct ClaudeCodeOptions {
 }
 
 impl std::fmt::Debug for ClaudeCodeOptions {
-    #[allow(deprecated)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClaudeCodeOptions")
-            .field("system_prompt", &self.system_prompt)
-            .field("append_system_prompt", &self.append_system_prompt)
+            .field("system_prompt_v2", &self.system_prompt_v2)
             .field("allowed_tools", &self.allowed_tools)
             .field("disallowed_tools", &self.disallowed_tools)
             .field("permission_mode", &self.permission_mode)
@@ -375,17 +365,9 @@ pub struct ClaudeCodeOptionsBuilder {
 }
 
 impl ClaudeCodeOptionsBuilder {
-    /// Set system prompt
-    #[allow(deprecated)]
-    pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.options.system_prompt = Some(prompt.into());
-        self
-    }
-
-    /// Set append system prompt
-    #[allow(deprecated)]
-    pub fn append_system_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.options.append_system_prompt = Some(prompt.into());
+    /// Set system prompt v2 (modern API)
+    pub fn system_prompt_v2(mut self, prompt: SystemPrompt) -> Self {
+        self.options.system_prompt_v2 = Some(prompt);
         self
     }
 
@@ -578,10 +560,9 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(deprecated)]
     fn test_options_builder() {
         let options = ClaudeCodeOptions::builder()
-            .system_prompt("Test prompt")
+            .system_prompt_v2(SystemPrompt::String("Test prompt".to_string()))
             .model("claude-3-opus")
             .permission_mode(PermissionMode::AcceptEdits)
             .allow_tool("read")
@@ -589,7 +570,7 @@ mod tests {
             .max_turns(10)
             .build();
 
-        assert_eq!(options.system_prompt, Some("Test prompt".to_string()));
+        assert!(matches!(options.system_prompt_v2, Some(SystemPrompt::String(_))));
         assert_eq!(options.model, Some("claude-3-opus".to_string()));
         assert_eq!(options.permission_mode, PermissionMode::AcceptEdits);
         assert_eq!(options.allowed_tools, vec!["read", "write"]);

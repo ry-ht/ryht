@@ -34,7 +34,7 @@ use crate::error::{Error, SessionError};
 use crate::result::Result;
 use crate::types::Message;
 
-use super::manager::{get_projects_dir, list_projects};
+use super::discovery::{get_projects_dir, list_projects};
 use super::types::{Project, Session};
 use super::cache;
 
@@ -250,7 +250,7 @@ pub async fn update_session_metadata(
     session_id: &SessionId,
     metadata: serde_json::Value,
 ) -> Result<()> {
-    use super::manager::{list_projects, list_sessions};
+    use super::discovery::{list_projects, list_sessions};
     use tokio::fs;
 
     // Find the session across all projects

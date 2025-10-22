@@ -116,9 +116,9 @@
 //! ```
 
 mod cache;
+mod discovery;
 mod filter;
 mod management;
-mod manager;
 mod types;
 mod writer;
 
@@ -128,7 +128,7 @@ mod tests;
 // Re-export public API
 
 // Core discovery and loading
-pub use manager::{
+pub use discovery::{
     find_project_by_path, get_claude_dir, get_projects_dir, list_projects, list_sessions,
     load_session_history,
 };

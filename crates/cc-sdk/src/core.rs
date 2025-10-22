@@ -35,6 +35,152 @@
 use std::fmt;
 use std::path::PathBuf;
 
+/// Macro to implement common boilerplate for string-based newtypes.
+///
+/// This macro generates:
+/// - `new()`, `as_str()`, `into_inner()` methods
+/// - `From<String>`, `From<&str>` conversions
+/// - `AsRef<str>` implementation
+/// - `FromStr` implementation
+/// - `Display` implementation
+///
+/// # Usage
+///
+/// ```ignore
+/// impl_string_newtype!(SessionId);
+/// ```
+macro_rules! impl_string_newtype {
+    ($name:ident) => {
+        impl $name {
+            /// Create a new instance.
+            #[inline]
+            pub fn new(id: impl Into<String>) -> Self {
+                Self(id.into())
+            }
+
+            /// Get the value as a string slice.
+            #[inline]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+
+            /// Convert into the inner string.
+            #[inline]
+            pub fn into_inner(self) -> String {
+                self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(s: String) -> Self {
+                Self(s)
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                Self(s.to_string())
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::convert::Infallible;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(Self(s.to_string()))
+            }
+        }
+    };
+}
+
+/// Macro to implement common boilerplate for PathBuf-based newtypes.
+///
+/// This macro generates:
+/// - `new()`, `as_path()`, `into_inner()` methods
+/// - `From<PathBuf>`, `From<&str>` conversions
+/// - `AsRef<PathBuf>`, `AsRef<Path>` implementations
+/// - `FromStr` implementation
+/// - `Display` implementation
+///
+/// # Usage
+///
+/// ```ignore
+/// impl_path_newtype!(BinaryPath);
+/// ```
+macro_rules! impl_path_newtype {
+    ($name:ident) => {
+        impl $name {
+            /// Create a new instance.
+            #[inline]
+            pub fn new(path: impl Into<PathBuf>) -> Self {
+                Self(path.into())
+            }
+
+            /// Get the path as a `PathBuf` reference.
+            #[inline]
+            pub fn as_path(&self) -> &PathBuf {
+                &self.0
+            }
+
+            /// Convert into the inner `PathBuf`.
+            #[inline]
+            pub fn into_inner(self) -> PathBuf {
+                self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0.display())
+            }
+        }
+
+        impl From<PathBuf> for $name {
+            fn from(p: PathBuf) -> Self {
+                Self(p)
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                Self(PathBuf::from(s))
+            }
+        }
+
+        impl AsRef<PathBuf> for $name {
+            fn as_ref(&self) -> &PathBuf {
+                &self.0
+            }
+        }
+
+        impl AsRef<std::path::Path> for $name {
+            fn as_ref(&self) -> &std::path::Path {
+                self.0.as_ref()
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::convert::Infallible;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(Self(PathBuf::from(s)))
+            }
+        }
+    };
+}
+
 /// Type-state markers for compile-time safety.
 ///
 /// These marker types are used with the type-state pattern to ensure that
@@ -96,13 +242,9 @@ pub mod state {
 #[serde(transparent)]
 pub struct SessionId(String);
 
-impl SessionId {
-    /// Create a new session ID.
-    #[inline]
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
+impl_string_newtype!(SessionId);
 
+impl SessionId {
     /// Generate a new random session ID.
     ///
     /// Uses UUID v4 format for globally unique identifiers.
@@ -111,56 +253,12 @@ impl SessionId {
         Self(uuid::Uuid::new_v4().to_string())
     }
 
-    /// Get the session ID as a string slice.
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Convert into the inner string.
-    #[inline]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
     /// Validate that the session ID is non-empty.
     ///
     /// Returns `true` if the session ID is valid (non-empty).
     #[inline]
     pub fn is_valid(&self) -> bool {
         !self.0.is_empty()
-    }
-}
-
-impl fmt::Display for SessionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for SessionId {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl From<&str> for SessionId {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
-    }
-}
-
-impl AsRef<str> for SessionId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::str::FromStr for SessionId {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
     }
 }
 
@@ -182,25 +280,9 @@ impl std::str::FromStr for SessionId {
 #[serde(transparent)]
 pub struct BinaryPath(PathBuf);
 
+impl_path_newtype!(BinaryPath);
+
 impl BinaryPath {
-    /// Create a new binary path.
-    #[inline]
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self(path.into())
-    }
-
-    /// Get the path as a `PathBuf` reference.
-    #[inline]
-    pub fn as_path(&self) -> &PathBuf {
-        &self.0
-    }
-
-    /// Convert into the inner `PathBuf`.
-    #[inline]
-    pub fn into_inner(self) -> PathBuf {
-        self.0
-    }
-
     /// Check if the binary exists.
     #[inline]
     pub fn exists(&self) -> bool {
@@ -228,44 +310,6 @@ impl BinaryPath {
     }
 }
 
-impl fmt::Display for BinaryPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.display())
-    }
-}
-
-impl From<PathBuf> for BinaryPath {
-    fn from(p: PathBuf) -> Self {
-        Self(p)
-    }
-}
-
-impl From<&str> for BinaryPath {
-    fn from(s: &str) -> Self {
-        Self(PathBuf::from(s))
-    }
-}
-
-impl AsRef<PathBuf> for BinaryPath {
-    fn as_ref(&self) -> &PathBuf {
-        &self.0
-    }
-}
-
-impl AsRef<std::path::Path> for BinaryPath {
-    fn as_ref(&self) -> &std::path::Path {
-        self.0.as_ref()
-    }
-}
-
-impl std::str::FromStr for BinaryPath {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(PathBuf::from(s)))
-    }
-}
-
 /// Newtype wrapper for model IDs.
 ///
 /// This provides type safety for Claude model identifiers.
@@ -282,25 +326,9 @@ impl std::str::FromStr for BinaryPath {
 #[serde(transparent)]
 pub struct ModelId(String);
 
+impl_string_newtype!(ModelId);
+
 impl ModelId {
-    /// Create a new model ID.
-    #[inline]
-    pub fn new(id: impl Into<String>) -> Self {
-        Self(id.into())
-    }
-
-    /// Get the model ID as a string slice.
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Convert into the inner string.
-    #[inline]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
     /// Check if this is a Sonnet model.
     #[inline]
     pub fn is_sonnet(&self) -> bool {
@@ -317,38 +345,6 @@ impl ModelId {
     #[inline]
     pub fn is_haiku(&self) -> bool {
         self.0.contains("haiku")
-    }
-}
-
-impl fmt::Display for ModelId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for ModelId {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl From<&str> for ModelId {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
-    }
-}
-
-impl AsRef<str> for ModelId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::str::FromStr for ModelId {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.to_string()))
     }
 }
 

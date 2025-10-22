@@ -33,7 +33,7 @@ use crate::error::{Error, SessionError};
 use crate::result::Result;
 use crate::types::Message;
 
-use super::manager::{list_projects, load_session_history};
+use super::discovery::{list_projects, load_session_history};
 use super::writer::{create_session, write_message, CreateSessionOptions};
 use super::cache;
 

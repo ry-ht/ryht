@@ -225,7 +225,7 @@ impl SubprocessTransport {
             }
         }
 
-        // System prompts - prioritize v2 API
+        // System prompts - use v2 API
         if let Some(ref prompt_v2) = self.options.system_prompt_v2 {
             match prompt_v2 {
                 crate::types::SystemPrompt::String(s) => {
@@ -240,16 +240,6 @@ impl SubprocessTransport {
                         cmd.arg("--append-system-prompt").arg(append_text);
                     }
                 }
-            }
-        } else {
-            // Fallback to deprecated fields for backward compatibility
-            #[allow(deprecated)]
-            if let Some(ref prompt) = self.options.system_prompt {
-                cmd.arg("--system-prompt").arg(prompt);
-            }
-            #[allow(deprecated)]
-            if let Some(ref prompt) = self.options.append_system_prompt {
-                cmd.arg("--append-system-prompt").arg(prompt);
             }
         }
 

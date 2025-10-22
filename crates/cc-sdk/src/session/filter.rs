@@ -29,7 +29,7 @@ use regex::Regex;
 use crate::result::Result;
 use crate::types::Message;
 
-use super::manager::{list_projects, list_sessions, load_session_history};
+use super::discovery::{list_projects, list_sessions, load_session_history};
 use super::types::Session;
 
 /// Sort order for sessions.

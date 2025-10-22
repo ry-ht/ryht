@@ -607,13 +607,27 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    #[allow(deprecated)]
+    /// Set the system prompt (modern API).
+    ///
+    /// Use `system_prompt_v2` for the new SystemPrompt enum API.
     pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
         let mut options = inner.options.take().unwrap_or_default();
-        options.system_prompt = Some(prompt.into());
+        options.system_prompt_v2 = Some(crate::options::SystemPrompt::String(prompt.into()));
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set the system prompt using the v2 API.
+    pub fn system_prompt_v2(mut self, prompt: crate::options::SystemPrompt) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.system_prompt_v2 = Some(prompt);
         inner.options = Some(options);
 
         self
@@ -1949,10 +1963,10 @@ mod tests {
         let options = builder.inner.options.as_ref().unwrap();
         assert_eq!(options.max_output_tokens, Some(8000));
         assert_eq!(options.max_turns, Some(20));
-        #[allow(deprecated)]
-        {
-            assert_eq!(options.system_prompt, Some("You are a helpful assistant".to_string()));
-        }
+        assert!(matches!(
+            options.system_prompt_v2,
+            Some(crate::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
+        ));
     }
 
     #[tokio::test]
