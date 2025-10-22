@@ -4,7 +4,7 @@
 
 use super::{InputMessage, Transport, TransportState};
 use crate::{
-    errors::{Result, SdkError},
+    Result,
     types::{ClaudeCodeOptions, ControlRequest, ControlResponse, Message, PermissionMode},
 };
 use async_trait::async_trait;
@@ -437,7 +437,7 @@ impl SubprocessTransport {
 
         let mut child = cmd.spawn().map_err(|e| {
             error!("Failed to spawn Claude CLI: {}", e);
-            crate::errors::Error::Binary(crate::errors::BinaryError::SpawnFailed {
+            crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
                 path: self.cli_path.clone(),
                 reason: format!("Failed to spawn process: {}", e),
                 source: e,
@@ -448,15 +448,15 @@ impl SubprocessTransport {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stdin".into())))?;
+            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdin".into())))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stdout".into())))?;
+            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stderr".into())))?;
+            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
         // Determine buffer size from options or use default
         let buffer_size = self.options.cli_channel_buffer_size.unwrap_or(CHANNEL_BUFFER_SIZE);
@@ -688,11 +688,11 @@ impl Transport for SubprocessTransport {
 
     async fn send_message(&mut self, message: InputMessage) -> Result<()> {
         if self.state != TransportState::Connected {
-            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
+            return Err(crate::error::Error::Client(crate::error::ClientError::NotConnected));
         }
 
         let json = serde_json::to_string(&message)
-            .map_err(|e| crate::errors::Error::Transport(crate::errors::TransportError::Json(e)))?;
+            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
         debug!("Serialized message: {}", json);
 
         if let Some(ref tx) = self.stdin_tx {
@@ -701,7 +701,7 @@ impl Transport for SubprocessTransport {
             debug!("Message sent to channel");
             Ok(())
         } else {
-            Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected))
+            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
         }
     }
 
@@ -730,7 +730,7 @@ impl Transport for SubprocessTransport {
 
     async fn send_control_request(&mut self, request: ControlRequest) -> Result<()> {
         if self.state != TransportState::Connected {
-            return Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected));
+            return Err(crate::error::Error::Client(crate::error::ClientError::NotConnected));
         }
 
         self.request_counter += 1;
@@ -747,13 +747,13 @@ impl Transport for SubprocessTransport {
         };
 
         let json = serde_json::to_string(&control_msg)
-            .map_err(|e| crate::errors::Error::Transport(crate::errors::TransportError::Json(e)))?;
+            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected))
+            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
         }
     }
 
@@ -769,16 +769,16 @@ impl Transport for SubprocessTransport {
         // The request is already properly formatted as {"type": "control_request", ...}
         // Just send it directly without wrapping
         let json = serde_json::to_string(&request)
-            .map_err(|e| crate::errors::Error::Transport(crate::errors::TransportError::Json(e)))?;
+            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected))
+            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
         }
     }
-    
+
     async fn send_sdk_control_response(&mut self, response: serde_json::Value) -> Result<()> {
         // Wrap the response in control_response format expected by CLI
         // The response should have: {"type": "control_response", "response": {...}}
@@ -788,13 +788,13 @@ impl Transport for SubprocessTransport {
         });
 
         let json = serde_json::to_string(&control_response)
-            .map_err(|e| crate::errors::Error::Transport(crate::errors::TransportError::Json(e)))?;
+            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::errors::Error::Client(crate::errors::ClientError::NotConnected))
+            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
         }
     }
 
@@ -855,7 +855,7 @@ pub(crate) fn find_claude_cli() -> Result<PathBuf> {
     }
 
     // Check common installation locations
-    let home = dirs::home_dir().ok_or_else(|| crate::errors::Error::Binary(crate::errors::BinaryError::NotFound {
+    let home = dirs::home_dir().ok_or_else(|| crate::error::Error::Binary(crate::error::BinaryError::NotFound {
         searched_paths: vec![],
     }))?;
 
@@ -894,12 +894,12 @@ pub(crate) fn find_claude_cli() -> Result<PathBuf> {
     // Check if Node.js is installed
     if which::which("node").is_err() && which::which("npm").is_err() {
         error!("Node.js/npm not found - Claude CLI requires Node.js");
-        return Err(crate::errors::Error::Binary(crate::errors::BinaryError::NotFound {
+        return Err(crate::error::Error::Binary(crate::error::BinaryError::NotFound {
             searched_paths: searched.into_iter().map(PathBuf::from).collect(),
         }));
     }
 
-    Err(crate::errors::Error::Binary(crate::errors::BinaryError::NotFound {
+    Err(crate::error::Error::Binary(crate::error::BinaryError::NotFound {
         searched_paths: searched.into_iter().map(PathBuf::from).collect(),
     }))
 }
@@ -911,7 +911,7 @@ mod tests {
     #[test]
     fn test_find_claude_cli_error_message() {
         // Test error message format without relying on CLI not being found
-        let error = crate::errors::Error::Binary(crate::errors::BinaryError::NotFound {
+        let error = crate::error::Error::Binary(crate::error::BinaryError::NotFound {
             searched_paths: vec![PathBuf::from("/test/path1"), PathBuf::from("/test/path2")],
         });
         let error_msg = error.to_string();

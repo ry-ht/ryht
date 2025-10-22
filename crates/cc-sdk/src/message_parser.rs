@@ -4,7 +4,8 @@
 //! strongly typed Message enums.
 
 use crate::{
-    errors::{Result, SdkError},
+    Result,
+    error::Error,
     types::{
         AssistantMessage, ContentBlock, ContentValue, Message, TextContent, ThinkingContent,
         ToolResultContent, ToolUseContent, UserMessage,
@@ -19,7 +20,7 @@ pub fn parse_message(json: Value) -> Result<Option<Message>> {
     let msg_type = json
         .get("type")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| SdkError::parse_error("Missing 'type' field", json.to_string()))?;
+        .ok_or_else(|| Error::parse_error("Missing 'type' field", json.to_string()))?;
 
     match msg_type {
         "user" => parse_user_message(json),
@@ -37,7 +38,7 @@ pub fn parse_message(json: Value) -> Result<Option<Message>> {
 fn parse_user_message(json: Value) -> Result<Option<Message>> {
     let message = json
         .get("message")
-        .ok_or_else(|| SdkError::parse_error("Missing 'message' field", json.to_string()))?;
+        .ok_or_else(|| Error::parse_error("Missing 'message' field", json.to_string()))?;
 
     // Handle different content formats
     let content = if let Some(content_str) = message.get("content").and_then(|v| v.as_str()) {
@@ -49,7 +50,7 @@ fn parse_user_message(json: Value) -> Result<Option<Message>> {
         debug!("Skipping user message with array content (likely tool result)");
         return Ok(None);
     } else {
-        return Err(SdkError::parse_error(
+        return Err(Error::parse_error(
             "Missing or invalid 'content' field",
             json.to_string(),
         ));
@@ -64,13 +65,13 @@ fn parse_user_message(json: Value) -> Result<Option<Message>> {
 fn parse_assistant_message(json: Value) -> Result<Option<Message>> {
     let message = json
         .get("message")
-        .ok_or_else(|| SdkError::parse_error("Missing 'message' field", json.to_string()))?;
+        .ok_or_else(|| Error::parse_error("Missing 'message' field", json.to_string()))?;
 
     let content_array = message
         .get("content")
         .and_then(|v| v.as_array())
         .ok_or_else(|| {
-            SdkError::parse_error("Missing or invalid 'content' array", json.to_string())
+            Error::parse_error("Missing or invalid 'content' array", json.to_string())
         })?;
 
     let mut content_blocks = Vec::new();
@@ -95,7 +96,7 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
         match block_type {
             "text" => {
                 let text = json.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
-                    SdkError::parse_error("Missing 'text' field in text block", json.to_string())
+                    Error::parse_error("Missing 'text' field in text block", json.to_string())
                 })?;
                 Ok(Some(ContentBlock::Text(TextContent {
                     text: text.to_string(),
@@ -103,10 +104,10 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
             }
             "thinking" => {
                 let thinking = json.get("thinking").and_then(|v| v.as_str()).ok_or_else(|| {
-                    SdkError::parse_error("Missing 'thinking' field in thinking block", json.to_string())
+                    Error::parse_error("Missing 'thinking' field in thinking block", json.to_string())
                 })?;
                 let signature = json.get("signature").and_then(|v| v.as_str()).ok_or_else(|| {
-                    SdkError::parse_error("Missing 'signature' field in thinking block", json.to_string())
+                    Error::parse_error("Missing 'signature' field in thinking block", json.to_string())
                 })?;
                 Ok(Some(ContentBlock::Thinking(ThinkingContent {
                     thinking: thinking.to_string(),
@@ -115,10 +116,10 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
             }
             "tool_use" => {
                 let id = json.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
-                    SdkError::parse_error("Missing 'id' field in tool_use block", json.to_string())
+                    Error::parse_error("Missing 'id' field in tool_use block", json.to_string())
                 })?;
                 let name = json.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    SdkError::parse_error(
+                    Error::parse_error(
                         "Missing 'name' field in tool_use block",
                         json.to_string(),
                     )
@@ -139,7 +140,7 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
                     .get("tool_use_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
-                        SdkError::parse_error(
+                        Error::parse_error(
                             "Missing 'tool_use_id' field in tool_result block",
                             json.to_string(),
                         )

@@ -23,11 +23,9 @@
 //! # }
 //! ```
 
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use regex::Regex;
 
-use crate::core::SessionId;
 use crate::result::Result;
 use crate::types::Message;
 
@@ -457,5 +455,225 @@ mod tests {
     #[test]
     fn test_sort_by_default() {
         assert_eq!(SortBy::default(), SortBy::CreatedDesc);
+    }
+
+    // Property-based tests
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        // Strategy for generating SortBy
+        fn sort_by_strategy() -> impl Strategy<Value = SortBy> {
+            prop_oneof![
+                Just(SortBy::CreatedAsc),
+                Just(SortBy::CreatedDesc),
+                Just(SortBy::ModifiedAsc),
+                Just(SortBy::ModifiedDesc),
+                Just(SortBy::MessageCountAsc),
+                Just(SortBy::MessageCountDesc),
+            ]
+        }
+
+        proptest! {
+            // SessionFilter builder property tests
+            fn filter_builder_project_id_preserved(project_id in "[a-zA-Z0-9_-]{1,50}") {
+                let filter = SessionFilter::new().with_project_id(project_id.clone());
+                prop_assert_eq!(filter.project_id, Some(project_id));
+            }
+
+
+            fn filter_builder_limit_preserved(limit in 1usize..1000) {
+                let filter = SessionFilter::new().with_limit(limit);
+                prop_assert_eq!(filter.limit, Some(limit));
+            }
+
+
+            fn filter_builder_offset_preserved(offset in 0usize..1000) {
+                let filter = SessionFilter::new().with_offset(offset);
+                prop_assert_eq!(filter.offset, Some(offset));
+            }
+
+
+            fn filter_builder_min_messages_preserved(min in 0usize..100) {
+                let filter = SessionFilter::new().with_min_messages(min);
+                prop_assert_eq!(filter.min_messages, Some(min));
+            }
+
+
+            fn filter_builder_max_messages_preserved(max in 1usize..1000) {
+                let filter = SessionFilter::new().with_max_messages(max);
+                prop_assert_eq!(filter.max_messages, Some(max));
+            }
+
+
+            fn filter_builder_content_search_preserved(search in "\\PC{1,100}") {
+                let filter = SessionFilter::new().with_content_search(search.clone());
+                prop_assert_eq!(filter.content_search, Some(search));
+            }
+
+
+            fn filter_builder_regex_preserved(regex in prop::bool::ANY) {
+                let filter = SessionFilter::new().with_regex(regex);
+                prop_assert_eq!(filter.regex_search, regex);
+            }
+
+
+            fn filter_builder_case_sensitive_preserved(case_sensitive in prop::bool::ANY) {
+                let filter = SessionFilter::new().with_case_sensitive(case_sensitive);
+                prop_assert_eq!(filter.case_sensitive, case_sensitive);
+            }
+
+
+            fn filter_builder_sort_by_preserved(sort_by in sort_by_strategy()) {
+                let filter = SessionFilter::new().with_sort_by(sort_by);
+                prop_assert_eq!(filter.sort_by, sort_by);
+            }
+
+            // Filter composition property tests
+
+            fn filter_builder_composition_order_independent(
+                project_id in "[a-zA-Z0-9_-]{1,30}",
+                limit in 1usize..100,
+                offset in 0usize..50
+            ) {
+                // Build filter in different orders
+                let filter1 = SessionFilter::new()
+                    .with_project_id(project_id.clone())
+                    .with_limit(limit)
+                    .with_offset(offset);
+
+                let filter2 = SessionFilter::new()
+                    .with_offset(offset)
+                    .with_project_id(project_id.clone())
+                    .with_limit(limit);
+
+                let filter3 = SessionFilter::new()
+                    .with_limit(limit)
+                    .with_offset(offset)
+                    .with_project_id(project_id.clone());
+
+                // All should have the same final values
+                prop_assert_eq!(&filter1.project_id, &filter2.project_id);
+                prop_assert_eq!(&filter2.project_id, &filter3.project_id);
+                prop_assert_eq!(&filter1.limit, &filter2.limit);
+                prop_assert_eq!(&filter2.limit, &filter3.limit);
+                prop_assert_eq!(&filter1.offset, &filter2.offset);
+                prop_assert_eq!(&filter2.offset, &filter3.offset);
+            }
+
+
+            fn filter_builder_chaining_consistent(
+                search in "\\PC{1,50}",
+                min in 1usize..50,
+                max in 51usize..100
+            ) {
+                let filter = SessionFilter::new()
+                    .with_content_search(search.clone())
+                    .with_min_messages(min)
+                    .with_max_messages(max);
+
+                prop_assert_eq!(filter.content_search, Some(search));
+                prop_assert_eq!(filter.min_messages, Some(min));
+                prop_assert_eq!(filter.max_messages, Some(max));
+            }
+
+            // SortBy property tests
+
+            fn sort_by_all_variants_distinct(sort1 in sort_by_strategy(), sort2 in sort_by_strategy()) {
+                // If they're equal, they should be the same variant
+                if sort1 == sort2 {
+                    prop_assert!(matches!(
+                        (sort1, sort2),
+                        (SortBy::CreatedAsc, SortBy::CreatedAsc) |
+                        (SortBy::CreatedDesc, SortBy::CreatedDesc) |
+                        (SortBy::ModifiedAsc, SortBy::ModifiedAsc) |
+                        (SortBy::ModifiedDesc, SortBy::ModifiedDesc) |
+                        (SortBy::MessageCountAsc, SortBy::MessageCountAsc) |
+                        (SortBy::MessageCountDesc, SortBy::MessageCountDesc)
+                    ));
+                }
+            }
+
+            // Filter validation property tests
+
+            fn filter_min_max_messages_relationship(
+                min in 0usize..50,
+                max in 51usize..100
+            ) {
+                let filter = SessionFilter::new()
+                    .with_min_messages(min)
+                    .with_max_messages(max);
+
+                // Min should be less than max (this is a logical constraint, not enforced by the type)
+                prop_assert!(filter.min_messages.unwrap() < filter.max_messages.unwrap());
+            }
+
+
+            fn filter_default_has_sensible_values(_dummy in 0u32..1) {
+                let filter = SessionFilter::default();
+
+                prop_assert!(filter.project_id.is_none());
+                prop_assert!(filter.date_range.is_none());
+                prop_assert!(filter.content_search.is_none());
+                prop_assert!(!filter.regex_search);
+                prop_assert!(!filter.case_sensitive);
+                prop_assert!(filter.min_messages.is_none());
+                prop_assert!(filter.max_messages.is_none());
+                prop_assert_eq!(filter.sort_by, SortBy::CreatedDesc);
+                prop_assert!(filter.limit.is_none());
+                prop_assert!(filter.offset.is_none());
+            }
+
+            // SessionFilter immutability tests
+
+            fn filter_builder_immutable_original(
+                project_id1 in "[a-zA-Z0-9_-]{1,30}",
+                project_id2 in "[a-zA-Z0-9_-]{1,30}"
+            ) {
+                let filter1 = SessionFilter::new().with_project_id(project_id1.clone());
+                let filter2 = filter1.clone().with_project_id(project_id2.clone());
+
+                // Original should be unchanged
+                prop_assert_eq!(filter1.project_id, Some(project_id1));
+                // New filter should have new value
+                prop_assert_eq!(filter2.project_id, Some(project_id2));
+            }
+
+            // Complex filter composition tests
+
+            fn filter_all_options_can_be_set(
+                project_id in "[a-zA-Z0-9_-]{1,30}",
+                search in "\\PC{1,50}",
+                min_msg in 1usize..20,
+                max_msg in 21usize..50,
+                limit in 1usize..100,
+                offset in 0usize..50,
+                regex in prop::bool::ANY,
+                case_sensitive in prop::bool::ANY,
+                sort_by in sort_by_strategy()
+            ) {
+                let filter = SessionFilter::new()
+                    .with_project_id(project_id.clone())
+                    .with_content_search(search.clone())
+                    .with_min_messages(min_msg)
+                    .with_max_messages(max_msg)
+                    .with_limit(limit)
+                    .with_offset(offset)
+                    .with_regex(regex)
+                    .with_case_sensitive(case_sensitive)
+                    .with_sort_by(sort_by);
+
+                // Verify all values are set correctly
+                prop_assert_eq!(filter.project_id, Some(project_id));
+                prop_assert_eq!(filter.content_search, Some(search));
+                prop_assert_eq!(filter.min_messages, Some(min_msg));
+                prop_assert_eq!(filter.max_messages, Some(max_msg));
+                prop_assert_eq!(filter.limit, Some(limit));
+                prop_assert_eq!(filter.offset, Some(offset));
+                prop_assert_eq!(filter.regex_search, regex);
+                prop_assert_eq!(filter.case_sensitive, case_sensitive);
+                prop_assert_eq!(filter.sort_by, sort_by);
+            }
+        }
     }
 }

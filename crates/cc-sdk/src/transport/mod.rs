@@ -4,7 +4,7 @@
 //! communicating with the Claude CLI.
 
 use crate::{
-    errors::Result,
+    result::Result,
     types::{ControlRequest, ControlResponse, Message},
 };
 use async_trait::async_trait;

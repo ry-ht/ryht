@@ -4,7 +4,7 @@
 //! with Claude Code CLI.
 
 use crate::{
-    errors::Result,
+    Result,
     transport::InputMessage,
     types::{ClaudeCodeOptions, Message, PermissionMode},
 };
@@ -132,7 +132,7 @@ pub async fn query(
         QueryInput::Stream(_stream) => {
             // For streaming, use the interactive mode
             // TODO: Implement streaming mode
-            Err(crate::errors::Error::Client(crate::errors::ClientError::NotSupported {
+            Err(crate::error::Error::Client(crate::error::ClientError::NotSupported {
                 feature: "Streaming input mode not yet implemented".into(),
             }))
         }
@@ -266,7 +266,7 @@ async fn query_print_mode(
     debug!("Command: {:?}", cmd);
 
     let mut child = cmd.spawn().map_err(|e| {
-        crate::errors::Error::Binary(crate::errors::BinaryError::SpawnFailed {
+        crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
             path: cli_path.clone(),
             reason: format!("Failed to spawn process: {}", e),
             source: e,
@@ -276,11 +276,11 @@ async fn query_print_mode(
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stdout".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| crate::errors::Error::Transport(crate::errors::TransportError::ChannelError("Failed to get stderr".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
     // Wrap child process in Arc<Mutex> for shared ownership
     let child = Arc::new(Mutex::new(child));
@@ -346,14 +346,14 @@ async fn query_print_mode(
             Ok(status) => {
                 if !status.success() {
                     let _ = tx
-                        .send(Err(crate::errors::Error::Transport(crate::errors::TransportError::ProcessExited {
+                        .send(Err(crate::error::Error::Transport(crate::error::TransportError::ProcessExited {
                             code: status.code(),
                         })))
                         .await;
                 }
             }
             Err(e) => {
-                let _ = tx.send(Err(crate::errors::Error::Transport(crate::errors::TransportError::Io(e)))).await;
+                let _ = tx.send(Err(crate::error::Error::Transport(crate::error::TransportError::Io(e)))).await;
             }
         }
     });

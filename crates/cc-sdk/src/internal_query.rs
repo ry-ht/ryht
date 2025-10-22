@@ -4,7 +4,7 @@
 //! permissions, hooks, and MCP server integration.
 
 use crate::{
-    errors::{Result, SdkError},
+    Result,
     transport::{InputMessage, Transport},
     types::{
         CanUseTool, HookCallback, HookContext, HookMatcher, Message, PermissionResult, PermissionUpdate,
@@ -223,14 +223,14 @@ impl Query {
                 debug!("Received control response for {}", request_id);
                 Ok(response)
             }
-            Ok(Err(_)) => Err(crate::errors::Error::Client(crate::errors::ClientError::ControlRequestFailed {
+            Ok(Err(_)) => Err(crate::error::Error::Client(crate::error::ClientError::ControlRequestFailed {
                 reason: "Response channel closed".to_string(),
             })),
             Err(_) => {
                 // Clean up pending response
                 let mut pending = self.pending_responses.write().await;
                 pending.remove(&request_id);
-                Err(crate::errors::Error::Transport(crate::errors::TransportError::Timeout {
+                Err(crate::error::Error::Transport(crate::error::TransportError::Timeout {
                     duration: Duration::from_secs(60),
                 }))
             }
@@ -469,7 +469,7 @@ impl Query {
                                                 Err(parse_err) => {
                                                     error!("Failed to parse hook input: {}", parse_err);
                                                     // Return error using InvalidMessage
-                                                    Err(crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                                                    Err(crate::error::Error::Transport(crate::error::TransportError::InvalidMessage {
                                                         reason: format!("Invalid hook input: {parse_err}"),
                                                         raw: request.input.to_string(),
                                                     }))
@@ -539,7 +539,7 @@ impl Query {
                                                     }
                                                     Err(parse_err) => {
                                                         error!("Failed to parse hook input (fallback): {}", parse_err);
-                                                        Err(crate::errors::Error::Transport(crate::errors::TransportError::InvalidMessage {
+                                                        Err(crate::error::Error::Transport(crate::error::TransportError::InvalidMessage {
                                                             reason: format!("Invalid hook input: {parse_err}"),
                                                             raw: input.to_string(),
                                                         }))
@@ -696,7 +696,7 @@ impl Query {
                 }
             }))
         } else {
-            Err(crate::errors::Error::Session(crate::errors::SessionError::InvalidState {
+            Err(crate::error::Error::Session(crate::error::SessionError::InvalidState {
                 current: "SDK MCP server not found".to_string(),
                 expected: format!("MCP server with name: {server_name}"),
             }))

@@ -29,7 +29,6 @@
 #![allow(missing_docs)]
 
 // Re-export core types for convenience
-pub use crate::core::{BinaryPath, ModelId, SessionId, Version};
 
 // Re-export from submodules
 pub use crate::messages::*;

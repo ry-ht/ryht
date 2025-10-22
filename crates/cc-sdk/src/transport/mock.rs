@@ -1,6 +1,6 @@
 //! In-memory mock transport for testing and E2E simulations
 use super::{InputMessage, Transport};
-use crate::{errors::Result, types::{ControlRequest, ControlResponse, Message}};
+use crate::{Result, types::{ControlRequest, ControlResponse, Message}};
 use async_trait::async_trait;
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;

@@ -3,7 +3,6 @@
 //! This module provides functions for discovering projects, listing sessions,
 //! and loading session history from JSONL files.
 
-use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};

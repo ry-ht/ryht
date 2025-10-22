@@ -1,6 +1,6 @@
 use cc_sdk::{
     Query, HookCallback, HookContext, HookInput, HookJSONOutput,
-    SyncHookJSONOutput, Result, SdkError,
+    SyncHookJSONOutput, Result,
     transport::mock::MockTransport,
 };
 use async_trait::async_trait;
@@ -16,7 +16,7 @@ impl HookCallback for EchoHook {
         input: &HookInput,
         _tool_use_id: Option<&str>,
         _context: &HookContext,
-    ) -> std::result::Result<HookJSONOutput, SdkError> {
+    ) -> std::result::Result<HookJSONOutput, cc_sdk::error::Error> {
         // Echo the input back as additional context
         let input_json = serde_json::to_value(input)
             .unwrap_or_else(|_| serde_json::json!({}));

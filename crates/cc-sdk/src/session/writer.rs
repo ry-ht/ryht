@@ -35,7 +35,7 @@ use crate::result::Result;
 use crate::types::Message;
 
 use super::manager::{get_projects_dir, list_projects};
-use super::types::{Project, Session, SessionMetadata};
+use super::types::{Project, Session};
 use super::cache;
 
 /// Options for creating a new session.

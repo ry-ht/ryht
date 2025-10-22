@@ -24,7 +24,7 @@
 //!
 //! ```rust
 //! use cc_sdk::hooks::{HookCallback, HookInput, HookJSONOutput, HookContext};
-//! use cc_sdk::errors::SdkError;
+//! use cc_sdk::Error;
 //! use async_trait::async_trait;
 //!
 //! struct MyHook;
@@ -36,7 +36,7 @@
 //!         input: &HookInput,
 //!         tool_use_id: Option<&str>,
 //!         context: &HookContext,
-//!     ) -> Result<HookJSONOutput, SdkError> {
+//!     ) -> Result<HookJSONOutput, Error> {
 //!         // Hook implementation
 //!         Ok(HookJSONOutput::Sync(Default::default()))
 //!     }
@@ -349,7 +349,7 @@ pub trait HookCallback: Send + Sync {
         input: &HookInput,
         tool_use_id: Option<&str>,
         context: &HookContext,
-    ) -> Result<HookJSONOutput, crate::errors::SdkError>;
+    ) -> Result<HookJSONOutput, crate::error::Error>;
 }
 
 /// Legacy hook callback trait for backward compatibility

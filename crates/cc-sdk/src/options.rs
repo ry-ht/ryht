@@ -242,9 +242,12 @@ pub enum SystemPrompt {
     String(String),
     /// Preset-based prompt with optional append
     Preset {
+        /// Preset type identifier (always "preset")
         #[serde(rename = "type")]
-        preset_type: String,  // "preset"
-        preset: String,       // e.g., "claude_code"
+        preset_type: String,
+        /// Preset name (e.g., "claude_code")
+        preset: String,
+        /// Optional text to append to the preset
         #[serde(skip_serializing_if = "Option::is_none")]
         append: Option<String>,
     },

@@ -1,6 +1,6 @@
 //! Performance utilities for the Claude Code SDK
 
-use crate::{errors::Result, types::Message};
+use crate::{Result, types::Message};
 use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::mpsc;

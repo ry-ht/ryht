@@ -117,7 +117,6 @@ pub mod token_tracker;
 pub mod model_recommendation;
 
 // Internal modules
-mod errors;  // Deprecated: use error module
 mod types;   // Re-exports from submodules
 mod internal_query;
 mod message_parser;
@@ -291,18 +290,6 @@ pub use token_tracker::{BudgetLimit, BudgetManager, BudgetStatus, TokenUsageTrac
 
 /// Transport implementation.
 pub use transport::SubprocessTransport;
-
-// ----------------------------------------------------------------------------
-// Legacy Compatibility (Deprecated)
-// ----------------------------------------------------------------------------
-
-#[deprecated(since = "0.4.0", note = "Use `Result` instead")]
-#[doc(hidden)]
-pub use errors::Result as LegacyResult;
-
-#[deprecated(since = "0.4.0", note = "Use `Error` instead")]
-#[doc(hidden)]
-pub use errors::SdkError;
 
 // ============================================================================
 // Prelude Module
