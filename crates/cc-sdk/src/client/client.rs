@@ -1495,15 +1495,16 @@ impl ClaudeClient<Connected> {
 
         let input_msg = InputMessage::user(message.into(), session_id.to_string());
 
-        // Send message
-        let mut transport_guard = transport.lock().await;
-        transport_guard.send_message(input_msg).await
-            .map_err(|e| Error::Protocol(format!("Send failed: {}", e)))?;
-
-        // Create receiver for this stream
+        // Create receiver for this stream BEFORE sending message to avoid race condition
+        // where response arrives before we subscribe to the broadcast channel
         let receiver = self.inner.message_tx.as_ref()
             .ok_or_else(|| Error::Config("Message channel not initialized".to_string()))?
             .subscribe();
+
+        // Send message AFTER subscription is created
+        let mut transport_guard = transport.lock().await;
+        transport_guard.send_message(input_msg).await
+            .map_err(|e| Error::Protocol(format!("Send failed: {}", e)))?;
 
         Ok(MessageStream {
             receiver: BroadcastStream::new(receiver),
@@ -1727,15 +1728,16 @@ impl ClaudeClient<Connected> {
         // Create input message with content blocks
         let input_msg = InputMessage::user_with_blocks(content_blocks, session_id.to_string());
 
-        // Send message
-        let mut transport_guard = transport.lock().await;
-        transport_guard.send_message(input_msg).await
-            .map_err(|e| Error::Protocol(format!("Send failed: {}", e)))?;
-
-        // Create receiver for this stream
+        // Create receiver for this stream BEFORE sending message to avoid race condition
+        // where response arrives before we subscribe to the broadcast channel
         let receiver = self.inner.message_tx.as_ref()
             .ok_or_else(|| Error::Config("Message channel not initialized".to_string()))?
             .subscribe();
+
+        // Send message AFTER subscription is created
+        let mut transport_guard = transport.lock().await;
+        transport_guard.send_message(input_msg).await
+            .map_err(|e| Error::Protocol(format!("Send failed: {}", e)))?;
 
         Ok(MessageStream {
             receiver: BroadcastStream::new(receiver),
