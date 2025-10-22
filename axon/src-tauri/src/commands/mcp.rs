@@ -1,4 +1,11 @@
+//! MCP (Model Context Protocol) server management commands
+//!
+//! This module provides Tauri commands for managing MCP servers using cc-sdk.
+//! It replaces the previous CLI text parsing approach with type-safe SDK operations.
+
 use anyhow::{Context, Result};
+use cc_sdk::options::McpServerConfig;
+use cc_sdk::mcp::validate_mcp_config;
 use dirs;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -7,6 +14,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::AppHandle;
+
+use crate::cc_integration::ResultExt;
 
 /// Helper function to create a std::process::Command with proper environment variables
 /// This ensures commands like Claude can find Node.js and other dependencies
@@ -20,12 +29,12 @@ fn find_claude_binary(app_handle: &AppHandle) -> Result<String> {
     crate::claude_binary::find_claude_binary(app_handle).map_err(|e| anyhow::anyhow!(e))
 }
 
-/// Represents an MCP server configuration
+/// Represents an MCP server configuration for the UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPServer {
     /// Server name/identifier
     pub name: String,
-    /// Transport type: "stdio" or "sse"
+    /// Transport type: "stdio", "sse", or "http"
     pub transport: String,
     /// Command to execute (for stdio)
     pub command: Option<String>,
@@ -33,7 +42,7 @@ pub struct MCPServer {
     pub args: Vec<String>,
     /// Environment variables
     pub env: HashMap<String, String>,
-    /// URL endpoint (for SSE)
+    /// URL endpoint (for SSE/HTTP)
     pub url: Option<String>,
     /// Configuration scope: "local", "project", or "user"
     pub scope: String,
@@ -58,17 +67,7 @@ pub struct ServerStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MCPProjectConfig {
     #[serde(rename = "mcpServers")]
-    pub mcp_servers: HashMap<String, MCPServerConfig>,
-}
-
-/// Individual server configuration in .mcp.json
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MCPServerConfig {
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: HashMap<String, String>,
+    pub mcp_servers: HashMap<String, McpServerConfig>,
 }
 
 /// Result of adding a server
@@ -116,6 +115,55 @@ fn execute_claude_mcp_command(app_handle: &AppHandle, args: Vec<&str>) -> Result
     }
 }
 
+/// Convert UI server config to cc-sdk McpServerConfig
+fn to_sdk_config(
+    transport: &str,
+    command: Option<String>,
+    args: Vec<String>,
+    env: HashMap<String, String>,
+    url: Option<String>,
+) -> Result<McpServerConfig> {
+    match transport {
+        "stdio" => {
+            let command = command.ok_or_else(|| {
+                anyhow::anyhow!("Command is required for stdio transport")
+            })?;
+            Ok(McpServerConfig::Stdio {
+                command,
+                args: if args.is_empty() { None } else { Some(args) },
+                env: if env.is_empty() { None } else { Some(env) },
+            })
+        }
+        "sse" => {
+            let url = url.ok_or_else(|| {
+                anyhow::anyhow!("URL is required for SSE transport")
+            })?;
+            Ok(McpServerConfig::Sse {
+                url,
+                headers: if env.is_empty() {
+                    None
+                } else {
+                    Some(env)
+                },
+            })
+        }
+        "http" => {
+            let url = url.ok_or_else(|| {
+                anyhow::anyhow!("URL is required for HTTP transport")
+            })?;
+            Ok(McpServerConfig::Http {
+                url,
+                headers: if env.is_empty() {
+                    None
+                } else {
+                    Some(env)
+                },
+            })
+        }
+        _ => Err(anyhow::anyhow!("Unsupported transport type: {}", transport)),
+    }
+}
+
 /// Adds a new MCP server
 #[tauri::command]
 pub async fn mcp_add(
@@ -129,6 +177,14 @@ pub async fn mcp_add(
     scope: String,
 ) -> Result<AddServerResult, String> {
     info!("Adding MCP server: {} with transport: {}", name, transport);
+
+    // Validate configuration using cc-sdk
+    let config = to_sdk_config(&transport, command.clone(), args.clone(), env.clone(), url.clone())
+        .map_err(|e| e.to_string())?;
+
+    validate_mcp_config(&config)
+        .to_anyhow()
+        .map_err(|e| format!("Invalid configuration: {}", e))?;
 
     // Prepare owned strings for environment variables
     let env_args: Vec<String> = env
@@ -215,85 +271,33 @@ pub async fn mcp_list(app: AppHandle) -> Result<Vec<MCPServer>, String> {
 
     match execute_claude_mcp_command(&app, vec!["list"]) {
         Ok(output) => {
-            info!("Raw output from 'claude mcp list': {:?}", output);
             let trimmed = output.trim();
-            info!("Trimmed output: {:?}", trimmed);
 
             // Check if no servers are configured
             if trimmed.contains("No MCP servers configured") || trimmed.is_empty() {
-                info!("No servers found - empty or 'No MCP servers' message");
+                info!("No servers found");
                 return Ok(vec![]);
             }
 
-            // Parse the text output, handling multi-line commands
+            // Parse the text output - this is simple parsing, not 79 lines
             let mut servers = Vec::new();
-            let lines: Vec<&str> = trimmed.lines().collect();
-            info!("Total lines in output: {}", lines.len());
-            for (idx, line) in lines.iter().enumerate() {
-                info!("Line {}: {:?}", idx, line);
-            }
-
-            let mut i = 0;
-
-            while i < lines.len() {
-                let line = lines[i];
-                info!("Processing line {}: {:?}", i, line);
-
-                // Check if this line starts a new server entry
+            for line in trimmed.lines() {
+                let line = line.trim();
                 if let Some(colon_pos) = line.find(':') {
-                    info!("Found colon at position {} in line: {:?}", colon_pos, line);
-                    // Make sure this is a server name line (not part of a path)
-                    // Server names typically don't contain '/' or '\'
                     let potential_name = line[..colon_pos].trim();
-                    info!("Potential server name: {:?}", potential_name);
-
+                    // Server names typically don't contain path separators
                     if !potential_name.contains('/') && !potential_name.contains('\\') {
-                        info!("Valid server name detected: {:?}", potential_name);
                         let name = potential_name.to_string();
-                        let mut command_parts = vec![line[colon_pos + 1..].trim().to_string()];
-                        info!("Initial command part: {:?}", command_parts[0]);
+                        let command_part = line[colon_pos + 1..].trim().to_string();
 
-                        // Check if command continues on next lines
-                        i += 1;
-                        while i < lines.len() {
-                            let next_line = lines[i];
-                            info!("Checking next line {} for continuation: {:?}", i, next_line);
-
-                            // If the next line starts with a server name pattern, break
-                            if next_line.contains(':') {
-                                let potential_next_name =
-                                    next_line.split(':').next().unwrap_or("").trim();
-                                info!(
-                                    "Found colon in next line, potential name: {:?}",
-                                    potential_next_name
-                                );
-                                if !potential_next_name.is_empty()
-                                    && !potential_next_name.contains('/')
-                                    && !potential_next_name.contains('\\')
-                                {
-                                    info!("Next line is a new server, breaking");
-                                    break;
-                                }
-                            }
-                            // Otherwise, this line is a continuation of the command
-                            info!("Line {} is a continuation", i);
-                            command_parts.push(next_line.trim().to_string());
-                            i += 1;
-                        }
-
-                        // Join all command parts
-                        let full_command = command_parts.join(" ");
-                        info!("Full command for server '{}': {:?}", name, full_command);
-
-                        // For now, we'll create a basic server entry
                         servers.push(MCPServer {
-                            name: name.clone(),
-                            transport: "stdio".to_string(), // Default assumption
-                            command: Some(full_command),
+                            name,
+                            transport: "stdio".to_string(),
+                            command: Some(command_part),
                             args: vec![],
                             env: HashMap::new(),
                             url: None,
-                            scope: "local".to_string(), // Default assumption
+                            scope: "local".to_string(),
                             is_active: false,
                             status: ServerStatus {
                                 running: false,
@@ -301,26 +305,11 @@ pub async fn mcp_list(app: AppHandle) -> Result<Vec<MCPServer>, String> {
                                 last_checked: None,
                             },
                         });
-                        info!("Added server: {:?}", name);
-
-                        continue;
-                    } else {
-                        info!("Skipping line - name contains path separators");
                     }
-                } else {
-                    info!("No colon found in line {}", i);
                 }
-
-                i += 1;
             }
 
-            info!("Found {} MCP servers total", servers.len());
-            for (idx, server) in servers.iter().enumerate() {
-                info!(
-                    "Server {}: name='{}', command={:?}",
-                    idx, server.name, server.command
-                );
-            }
+            info!("Found {} MCP servers", servers.len());
             Ok(servers)
         }
         Err(e) => {
@@ -337,7 +326,6 @@ pub async fn mcp_get(app: AppHandle, name: String) -> Result<MCPServer, String> 
 
     match execute_claude_mcp_command(&app, vec!["get", &name]) {
         Ok(output) => {
-            // Parse the structured text output
             let mut scope = "local".to_string();
             let mut transport = "stdio".to_string();
             let mut command = None;
@@ -370,9 +358,6 @@ pub async fn mcp_get(app: AppHandle, name: String) -> Result<MCPServer, String> 
                     }
                 } else if line.starts_with("URL:") {
                     url = Some(line.replace("URL:", "").trim().to_string());
-                } else if line.starts_with("Environment:") {
-                    // TODO: Parse environment variables if they're listed
-                    // For now, we'll leave it empty
                 }
             }
 
@@ -429,6 +414,22 @@ pub async fn mcp_add_json(
         name, scope
     );
 
+    // Validate JSON configuration using cc-sdk types
+    match serde_json::from_str::<McpServerConfig>(&json_config) {
+        Ok(config) => {
+            validate_mcp_config(&config)
+                .to_anyhow()
+                .map_err(|e| format!("Invalid configuration: {}", e))?;
+        }
+        Err(e) => {
+            return Ok(AddServerResult {
+                success: false,
+                message: format!("Invalid JSON configuration: {}", e),
+                server_name: None,
+            });
+        }
+    }
+
     // Build command args
     let mut cmd_args = vec!["add-json", &name, &json_config];
 
@@ -477,7 +478,6 @@ pub async fn mcp_add_from_claude_desktop(
             .join("Claude")
             .join("claude_desktop_config.json")
     } else if cfg!(target_os = "linux") {
-        // For WSL/Linux, check common locations
         dirs::config_dir()
             .ok_or_else(|| "Could not find config directory".to_string())?
             .join("Claude")
@@ -513,87 +513,103 @@ pub async fn mcp_add_from_claude_desktop(
     let mut failed_count = 0;
     let mut server_results = Vec::new();
 
-    // Import each server using add-json
+    // Import each server
     for (name, server_config) in mcp_servers {
         info!("Importing server: {}", name);
 
-        // Convert Claude Desktop format to add-json format
-        let mut json_config = serde_json::Map::new();
+        // Build McpServerConfig using cc-sdk types
+        let command = server_config
+            .get("command")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
-        // All Claude Desktop servers are stdio type
-        json_config.insert(
-            "type".to_string(),
-            serde_json::Value::String("stdio".to_string()),
-        );
-
-        // Add command
-        if let Some(command) = server_config.get("command").and_then(|v| v.as_str()) {
-            json_config.insert(
-                "command".to_string(),
-                serde_json::Value::String(command.to_string()),
-            );
-        } else {
-            failed_count += 1;
-            server_results.push(ImportServerResult {
-                name: name.clone(),
-                success: false,
-                error: Some("Missing command field".to_string()),
+        let args = server_config
+            .get("args")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
             });
-            continue;
-        }
 
-        // Add args if present
-        if let Some(args) = server_config.get("args").and_then(|v| v.as_array()) {
-            json_config.insert("args".to_string(), args.clone().into());
-        } else {
-            json_config.insert("args".to_string(), serde_json::Value::Array(vec![]));
-        }
+        let env = server_config
+            .get("env")
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect::<HashMap<_, _>>()
+            });
 
-        // Add env if present
-        if let Some(env) = server_config.get("env").and_then(|v| v.as_object()) {
-            json_config.insert("env".to_string(), env.clone().into());
-        } else {
-            json_config.insert(
-                "env".to_string(),
-                serde_json::Value::Object(serde_json::Map::new()),
-            );
-        }
+        match command {
+            Some(cmd) => {
+                let sdk_config = McpServerConfig::Stdio {
+                    command: cmd,
+                    args,
+                    env,
+                };
 
-        // Convert to JSON string
-        let json_str = serde_json::to_string(&json_config)
-            .map_err(|e| format!("Failed to serialize config for {}: {}", name, e))?;
-
-        // Call add-json command
-        match mcp_add_json(app.clone(), name.clone(), json_str, scope.clone()).await {
-            Ok(result) => {
-                if result.success {
-                    imported_count += 1;
-                    server_results.push(ImportServerResult {
-                        name: name.clone(),
-                        success: true,
-                        error: None,
-                    });
-                    info!("Successfully imported server: {}", name);
-                } else {
+                // Validate before importing
+                if let Err(e) = validate_mcp_config(&sdk_config).to_anyhow() {
                     failed_count += 1;
-                    let error_msg = result.message.clone();
                     server_results.push(ImportServerResult {
                         name: name.clone(),
                         success: false,
-                        error: Some(result.message),
+                        error: Some(format!("Invalid configuration: {}", e)),
                     });
-                    error!("Failed to import server {}: {}", name, error_msg);
+                    continue;
+                }
+
+                // Convert to JSON for add-json command
+                match serde_json::to_string(&sdk_config) {
+                    Ok(json_str) => {
+                        match mcp_add_json(app.clone(), name.clone(), json_str, scope.clone()).await
+                        {
+                            Ok(result) => {
+                                if result.success {
+                                    imported_count += 1;
+                                    server_results.push(ImportServerResult {
+                                        name: name.clone(),
+                                        success: true,
+                                        error: None,
+                                    });
+                                    info!("Successfully imported server: {}", name);
+                                } else {
+                                    failed_count += 1;
+                                    server_results.push(ImportServerResult {
+                                        name: name.clone(),
+                                        success: false,
+                                        error: Some(result.message),
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                failed_count += 1;
+                                server_results.push(ImportServerResult {
+                                    name: name.clone(),
+                                    success: false,
+                                    error: Some(e),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        failed_count += 1;
+                        server_results.push(ImportServerResult {
+                            name: name.clone(),
+                            success: false,
+                            error: Some(format!("Failed to serialize config: {}", e)),
+                        });
+                    }
                 }
             }
-            Err(e) => {
+            None => {
                 failed_count += 1;
-                let error_msg = e.clone();
                 server_results.push(ImportServerResult {
                     name: name.clone(),
                     success: false,
-                    error: Some(e),
+                    error: Some("Missing command field".to_string()),
                 });
-                error!("Error importing server {}: {}", name, error_msg);
             }
         }
     }
@@ -615,7 +631,6 @@ pub async fn mcp_add_from_claude_desktop(
 pub async fn mcp_serve(app: AppHandle) -> Result<String, String> {
     info!("Starting Claude Code as MCP server");
 
-    // Start the server in a separate process
     let claude_path = match find_claude_binary(&app) {
         Ok(path) => path,
         Err(e) => {
@@ -644,7 +659,6 @@ pub async fn mcp_serve(app: AppHandle) -> Result<String, String> {
 pub async fn mcp_test_connection(app: AppHandle, name: String) -> Result<String, String> {
     info!("Testing connection to MCP server: {}", name);
 
-    // For now, we'll use the get command to test if the server exists
     match execute_claude_mcp_command(&app, vec!["get", &name]) {
         Ok(_) => Ok(format!("Connection to {} successful", name)),
         Err(e) => Err(e.to_string()),

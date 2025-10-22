@@ -14,7 +14,7 @@ use super::env::get_claude_version;
 use super::version::compare_versions;
 
 /// Type of Claude installation source.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum InstallationType {
     /// System-installed binary (in standard paths)
     System,
@@ -38,7 +38,7 @@ pub enum InstallationType {
 ///     println!("  Source: {}", install.source);
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClaudeInstallation {
     /// Full path to the Claude binary
     pub path: String,
