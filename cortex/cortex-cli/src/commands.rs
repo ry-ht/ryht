@@ -690,25 +690,31 @@ pub async fn flush_vfs(
 
 /// Show system statistics
 pub async fn show_stats(format: OutputFormat) -> Result<()> {
+    use cortex_core::traits::Storage;
+
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
 
     let spinner = output::spinner("Gathering statistics...");
 
-    // TODO: Gather actual metrics
+    // Gather actual metrics from storage
+    let system_stats = storage.get_stats().await?;
+
     let stats = serde_json::json!({
-        "workspaces": 0,
-        "files": 0,
-        "total_size_bytes": 0,
+        "workspaces": 0, // VFS workspaces not tracked by core storage
+        "projects": system_stats.total_projects,
+        "documents": system_stats.total_documents,
+        "chunks": system_stats.total_chunks,
+        "total_size_bytes": system_stats.storage_size_bytes,
         "memory": {
-            "episodes": 0,
-            "semantic_nodes": 0,
-            "working_memory_size": 0,
+            "episodes": system_stats.total_episodes,
+            "embeddings": system_stats.total_embeddings,
         },
         "database": {
             "connection_pool_size": config.database.pool_size,
             "cache_size_mb": config.storage.cache_size_mb,
-        }
+        },
+        "last_updated": system_stats.last_updated.to_rfc3339(),
     });
 
     spinner.finish_and_clear();
@@ -719,15 +725,20 @@ pub async fn show_stats(format: OutputFormat) -> Result<()> {
         }
         _ => {
             output::header("Cortex System Statistics");
-            println!("\nWorkspaces: 0");
-            println!("Files: 0");
-            println!("Total Size: 0 B");
+            println!("\nProjects: {}", system_stats.total_projects);
+            println!("Documents: {}", system_stats.total_documents);
+            println!("Chunks: {}", system_stats.total_chunks);
+            println!("Total Size: {} bytes ({:.2} MB)",
+                system_stats.storage_size_bytes,
+                system_stats.storage_size_bytes as f64 / 1_048_576.0
+            );
             println!("\nMemory:");
-            println!("  Episodes: 0");
-            println!("  Semantic Nodes: 0");
+            println!("  Episodes: {}", system_stats.total_episodes);
+            println!("  Embeddings: {}", system_stats.total_embeddings);
             println!("\nDatabase:");
             println!("  Pool Size: {}", config.database.pool_size);
             println!("  Cache: {} MB", config.storage.cache_size_mb);
+            println!("\nLast Updated: {}", system_stats.last_updated);
         }
     }
 

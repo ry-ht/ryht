@@ -324,13 +324,18 @@ impl Storage for SurrealStorage {
             .map_err(|e| CortexError::storage(format!("Failed to get stats: {}", e)))?;
         let total_episodes: Option<i64> = result.take("count").ok().flatten().unwrap_or(Some(0));
 
+        // Calculate approximate storage size by summing document sizes
+        let mut result = db.query("SELECT math::sum(size) AS total_size FROM documents GROUP ALL").await
+            .map_err(|e| CortexError::storage(format!("Failed to calculate storage size: {}", e)))?;
+        let storage_size: Option<i64> = result.take("total_size").ok().flatten().unwrap_or(Some(0));
+
         Ok(SystemStats {
             total_projects: total_projects.unwrap_or(0) as u64,
             total_documents: total_documents.unwrap_or(0) as u64,
             total_chunks: total_chunks.unwrap_or(0) as u64,
             total_embeddings: total_embeddings.unwrap_or(0) as u64,
             total_episodes: total_episodes.unwrap_or(0) as u64,
-            storage_size_bytes: 0, // TODO: Implement storage size calculation
+            storage_size_bytes: storage_size.unwrap_or(0) as u64,
             last_updated: chrono::Utc::now(),
         })
     }

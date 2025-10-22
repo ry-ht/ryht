@@ -109,8 +109,9 @@ impl ExternalProjectLoader {
             updated_at: chrono::Utc::now(),
         };
 
-        // TODO: Store workspace in database - need VFS API for this
-        // For now, just return the workspace
+        // Store workspace in VFS database
+        self.vfs.create_workspace(&workspace).await?;
+
         Ok(workspace)
     }
 
@@ -295,10 +296,9 @@ impl ExternalProjectLoader {
     }
 
     /// Save a vnode to database.
-    async fn save_vnode(&self, _vnode: &VNode) -> Result<()> {
-        // TODO: Need VFS API for saving vnodes directly
-        // For now, skip saving
-        Ok(())
+    async fn save_vnode(&self, vnode: &VNode) -> Result<()> {
+        // Store vnode in VFS database
+        self.vfs.store_vnode(vnode).await
     }
 
     /// Import a single file (convenience method).

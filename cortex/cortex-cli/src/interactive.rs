@@ -323,10 +323,19 @@ pub struct IngestionConfig {
 
 /// Interactive search interface
 pub async fn interactive_search() -> Result<()> {
+    use crate::config::CortexConfig;
+    use cortex_semantic::SemanticSearchEngine;
+
     let session = InteractiveSession::new();
 
     session.clear()?;
     session.banner("Interactive Search")?;
+
+    // Initialize semantic search engine
+    let config = CortexConfig::load()?;
+    let search_engine = SemanticSearchEngine::new(
+        cortex_semantic::config::SemanticConfig::default(),
+    ).await?;
 
     loop {
         let query: String = session.input("Search query (or 'quit' to exit)")?;
@@ -338,12 +347,33 @@ pub async fn interactive_search() -> Result<()> {
         // Perform search
         let spinner = session.spinner("Searching...");
 
-        // TODO: Implement actual search
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        match search_engine.search(&query, 10).await {
+            Ok(results) => {
+                spinner.finish_with_message(format!("Found {} results for '{}'", results.len(), query));
 
-        spinner.finish_with_message(format!("Found 0 results for '{}'", query));
-
-        println!("\nNo results found. Try a different query.");
+                if results.is_empty() {
+                    println!("\nNo results found. Try a different query.");
+                } else {
+                    println!("\nResults:");
+                    for (i, result) in results.iter().enumerate() {
+                        println!("\n{}. Score: {:.3}", i + 1, result.score);
+                        println!("   ID: {}", result.id);
+                        if let Some(content) = &result.content {
+                            let preview = if content.len() > 100 {
+                                format!("{}...", &content[..100])
+                            } else {
+                                content.clone()
+                            };
+                            println!("   Preview: {}", preview);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                spinner.finish_with_message("Search failed");
+                println!("\nError: {}", e);
+            }
+        }
     }
 
     Ok(())

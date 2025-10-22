@@ -441,10 +441,8 @@ impl MaterializationEngine {
     }
 
     /// Mark a vnode as synchronized.
-    async fn mark_synchronized(&self, _vnode_id: &Uuid) -> Result<()> {
-        // TODO: Need to add VFS API for updating vnode status
-        // For now, skip marking as synchronized
-        Ok(())
+    async fn mark_synchronized(&self, vnode_id: &Uuid) -> Result<()> {
+        self.vfs.update_vnode_status(vnode_id, SyncStatus::Synchronized).await
     }
 
     /// Create a backup of the target directory.

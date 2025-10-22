@@ -481,12 +481,19 @@ enum FlushScopeArg {
     Project,
 }
 
+// Note: FlushScopeArg needs to be converted in context where we have access to config/workspace
+// This simple From impl provides a default mapping.
+// For workspace-specific flushing, use FlushScope::Workspace(uuid) directly with the active workspace ID.
 impl From<FlushScopeArg> for FlushScope {
     fn from(arg: FlushScopeArg) -> Self {
         match arg {
             FlushScopeArg::All => FlushScope::All,
-            FlushScopeArg::Workspace => FlushScope::All, // TODO: Map to proper workspace scope
-            FlushScopeArg::Project => FlushScope::All,   // TODO: Map to proper project scope
+            // Workspace and Project scopes fall back to All here.
+            // The actual workspace-specific flush should be done by:
+            // 1. Loading the active workspace from config
+            // 2. Using FlushScope::Workspace(workspace_id)
+            FlushScopeArg::Workspace => FlushScope::All,
+            FlushScopeArg::Project => FlushScope::All,
         }
     }
 }

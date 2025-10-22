@@ -243,11 +243,20 @@ impl ConnectionManager {
             }
         }
 
-        // Check if connection needs recycling
+        // Check if connection needs recycling using atomic compare-and-swap
         if let Some(max_uses) = self.config.pool_config.recycle_after_uses {
-            if conn.uses() >= max_uses {
-                debug!("Connection {} exceeded max uses, will be recycled", conn.id());
-                conn.mark_for_recycling();
+            let uses = conn.uses();
+            if uses >= max_uses {
+                // Use atomic compare-and-swap to ensure only one thread marks for recycling
+                // This prevents race conditions where multiple threads check and mark simultaneously
+                if conn.inner.recycle.compare_exchange(
+                    false,
+                    true,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst
+                ).is_ok() {
+                    debug!("Connection {} exceeded max uses ({}), marked for recycling", conn.id(), uses);
+                }
             }
         }
 

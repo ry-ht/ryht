@@ -529,8 +529,9 @@ pub fn check_compatibility(
 /// Internal lock manager state
 #[derive(Debug)]
 struct LockManagerState {
-    /// All active locks: lock_id -> EntityLock
-    locks: DashMap<LockId, EntityLock>,
+    /// All active locks: lock_id -> Arc<EntityLock>
+    /// Using Arc to avoid clones on lookups
+    locks: DashMap<LockId, Arc<EntityLock>>,
     /// Locks by entity: entity_id -> set of lock_ids
     locks_by_entity: DashMap<String, HashSet<LockId>>,
     /// Locks by session: session_id -> set of lock_ids
@@ -562,8 +563,9 @@ impl LockManagerState {
         let entity_id = lock.entity_id.clone();
         let session_id = lock.holder_session.clone();
 
-        // Add to main locks map
-        self.locks.insert(lock_id.clone(), lock);
+        // Add to main locks map using Arc to avoid clones
+        let lock_arc = Arc::new(lock);
+        self.locks.insert(lock_id.clone(), lock_arc);
 
         // Add to entity index
         self.locks_by_entity
@@ -583,15 +585,15 @@ impl LockManagerState {
         stats.active_locks = self.locks.len();
     }
 
-    fn remove_lock(&self, lock_id: &LockId) -> Option<EntityLock> {
-        if let Some((_, lock)) = self.locks.remove(lock_id) {
+    fn remove_lock(&self, lock_id: &LockId) -> Option<Arc<EntityLock>> {
+        if let Some((_, lock_arc)) = self.locks.remove(lock_id) {
             // Remove from entity index
-            if let Some(mut entity_locks) = self.locks_by_entity.get_mut(&lock.entity_id) {
+            if let Some(mut entity_locks) = self.locks_by_entity.get_mut(&lock_arc.entity_id) {
                 entity_locks.remove(lock_id);
             }
 
             // Remove from session index
-            if let Some(mut session_locks) = self.locks_by_session.get_mut(&lock.holder_session) {
+            if let Some(mut session_locks) = self.locks_by_session.get_mut(&lock_arc.holder_session) {
                 session_locks.remove(lock_id);
             }
 
@@ -600,13 +602,13 @@ impl LockManagerState {
             stats.total_released += 1;
             stats.active_locks = self.locks.len();
 
-            Some(lock)
+            Some(lock_arc)
         } else {
             None
         }
     }
 
-    fn get_entity_locks(&self, entity_id: &str) -> Vec<EntityLock> {
+    fn get_entity_locks(&self, entity_id: &str) -> Vec<Arc<EntityLock>> {
         if let Some(lock_ids) = self.locks_by_entity.get(entity_id) {
             lock_ids
                 .iter()
@@ -617,7 +619,7 @@ impl LockManagerState {
         }
     }
 
-    fn get_session_locks(&self, session_id: &SessionId) -> Vec<EntityLock> {
+    fn get_session_locks(&self, session_id: &SessionId) -> Vec<Arc<EntityLock>> {
         if let Some(lock_ids) = self.locks_by_session.get(session_id) {
             lock_ids
                 .iter()
@@ -628,7 +630,7 @@ impl LockManagerState {
         }
     }
 
-    fn find_expired_locks(&self, now: DateTime<Utc>) -> Vec<EntityLock> {
+    fn find_expired_locks(&self, now: DateTime<Utc>) -> Vec<Arc<EntityLock>> {
         self.locks
             .iter()
             .filter(|entry| entry.value().expires_at < now)
@@ -668,7 +670,7 @@ impl LockManager {
         request: LockRequest,
     ) -> Result<LockAcquisition> {
         let entity_locks = self.state.get_entity_locks(&request.entity_id);
-        let entity_lock_refs: Vec<&EntityLock> = entity_locks.iter().collect();
+        let entity_lock_refs: Vec<&EntityLock> = entity_locks.iter().map(|arc| arc.as_ref()).collect();
 
         // Check compatibility
         if !check_compatibility(&entity_lock_refs, &request.lock_type, session) {
@@ -819,7 +821,7 @@ impl LockManager {
     }
 
     /// List all active locks
-    pub fn list_locks(&self) -> Result<Vec<EntityLock>> {
+    pub fn list_locks(&self) -> Result<Vec<Arc<EntityLock>>> {
         Ok(self
             .state
             .locks
@@ -829,12 +831,12 @@ impl LockManager {
     }
 
     /// List locks for a specific session
-    pub fn list_session_locks(&self, session: &SessionId) -> Result<Vec<EntityLock>> {
+    pub fn list_session_locks(&self, session: &SessionId) -> Result<Vec<Arc<EntityLock>>> {
         Ok(self.state.get_session_locks(session))
     }
 
     /// List locks for a specific entity
-    pub fn list_entity_locks(&self, entity_id: &str) -> Result<Vec<EntityLock>> {
+    pub fn list_entity_locks(&self, entity_id: &str) -> Result<Vec<Arc<EntityLock>>> {
         Ok(self.state.get_entity_locks(entity_id))
     }
 
@@ -844,7 +846,7 @@ impl LockManager {
     }
 
     /// Get a specific lock by ID
-    pub fn get_lock(&self, lock_id: &LockId) -> Result<EntityLock> {
+    pub fn get_lock(&self, lock_id: &LockId) -> Result<Arc<EntityLock>> {
         self.state
             .locks
             .get(lock_id)
@@ -853,7 +855,7 @@ impl LockManager {
     }
 
     /// Find expired locks
-    pub fn find_expired_locks(&self, now: DateTime<Utc>) -> Vec<EntityLock> {
+    pub fn find_expired_locks(&self, now: DateTime<Utc>) -> Vec<Arc<EntityLock>> {
         self.state.find_expired_locks(now)
     }
 

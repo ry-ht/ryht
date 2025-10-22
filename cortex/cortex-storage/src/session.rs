@@ -54,6 +54,9 @@ pub struct AgentSession {
     /// Base version this session forked from
     pub base_version: u64,
 
+    /// Version number for optimistic locking (incremented on each update)
+    pub version: u64,
+
     /// Session creation timestamp
     pub created_at: DateTime<Utc>,
 
@@ -360,6 +363,7 @@ impl SessionManager {
             state: SessionState::Active,
             parent_session: None,
             base_version,
+            version: 1, // Initialize version to 1
             created_at: now,
             updated_at: now,
             expires_at,
@@ -512,7 +516,9 @@ impl SessionManager {
 
     /// Change session state
     ///
-    /// IMPROVED: Uses atomic update with optimistic locking to prevent race conditions
+    /// FIXED: Uses version-based optimistic locking to prevent race conditions
+    /// The version field is incremented atomically, and updates fail if the version
+    /// has changed since the session was read (indicating a concurrent modification)
     pub async fn set_session_state(
         &self,
         session_id: &SessionId,
@@ -525,13 +531,8 @@ impl SessionManager {
         // Validate state transition
         self.validate_state_transition(session.state, new_state)?;
 
-        // Use atomic update with conditional check to prevent race conditions
-        // This ensures the state hasn't changed since we read it
-        let session_id_str = format!("session:{}", session_id);
-        let _current_state_str = serde_json::to_string(&session.state)
-            .map_err(|e| CortexError::Storage(format!("Failed to serialize state: {}", e)))?;
-        let _new_state_str = serde_json::to_string(&new_state)
-            .map_err(|e| CortexError::Storage(format!("Failed to serialize state: {}", e)))?;
+        // Capture the current version for optimistic locking
+        let current_version = session.version;
 
         self.db
             .use_ns(&self.main_namespace)
@@ -539,27 +540,32 @@ impl SessionManager {
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to switch namespace: {}", e)))?;
 
-        // Atomic update: only update if current state matches
+        let session_id_str = format!("session:{}", session_id);
+
+        // FIXED: Atomic update with version-based optimistic locking
+        // Only updates if the version matches (no concurrent modifications)
+        // Increments version atomically as part of the update
         let mut result = self.db
-            .query("UPDATE $session_id SET state = $new_state, updated_at = time::now() WHERE state = $current_state RETURN AFTER")
+            .query("UPDATE $session_id SET state = $new_state, version = version + 1, updated_at = time::now() WHERE version = $current_version RETURN AFTER")
             .bind(("session_id", session_id_str))
             .bind(("new_state", new_state))
-            .bind(("current_state", session.state))
+            .bind(("current_version", current_version))
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to update session state: {}", e)))?;
 
         let updated: Option<AgentSession> = result.take(0)
             .map_err(|e| CortexError::Storage(format!("Failed to parse updated session: {}", e)))?;
 
+        // If no record was updated, the version changed (concurrent modification)
         if updated.is_none() {
             return Err(CortexError::concurrency(
-                format!("State transition failed - session {} state was modified concurrently", session_id)
+                format!("State transition failed - session {} was modified concurrently (version mismatch)", session_id)
             ));
         }
 
         info!(
-            "Session {} transitioned to state {:?}",
-            session_id, new_state
+            "Session {} transitioned from {:?} to {:?} (version {} -> {})",
+            session_id, session.state, new_state, current_version, current_version + 1
         );
 
         Ok(())
