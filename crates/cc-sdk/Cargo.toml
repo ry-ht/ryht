@@ -42,6 +42,7 @@ async-stream = { workspace = true }
 rand = "0.9"
 crossbeam-channel = "0.5"
 regex = { workspace = true }
+base64 = "0.22"
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -58,6 +58,38 @@ impl Default for ControlProtocolFormat {
     }
 }
 
+/// Output format for CLI responses
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputFormat {
+    /// Plain text output
+    Text,
+    /// JSON output
+    Json,
+    /// Streaming JSON output (one JSON object per line)
+    StreamJson,
+}
+
+impl Default for OutputFormat {
+    fn default() -> Self {
+        Self::StreamJson
+    }
+}
+
+/// Input format for CLI messages
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputFormat {
+    /// Plain text input
+    Text,
+    /// Streaming JSON input (one JSON object per line)
+    StreamJson,
+}
+
+impl Default for InputFormat {
+    fn default() -> Self {
+        Self::StreamJson
+    }
+}
+
 /// MCP (Model Context Protocol) server configuration
 #[derive(Clone)]
 pub enum McpServerConfig {
@@ -316,6 +348,36 @@ pub struct ClaudeCodeOptions {
     /// Controls the size of message, control, and stdin buffers (default: 100)
     /// Increase for high-throughput scenarios to prevent message lag
     pub cli_channel_buffer_size: Option<usize>,
+
+    /// Debug mode with optional category filtering
+    /// When set, enables debug output. The value can be empty for all categories
+    /// or a comma-separated list of debug categories (e.g., "api,mcp")
+    pub debug_mode: Option<String>,
+
+    /// Print mode - non-interactive output
+    /// When true, CLI runs in non-interactive mode and exits after response
+    pub print_mode: bool,
+
+    /// Output format for CLI responses
+    pub output_format: OutputFormat,
+
+    /// Input format for CLI messages
+    pub input_format: InputFormat,
+
+    /// Fallback model to use when primary model is unavailable
+    pub fallback_model: Option<String>,
+
+    /// Enable IDE auto-connect
+    pub ide_autoconnect: bool,
+
+    /// Enable strict MCP configuration validation
+    pub strict_mcp_config: bool,
+
+    /// Custom session ID (UUID format)
+    pub custom_session_id: Option<uuid::Uuid>,
+
+    /// Replay user messages from conversation history
+    pub replay_user_messages: bool,
 }
 
 impl std::fmt::Debug for ClaudeCodeOptions {
@@ -344,6 +406,11 @@ impl std::fmt::Debug for ClaudeCodeOptions {
             .field("can_use_tool", &self.can_use_tool.is_some())
             .field("hooks", &self.hooks.is_some())
             .field("control_protocol_format", &self.control_protocol_format)
+            .field("fallback_model", &self.fallback_model)
+            .field("ide_autoconnect", &self.ide_autoconnect)
+            .field("strict_mcp_config", &self.strict_mcp_config)
+            .field("custom_session_id", &self.custom_session_id)
+            .field("replay_user_messages", &self.replay_user_messages)
             .finish()
     }
 }
@@ -546,6 +613,207 @@ impl ClaudeCodeOptionsBuilder {
         self
     }
 
+    /// Enable debug mode with optional category filtering
+    ///
+    /// When enabled, Claude CLI will output debug information. You can optionally
+    /// specify categories to filter debug output (e.g., "api,mcp").
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - Optional debug category filter. Use empty string for all categories.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// // Enable debug for all categories
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .debug_mode("")
+    ///     .build();
+    ///
+    /// // Enable debug for specific categories
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .debug_mode("api,mcp")
+    ///     .build();
+    /// ```
+    pub fn debug_mode(mut self, filter: impl Into<String>) -> Self {
+        self.options.debug_mode = Some(filter.into());
+        self
+    }
+
+    /// Enable print mode (non-interactive)
+    ///
+    /// When enabled, the CLI runs in non-interactive mode and exits after
+    /// receiving a response. Useful for one-shot queries.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether to enable print mode
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .print_mode(true)
+    ///     .build();
+    /// ```
+    pub fn print_mode(mut self, enabled: bool) -> Self {
+        self.options.print_mode = enabled;
+        self
+    }
+
+    /// Set output format
+    ///
+    /// Controls the format of responses from the Claude CLI.
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - The output format to use
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::{ClaudeCodeOptions, OutputFormat};
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .output_format(OutputFormat::Json)
+    ///     .build();
+    /// ```
+    pub fn output_format(mut self, format: OutputFormat) -> Self {
+        self.options.output_format = format;
+        self
+    }
+
+    /// Set input format
+    ///
+    /// Controls the format of messages sent to the Claude CLI.
+    ///
+    /// # Arguments
+    ///
+    /// * `format` - The input format to use
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::{ClaudeCodeOptions, InputFormat};
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .input_format(InputFormat::Text)
+    ///     .build();
+    /// ```
+    pub fn input_format(mut self, format: InputFormat) -> Self {
+        self.options.input_format = format;
+        self
+    }
+
+    /// Set fallback model
+    ///
+    /// Specifies a fallback model to use when the primary model is unavailable.
+    /// This is promoted from extra_args to a first-class field.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The fallback model identifier
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .model("claude-sonnet-4")
+    ///     .fallback_model("claude-opus-4")
+    ///     .build();
+    /// ```
+    pub fn fallback_model(mut self, model: impl Into<String>) -> Self {
+        self.options.fallback_model = Some(model.into());
+        self
+    }
+
+    /// Enable IDE auto-connect
+    ///
+    /// When enabled, the CLI will automatically connect to supported IDEs.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - Whether to enable IDE auto-connect
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .ide_autoconnect(true)
+    ///     .build();
+    /// ```
+    pub fn ide_autoconnect(mut self, enable: bool) -> Self {
+        self.options.ide_autoconnect = enable;
+        self
+    }
+
+    /// Enable strict MCP configuration validation
+    ///
+    /// When enabled, the CLI will strictly validate MCP server configurations.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - Whether to enable strict MCP config validation
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .strict_mcp_config(true)
+    ///     .build();
+    /// ```
+    pub fn strict_mcp_config(mut self, enable: bool) -> Self {
+        self.options.strict_mcp_config = enable;
+        self
+    }
+
+    /// Set custom session ID
+    ///
+    /// Specifies a custom UUID to use as the session identifier.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The custom session UUID
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// # use uuid::Uuid;
+    /// let session_id = Uuid::new_v4();
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .custom_session_id(session_id)
+    ///     .build();
+    /// ```
+    pub fn custom_session_id(mut self, id: uuid::Uuid) -> Self {
+        self.options.custom_session_id = Some(id);
+        self
+    }
+
+    /// Enable replay user messages
+    ///
+    /// When enabled, user messages from conversation history will be replayed.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - Whether to enable replay user messages
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use cc_sdk::options::ClaudeCodeOptions;
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .replay_user_messages(true)
+    ///     .build();
+    /// ```
+    pub fn replay_user_messages(mut self, enable: bool) -> Self {
+        self.options.replay_user_messages = enable;
+        self
+    }
+
     /// Build the options
     pub fn build(self) -> ClaudeCodeOptions {
         self.options
@@ -589,5 +857,192 @@ mod tests {
         assert_eq!(options.extra_args.get("custom-flag"), Some(&Some("value".to_string())));
         assert_eq!(options.extra_args.get("boolean-flag"), Some(&None));
         assert_eq!(options.extra_args.get("another-flag"), Some(&Some("another-value".to_string())));
+    }
+
+    #[test]
+    fn test_debug_mode() {
+        // Test debug mode with no filter
+        let options = ClaudeCodeOptions::builder()
+            .debug_mode("")
+            .build();
+        assert_eq!(options.debug_mode, Some("".to_string()));
+
+        // Test debug mode with specific categories
+        let options = ClaudeCodeOptions::builder()
+            .debug_mode("api,mcp")
+            .build();
+        assert_eq!(options.debug_mode, Some("api,mcp".to_string()));
+
+        // Test no debug mode by default
+        let options = ClaudeCodeOptions::builder().build();
+        assert_eq!(options.debug_mode, None);
+    }
+
+    #[test]
+    fn test_print_mode() {
+        // Test print mode enabled
+        let options = ClaudeCodeOptions::builder()
+            .print_mode(true)
+            .build();
+        assert!(options.print_mode);
+
+        // Test print mode disabled
+        let options = ClaudeCodeOptions::builder()
+            .print_mode(false)
+            .build();
+        assert!(!options.print_mode);
+
+        // Test print mode default (false)
+        let options = ClaudeCodeOptions::builder().build();
+        assert!(!options.print_mode);
+    }
+
+    #[test]
+    fn test_output_format() {
+        // Test all output formats
+        let options = ClaudeCodeOptions::builder()
+            .output_format(OutputFormat::Text)
+            .build();
+        assert_eq!(options.output_format, OutputFormat::Text);
+
+        let options = ClaudeCodeOptions::builder()
+            .output_format(OutputFormat::Json)
+            .build();
+        assert_eq!(options.output_format, OutputFormat::Json);
+
+        let options = ClaudeCodeOptions::builder()
+            .output_format(OutputFormat::StreamJson)
+            .build();
+        assert_eq!(options.output_format, OutputFormat::StreamJson);
+
+        // Test default is StreamJson
+        let options = ClaudeCodeOptions::builder().build();
+        assert_eq!(options.output_format, OutputFormat::StreamJson);
+    }
+
+    #[test]
+    fn test_input_format() {
+        // Test all input formats
+        let options = ClaudeCodeOptions::builder()
+            .input_format(InputFormat::Text)
+            .build();
+        assert_eq!(options.input_format, InputFormat::Text);
+
+        let options = ClaudeCodeOptions::builder()
+            .input_format(InputFormat::StreamJson)
+            .build();
+        assert_eq!(options.input_format, InputFormat::StreamJson);
+
+        // Test default is StreamJson
+        let options = ClaudeCodeOptions::builder().build();
+        assert_eq!(options.input_format, InputFormat::StreamJson);
+    }
+
+    #[test]
+    fn test_combined_cli_features() {
+        // Test combining debug mode, print mode, and format options
+        let options = ClaudeCodeOptions::builder()
+            .debug_mode("api,mcp")
+            .print_mode(true)
+            .output_format(OutputFormat::Json)
+            .input_format(InputFormat::Text)
+            .model("claude-sonnet-4")
+            .build();
+
+        assert_eq!(options.debug_mode, Some("api,mcp".to_string()));
+        assert!(options.print_mode);
+        assert_eq!(options.output_format, OutputFormat::Json);
+        assert_eq!(options.input_format, InputFormat::Text);
+        assert_eq!(options.model, Some("claude-sonnet-4".to_string()));
+    }
+
+    #[test]
+    fn test_fallback_model() {
+        let options = ClaudeCodeOptions::builder()
+            .model("claude-sonnet-4")
+            .fallback_model("claude-opus-4")
+            .build();
+
+        assert_eq!(options.model, Some("claude-sonnet-4".to_string()));
+        assert_eq!(options.fallback_model, Some("claude-opus-4".to_string()));
+
+        // Test without fallback model
+        let options = ClaudeCodeOptions::builder()
+            .model("claude-sonnet-4")
+            .build();
+        assert_eq!(options.fallback_model, None);
+    }
+
+    #[test]
+    fn test_ide_autoconnect() {
+        let options = ClaudeCodeOptions::builder()
+            .ide_autoconnect(true)
+            .build();
+        assert!(options.ide_autoconnect);
+
+        // Test default is false
+        let options = ClaudeCodeOptions::builder().build();
+        assert!(!options.ide_autoconnect);
+    }
+
+    #[test]
+    fn test_strict_mcp_config() {
+        let options = ClaudeCodeOptions::builder()
+            .strict_mcp_config(true)
+            .build();
+        assert!(options.strict_mcp_config);
+
+        // Test default is false
+        let options = ClaudeCodeOptions::builder().build();
+        assert!(!options.strict_mcp_config);
+    }
+
+    #[test]
+    fn test_custom_session_id() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let options = ClaudeCodeOptions::builder()
+            .custom_session_id(session_id)
+            .build();
+        assert_eq!(options.custom_session_id, Some(session_id));
+
+        // Test without custom session ID
+        let options = ClaudeCodeOptions::builder().build();
+        assert_eq!(options.custom_session_id, None);
+    }
+
+    #[test]
+    fn test_replay_user_messages() {
+        let options = ClaudeCodeOptions::builder()
+            .replay_user_messages(true)
+            .build();
+        assert!(options.replay_user_messages);
+
+        // Test default is false
+        let options = ClaudeCodeOptions::builder().build();
+        assert!(!options.replay_user_messages);
+    }
+
+    #[test]
+    fn test_all_new_features_combined() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let options = ClaudeCodeOptions::builder()
+            .model("claude-sonnet-4")
+            .fallback_model("claude-opus-4")
+            .ide_autoconnect(true)
+            .strict_mcp_config(true)
+            .custom_session_id(session_id)
+            .replay_user_messages(true)
+            .build();
+
+        assert_eq!(options.model, Some("claude-sonnet-4".to_string()));
+        assert_eq!(options.fallback_model, Some("claude-opus-4".to_string()));
+        assert!(options.ide_autoconnect);
+        assert!(options.strict_mcp_config);
+        assert_eq!(options.custom_session_id, Some(session_id));
+        assert!(options.replay_user_messages);
     }
 }

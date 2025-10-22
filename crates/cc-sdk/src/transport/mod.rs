@@ -33,13 +33,26 @@ pub struct InputMessage {
 }
 
 impl InputMessage {
-    /// Create a new user message
+    /// Create a new user message with text content
     pub fn user(content: String, session_id: String) -> Self {
         Self {
             r#type: "user".to_string(),
             message: serde_json::json!({
                 "role": "user",
                 "content": content
+            }),
+            parent_tool_use_id: None,
+            session_id,
+        }
+    }
+
+    /// Create a new user message with content blocks (for file attachments)
+    pub fn user_with_blocks(blocks: Vec<serde_json::Value>, session_id: String) -> Self {
+        Self {
+            r#type: "user".to_string(),
+            message: serde_json::json!({
+                "role": "user",
+                "content": blocks
             }),
             parent_tool_use_id: None,
             session_id,

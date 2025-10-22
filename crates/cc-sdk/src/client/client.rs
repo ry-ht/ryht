@@ -979,6 +979,272 @@ impl ClaudeClientBuilder<WithBinary> {
         self
     }
 
+    /// Enable debug mode with optional category filtering
+    ///
+    /// When enabled, Claude CLI will output debug information. You can optionally
+    /// specify categories to filter debug output (e.g., "api,mcp").
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// // Enable debug for all categories
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .debug_mode("");
+    ///
+    /// // Enable debug for specific categories
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .debug_mode("api,mcp");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn debug_mode(mut self, filter: impl Into<String>) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.debug_mode = Some(filter.into());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Enable print mode (non-interactive)
+    ///
+    /// When enabled, the CLI runs in non-interactive mode and exits after
+    /// receiving a response. Useful for one-shot queries.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .print_mode(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn print_mode(mut self, enabled: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.print_mode = enabled;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set output format
+    ///
+    /// Controls the format of responses from the Claude CLI.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::types::OutputFormat;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .output_format(OutputFormat::Json);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn output_format(mut self, format: crate::types::OutputFormat) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.output_format = format;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set input format
+    ///
+    /// Controls the format of messages sent to the Claude CLI.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::types::InputFormat;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .input_format(InputFormat::Text);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn input_format(mut self, format: crate::types::InputFormat) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.input_format = format;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set fallback model
+    ///
+    /// Specifies a fallback model to use when the primary model is unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use cc_sdk::core::ModelId;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .model(ModelId::from("claude-sonnet-4"))
+    ///     .fallback_model(ModelId::from("claude-opus-4"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn fallback_model(mut self, model: ModelId) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.fallback_model = Some(model.into_inner());
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Enable IDE auto-connect
+    ///
+    /// When enabled, the CLI will automatically connect to supported IDEs.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .ide_autoconnect(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn ide_autoconnect(mut self, enable: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.ide_autoconnect = enable;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Enable strict MCP configuration validation
+    ///
+    /// When enabled, the CLI will strictly validate MCP server configurations.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .strict_mcp_config(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn strict_mcp_config(mut self, enable: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.strict_mcp_config = enable;
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Set custom session ID
+    ///
+    /// Specifies a custom UUID to use as the session identifier.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    /// use uuid::Uuid;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let session_id = Uuid::new_v4();
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .custom_session_id(session_id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn custom_session_id(mut self, id: uuid::Uuid) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.custom_session_id = Some(id);
+        inner.options = Some(options);
+
+        self
+    }
+
+    /// Enable replay user messages
+    ///
+    /// When enabled, user messages from conversation history will be replayed.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// let builder = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .replay_user_messages(true);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn replay_user_messages(mut self, enable: bool) -> Self {
+        let inner = Arc::get_mut(&mut self.inner)
+            .expect("Builder should have unique access to inner");
+
+        let mut options = inner.options.take().unwrap_or_default();
+        options.replay_user_messages = enable;
+        inner.options = Some(options);
+
+        self
+    }
+
     /// Configure the client with the current settings.
     ///
     /// Transitions to the `Configured` state.
@@ -1076,8 +1342,12 @@ impl ClaudeClientBuilder<Configured> {
         // Create message broadcast channel
         let (message_tx, _message_rx) = broadcast::channel(100);
 
-        // Generate session ID
-        let session_id = SessionId::generate();
+        // Generate or use custom session ID
+        let session_id = if let Some(custom_id) = options.custom_session_id {
+            SessionId::new(custom_id.to_string())
+        } else {
+            SessionId::generate()
+        };
 
         let inner = Arc::new(ClientInner {
             binary_path: self.inner.binary_path.clone(),
@@ -1282,12 +1552,192 @@ impl ClaudeClient<Connected> {
     pub async fn send_with_files(
         &self,
         message: String,
-        _files: Vec<PathBuf>,
+        files: Vec<PathBuf>,
     ) -> Result<MessageStream> {
-        // File attachment is reserved for future implementation.
-        // Requires protocol support from Claude CLI for multipart messages.
-        // Current workaround: mention file paths in message text.
-        self.send(message).await
+        use tokio::fs;
+        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+        let transport = self.inner.transport.as_ref()
+            .ok_or_else(|| Error::Client(ClientError::NotConnected))?;
+
+        let session_id = self.inner.session_id.as_ref()
+            .ok_or_else(|| Error::Session(SessionError::NotFound {
+                session_id: SessionId::new("unknown"),
+            }))?;
+
+        // Build content blocks: start with text message
+        let mut content_blocks: Vec<serde_json::Value> = vec![
+            serde_json::json!({
+                "type": "text",
+                "text": message
+            })
+        ];
+
+        // Process each file
+        for file_path in files {
+            // Validate file exists
+            if !file_path.exists() {
+                return Err(Error::Protocol(format!("File not found: {}", file_path.display())));
+            }
+
+            // Read file contents
+            let file_bytes = fs::read(&file_path).await
+                .map_err(|e| Error::Protocol(format!("Failed to read file {}: {}", file_path.display(), e)))?;
+
+            // Encode to base64
+            let base64_data = BASE64.encode(&file_bytes);
+
+            // Determine file type and create appropriate content block
+            let extension = file_path.extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase())
+                .unwrap_or_default();
+
+            let content_block = match extension.as_str() {
+                // Image files
+                "jpg" | "jpeg" => serde_json::json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64_data
+                    }
+                }),
+                "png" => serde_json::json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": base64_data
+                    }
+                }),
+                "gif" => serde_json::json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/gif",
+                        "data": base64_data
+                    }
+                }),
+                "webp" => serde_json::json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/webp",
+                        "data": base64_data
+                    }
+                }),
+                // Document files
+                "pdf" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.pdf")
+                }),
+                "txt" | "text" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "text/plain",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.txt")
+                }),
+                "md" | "markdown" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "text/markdown",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.md")
+                }),
+                "json" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/json",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.json")
+                }),
+                "xml" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/xml",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.xml")
+                }),
+                "csv" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "text/csv",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.csv")
+                }),
+                "html" | "htm" => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "text/html",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document.html")
+                }),
+                // Default: treat as plain text document
+                _ => serde_json::json!({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "text/plain",
+                        "data": base64_data
+                    },
+                    "title": file_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("document")
+                }),
+            };
+
+            content_blocks.push(content_block);
+        }
+
+        // Create input message with content blocks
+        let input_msg = InputMessage::user_with_blocks(content_blocks, session_id.to_string());
+
+        // Send message
+        let mut transport_guard = transport.lock().await;
+        transport_guard.send_message(input_msg).await
+            .map_err(|e| Error::Protocol(format!("Send failed: {}", e)))?;
+
+        // Create receiver for this stream
+        let receiver = self.inner.message_tx.as_ref()
+            .ok_or_else(|| Error::Config("Message channel not initialized".to_string()))?
+            .subscribe();
+
+        Ok(MessageStream {
+            receiver: BroadcastStream::new(receiver),
+        })
     }
 
     /// Interrupt the current operation.
@@ -2077,5 +2527,89 @@ mod tests {
         let options = builder.inner.options.as_ref().unwrap();
         assert_eq!(options.mcp_tools.len(), 2);
         assert!(options.mcp_tools.contains(&"fs__read".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_model_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .model(ModelId::from("claude-sonnet-4"))
+            .fallback_model(ModelId::from("claude-opus-4"))
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.model, Some("claude-sonnet-4".to_string()));
+        assert_eq!(options.fallback_model, Some("claude-opus-4".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_ide_autoconnect_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .ide_autoconnect(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.ide_autoconnect);
+    }
+
+    #[tokio::test]
+    async fn test_strict_mcp_config_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .strict_mcp_config(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.strict_mcp_config);
+    }
+
+    #[tokio::test]
+    async fn test_custom_session_id_configuration() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .custom_session_id(session_id)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.custom_session_id, Some(session_id));
+    }
+
+    #[tokio::test]
+    async fn test_replay_user_messages_configuration() {
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .replay_user_messages(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert!(options.replay_user_messages);
+    }
+
+    #[tokio::test]
+    async fn test_all_new_features_combined() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let builder = ClaudeClient::builder()
+            .binary("/usr/local/bin/claude")
+            .model(ModelId::from("claude-sonnet-4"))
+            .fallback_model(ModelId::from("claude-opus-4"))
+            .ide_autoconnect(true)
+            .strict_mcp_config(true)
+            .custom_session_id(session_id)
+            .replay_user_messages(true)
+            .configure();
+
+        let options = builder.inner.options.as_ref().unwrap();
+        assert_eq!(options.model, Some("claude-sonnet-4".to_string()));
+        assert_eq!(options.fallback_model, Some("claude-opus-4".to_string()));
+        assert!(options.ide_autoconnect);
+        assert!(options.strict_mcp_config);
+        assert_eq!(options.custom_session_id, Some(session_id));
+        assert!(options.replay_user_messages);
     }
 }

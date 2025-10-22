@@ -184,12 +184,41 @@ impl SubprocessTransport {
     fn build_command(&self) -> Command {
         let mut cmd = Command::new(&self.cli_path);
 
-        // Always use output-format stream-json and verbose (like Python SDK)
-        cmd.arg("--output-format").arg("stream-json");
+        // Output format
+        let output_format_str = match self.options.output_format {
+            crate::types::OutputFormat::Text => "text",
+            crate::types::OutputFormat::Json => "json",
+            crate::types::OutputFormat::StreamJson => "stream-json",
+        };
+        cmd.arg("--output-format").arg(output_format_str);
+
+        // Always add verbose for better logging
         cmd.arg("--verbose");
 
-        // For streaming/interactive mode, also add input-format stream-json
-        cmd.arg("--input-format").arg("stream-json");
+        // Input format (only for non-print mode)
+        if !self.options.print_mode {
+            let input_format_str = match self.options.input_format {
+                crate::types::InputFormat::Text => "text",
+                crate::types::InputFormat::StreamJson => "stream-json",
+            };
+            cmd.arg("--input-format").arg(input_format_str);
+        }
+
+        // Print mode (non-interactive)
+        if self.options.print_mode {
+            cmd.arg("--print");
+        }
+
+        // Debug mode with optional filtering
+        if let Some(ref debug_filter) = self.options.debug_mode {
+            if debug_filter.is_empty() {
+                // Enable debug for all categories
+                cmd.arg("--debug");
+            } else {
+                // Enable debug with specific categories
+                cmd.arg("--debug").arg(debug_filter);
+            }
+        }
         
         // Include partial messages if requested
         if self.options.include_partial_messages {
@@ -340,6 +369,31 @@ impl SubprocessTransport {
                 let value = sources.iter().map(|s| (match s { crate::types::SettingSource::User => "user", crate::types::SettingSource::Project => "project", crate::types::SettingSource::Local => "local" }).to_string()).collect::<Vec<_>>().join(",");
                 cmd.arg("--setting-sources").arg(value);
             }
+
+        // Fallback model
+        if let Some(ref fallback_model) = self.options.fallback_model {
+            cmd.arg("--fallback-model").arg(fallback_model);
+        }
+
+        // IDE auto-connect
+        if self.options.ide_autoconnect {
+            cmd.arg("--ide");
+        }
+
+        // Strict MCP config
+        if self.options.strict_mcp_config {
+            cmd.arg("--strict-mcp-config");
+        }
+
+        // Custom session ID
+        if let Some(ref session_id) = self.options.custom_session_id {
+            cmd.arg("--session-id").arg(session_id.to_string());
+        }
+
+        // Replay user messages
+        if self.options.replay_user_messages {
+            cmd.arg("--replay-user-messages");
+        }
 
         // Extra arguments
         for (key, value) in &self.options.extra_args {
@@ -963,5 +1017,206 @@ mod tests {
         assert!(SemVer::new(1, 9, 9) < min_version);
         assert!(SemVer::new(2, 0, 0) >= min_version);
         assert!(SemVer::new(2, 1, 0) >= min_version);
+    }
+
+    #[test]
+    fn test_build_command_debug_mode() {
+        // Test debug mode with no filter
+        let mut options = ClaudeCodeOptions::default();
+        options.debug_mode = Some("".to_string());
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--debug"));
+    }
+
+    #[test]
+    fn test_build_command_debug_mode_with_filter() {
+        // Test debug mode with specific filter
+        let mut options = ClaudeCodeOptions::default();
+        options.debug_mode = Some("api,mcp".to_string());
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--debug"));
+        assert!(cmd_str.contains("api,mcp"));
+    }
+
+    #[test]
+    fn test_build_command_print_mode() {
+        // Test print mode
+        let mut options = ClaudeCodeOptions::default();
+        options.print_mode = true;
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--print"));
+        // Print mode should not include input-format
+        assert!(!cmd_str.contains("--input-format"));
+    }
+
+    #[test]
+    fn test_build_command_output_formats() {
+        // Test text output format
+        let mut options = ClaudeCodeOptions::default();
+        options.output_format = crate::types::OutputFormat::Text;
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--output-format"));
+        assert!(cmd_str.contains("text"));
+
+        // Test JSON output format
+        let mut options = ClaudeCodeOptions::default();
+        options.output_format = crate::types::OutputFormat::Json;
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--output-format"));
+        assert!(cmd_str.contains("json"));
+
+        // Test stream-json output format (default)
+        let options = ClaudeCodeOptions::default();
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--output-format"));
+        assert!(cmd_str.contains("stream-json"));
+    }
+
+    #[test]
+    fn test_build_command_input_formats() {
+        // Test text input format
+        let mut options = ClaudeCodeOptions::default();
+        options.input_format = crate::types::InputFormat::Text;
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--input-format"));
+        assert!(cmd_str.contains("text"));
+
+        // Test stream-json input format (default)
+        let options = ClaudeCodeOptions::default();
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+        assert!(cmd_str.contains("--input-format"));
+        assert!(cmd_str.contains("stream-json"));
+    }
+
+    #[test]
+    fn test_build_command_combined_cli_features() {
+        // Test combining multiple CLI features
+        let mut options = ClaudeCodeOptions::default();
+        options.debug_mode = Some("api".to_string());
+        options.output_format = crate::types::OutputFormat::Json;
+        options.input_format = crate::types::InputFormat::Text;
+        options.model = Some("claude-sonnet-4".to_string());
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--debug"));
+        assert!(cmd_str.contains("api"));
+        assert!(cmd_str.contains("--output-format"));
+        assert!(cmd_str.contains("json"));
+        assert!(cmd_str.contains("--input-format"));
+        assert!(cmd_str.contains("text"));
+        assert!(cmd_str.contains("--model"));
+        assert!(cmd_str.contains("claude-sonnet-4"));
+    }
+
+    #[test]
+    fn test_build_command_fallback_model() {
+        let mut options = ClaudeCodeOptions::default();
+        options.model = Some("claude-sonnet-4".to_string());
+        options.fallback_model = Some("claude-opus-4".to_string());
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--model"));
+        assert!(cmd_str.contains("claude-sonnet-4"));
+        assert!(cmd_str.contains("--fallback-model"));
+        assert!(cmd_str.contains("claude-opus-4"));
+    }
+
+    #[test]
+    fn test_build_command_ide_autoconnect() {
+        let mut options = ClaudeCodeOptions::default();
+        options.ide_autoconnect = true;
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--ide"));
+    }
+
+    #[test]
+    fn test_build_command_strict_mcp_config() {
+        let mut options = ClaudeCodeOptions::default();
+        options.strict_mcp_config = true;
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--strict-mcp-config"));
+    }
+
+    #[test]
+    fn test_build_command_custom_session_id() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let mut options = ClaudeCodeOptions::default();
+        options.custom_session_id = Some(session_id);
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--session-id"));
+        assert!(cmd_str.contains(&session_id.to_string()));
+    }
+
+    #[test]
+    fn test_build_command_replay_user_messages() {
+        let mut options = ClaudeCodeOptions::default();
+        options.replay_user_messages = true;
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--replay-user-messages"));
+    }
+
+    #[test]
+    fn test_build_command_all_new_features() {
+        use uuid::Uuid;
+
+        let session_id = Uuid::new_v4();
+        let mut options = ClaudeCodeOptions::default();
+        options.fallback_model = Some("claude-opus-4".to_string());
+        options.ide_autoconnect = true;
+        options.strict_mcp_config = true;
+        options.custom_session_id = Some(session_id);
+        options.replay_user_messages = true;
+
+        let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
+        let cmd = transport.build_command();
+        let cmd_str = format!("{:?}", cmd);
+
+        assert!(cmd_str.contains("--fallback-model"));
+        assert!(cmd_str.contains("claude-opus-4"));
+        assert!(cmd_str.contains("--ide"));
+        assert!(cmd_str.contains("--strict-mcp-config"));
+        assert!(cmd_str.contains("--session-id"));
+        assert!(cmd_str.contains(&session_id.to_string()));
+        assert!(cmd_str.contains("--replay-user-messages"));
     }
 }

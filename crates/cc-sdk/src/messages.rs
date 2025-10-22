@@ -384,8 +384,88 @@ pub enum ContentValue {
 pub struct UserContent {
     /// Role (always "user")
     pub role: String,
-    /// Message content
-    pub content: String,
+    /// Message content (either string or array of content blocks)
+    #[serde(flatten)]
+    pub content: UserContentData,
+}
+
+/// User content data - either text or content blocks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UserContentData {
+    /// Simple text content
+    Text {
+        /// Text content
+        content: String,
+    },
+    /// Array of content blocks (text, images, documents)
+    Blocks {
+        /// Content blocks
+        content: Vec<UserContentBlock>,
+    },
+}
+
+/// Content block for user messages (text, image, document)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum UserContentBlock {
+    /// Text content block
+    Text {
+        /// Text content
+        text: String,
+    },
+    /// Image content block
+    Image {
+        /// Image source
+        source: ImageSource,
+    },
+    /// Document content block
+    Document {
+        /// Document source
+        source: DocumentSource,
+        /// Optional document title
+        #[serde(skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        /// Optional context about the document
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context: Option<String>,
+    },
+}
+
+/// Image source for image content blocks
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ImageSource {
+    /// Base64-encoded image data
+    Base64 {
+        /// Media type (e.g., "image/jpeg", "image/png")
+        media_type: String,
+        /// Base64-encoded image data
+        data: String,
+    },
+    /// URL to image
+    Url {
+        /// URL to the image
+        url: String,
+    },
+}
+
+/// Document source for document content blocks
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum DocumentSource {
+    /// Base64-encoded document data
+    Base64 {
+        /// Media type (e.g., "application/pdf", "text/plain")
+        media_type: String,
+        /// Base64-encoded document data
+        data: String,
+    },
+    /// File ID from Files API
+    File {
+        /// File ID from Claude Files API
+        file_id: String,
+    },
 }
 
 /// Assistant content structure for internal use
