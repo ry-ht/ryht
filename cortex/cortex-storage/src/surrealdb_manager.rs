@@ -75,8 +75,8 @@ impl Default for SurrealDBConfig {
             data_dir: ryht_dir.join("data"),
             log_file: ryht_dir.join("logs").join("surreal.log"),
             pid_file: ryht_dir.join("surreal.pid"),
-            username: "cortex".to_string(),
-            password: "cortex".to_string(),
+            username: "root".to_string(),
+            password: "root".to_string(),
             storage_engine: "rocksdb".to_string(),
             allow_guests: false,
             max_retries: 3,
@@ -954,7 +954,7 @@ mod tests {
     fn test_config_default() {
         let config = SurrealDBConfig::default();
         assert_eq!(config.bind_address, "127.0.0.1:8000");
-        assert_eq!(config.username, "cortex");
+        assert_eq!(config.username, "root");
         assert_eq!(config.storage_engine, "rocksdb");
     }
 

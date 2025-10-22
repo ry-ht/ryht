@@ -952,7 +952,25 @@ pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -
             output::kv("URL", manager.connection_url());
             output::kv("Data", manager.config().data_dir.display());
             output::kv("Logs", manager.config().log_file.display());
-            Ok(())
+            output::info("Press Ctrl+C to stop the server");
+            println!();
+
+            // Wait for shutdown signal (Ctrl+C)
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {
+                    output::info("Shutdown signal received, stopping server...");
+                    if let Err(e) = manager.stop().await {
+                        output::error(format!("Error during shutdown: {}", e));
+                        return Err(e.into());
+                    }
+                    output::success("SurrealDB server stopped gracefully");
+                    Ok(())
+                }
+                Err(e) => {
+                    output::error(format!("Failed to listen for shutdown signal: {}", e));
+                    Err(e.into())
+                }
+            }
         }
         Err(e) => {
             output::error(format!("Failed to start SurrealDB server: {}", e));
