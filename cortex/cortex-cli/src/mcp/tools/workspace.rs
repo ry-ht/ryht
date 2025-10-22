@@ -25,7 +25,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::fs;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -47,6 +47,8 @@ pub struct WorkspaceContext {
     #[allow(dead_code)]
     semantic_memory: Arc<SemanticMemorySystem>,
     ingestion: Arc<FileIngestionPipeline>,
+    /// Active workspace ID (shared across all tools)
+    active_workspace: Arc<RwLock<Option<Uuid>>>,
 }
 
 impl WorkspaceContext {
@@ -72,7 +74,20 @@ impl WorkspaceContext {
             parser,
             semantic_memory,
             ingestion,
+            active_workspace: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Get the currently active workspace ID
+    pub fn get_active_workspace(&self) -> Option<Uuid> {
+        self.active_workspace.read().ok().and_then(|guard| *guard)
+    }
+
+    /// Set the active workspace ID
+    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
+        if let Ok(mut guard) = self.active_workspace.write() {
+            *guard = workspace_id;
+        }
     }
 
     /// Store a workspace in the database
@@ -713,8 +728,9 @@ impl Tool for WorkspaceActivateTool {
 
         info!("Activating workspace: {} ({})", workspace.name, workspace_id);
 
-        // TODO: Store active workspace in session context
-        // For now, just validate and return success
+        // Store active workspace in context
+        self.ctx.set_active_workspace(Some(workspace_id));
+
         let output = ActivateOutput {
             workspace_id: workspace_id.to_string(),
             name: workspace.name,

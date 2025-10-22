@@ -145,7 +145,9 @@ impl Tool for VfsGetNodeTool {
             path: node.path.to_string(),
             content,
             size_bytes: node.size_bytes as u64,
-            permissions: "644".to_string(), // TODO: Get from metadata
+            permissions: node.permissions
+                .map(|p| format!("{:o}", p))
+                .unwrap_or_else(|| "644".to_string()),
             metadata: if input.include_metadata {
                 Some(serde_json::json!({
                     "created_at": node.created_at,
@@ -474,7 +476,16 @@ impl Tool for VfsUpdateFileTool {
         let path = VirtualPath::new(&input.path)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid path: {}", e)))?;
 
-        // TODO: Check expected_version for optimistic locking
+        // Check expected_version for optimistic locking
+        let current_node = self.ctx.vfs.metadata(&workspace_id, &path).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get current node: {}", e)))?;
+
+        if current_node.version as u64 != input.expected_version {
+            return Err(ToolError::ExecutionFailed(format!(
+                "Version mismatch: expected version {}, but current version is {}. File was modified by another process.",
+                input.expected_version, current_node.version
+            )));
+        }
 
         info!("Updating file: {} in workspace {}", path, workspace_id);
 

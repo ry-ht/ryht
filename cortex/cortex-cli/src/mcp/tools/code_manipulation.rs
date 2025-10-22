@@ -26,7 +26,7 @@ use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tracing::debug;
 use uuid::Uuid;
 use anyhow::Result as AnyhowResult;
@@ -40,12 +40,40 @@ use anyhow::Result as AnyhowResult;
 pub struct CodeManipulationContext {
     storage: Arc<ConnectionManager>,
     vfs: Arc<VirtualFileSystem>,
+    /// Active workspace ID (shared with workspace tools)
+    active_workspace: Arc<RwLock<Option<Uuid>>>,
 }
 
 impl CodeManipulationContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
-        Self { storage, vfs }
+        Self {
+            storage,
+            vfs,
+            active_workspace: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Create a new context with a shared active workspace reference
+    pub fn with_active_workspace(storage: Arc<ConnectionManager>, active_workspace: Arc<RwLock<Option<Uuid>>>) -> Self {
+        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+        Self {
+            storage,
+            vfs,
+            active_workspace,
+        }
+    }
+
+    /// Get the currently active workspace ID
+    pub fn get_active_workspace(&self) -> Option<Uuid> {
+        self.active_workspace.read().ok().and_then(|guard| *guard)
+    }
+
+    /// Set the active workspace ID
+    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
+        if let Ok(mut guard) = self.active_workspace.write() {
+            *guard = workspace_id;
+        }
     }
 
     /// Parse a file using the appropriate parser based on extension
@@ -464,8 +492,11 @@ impl Tool for CodeUpdateUnitTool {
             )));
         }
 
-        // Parse the file
-        let workspace_id = Uuid::new_v4(); // TODO: Get from context
+        // Get workspace ID from context
+        let workspace_id = self.ctx.get_active_workspace()
+            .ok_or_else(|| ToolError::ExecutionFailed(
+                "No active workspace set. Please activate a workspace first using cortex.workspace.activate".to_string()
+            ))?;
         let language = match unit.language {
             Language::Rust => ParserLanguage::Rust,
             Language::TypeScript => ParserLanguage::TypeScript,
@@ -628,8 +659,11 @@ impl Tool for CodeDeleteUnitTool {
             )));
         }
 
-        // Parse the file
-        let workspace_id = Uuid::new_v4(); // TODO: Get from context
+        // Get workspace ID from context
+        let workspace_id = self.ctx.get_active_workspace()
+            .ok_or_else(|| ToolError::ExecutionFailed(
+                "No active workspace set. Please activate a workspace first using cortex.workspace.activate".to_string()
+            ))?;
         let language = match unit.language {
             Language::Rust => ParserLanguage::Rust,
             Language::TypeScript => ParserLanguage::TypeScript,
