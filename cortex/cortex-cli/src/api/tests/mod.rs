@@ -100,6 +100,14 @@ mod types_tests {
             content: Some("fn main() {}".to_string()),
             created_at: now,
             updated_at: now,
+            modified_in_session: None,
+            change_type: None,
+            session_version: None,
+            base_version: None,
+            encoding: None,
+            line_count: None,
+            hash: None,
+            metadata: None,
         };
 
         let json = serde_json::to_string(&file_response).unwrap();
