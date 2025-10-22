@@ -9,8 +9,8 @@ The web server provides a REST API and WebSocket interface that mirrors the Taur
 ## Architecture
 
 ```
-┌─────────────────┐    WebSocket     ┌─────────────────┐    Process    ┌─────────────────┐
-│   Browser UI    │ ←──────────────→ │  Rust Backend   │ ────────────→ │  Claude Binary  │
+┌─────────────────┐    WebSocket     ┌─────────────────┐    Process     ┌─────────────────┐
+│   Browser UI    │ ←──────────────→ │  Rust Backend   │ ────────────→  │  Claude Binary  │
 │                 │    REST API      │   (Axum Server) │               │                 │
 │ • React/TS      │ ←──────────────→ │                 │               │ • claude-code   │
 │ • WebSocket     │                  │ • Session Mgmt  │               │ • Subprocess    │

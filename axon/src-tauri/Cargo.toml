@@ -1,10 +1,10 @@
 [package]
 name = "axon"
 version = "0.2.1"
-description = "Multi-agent orchestration system for ry.ht"
+description = "GUI app and Toolkit for Claude Code"
 authors = ["mufeedvh", "123vviekr"]
 license = "AGPL-3.0"
-edition = "2024"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -62,9 +62,8 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 clap = { version = "4.0", features = ["derive"] }
 futures-util = "0.3"
-# Updated to resolve workspace dependency conflict
-image = "0.25"
-cc-sdk = { path = "../../crates/cc-sdk" }
+# Pin image to avoid edition2024 requirement
+image = "=0.25.1"
 
 
 [target.'cfg(target_os = "macos")'.dependencies]

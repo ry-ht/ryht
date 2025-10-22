@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import asteriskLogo from "@/assets/nfo/asterisk-logo.png";
-import keygennMusic from "@/assets/nfo/opcode-nfo.ogg";
+import keygennMusic from "@/assets/nfo/axon-nfo.ogg";
 
 interface NFOCreditsProps {
   /**
@@ -84,7 +84,7 @@ export const NFOCredits: React.FC<NFOCreditsProps> = ({ onClose }) => {
   
   // Credits content
   const creditsContent = [
-    { type: "header", text: "opcode v0.2.1" },
+    { type: "header", text: "axon v0.2.1" },
     { type: "subheader", text: "[ A STRATEGIC PROJECT BY ASTERISK ]" },
     { type: "spacer" },
     { type: "section", title: "━━━ CREDITS ━━━" },
@@ -147,7 +147,7 @@ export const NFOCredits: React.FC<NFOCreditsProps> = ({ onClose }) => {
             <div className="flex items-center justify-between px-4 py-2 bg-card border-b border-border">
               <div className="flex items-center space-x-2">
                 <div className="text-sm font-bold tracking-wider font-mono text-foreground">
-                  opcode.NFO
+                  axon.NFO
                 </div>
               </div>
               <div className="flex items-center space-x-2">

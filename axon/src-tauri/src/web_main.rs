@@ -1,10 +1,14 @@
 use clap::Parser;
 
-use axon_lib::web_server;
+mod checkpoint;
+mod claude_binary;
+mod commands;
+mod process;
+mod web_server;
 
 #[derive(Parser)]
-#[command(name = "opcode-web")]
-#[command(about = "Opcode Web Server - Access Opcode from your phone")]
+#[command(name = "axon-web")]
+#[command(about = "Axon Web Server - Access Axon from your phone")]
 struct Args {
     /// Port to run the web server on
     #[arg(short, long, default_value = "8080")]
@@ -21,7 +25,7 @@ async fn main() {
 
     let args = Args::parse();
 
-    println!("🚀 Starting Opcode Web Server...");
+    println!("🚀 Starting Axon Web Server...");
     println!(
         "📱 Will be accessible from phones at: http://{}:{}",
         args.host, args.port

@@ -280,7 +280,6 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   }, [messages]);
 
 
-
   // Project path selection is handled upstream when opening an execution tab
 
   const handleOpenHooksDialog = async () => {
@@ -336,7 +335,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       const errorUnlisten = await listen<string>(`agent-error:${executionRunId}`, (event) => {
         console.error("Agent error:", event.payload);
         setError(event.payload);
-
+        
         // Track agent error
         trackEvent.agentError({
           error_type: 'runtime_error',
