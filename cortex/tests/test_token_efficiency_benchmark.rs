@@ -48,6 +48,7 @@ impl TokenCounter {
     }
 
     /// Count tokens in multiple texts (sum)
+    #[allow(dead_code)]
     fn count_all(texts: &[&str]) -> usize {
         texts.iter().map(|t| Self::count(t)).sum()
     }

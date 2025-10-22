@@ -539,3 +539,369 @@ mod metadata_tests {
         assert_eq!(metadata.duration_ms, 200);
     }
 }
+
+#[cfg(test)]
+mod workspace_update_tests {
+    use super::*;
+
+    #[test]
+    fn test_update_workspace_request_serialization() {
+        let request = UpdateWorkspaceRequest {
+            name: Some("Updated Name".to_string()),
+            workspace_type: Some("code".to_string()),
+            read_only: Some(true),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("Updated Name"));
+        assert!(json.contains("code"));
+        assert!(json.contains("true"));
+    }
+
+    #[test]
+    fn test_update_workspace_request_partial() {
+        let request = UpdateWorkspaceRequest {
+            name: Some("New Name".to_string()),
+            workspace_type: None,
+            read_only: None,
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("New Name"));
+        assert!(!json.contains("workspace_type") || json.contains("null"));
+    }
+
+    #[test]
+    fn test_update_workspace_request_deserialization() {
+        let json = r#"{
+            "name": "Test Workspace",
+            "workspace_type": "documentation",
+            "read_only": false
+        }"#;
+
+        let request: UpdateWorkspaceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.name, Some("Test Workspace".to_string()));
+        assert_eq!(request.workspace_type, Some("documentation".to_string()));
+        assert_eq!(request.read_only, Some(false));
+    }
+
+    #[test]
+    fn test_sync_workspace_request_serialization() {
+        let request = SyncWorkspaceRequest {
+            force: Some(true),
+            dry_run: Some(false),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("true"));
+        assert!(json.contains("false"));
+    }
+
+    #[test]
+    fn test_sync_workspace_request_defaults() {
+        let json = r#"{}"#;
+        let request: SyncWorkspaceRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.force, None);
+        assert_eq!(request.dry_run, None);
+    }
+
+    #[test]
+    fn test_sync_response_serialization() {
+        let response = SyncResponse {
+            files_added: 10,
+            files_updated: 5,
+            files_deleted: 2,
+            total_processed: 17,
+            duration_ms: 1500,
+            changes: vec![
+                SyncChange {
+                    path: "/src/main.rs".to_string(),
+                    change_type: "updated".to_string(),
+                    size_bytes: Some(1024),
+                },
+                SyncChange {
+                    path: "/src/lib.rs".to_string(),
+                    change_type: "added".to_string(),
+                    size_bytes: Some(2048),
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"files_added\":10"));
+        assert!(json.contains("\"files_updated\":5"));
+        assert!(json.contains("\"files_deleted\":2"));
+        assert!(json.contains("\"total_processed\":17"));
+        assert!(json.contains("main.rs"));
+        assert!(json.contains("updated"));
+    }
+
+    #[test]
+    fn test_sync_change_serialization() {
+        let change = SyncChange {
+            path: "/test/file.txt".to_string(),
+            change_type: "deleted".to_string(),
+            size_bytes: None,
+        };
+
+        let json = serde_json::to_string(&change).unwrap();
+        assert!(json.contains("/test/file.txt"));
+        assert!(json.contains("deleted"));
+    }
+}
+
+#[cfg(test)]
+mod search_reference_tests {
+    use super::*;
+
+    #[test]
+    fn test_references_response_serialization() {
+        let response = ReferencesResponse {
+            unit_id: "unit-123".to_string(),
+            unit_name: "calculate_total".to_string(),
+            total_references: 15,
+            references: vec![
+                CodeReference {
+                    id: "ref-1".to_string(),
+                    file_path: "/src/api.rs".to_string(),
+                    line: 42,
+                    column: 10,
+                    reference_type: "call".to_string(),
+                    context: "let total = calculate_total(items);".to_string(),
+                    referencing_unit: Some("process_order".to_string()),
+                },
+                CodeReference {
+                    id: "ref-2".to_string(),
+                    file_path: "/tests/api_test.rs".to_string(),
+                    line: 100,
+                    column: 5,
+                    reference_type: "call".to_string(),
+                    context: "assert_eq!(calculate_total(&[1, 2, 3]), 6);".to_string(),
+                    referencing_unit: Some("test_calculate_total".to_string()),
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("unit-123"));
+        assert!(json.contains("calculate_total"));
+        assert!(json.contains("\"total_references\":15"));
+        assert!(json.contains("api.rs"));
+        assert!(json.contains("\"line\":42"));
+    }
+
+    #[test]
+    fn test_code_reference_deserialization() {
+        let json = r#"{
+            "id": "ref-456",
+            "file_path": "/src/models.rs",
+            "line": 25,
+            "column": 8,
+            "reference_type": "import",
+            "context": "use crate::models::User;",
+            "referencing_unit": "main"
+        }"#;
+
+        let reference: CodeReference = serde_json::from_str(json).unwrap();
+        assert_eq!(reference.id, "ref-456");
+        assert_eq!(reference.file_path, "/src/models.rs");
+        assert_eq!(reference.line, 25);
+        assert_eq!(reference.column, 8);
+        assert_eq!(reference.reference_type, "import");
+        assert_eq!(reference.referencing_unit, Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_pattern_search_request_serialization() {
+        let request = PatternSearchRequest {
+            workspace_id: "ws-789".to_string(),
+            pattern: "fn.*calculate".to_string(),
+            language: Some("rust".to_string()),
+            limit: Some(50),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("ws-789"));
+        assert!(json.contains("fn.*calculate"));
+        assert!(json.contains("rust"));
+        assert!(json.contains("50"));
+    }
+
+    #[test]
+    fn test_pattern_search_request_deserialization() {
+        let json = r#"{
+            "workspace_id": "ws-abc",
+            "pattern": "class\\s+\\w+",
+            "language": "python"
+        }"#;
+
+        let request: PatternSearchRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.workspace_id, "ws-abc");
+        assert_eq!(request.pattern, "class\\s+\\w+");
+        assert_eq!(request.language, Some("python".to_string()));
+        assert_eq!(request.limit, None);
+    }
+
+    #[test]
+    fn test_pattern_search_response_serialization() {
+        let response = PatternSearchResponse {
+            pattern: "TODO:".to_string(),
+            total_matches: 25,
+            matches: vec![
+                PatternMatch {
+                    file_path: "/src/api.rs".to_string(),
+                    line: 100,
+                    column: 5,
+                    matched_text: "TODO: Implement validation".to_string(),
+                    context: "    // TODO: Implement validation\n    fn validate() {}".to_string(),
+                    unit_id: Some("validate".to_string()),
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("TODO:"));
+        assert!(json.contains("\"total_matches\":25"));
+        assert!(json.contains("Implement validation"));
+    }
+
+    #[test]
+    fn test_pattern_match_deserialization() {
+        let json = r#"{
+            "file_path": "/src/lib.rs",
+            "line": 50,
+            "column": 10,
+            "matched_text": "fn process_data",
+            "context": "pub fn process_data(input: &str) -> Result<Data>",
+            "unit_id": "process_data"
+        }"#;
+
+        let pattern_match: PatternMatch = serde_json::from_str(json).unwrap();
+        assert_eq!(pattern_match.file_path, "/src/lib.rs");
+        assert_eq!(pattern_match.line, 50);
+        assert_eq!(pattern_match.matched_text, "fn process_data");
+        assert_eq!(pattern_match.unit_id, Some("process_data".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod memory_search_tests {
+    use super::*;
+
+    #[test]
+    fn test_episode_search_request_serialization() {
+        let request = EpisodeSearchRequest {
+            query: "error handling".to_string(),
+            episode_type: Some("learning".to_string()),
+            min_importance: Some(0.7),
+            limit: Some(10),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("error handling"));
+        assert!(json.contains("learning"));
+        assert!(json.contains("0.7"));
+        assert!(json.contains("10"));
+    }
+
+    #[test]
+    fn test_episode_search_request_deserialization() {
+        let json = r#"{
+            "query": "refactoring patterns",
+            "episode_type": "experience",
+            "min_importance": 0.5
+        }"#;
+
+        let request: EpisodeSearchRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.query, "refactoring patterns");
+        assert_eq!(request.episode_type, Some("experience".to_string()));
+        assert_eq!(request.min_importance, Some(0.5));
+        assert_eq!(request.limit, None);
+    }
+
+    #[test]
+    fn test_episode_search_request_minimal() {
+        let json = r#"{
+            "query": "test query"
+        }"#;
+
+        let request: EpisodeSearchRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.query, "test query");
+        assert_eq!(request.episode_type, None);
+        assert_eq!(request.min_importance, None);
+        assert_eq!(request.limit, None);
+    }
+
+    #[test]
+    fn test_learned_pattern_serialization() {
+        let now = Utc::now();
+        let pattern = LearnedPattern {
+            id: "pattern-123".to_string(),
+            pattern_name: "Builder Pattern".to_string(),
+            description: "Use builder pattern for complex object construction".to_string(),
+            pattern_type: "design".to_string(),
+            occurrences: 42,
+            confidence: 0.95,
+            created_at: now,
+            last_seen: now,
+            examples: vec![
+                "User::builder().name(\"John\").build()".to_string(),
+                "Config::builder().port(8080).host(\"localhost\").build()".to_string(),
+            ],
+        };
+
+        let json = serde_json::to_string(&pattern).unwrap();
+        assert!(json.contains("pattern-123"));
+        assert!(json.contains("Builder Pattern"));
+        assert!(json.contains("\"occurrences\":42"));
+        assert!(json.contains("0.95"));
+        assert!(json.contains("User::builder()"));
+    }
+
+    #[test]
+    fn test_learned_pattern_deserialization() {
+        let json = r#"{
+            "id": "pattern-456",
+            "pattern_name": "Error Propagation",
+            "description": "Use ? operator for error propagation",
+            "pattern_type": "idiom",
+            "occurrences": 128,
+            "confidence": 0.88,
+            "created_at": "2024-01-01T00:00:00Z",
+            "last_seen": "2024-01-15T00:00:00Z",
+            "examples": [
+                "let file = File::open(path)?;",
+                "let data = read_data()?;"
+            ]
+        }"#;
+
+        let pattern: LearnedPattern = serde_json::from_str(json).unwrap();
+        assert_eq!(pattern.id, "pattern-456");
+        assert_eq!(pattern.pattern_name, "Error Propagation");
+        assert_eq!(pattern.pattern_type, "idiom");
+        assert_eq!(pattern.occurrences, 128);
+        assert_eq!(pattern.confidence, 0.88);
+        assert_eq!(pattern.examples.len(), 2);
+    }
+
+    #[test]
+    fn test_learned_pattern_with_no_examples() {
+        let now = Utc::now();
+        let pattern = LearnedPattern {
+            id: "pattern-789".to_string(),
+            pattern_name: "New Pattern".to_string(),
+            description: "Recently discovered pattern".to_string(),
+            pattern_type: "experimental".to_string(),
+            occurrences: 1,
+            confidence: 0.5,
+            created_at: now,
+            last_seen: now,
+            examples: vec![],
+        };
+
+        let json = serde_json::to_string(&pattern).unwrap();
+        assert!(json.contains("pattern-789"));
+        assert!(json.contains("\"examples\":[]"));
+    }
+}

@@ -2,7 +2,10 @@
 
 use crate::api::{
     error::ApiResult,
-    types::{ApiResponse, ConsolidateMemoryRequest, MemoryEpisode},
+    types::{
+        ApiResponse, ConsolidateMemoryRequest, MemoryEpisode,
+        EpisodeSearchRequest, LearnedPattern,
+    },
 };
 use axum::{
     extract::{Path, State},
@@ -27,6 +30,8 @@ pub fn memory_routes(context: MemoryContext) -> Router {
         .route("/api/v3/memory/episodes", get(list_episodes))
         .route("/api/v3/memory/consolidate", post(consolidate_memory))
         .route("/api/v3/memory/episodes/:episode_id", get(get_episode))
+        .route("/api/v3/memory/search", post(search_episodes))
+        .route("/api/v3/memory/patterns", get(get_patterns))
         .with_state(context)
 }
 
@@ -237,4 +242,185 @@ async fn consolidate_memory(
     let duration = start.elapsed().as_millis() as u64;
 
     Ok(Json(ApiResponse::success(response_data, request_id, duration)))
+}
+
+/// POST /api/v3/memory/search - Search similar episodes using embeddings
+async fn search_episodes(
+    State(ctx): State<MemoryContext>,
+    Json(payload): Json<EpisodeSearchRequest>,
+) -> ApiResult<Json<ApiResponse<Vec<MemoryEpisode>>>> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    let limit = payload.limit.unwrap_or(20);
+    let min_importance = payload.min_importance.unwrap_or(0.0);
+
+    tracing::debug!(
+        query = %payload.query,
+        episode_type = ?payload.episode_type,
+        min_importance = min_importance,
+        limit = limit,
+        "Searching for similar episodes"
+    );
+
+    // In a real implementation, this would:
+    // 1. Generate embedding for the query
+    // 2. Search semantic memory using vector similarity
+    // 3. Return ranked results by similarity score
+
+    // For now, we'll do a text-based search
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    let mut query_str = String::from(
+        "SELECT
+            cortex_id,
+            type::string(episode_type) as episode_type,
+            task_description,
+            created_at,
+            duration_seconds,
+            type::string(outcome) as outcome,
+            success_metrics
+        FROM episode
+        WHERE task_description CONTAINS $query"
+    );
+
+    if let Some(ref ep_type) = payload.episode_type {
+        query_str.push_str(" AND type::string(episode_type) = $episode_type");
+    }
+
+    query_str.push_str(" ORDER BY created_at DESC LIMIT $limit");
+
+    let mut query = conn.connection()
+        .query(&query_str)
+        .bind(("query", payload.query.clone()))
+        .bind(("limit", limit));
+
+    if let Some(ref ep_type) = payload.episode_type {
+        query = query.bind(("episode_type", ep_type.clone()));
+    }
+
+    let mut response = query
+        .await
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    let episodes_raw: Vec<serde_json::Value> = response.take(0)
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    // Convert to API response format and filter by importance
+    let episodes: Vec<MemoryEpisode> = episodes_raw
+        .into_iter()
+        .filter_map(|ep| {
+            // Calculate importance based on success metrics
+            let importance = if let Some(metrics) = ep.get("success_metrics") {
+                if let Some(obj) = metrics.as_object() {
+                    obj.values()
+                        .filter_map(|v| v.as_f64())
+                        .sum::<f64>() / obj.len().max(1) as f64
+                } else {
+                    0.5
+                }
+            } else {
+                0.5
+            };
+
+            // Filter by minimum importance
+            if importance < min_importance {
+                return None;
+            }
+
+            Some(MemoryEpisode {
+                id: ep.get("cortex_id")?.as_str()?.to_string(),
+                content: ep.get("task_description")?.as_str()?.to_string(),
+                episode_type: ep.get("episode_type")?.as_str()?.to_string(),
+                importance,
+                created_at: serde_json::from_value(ep.get("created_at")?.clone()).ok()?,
+            })
+        })
+        .collect();
+
+    tracing::debug!(
+        query = %payload.query,
+        results = episodes.len(),
+        "Episode search completed"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(episodes, request_id, duration)))
+}
+
+/// GET /api/v3/memory/patterns - Get learned patterns from memory
+async fn get_patterns(
+    State(ctx): State<MemoryContext>,
+) -> ApiResult<Json<ApiResponse<Vec<LearnedPattern>>>> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    tracing::debug!("Fetching learned patterns from memory");
+
+    // Query learned patterns from database
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    let query = "SELECT
+        id,
+        pattern_name,
+        description,
+        type::string(pattern_type) as pattern_type,
+        occurrences,
+        confidence,
+        created_at,
+        last_seen,
+        examples
+        FROM learned_pattern
+        ORDER BY confidence DESC, occurrences DESC
+        LIMIT 100";
+
+    let mut response = conn.connection()
+        .query(query)
+        .await
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    let patterns_raw: Vec<serde_json::Value> = response.take(0)
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+
+    // Convert to API response format
+    let patterns: Vec<LearnedPattern> = patterns_raw
+        .into_iter()
+        .filter_map(|p| {
+            let examples = if let Some(examples_val) = p.get("examples") {
+                if let Some(arr) = examples_val.as_array() {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            Some(LearnedPattern {
+                id: p.get("id")?.as_str()?.to_string(),
+                pattern_name: p.get("pattern_name")?.as_str()?.to_string(),
+                description: p.get("description")?.as_str().unwrap_or("").to_string(),
+                pattern_type: p.get("pattern_type")?.as_str()?.to_string(),
+                occurrences: p.get("occurrences")?.as_u64()? as usize,
+                confidence: p.get("confidence")?.as_f64()?,
+                created_at: serde_json::from_value(p.get("created_at")?.clone()).ok()?,
+                last_seen: serde_json::from_value(p.get("last_seen")?.clone()).ok()?,
+                examples,
+            })
+        })
+        .collect();
+
+    tracing::debug!(
+        patterns_count = patterns.len(),
+        "Retrieved learned patterns"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(patterns, request_id, duration)))
 }

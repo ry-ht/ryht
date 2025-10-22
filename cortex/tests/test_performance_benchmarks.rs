@@ -142,17 +142,20 @@ struct MemoryTracker {
 }
 
 impl MemoryTracker {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             initial_bytes: 0, // Placeholder - would use actual memory tracking
         }
     }
 
+    #[allow(dead_code)]
     fn measure(&self) -> usize {
         // Placeholder - would measure actual memory
         0
     }
 
+    #[allow(dead_code)]
     fn print_report(&self, operation: &str) {
         let current = self.measure();
         let delta = current.saturating_sub(self.initial_bytes);

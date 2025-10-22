@@ -2,11 +2,15 @@
 
 use crate::api::{
     error::{ApiError, ApiResult},
-    types::{ApiResponse, SearchRequest, SearchResult},
+    types::{
+        ApiResponse, SearchRequest, SearchResult,
+        ReferencesResponse, CodeReference, PatternSearchRequest,
+        PatternSearchResponse, PatternMatch,
+    },
 };
 use axum::{
-    extract::{Query, State},
-    routing::get,
+    extract::{Path, Query, State},
+    routing::{get, post},
     Json, Router,
 };
 use cortex_memory::CognitiveManager;
@@ -25,6 +29,8 @@ pub struct SearchContext {
 pub fn search_routes(context: SearchContext) -> Router {
     Router::new()
         .route("/api/v3/search", get(search))
+        .route("/api/v3/search/references/:unit_id", get(find_references))
+        .route("/api/v3/search/pattern", post(search_pattern))
         .with_state(context)
 }
 
@@ -41,7 +47,7 @@ async fn search(
 
     let results = match search_type {
         "semantic" => search_semantic(&ctx, &params.query, limit).await?,
-        "pattern" => search_pattern(&ctx, &params.query, limit).await?,
+        "pattern" => search_pattern_helper(&ctx, &params.query, limit).await?,
         "content" => search_content(&ctx, &params.query, limit).await?,
         _ => return Err(ApiError::BadRequest(format!("Invalid search type: {}", search_type))),
     };
@@ -116,8 +122,8 @@ async fn search_semantic(
     Ok(results)
 }
 
-/// Search for pattern matches in code
-async fn search_pattern(
+/// Search for pattern matches in code (helper function for the general search endpoint)
+async fn search_pattern_helper(
     ctx: &SearchContext,
     query: &str,
     limit: usize,
@@ -244,4 +250,187 @@ fn extract_snippet(content: &str, query: &str, context_chars: usize) -> String {
     } else {
         content.chars().take(context_chars * 2).collect()
     }
+}
+
+/// GET /api/v3/search/references/:unit_id - Find references to a code unit
+async fn find_references(
+    State(ctx): State<SearchContext>,
+    Path(unit_id): Path<String>,
+) -> ApiResult<Json<ApiResponse<ReferencesResponse>>> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    // Get the code unit details first
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let unit_query = "SELECT * FROM code_unit WHERE id = $unit_id LIMIT 1";
+    let mut unit_response = conn.connection()
+        .query(unit_query)
+        .bind(("unit_id", unit_id.clone()))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let units: Vec<serde_json::Value> = unit_response.take(0)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let unit = units.into_iter().next()
+        .ok_or_else(|| ApiError::NotFound(format!("Code unit {} not found", unit_id)))?;
+
+    let unit_name = unit.get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown")
+        .to_string();
+
+    // Search for references to this unit
+    // In a real implementation, this would query a references table or graph
+    let references_query = "SELECT * FROM code_reference WHERE target_unit_id = $unit_id LIMIT 100";
+    let mut ref_response = conn.connection()
+        .query(references_query)
+        .bind(("unit_id", unit_id.clone()))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let references_raw: Vec<serde_json::Value> = ref_response.take(0)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let references: Vec<CodeReference> = references_raw
+        .into_iter()
+        .filter_map(|r| {
+            Some(CodeReference {
+                id: r.get("id")?.as_str()?.to_string(),
+                file_path: r.get("file_path")?.as_str()?.to_string(),
+                line: r.get("line")?.as_u64()? as usize,
+                column: r.get("column")?.as_u64().unwrap_or(0) as usize,
+                reference_type: r.get("reference_type")?.as_str()?.to_string(),
+                context: r.get("context")?.as_str().unwrap_or("").to_string(),
+                referencing_unit: r.get("referencing_unit_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+            })
+        })
+        .collect();
+
+    let total_references = references.len();
+
+    tracing::debug!(
+        unit_id = %unit_id,
+        unit_name = %unit_name,
+        references = total_references,
+        "Found references to code unit"
+    );
+
+    let response = ReferencesResponse {
+        unit_id,
+        unit_name,
+        total_references,
+        references,
+    };
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(response, request_id, duration)))
+}
+
+/// POST /api/v3/search/pattern - Search using tree-sitter patterns
+async fn search_pattern(
+    State(ctx): State<SearchContext>,
+    Json(payload): Json<PatternSearchRequest>,
+) -> ApiResult<Json<ApiResponse<PatternSearchResponse>>> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    let limit = payload.limit.unwrap_or(50);
+
+    tracing::debug!(
+        workspace_id = %payload.workspace_id,
+        pattern = %payload.pattern,
+        language = ?payload.language,
+        "Searching for AST pattern"
+    );
+
+    // In a real implementation, this would:
+    // 1. Parse the tree-sitter pattern
+    // 2. Query the AST database for matching nodes
+    // 3. Return structured results with context
+
+    // For now, we'll do a simpler text-based search as a placeholder
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let mut search_query = String::from(
+        "SELECT * FROM code_unit WHERE (
+            signature CONTAINS $pattern OR
+            body CONTAINS $pattern
+         )"
+    );
+
+    if let Some(ref lang) = payload.language {
+        search_query.push_str(" AND language = $language");
+    }
+
+    search_query.push_str(" LIMIT $limit");
+
+    let mut query = conn.connection()
+        .query(&search_query)
+        .bind(("pattern", payload.pattern.clone()));
+
+    if let Some(ref lang) = payload.language {
+        query = query.bind(("language", lang.clone()));
+    }
+
+    let mut response = query
+        .bind(("limit", limit))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let units: Vec<serde_json::Value> = response.take(0)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let matches: Vec<PatternMatch> = units
+        .into_iter()
+        .filter_map(|unit| {
+            let file_path = unit.get("file_path")?.as_str()?.to_string();
+            let start_line = unit.get("start_line")?.as_u64()? as usize;
+            let start_column = unit.get("start_column")?.as_u64().unwrap_or(0) as usize;
+            let body = unit.get("body").and_then(|v| v.as_str()).unwrap_or("");
+            let signature = unit.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+
+            // Find the matched text
+            let matched_text = if body.contains(&payload.pattern) {
+                extract_snippet(body, &payload.pattern, 50)
+            } else if signature.contains(&payload.pattern) {
+                extract_snippet(signature, &payload.pattern, 50)
+            } else {
+                payload.pattern.clone()
+            };
+
+            Some(PatternMatch {
+                file_path,
+                line: start_line,
+                column: start_column,
+                matched_text: matched_text.clone(),
+                context: format!("{}\n{}", signature, matched_text),
+                unit_id: unit.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            })
+        })
+        .collect();
+
+    let total_matches = matches.len();
+
+    tracing::debug!(
+        pattern = %payload.pattern,
+        matches = total_matches,
+        "Pattern search completed"
+    );
+
+    let response = PatternSearchResponse {
+        pattern: payload.pattern,
+        total_matches,
+        matches,
+    };
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(response, request_id, duration)))
 }

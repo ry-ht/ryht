@@ -388,6 +388,113 @@ pub struct DependencyCycle {
 }
 
 // ============================================================================
+// Workspace Update/Sync Types
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateWorkspaceRequest {
+    pub name: Option<String>,
+    pub workspace_type: Option<String>,
+    pub read_only: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncWorkspaceRequest {
+    pub force: Option<bool>,
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncResponse {
+    pub files_added: usize,
+    pub files_updated: usize,
+    pub files_deleted: usize,
+    pub total_processed: usize,
+    pub duration_ms: u64,
+    pub changes: Vec<SyncChange>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncChange {
+    pub path: String,
+    pub change_type: String, // added, updated, deleted
+    pub size_bytes: Option<u64>,
+}
+
+// ============================================================================
+// Search Reference Types
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReferencesResponse {
+    pub unit_id: String,
+    pub unit_name: String,
+    pub total_references: usize,
+    pub references: Vec<CodeReference>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodeReference {
+    pub id: String,
+    pub file_path: String,
+    pub line: usize,
+    pub column: usize,
+    pub reference_type: String, // call, import, instantiation, etc
+    pub context: String,
+    pub referencing_unit: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatternSearchRequest {
+    pub workspace_id: String,
+    pub pattern: String,
+    pub language: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatternSearchResponse {
+    pub pattern: String,
+    pub total_matches: usize,
+    pub matches: Vec<PatternMatch>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PatternMatch {
+    pub file_path: String,
+    pub line: usize,
+    pub column: usize,
+    pub matched_text: String,
+    pub context: String,
+    pub unit_id: Option<String>,
+}
+
+// ============================================================================
+// Memory Search Types
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EpisodeSearchRequest {
+    pub query: String,
+    pub episode_type: Option<String>,
+    pub min_importance: Option<f64>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LearnedPattern {
+    pub id: String,
+    pub pattern_name: String,
+    pub description: String,
+    pub pattern_type: String,
+    pub occurrences: usize,
+    pub confidence: f64,
+    pub created_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
+    pub examples: Vec<String>,
+}
+
+// ============================================================================
 // Build & CI/CD Types
 // ============================================================================
 
