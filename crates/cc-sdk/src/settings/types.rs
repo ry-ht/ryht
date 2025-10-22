@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
-use crate::types::McpServerConfig;
+use crate::options::McpServerConfig;
 
 /// Settings scope determines where settings are loaded from and stored.
 ///

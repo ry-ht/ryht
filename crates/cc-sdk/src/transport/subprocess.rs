@@ -5,7 +5,10 @@
 use super::{InputMessage, Transport, TransportState};
 use crate::{
     Result,
-    types::{ClaudeCodeOptions, ControlRequest, ControlResponse, Message, PermissionMode},
+    messages::Message,
+    options::ClaudeCodeOptions,
+    permissions::PermissionMode,
+    requests::{ControlRequest, ControlResponse},
 };
 use async_trait::async_trait;
 use futures::stream::{Stream, StreamExt};
@@ -186,9 +189,9 @@ impl SubprocessTransport {
 
         // Output format
         let output_format_str = match self.options.output_format {
-            crate::types::OutputFormat::Text => "text",
-            crate::types::OutputFormat::Json => "json",
-            crate::types::OutputFormat::StreamJson => "stream-json",
+            crate::options::OutputFormat::Text => "text",
+            crate::options::OutputFormat::Json => "json",
+            crate::options::OutputFormat::StreamJson => "stream-json",
         };
         cmd.arg("--output-format").arg(output_format_str);
 
@@ -198,8 +201,8 @@ impl SubprocessTransport {
         // Input format (only for non-print mode)
         if !self.options.print_mode {
             let input_format_str = match self.options.input_format {
-                crate::types::InputFormat::Text => "text",
-                crate::types::InputFormat::StreamJson => "stream-json",
+                crate::options::InputFormat::Text => "text",
+                crate::options::InputFormat::StreamJson => "stream-json",
             };
             cmd.arg("--input-format").arg(input_format_str);
         }
@@ -257,10 +260,10 @@ impl SubprocessTransport {
         // System prompts
         if let Some(ref prompt) = self.options.system_prompt {
             match prompt {
-                crate::types::SystemPrompt::String(s) => {
+                crate::options::SystemPrompt::String(s) => {
                     cmd.arg("--system-prompt").arg(s);
                 }
-                crate::types::SystemPrompt::Preset { preset, append, .. } => {
+                crate::options::SystemPrompt::Preset { preset, append, .. } => {
                     // Use preset-based prompt
                     cmd.arg("--system-prompt-preset").arg(preset);
 
@@ -366,7 +369,7 @@ impl SubprocessTransport {
         // Setting sources (comma-separated)
         if let Some(ref sources) = self.options.setting_sources
             && !sources.is_empty() {
-                let value = sources.iter().map(|s| (match s { crate::types::SettingSource::User => "user", crate::types::SettingSource::Project => "project", crate::types::SettingSource::Local => "local" }).to_string()).collect::<Vec<_>>().join(",");
+                let value = sources.iter().map(|s| (match s { crate::options::SettingSource::User => "user", crate::options::SettingSource::Project => "project", crate::options::SettingSource::Local => "local" }).to_string()).collect::<Vec<_>>().join(",");
                 cmd.arg("--setting-sources").arg(value);
             }
 
@@ -1059,7 +1062,7 @@ mod tests {
     fn test_build_command_output_formats() {
         // Test text output format
         let mut options = ClaudeCodeOptions::default();
-        options.output_format = crate::types::OutputFormat::Text;
+        options.output_format = crate::options::OutputFormat::Text;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1068,7 +1071,7 @@ mod tests {
 
         // Test JSON output format
         let mut options = ClaudeCodeOptions::default();
-        options.output_format = crate::types::OutputFormat::Json;
+        options.output_format = crate::options::OutputFormat::Json;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1088,7 +1091,7 @@ mod tests {
     fn test_build_command_input_formats() {
         // Test text input format
         let mut options = ClaudeCodeOptions::default();
-        options.input_format = crate::types::InputFormat::Text;
+        options.input_format = crate::options::InputFormat::Text;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1109,8 +1112,8 @@ mod tests {
         // Test combining multiple CLI features
         let mut options = ClaudeCodeOptions::default();
         options.debug_mode = Some("api".to_string());
-        options.output_format = crate::types::OutputFormat::Json;
-        options.input_format = crate::types::InputFormat::Text;
+        options.output_format = crate::options::OutputFormat::Json;
+        options.input_format = crate::options::InputFormat::Text;
         options.model = Some("claude-sonnet-4".to_string());
 
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");

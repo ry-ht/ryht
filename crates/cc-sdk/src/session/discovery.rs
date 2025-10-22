@@ -13,7 +13,7 @@ use serde_json;
 use crate::core::SessionId;
 use crate::error::{Error, SessionError};
 use crate::result::Result;
-use crate::types::Message;
+use crate::messages::Message;
 
 use super::types::{Project, Session, SessionMetadata};
 

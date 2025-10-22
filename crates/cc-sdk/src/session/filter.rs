@@ -27,7 +27,7 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 
 use crate::result::Result;
-use crate::types::Message;
+use crate::messages::Message;
 
 use super::discovery::{list_projects, list_sessions, load_session_history};
 use super::types::Session;
@@ -413,7 +413,7 @@ fn extract_message_content(message: &Message) -> String {
                 .content
                 .iter()
                 .filter_map(|block| {
-                    if let crate::types::ContentBlock::Text(text_content) = block {
+                    if let crate::messages::ContentBlock::Text(text_content) = block {
                         Some(text_content.text.clone())
                     } else {
                         None

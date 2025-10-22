@@ -122,7 +122,6 @@ pub mod streaming;
 pub mod metrics;
 
 // Internal modules
-mod types;   // Re-exports from submodules
 mod internal_query;
 mod message_parser;
 mod query;

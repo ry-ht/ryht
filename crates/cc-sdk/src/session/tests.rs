@@ -6,7 +6,7 @@
 mod integration_tests {
     use super::super::*;
     use crate::core::SessionId;
-    use crate::types::{Message, UserMessage};
+    use crate::messages::{Message, UserMessage};
     use chrono::{Duration, Utc};
     use std::path::PathBuf;
     use tempfile::TempDir;

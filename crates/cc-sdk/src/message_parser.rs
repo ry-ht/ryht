@@ -6,7 +6,7 @@
 use crate::{
     Result,
     error::Error,
-    types::{
+    messages::{
         AssistantMessage, ContentBlock, ContentValue, Message, TextContent, ThinkingContent,
         ToolResultContent, ToolUseContent, UserMessage,
     },

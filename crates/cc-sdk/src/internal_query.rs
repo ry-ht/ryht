@@ -6,11 +6,12 @@
 use crate::{
     Result,
     transport::{InputMessage, Transport},
-    types::{
-        CanUseTool, HookCallback, HookContext, HookMatcher, Message, PermissionResult, PermissionUpdate,
+    messages::Message,
+    permissions::{CanUseTool, PermissionResult, PermissionUpdate, ToolPermissionContext},
+    hooks::{HookCallback, HookContext, HookMatcher},
+    requests::{
         SDKControlInitializeRequest, SDKControlInterruptRequest, SDKControlPermissionRequest,
         SDKControlRequest, SDKHookCallbackRequest, SDKControlSetPermissionModeRequest,
-        ToolPermissionContext,
     },
 };
 use futures::stream::Stream;
@@ -346,7 +347,7 @@ impl Query {
         control_message: &JsonValue,
     ) -> JsonValue {
         // Try to parse as HookInput
-        let hook_result = match serde_json::from_value::<crate::types::HookInput>(input.clone()) {
+        let hook_result = match serde_json::from_value::<crate::hooks::HookInput>(input.clone()) {
             Ok(hook_input) => {
                 hook_callback
                     .execute(&hook_input, tool_use_id.as_deref(), context)
@@ -634,7 +635,7 @@ impl Query {
     /// Set the active model via control protocol
     #[allow(dead_code)]
     pub async fn set_model(&mut self, model: Option<String>) -> Result<()> {
-        let req = SDKControlRequest::SetModel(crate::types::SDKControlSetModelRequest {
+        let req = SDKControlRequest::SetModel(crate::requests::SDKControlSetModelRequest {
             subtype: "set_model".to_string(),
             model,
         });

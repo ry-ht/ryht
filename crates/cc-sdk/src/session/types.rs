@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::core::SessionId;
-use crate::types::Message;
+use crate::messages::Message;
 
 /// Represents a Claude Code project.
 ///

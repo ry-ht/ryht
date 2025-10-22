@@ -5,7 +5,8 @@
 
 use crate::{
     result::Result,
-    types::{ControlRequest, ControlResponse, Message},
+    messages::Message,
+    requests::{ControlRequest, ControlResponse},
 };
 use async_trait::async_trait;
 use futures::stream::Stream;

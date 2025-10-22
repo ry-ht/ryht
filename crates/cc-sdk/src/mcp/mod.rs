@@ -32,7 +32,7 @@ pub use mcp_sdk::{
     PROTOCOL_VERSION,
 };
 
-use crate::types::McpServerConfig;
+use crate::options::McpServerConfig;
 use crate::result::Result;
 use crate::error::Error;
 

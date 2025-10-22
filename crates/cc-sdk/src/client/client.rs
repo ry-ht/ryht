@@ -128,7 +128,9 @@ use crate::core::{state::*, BinaryPath, ModelId, SessionId};
 use crate::error::{Error, BinaryError, ClientError, SessionError};
 use crate::result::Result;
 use crate::transport::{InputMessage, SubprocessTransport, Transport};
-use crate::types::{ClaudeCodeOptions, Message, PermissionMode, McpServerConfig};
+use crate::messages::Message;
+use crate::options::{ClaudeCodeOptions, McpServerConfig};
+use crate::permissions::PermissionMode;
 use crate::metrics::SessionMetrics;
 use crate::streaming::OutputBuffer;
 
@@ -1061,7 +1063,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn output_format(mut self, format: crate::types::OutputFormat) -> Self {
+    pub fn output_format(mut self, format: crate::options::OutputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1090,7 +1092,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn input_format(mut self, format: crate::types::InputFormat) -> Self {
+    pub fn input_format(mut self, format: crate::options::InputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1769,7 +1771,7 @@ impl ClaudeClient<Connected> {
         let mut transport_guard = transport.lock().await;
 
         // Send interrupt via control request
-        use crate::types::ControlRequest;
+        use crate::requests::ControlRequest;
         let request_id = uuid::Uuid::new_v4().to_string();
         transport_guard.send_control_request(ControlRequest::Interrupt { request_id }).await
             .map_err(|e| Error::Protocol(format!("Interrupt failed: {}", e)))?;

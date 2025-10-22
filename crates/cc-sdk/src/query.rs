@@ -6,7 +6,9 @@
 use crate::{
     Result,
     transport::InputMessage,
-    types::{ClaudeCodeOptions, Message, PermissionMode},
+    messages::Message,
+    options::ClaudeCodeOptions,
+    permissions::PermissionMode,
 };
 use futures::stream::Stream;
 use std::pin::Pin;
