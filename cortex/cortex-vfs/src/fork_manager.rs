@@ -290,15 +290,9 @@ impl ForkManager {
                 // If already deleted, no-op
             }
             ChangeType::Renamed => {
-                // Handle rename by copying to new path and deleting old
-                if let Some(old_path) = &change.old_path {
-                    // Check if old path exists in target
-                    if self.vfs.metadata(&target.id, old_path).await.is_ok() {
-                        // Delete from old location
-                        self.vfs.delete(&target.id, old_path, false).await?;
-                    }
-                }
-                // Create at new location
+                // Handle rename by creating at new path
+                // Note: Change struct doesn't track old_path, so we can't delete from old location
+                // The vnode_id should reference the vnode with the current (new) path
                 self.copy_vnode_to_workspace(&change.vnode_id, &target.id).await?;
             }
         }

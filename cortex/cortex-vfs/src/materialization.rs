@@ -9,7 +9,6 @@ use std::time::Instant;
 use tokio::fs;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 /// Engine for materializing virtual filesystem to physical disk.
 ///
@@ -168,7 +167,9 @@ impl MaterializationEngine {
 
         // Mark all vnodes as synchronized
         for vnode in changes {
-            if let Err(e) = self.mark_synchronized(&vnode.id).await {
+            let mut vnode_clone = vnode.clone();
+            vnode_clone.mark_synchronized();
+            if let Err(e) = self.vfs.save_vnode(&vnode_clone).await {
                 warn!("Failed to mark vnode as synchronized: {}", e);
             }
         }
@@ -440,10 +441,6 @@ impl MaterializationEngine {
         virtual_path.to_physical(base)
     }
 
-    /// Mark a vnode as synchronized.
-    async fn mark_synchronized(&self, vnode_id: &Uuid) -> Result<()> {
-        self.vfs.update_vnode_status(vnode_id, SyncStatus::Synchronized).await
-    }
 
     /// Create a backup of the target directory.
     async fn create_backup(&self, target_path: &Path) -> Result<PathBuf> {

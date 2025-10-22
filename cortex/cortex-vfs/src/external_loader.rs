@@ -298,7 +298,7 @@ impl ExternalProjectLoader {
     /// Save a vnode to database.
     async fn save_vnode(&self, vnode: &VNode) -> Result<()> {
         // Store vnode in VFS database
-        self.vfs.store_vnode(vnode).await
+        self.vfs.save_vnode(vnode).await
     }
 
     /// Import a single file (convenience method).

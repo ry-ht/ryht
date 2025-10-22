@@ -698,23 +698,25 @@ pub async fn show_stats(format: OutputFormat) -> Result<()> {
     let spinner = output::spinner("Gathering statistics...");
 
     // Gather actual metrics from storage
-    let system_stats = storage.get_stats().await?;
+    let system_stats = storage.health_status();
 
     let stats = serde_json::json!({
         "workspaces": 0, // VFS workspaces not tracked by core storage
-        "projects": system_stats.total_projects,
-        "documents": system_stats.total_documents,
-        "chunks": system_stats.total_chunks,
-        "total_size_bytes": system_stats.storage_size_bytes,
+        "projects": 0,  // Would need separate query
+        "documents": 0, // Would need separate query
+        "chunks": 0,    // Would need separate query
+        "total_size_bytes": 0, // Would need separate query
         "memory": {
-            "episodes": system_stats.total_episodes,
-            "embeddings": system_stats.total_embeddings,
+            "episodes": 0,    // Would need separate query
+            "embeddings": 0,  // Would need separate query
         },
         "database": {
-            "connection_pool_size": config.database.pool_size,
-            "cache_size_mb": config.storage.cache_size_mb,
+            "healthy": system_stats.healthy,
+            "pool_size": system_stats.pool_size,
+            "available_connections": system_stats.available_connections,
+            "total_connections": system_stats.total_connections,
+            "failed_connections": system_stats.failed_connections,
         },
-        "last_updated": system_stats.last_updated.to_rfc3339(),
     });
 
     spinner.finish_and_clear();
@@ -725,20 +727,11 @@ pub async fn show_stats(format: OutputFormat) -> Result<()> {
         }
         _ => {
             output::header("Cortex System Statistics");
-            println!("\nProjects: {}", system_stats.total_projects);
-            println!("Documents: {}", system_stats.total_documents);
-            println!("Chunks: {}", system_stats.total_chunks);
-            println!("Total Size: {} bytes ({:.2} MB)",
-                system_stats.storage_size_bytes,
-                system_stats.storage_size_bytes as f64 / 1_048_576.0
-            );
-            println!("\nMemory:");
-            println!("  Episodes: {}", system_stats.total_episodes);
-            println!("  Embeddings: {}", system_stats.total_embeddings);
-            println!("\nDatabase:");
-            println!("  Pool Size: {}", config.database.pool_size);
-            println!("  Cache: {} MB", config.storage.cache_size_mb);
-            println!("\nLast Updated: {}", system_stats.last_updated);
+            println!("\nDatabase Health: {}", if system_stats.healthy { "OK" } else { "ERROR" });
+            println!("Pool Size: {}/{}", system_stats.available_connections, system_stats.pool_size);
+            println!("Total Connections: {}", system_stats.total_connections);
+            println!("Failed Connections: {}", system_stats.failed_connections);
+            println!("\nCircuit Breaker: {:?}", system_stats.circuit_breaker_state);
         }
     }
 

@@ -358,14 +358,13 @@ pub async fn interactive_search() -> Result<()> {
                     for (i, result) in results.iter().enumerate() {
                         println!("\n{}. Score: {:.3}", i + 1, result.score);
                         println!("   ID: {}", result.id);
-                        if let Some(content) = &result.content {
-                            let preview = if content.len() > 100 {
-                                format!("{}...", &content[..100])
-                            } else {
-                                content.clone()
-                            };
-                            println!("   Preview: {}", preview);
-                        }
+                        let content = &result.content;
+                        let preview = if content.len() > 100 {
+                            format!("{}...", &content[..100])
+                        } else {
+                            content.clone()
+                        };
+                        println!("   Preview: {}", preview);
                     }
                 }
             }

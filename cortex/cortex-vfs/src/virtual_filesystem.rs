@@ -5,7 +5,6 @@ use crate::path::VirtualPath;
 use crate::types::*;
 use cortex_core::error::{CortexError, Result};
 use cortex_storage::ConnectionManager;
-use dashmap::DashMap;
 use lru::LruCache;
 use parking_lot::Mutex;
 use std::num::NonZeroUsize;
@@ -306,7 +305,7 @@ impl VirtualFileSystem {
     }
 
     /// Save a vnode to the database.
-    async fn save_vnode(&self, vnode: &VNode) -> Result<()> {
+    pub async fn save_vnode(&self, vnode: &VNode) -> Result<()> {
         let query = format!(
             "CREATE vnode CONTENT $vnode"
         );
@@ -439,7 +438,6 @@ impl VirtualFileSystem {
         // 1. Try to create the record if it doesn't exist (reference_count = 1)
         // 2. If it already exists, atomically increment reference_count
         // The RETURN NONE prevents returning data we don't need
-        let record_id = format!("file_content:{}", hash);
 
         // Use a single atomic query that handles both cases
         // UPSERT with ON DUPLICATE KEY UPDATE would be ideal, but SurrealDB uses different syntax
@@ -561,6 +559,27 @@ impl VirtualFileSystem {
         vnode.mark_modified();
 
         self.save_vnode(&vnode).await?;
+
+        Ok(())
+    }
+
+    // ============================================================================
+    // Workspace Management
+    // ============================================================================
+
+    /// Create a workspace in the database.
+    pub async fn create_workspace(&self, workspace: &Workspace) -> Result<()> {
+        let query = "CREATE workspace CONTENT $workspace";
+
+        let conn = self.storage.acquire().await?;
+        let workspace_json = serde_json::to_value(workspace)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        conn.connection()
+            .query(query)
+            .bind(("workspace", workspace_json))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
 
         Ok(())
     }

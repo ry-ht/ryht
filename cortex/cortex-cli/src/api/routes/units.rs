@@ -73,7 +73,7 @@ async fn list_code_units_impl(
     let conn = pooled.connection();
 
     // Build query filters
-    let limit = params.limit.unwrap_or(100).min(1000);
+    let limit = params.limit.min(1000);
     let offset = params.offset.unwrap_or(0);
 
     let mut query = format!(

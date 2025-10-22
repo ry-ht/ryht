@@ -75,6 +75,7 @@ md5 = "0.8.0"
 # Authentication & Security
 jsonwebtoken = { version = "10.1.0", default-features = false, features = ["rust_crypto"] }
 bcrypt = "0.17.1"
+base64 = "0.22.1"
 
 # Tree-sitter parsers
 tree-sitter = "0.25.10"

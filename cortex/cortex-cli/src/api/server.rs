@@ -300,6 +300,7 @@ impl RestApiServer {
             .merge(super::routes::auth_routes(auth_context));
 
         // Build protected routes (authentication required)
+        let auth_state_clone = auth_state.clone();
         let protected_routes = Router::new()
             .merge(super::routes::workspace_routes(workspace_context))
             .merge(super::routes::vfs_routes(vfs_context))
@@ -312,18 +313,23 @@ impl RestApiServer {
             .merge(super::routes::dashboard_routes(dashboard_context))
             .merge(super::routes::task_routes(task_context))
             .merge(super::routes::export_routes(export_context))
-            .layer(middleware::from_fn_with_state(
-                auth_state.clone(),
-                super::middleware::AuthMiddleware::validate,
-            ));
+            .route_layer(middleware::from_fn(move |req, next| {
+                let auth_state = auth_state_clone.clone();
+                async move {
+                    super::middleware::AuthMiddleware::validate(auth_state, req, next).await
+                }
+            }));
 
         // WebSocket route (optional auth - will check token if provided)
+        let auth_state_clone2 = auth_state.clone();
         let ws_routes = Router::new()
             .merge(super::websocket::websocket_routes(self.ws_manager.clone()))
-            .layer(middleware::from_fn_with_state(
-                auth_state,
-                super::middleware::AuthMiddleware::optional,
-            ));
+            .route_layer(middleware::from_fn(move |req, next| {
+                let auth_state = auth_state_clone2.clone();
+                async move {
+                    super::middleware::AuthMiddleware::optional(auth_state, req, next).await
+                }
+            }));
 
         // Combine all routes with global middleware
         Router::new()

@@ -90,7 +90,7 @@ impl AuthMiddleware {
         state: AuthState,
         mut req: Request,
         next: Next,
-    ) -> Result<Response, impl IntoResponse> {
+    ) -> Response {
         // Extract authorization header
         let auth_header = req
             .headers()
@@ -118,11 +118,11 @@ impl AuthMiddleware {
                         // Insert both claims and AuthUser into request extensions
                         req.extensions_mut().insert(claims);
                         req.extensions_mut().insert(auth_user);
-                        return Ok(next.run(req).await);
+                        return next.run(req).await;
                     }
                     Err(e) => {
                         tracing::warn!("JWT validation failed: {}", e);
-                        return Err(unauthorized_response("Invalid or expired token"));
+                        return unauthorized_response("Invalid or expired token").into_response();
                     }
                 }
             }
@@ -143,17 +143,17 @@ impl AuthMiddleware {
 
                         req.extensions_mut().insert(claims);
                         req.extensions_mut().insert(auth_user);
-                        return Ok(next.run(req).await);
+                        return next.run(req).await;
                     }
                     Err(e) => {
                         tracing::warn!("API key validation failed: {}", e);
-                        return Err(unauthorized_response("Invalid API key"));
+                        return unauthorized_response("Invalid API key").into_response();
                     }
                 }
             }
         }
 
-        Err(unauthorized_response("Authentication required"))
+        unauthorized_response("Authentication required").into_response()
     }
 
     /// Optional authentication - doesn't fail if no token provided
@@ -193,14 +193,14 @@ impl AuthMiddleware {
     /// Role-based access control middleware - requires specific role
     pub async fn require_role(
         required_role: String,
-        mut req: Request,
+        req: Request,
         next: Next,
-    ) -> Result<Response, impl IntoResponse> {
+    ) -> Response {
         // Get AuthUser from request extensions
-        let auth_user = req
-            .extensions()
-            .get::<AuthUser>()
-            .ok_or_else(|| forbidden_response("Authentication required"))?;
+        let auth_user = match req.extensions().get::<AuthUser>() {
+            Some(user) => user,
+            None => return forbidden_response("Authentication required").into_response(),
+        };
 
         // Check if user has required role or is admin
         if auth_user.has_role(&required_role) || auth_user.is_admin() {
@@ -209,7 +209,7 @@ impl AuthMiddleware {
                 required_role = %required_role,
                 "Role check passed"
             );
-            Ok(next.run(req).await)
+            next.run(req).await
         } else {
             tracing::warn!(
                 user_id = %auth_user.user_id,
@@ -217,49 +217,49 @@ impl AuthMiddleware {
                 user_roles = ?auth_user.roles,
                 "Insufficient permissions"
             );
-            Err(forbidden_response(&format!(
+            forbidden_response(&format!(
                 "Insufficient permissions. Required role: {}",
                 required_role
-            )))
+            )).into_response()
         }
     }
 
     /// Admin-only access control middleware
     pub async fn require_admin(
-        mut req: Request,
+        req: Request,
         next: Next,
-    ) -> Result<Response, impl IntoResponse> {
-        let auth_user = req
-            .extensions()
-            .get::<AuthUser>()
-            .ok_or_else(|| forbidden_response("Authentication required"))?;
+    ) -> Response {
+        let auth_user = match req.extensions().get::<AuthUser>() {
+            Some(user) => user,
+            None => return forbidden_response("Authentication required").into_response(),
+        };
 
         if auth_user.is_admin() {
             tracing::debug!(
                 user_id = %auth_user.user_id,
                 "Admin check passed"
             );
-            Ok(next.run(req).await)
+            next.run(req).await
         } else {
             tracing::warn!(
                 user_id = %auth_user.user_id,
                 user_roles = ?auth_user.roles,
                 "Admin access denied"
             );
-            Err(forbidden_response("Admin access required"))
+            forbidden_response("Admin access required").into_response()
         }
     }
 
     /// Check if user has any of the specified roles
     pub async fn require_any_role(
         required_roles: Vec<String>,
-        mut req: Request,
+        req: Request,
         next: Next,
-    ) -> Result<Response, impl IntoResponse> {
-        let auth_user = req
-            .extensions()
-            .get::<AuthUser>()
-            .ok_or_else(|| forbidden_response("Authentication required"))?;
+    ) -> Response {
+        let auth_user = match req.extensions().get::<AuthUser>() {
+            Some(user) => user,
+            None => return forbidden_response("Authentication required").into_response(),
+        };
 
         let role_refs: Vec<&str> = required_roles.iter().map(|s| s.as_str()).collect();
 
@@ -269,7 +269,7 @@ impl AuthMiddleware {
                 required_roles = ?required_roles,
                 "Role check passed"
             );
-            Ok(next.run(req).await)
+            next.run(req).await
         } else {
             tracing::warn!(
                 user_id = %auth_user.user_id,
@@ -277,10 +277,10 @@ impl AuthMiddleware {
                 user_roles = ?auth_user.roles,
                 "Insufficient permissions"
             );
-            Err(forbidden_response(&format!(
+            forbidden_response(&format!(
                 "Insufficient permissions. Required one of: {}",
                 required_roles.join(", ")
-            )))
+            )).into_response()
         }
     }
 }
@@ -304,7 +304,7 @@ fn validate_jwt(token: &str, secret: &str) -> Result<Claims, jsonwebtoken::error
 }
 
 /// Validate API key
-async fn validate_api_key(api_key: &str, state: &AuthState) -> Result<Claims, Box<dyn std::error::Error>> {
+async fn validate_api_key(api_key: &str, state: &AuthState) -> Result<Claims, Box<dyn std::error::Error + Send + Sync>> {
     // Get all API keys from database
     let query = "SELECT * FROM api_keys WHERE expires_at IS NULL OR expires_at > time::now()";
 
