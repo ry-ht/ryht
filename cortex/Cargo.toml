@@ -267,6 +267,11 @@ name = "comprehensive_workflow_verification"
 path = "tests/comprehensive_workflow_verification.rs"
 harness = true
 
+[[test]]
+name = "e2e_cortex_complete"
+path = "tests/e2e_cortex_complete.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
