@@ -132,6 +132,8 @@ use crate::error::{Error, BinaryError, ClientError, SessionError};
 use crate::result::Result;
 use crate::transport::{InputMessage, SubprocessTransport, Transport};
 use crate::types::{ClaudeCodeOptions, Message, PermissionMode, McpServerConfig};
+use crate::metrics::SessionMetrics;
+use crate::streaming::OutputBuffer;
 
 /// Modern type-safe Claude client with compile-time state verification.
 ///
@@ -155,6 +157,8 @@ struct ClientInner {
     transport: Option<Arc<tokio::sync::Mutex<SubprocessTransport>>>,
     session_id: Option<SessionId>,
     message_tx: Option<broadcast::Sender<Message>>,
+    metrics: Arc<tokio::sync::Mutex<SessionMetrics>>,
+    output_buffer: Arc<OutputBuffer>,
 }
 
 impl ClientInner {
@@ -165,6 +169,8 @@ impl ClientInner {
             transport: None,
             session_id: None,
             message_tx: None,
+            metrics: Arc::new(tokio::sync::Mutex::new(SessionMetrics::new())),
+            output_buffer: Arc::new(OutputBuffer::new()),
         }
     }
 }
@@ -241,6 +247,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
         });
 
         Ok(ClaudeClientBuilder {
@@ -272,6 +280,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
         });
 
         ClaudeClientBuilder {
@@ -999,6 +1009,8 @@ impl Clone for ClientInner {
             transport: self.transport.clone(),
             session_id: self.session_id.clone(),
             message_tx: self.message_tx.clone(),
+            metrics: Arc::clone(&self.metrics),
+            output_buffer: Arc::clone(&self.output_buffer),
         }
     }
 }
@@ -1062,6 +1074,8 @@ impl ClaudeClientBuilder<Configured> {
             transport: Some(Arc::new(tokio::sync::Mutex::new(transport))),
             session_id: Some(session_id),
             message_tx: Some(message_tx),
+            metrics: Arc::new(tokio::sync::Mutex::new(SessionMetrics::new())),
+            output_buffer: Arc::new(OutputBuffer::new()),
         });
 
         Ok(ClaudeClientBuilder {
@@ -1538,6 +1552,183 @@ impl ClaudeClient<Connected> {
     /// ```
     pub fn binary_path(&self) -> Option<&BinaryPath> {
         self.inner.binary_path.as_ref()
+    }
+
+    /// Get the current session metrics.
+    ///
+    /// Returns a snapshot of the current metrics including token usage,
+    /// costs, duration, and message counts.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// let metrics = client.get_metrics().await;
+    /// println!("Total tokens used: {:?}", metrics.total_tokens);
+    /// println!("Estimated cost: ${:.4}", metrics.cost_usd.unwrap_or(0.0));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_metrics(&self) -> SessionMetrics {
+        let metrics = self.inner.metrics.lock().await;
+        metrics.clone()
+    }
+
+    /// Get the buffered output.
+    ///
+    /// Returns all lines that have been buffered from the Claude CLI output.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// let output = client.get_buffered_output();
+    /// for line in output {
+    ///     println!("{}", line);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn get_buffered_output(&self) -> Vec<String> {
+        self.inner.output_buffer.get_all()
+    }
+
+    /// Get the last N lines of buffered output.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// // Get the last 10 lines
+    /// let recent_output = client.get_recent_output(10);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn get_recent_output(&self, n: usize) -> Vec<String> {
+        self.inner.output_buffer.get_last(n)
+    }
+
+    /// Clear the output buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// client.clear_output_buffer();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn clear_output_buffer(&self) {
+        self.inner.output_buffer.clear();
+    }
+
+    /// Reset the session metrics.
+    ///
+    /// Clears all accumulated metrics while preserving pricing configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// client.reset_metrics().await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn reset_metrics(&self) {
+        let mut metrics = self.inner.metrics.lock().await;
+        metrics.reset();
+    }
+
+    /// Set custom pricing for token cost calculations.
+    ///
+    /// This affects future cost calculations based on token usage.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// // Set custom pricing: $2/1M input tokens, $10/1M output tokens
+    /// client.set_token_pricing(2.0, 10.0).await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_token_pricing(&self, input_cost: f64, output_cost: f64) {
+        let mut metrics = self.inner.metrics.lock().await;
+        metrics.set_pricing(input_cost, output_cost);
+    }
+
+    /// Get access to the output buffer for advanced operations.
+    ///
+    /// Returns a clone of the Arc-wrapped buffer for direct manipulation.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use cc_sdk::ClaudeClient;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> cc_sdk::Result<()> {
+    /// # let client = ClaudeClient::builder()
+    /// #     .discover_binary().await?
+    /// #     .configure()
+    /// #     .connect().await?
+    /// #     .build()?;
+    /// let buffer = client.output_buffer();
+    /// let errors = buffer.filter(|line| line.contains("error"));
+    /// println!("Found {} error lines", errors.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn output_buffer(&self) -> Arc<OutputBuffer> {
+        Arc::clone(&self.inner.output_buffer)
     }
 
     /// Disconnect from Claude.

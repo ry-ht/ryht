@@ -11,6 +11,11 @@
 //! - **Platform Support**: Works on Unix (macOS, Linux) and Windows
 //! - **Multiple Sources**: Supports system, NVM, Homebrew, npm, yarn, and custom paths
 //! - **Environment Setup**: Properly configures command execution environments
+//! - **Binary Validation**: Health checks and executability verification
+//! - **Installation Scoring**: Credibility-based ranking of installations
+//! - **User Preferences**: Optional preference persistence for binary selection
+//! - **Comprehensive Proxy Support**: HTTP_PROXY, HTTPS_PROXY, NO_PROXY, ALL_PROXY (both cases)
+//! - **NVM Environment**: Full NVM_DIR, NVM_BIN, and path management
 //!
 //! # Quick Start
 //!
@@ -154,17 +159,23 @@ mod discovery;
 mod env;
 mod version;
 pub mod cache;
+pub mod preferences;
+pub mod validation;
+pub mod scoring;
 
 // Re-export main types
 pub use discovery::{
     find_claude_binary, discover_installations, ClaudeInstallation,
     DiscoveryBuilder, InstallationType,
 };
-pub use env::{create_command_with_env, get_claude_version};
+pub use env::{create_command_with_env, get_claude_version, setup_environment, reconstruct_path};
 pub use version::{
     compare_versions, extract_version_from_output, Version,
 };
 pub use cache::{DiscoveryCache, CacheConfig};
+pub use preferences::{PreferenceStore, FilePreferenceStore, default_file_store, default_preference_path};
+pub use validation::{verify_binary, BinaryHealth, is_executable, check_version_compatibility, health_check_all};
+pub use scoring::{score_installation, compare_installations, rank_installations, ScoredInstallation, ScoreBreakdown};
 
 // Async discovery (optional feature)
 #[cfg(feature = "async-discovery")]

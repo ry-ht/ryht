@@ -3,6 +3,7 @@
 //! This module provides functions for creating properly configured Command instances
 //! that inherit necessary environment variables and paths for Claude Code execution.
 
+use std::collections::HashMap;
 use std::process::Command;
 
 /// Create a Command with proper environment variables.
@@ -63,12 +64,17 @@ fn is_essential_env_var(key: &str) -> bool {
             | "NODE_PATH"
             | "NVM_DIR"
             | "NVM_BIN"
+            | "NVM_HOME"
             | "HOMEBREW_PREFIX"
             | "HOMEBREW_CELLAR"
             | "HTTP_PROXY"
             | "HTTPS_PROXY"
             | "NO_PROXY"
             | "ALL_PROXY"
+            | "http_proxy"
+            | "https_proxy"
+            | "no_proxy"
+            | "all_proxy"
     ) || key.starts_with("LC_")
 }
 
@@ -117,7 +123,35 @@ fn setup_nvm_env(cmd: &mut Command, program: &str) {
             tracing::debug!("Setting NVM_BIN: {}", node_bin_str);
             cmd.env("NVM_BIN", node_bin_str.as_ref());
         }
+
+        // Set NVM_DIR if not already set
+        // NVM_DIR is usually ~/.nvm
+        if std::env::var("NVM_DIR").is_err() {
+            // Try to infer NVM_DIR from the path
+            if let Some(nvm_dir) = infer_nvm_dir(program) {
+                tracing::debug!("Setting NVM_DIR: {}", nvm_dir);
+                cmd.env("NVM_DIR", nvm_dir);
+            }
+        }
     }
+}
+
+/// Infer NVM_DIR from a binary path.
+///
+/// For example, from `/home/user/.nvm/versions/node/v18.0.0/bin/claude`
+/// we infer `/home/user/.nvm`
+#[cfg(unix)]
+fn infer_nvm_dir(program: &str) -> Option<String> {
+    let path = std::path::Path::new(program);
+
+    // Look for .nvm in the path components
+    for ancestor in path.ancestors() {
+        if ancestor.ends_with(".nvm") {
+            return Some(ancestor.to_string_lossy().to_string());
+        }
+    }
+
+    None
 }
 
 /// Setup Homebrew environment variables for Unix systems.
@@ -170,6 +204,20 @@ fn setup_proxy_env(cmd: &mut Command) {
         tracing::info!("  ALL_PROXY={}", all_proxy);
         cmd.env("ALL_PROXY", &all_proxy);
     }
+
+    // Also check lowercase variants (some tools prefer lowercase)
+    if let Ok(http_proxy) = std::env::var("http_proxy") {
+        cmd.env("http_proxy", &http_proxy);
+    }
+    if let Ok(https_proxy) = std::env::var("https_proxy") {
+        cmd.env("https_proxy", &https_proxy);
+    }
+    if let Ok(no_proxy) = std::env::var("no_proxy") {
+        cmd.env("no_proxy", &no_proxy);
+    }
+    if let Ok(all_proxy) = std::env::var("all_proxy") {
+        cmd.env("all_proxy", &all_proxy);
+    }
 }
 
 /// Get the Claude version from a binary path.
@@ -216,6 +264,162 @@ pub fn get_claude_version(path: &str) -> Result<Option<String>, String> {
             Err(format!("Failed to execute {}: {}", path, e))
         }
     }
+}
+
+/// Setup a complete environment for Claude execution.
+///
+/// This function creates a HashMap of environment variables that should be
+/// set when executing Claude. It includes:
+/// - Current PATH with all discovered binary locations
+/// - Proxy settings (HTTP_PROXY, HTTPS_PROXY, NO_PROXY, ALL_PROXY)
+/// - NVM variables (NVM_DIR, NVM_BIN) if applicable
+/// - Homebrew variables if applicable
+/// - System locale and shell variables
+///
+/// This is useful for applications that need to execute Claude with a
+/// properly configured environment.
+///
+/// # Returns
+///
+/// A HashMap of environment variable names to values
+///
+/// # Examples
+///
+/// ```no_run
+/// use cc_sdk::binary::setup_environment;
+/// use std::process::Command;
+///
+/// let env = setup_environment();
+/// let mut cmd = Command::new("claude");
+/// for (key, value) in env {
+///     cmd.env(key, value);
+/// }
+/// ```
+pub fn setup_environment() -> HashMap<String, String> {
+    let mut env = HashMap::new();
+
+    // Copy essential environment variables from the current process
+    for (key, value) in std::env::vars() {
+        if is_essential_env_var(&key) {
+            env.insert(key, value);
+        }
+    }
+
+    // Ensure we have HOME set
+    if !env.contains_key("HOME") {
+        if let Ok(home) = std::env::var("HOME") {
+            env.insert("HOME".to_string(), home);
+        }
+    }
+
+    // Ensure we have PATH set
+    if !env.contains_key("PATH") {
+        if let Ok(path) = std::env::var("PATH") {
+            env.insert("PATH".to_string(), path);
+        }
+    }
+
+    env
+}
+
+/// Get a complete PATH string including all common binary locations.
+///
+/// This reconstructs the PATH to include:
+/// - Current PATH
+/// - Homebrew directories (/opt/homebrew/bin, /usr/local/bin)
+/// - User local directories (~/.local/bin)
+/// - NVM directory if NVM_BIN is set
+///
+/// # Returns
+///
+/// A PATH string with all locations, colon-separated (Unix) or semicolon-separated (Windows)
+///
+/// # Examples
+///
+/// ```no_run
+/// use cc_sdk::binary::reconstruct_path;
+///
+/// let full_path = reconstruct_path();
+/// println!("Full PATH: {}", full_path);
+/// ```
+#[cfg(unix)]
+pub fn reconstruct_path() -> String {
+    let mut paths = Vec::new();
+
+    // Start with current PATH
+    if let Ok(current_path) = std::env::var("PATH") {
+        for p in current_path.split(':') {
+            if !p.is_empty() {
+                paths.push(p.to_string());
+            }
+        }
+    }
+
+    // Add Homebrew paths if not present
+    let homebrew_paths = vec![
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ];
+
+    for brew_path in homebrew_paths {
+        if !paths.contains(&brew_path.to_string()) {
+            if std::path::Path::new(brew_path).exists() {
+                paths.push(brew_path.to_string());
+            }
+        }
+    }
+
+    // Add user local bin if not present
+    if let Ok(home) = std::env::var("HOME") {
+        let local_bin = format!("{}/.local/bin", home);
+        if !paths.contains(&local_bin) {
+            if std::path::Path::new(&local_bin).exists() {
+                paths.push(local_bin);
+            }
+        }
+    }
+
+    // Add NVM bin if set
+    if let Ok(nvm_bin) = std::env::var("NVM_BIN") {
+        if !paths.contains(&nvm_bin) {
+            paths.push(nvm_bin);
+        }
+    }
+
+    paths.join(":")
+}
+
+#[cfg(windows)]
+pub fn reconstruct_path() -> String {
+    let mut paths = Vec::new();
+
+    // Start with current PATH
+    if let Ok(current_path) = std::env::var("PATH") {
+        for p in current_path.split(';') {
+            if !p.is_empty() {
+                paths.push(p.to_string());
+            }
+        }
+    }
+
+    // Add user local bin if not present
+    if let Ok(user_profile) = std::env::var("USERPROFILE") {
+        let local_bin = format!("{}/.local/bin", user_profile);
+        if !paths.contains(&local_bin) {
+            if std::path::Path::new(&local_bin).exists() {
+                paths.push(local_bin);
+            }
+        }
+    }
+
+    // Add NVM home if set
+    if let Ok(nvm_home) = std::env::var("NVM_HOME") {
+        if !paths.contains(&nvm_home) {
+            paths.push(nvm_home);
+        }
+    }
+
+    paths.join(";")
 }
 
 #[cfg(test)]

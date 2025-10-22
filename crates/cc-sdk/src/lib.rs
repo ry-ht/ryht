@@ -73,6 +73,7 @@
 //! - [`settings`] - Settings loading and saving with scope precedence
 //! - [`mcp`] - Model Context Protocol integration
 //! - [`binary`] - Claude binary discovery and version management
+//! - [`process`] - Process registry for concurrent session tracking
 //! - [`messages`] - Message and content type definitions
 //! - [`options`] - Configuration and builder types
 //! - [`permissions`] - Permission-related types and traits
@@ -111,10 +112,13 @@ pub mod requests;
 // Feature modules
 pub mod binary;
 pub mod mcp;
+pub mod process;
 pub mod session;
 pub mod settings;
 pub mod token_tracker;
 pub mod model_recommendation;
+pub mod streaming;
+pub mod metrics;
 
 // Internal modules
 mod types;   // Re-exports from submodules
@@ -290,6 +294,12 @@ pub use token_tracker::{BudgetLimit, BudgetManager, BudgetStatus, TokenUsageTrac
 
 /// Transport implementation.
 pub use transport::SubprocessTransport;
+
+/// Streaming utilities for JSONL parsing and output buffering.
+pub use streaming::{JsonlReader, OutputBuffer, extract_session_id, extract_session_id_from_line, parse_jsonl_line};
+
+/// Real-time metrics tracking for sessions.
+pub use metrics::{SessionMetrics, DEFAULT_INPUT_TOKEN_COST, DEFAULT_OUTPUT_TOKEN_COST};
 
 // ============================================================================
 // Prelude Module
