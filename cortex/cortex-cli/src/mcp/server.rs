@@ -132,7 +132,7 @@ impl CortexMcpServer {
         let build_ctx = BuildExecutionContext::new(storage.clone());
         let monitor_ctx = MonitoringContext::new(storage.clone());
         let security_ctx = SecurityAnalysisContext::new(storage.clone());
-        let type_ctx = TypeAnalysisContext::new(storage.clone());
+        let type_ctx = TypeAnalysisContext::new(storage.clone(), vfs.clone());
         let ai_ctx = AiAssistedContext::new(storage.clone());
         let adv_test_ctx = AdvancedTestingContext::new(storage.clone());
         let arch_ctx = ArchitectureAnalysisContext::new(storage.clone());

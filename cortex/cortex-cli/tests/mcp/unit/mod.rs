@@ -4,3 +4,6 @@
 
 pub mod vfs;
 pub mod workspace;
+pub mod code_manipulation;
+pub mod code_nav;
+pub mod security_analysis;
