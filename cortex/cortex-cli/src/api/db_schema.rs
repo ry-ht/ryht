@@ -55,6 +55,25 @@ pub async fn initialize_auth_schema(storage: &Arc<ConnectionManager>) -> anyhow:
         DEFINE INDEX api_keys_user_idx ON TABLE api_keys COLUMNS user_id;
     "#;
 
+    // Define session_file_modifications table for tracking session-specific file changes
+    let session_modifications_schema = r#"
+        DEFINE TABLE session_file_modifications SCHEMAFULL;
+
+        DEFINE FIELD id ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD session_id ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD file_path ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD file_id ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD change_type ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD version ON TABLE session_file_modifications TYPE int DEFAULT 1;
+        DEFINE FIELD base_version ON TABLE session_file_modifications TYPE option<int>;
+        DEFINE FIELD content_hash ON TABLE session_file_modifications TYPE string;
+        DEFINE FIELD size_bytes ON TABLE session_file_modifications TYPE int;
+        DEFINE FIELD created_at ON TABLE session_file_modifications TYPE datetime DEFAULT time::now();
+
+        DEFINE INDEX session_modifications_session_idx ON TABLE session_file_modifications COLUMNS session_id;
+        DEFINE INDEX session_modifications_file_idx ON TABLE session_file_modifications COLUMNS session_id, file_path;
+    "#;
+
     // Execute schema definitions
     conn.connection().query(users_schema).await?;
     info!("Created users table schema");
@@ -64,6 +83,9 @@ pub async fn initialize_auth_schema(storage: &Arc<ConnectionManager>) -> anyhow:
 
     conn.connection().query(api_keys_schema).await?;
     info!("Created api_keys table schema");
+
+    conn.connection().query(session_modifications_schema).await?;
+    info!("Created session_file_modifications table schema");
 
     info!("Authentication schema initialized successfully");
 

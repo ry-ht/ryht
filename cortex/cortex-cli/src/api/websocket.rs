@@ -184,22 +184,38 @@ pub struct WsContext {
 async fn ws_handler(
     ws: WebSocketUpgrade,
     State(ctx): State<WsContext>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, ctx))
+    // Try to extract user_id from Authorization header
+    let user_id = extract_user_id_from_headers(&headers);
+
+    if let Some(ref uid) = user_id {
+        info!("WebSocket connection from user: {} at {}", uid, addr);
+    } else {
+        debug!("WebSocket connection from {} without authentication", addr);
+    }
+
+    ws.on_upgrade(move |socket| handle_socket(socket, ctx, user_id))
 }
 
 /// Handle WebSocket connection
-async fn handle_socket(socket: WebSocket, ctx: WsContext) {
+async fn handle_socket(socket: WebSocket, ctx: WsContext, user_id: Option<String>) {
     let connection_id = Uuid::new_v4().to_string();
-    info!("New WebSocket connection: {}", connection_id);
+
+    if let Some(ref uid) = user_id {
+        info!("New WebSocket connection: {} (user: {})", connection_id, uid);
+    } else {
+        info!("New WebSocket connection: {} (anonymous)", connection_id);
+    }
 
     // Split the socket
     let (sender, receiver) = socket.split();
 
-    // Create connection info
+    // Create connection info with authenticated user_id
     let conn_info = ConnectionInfo {
         id: connection_id.clone(),
-        user_id: None, // TODO: Extract from auth
+        user_id,
         subscribed_channels: Vec::new(),
     };
 
@@ -421,4 +437,40 @@ pub fn websocket_routes(manager: WsManager) -> Router {
     Router::new()
         .route("/api/v1/ws", get(ws_handler))
         .with_state(ctx)
+}
+
+/// Extract user_id from JWT token in Authorization header or query parameter
+fn extract_user_id_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
+    use jsonwebtoken::{decode, DecodingKey, Validation};
+
+    // Get JWT secret from environment or use default
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .unwrap_or_else(|_| "cortex-dev-secret-change-in-production".to_string());
+
+    // Try to get token from Authorization header
+    let token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|auth| {
+            if auth.starts_with("Bearer ") {
+                Some(auth.trim_start_matches("Bearer "))
+            } else {
+                None
+            }
+        })?;
+
+    // Decode JWT token
+    #[derive(serde::Deserialize, Clone)]
+    struct Claims {
+        sub: String, // user_id
+    }
+
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(jwt_secret.as_bytes()),
+        &Validation::default(),
+    )
+    .ok()?;
+
+    Some(token_data.claims.sub)
 }

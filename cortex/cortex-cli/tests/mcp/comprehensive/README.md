@@ -4,6 +4,28 @@ This directory contains comprehensive test suites for validating Cortex MCP tool
 
 ## Test Files
 
+### 🧠 `self_modification_tests.rs` ⭐ **THE ULTIMATE TEST**
+**Cortex modifying and improving itself** - the ultimate proof of capability:
+
+**Test Cases:**
+- ✅ **Add New MCP Tool** - Cortex adds a new tool to its own codebase
+- ✅ **Optimize Performance** - Cortex identifies and optimizes slow functions in itself
+- ✅ **Fix Bugs** - AI-assisted bug detection and fixing in Cortex itself
+- ✅ **Improve Architecture** - Analyze and refactor Cortex's own architecture
+- ✅ **Add Tests** - Generate comprehensive tests for untested Cortex code
+- ✅ **Enhance Documentation** - Generate docs for undocumented Cortex APIs
+- ✅ **Upgrade Dependencies** - Check and upgrade Cortex's own dependencies
+- ✅ **Multi-Agent Self-Improvement** - 3 agents improving different parts simultaneously
+
+**What it Proves:**
+- Cortex truly understands code structure (including its own)
+- Cortex can make meaningful, complex modifications
+- Modified code compiles and passes tests
+- Improvements are measurable (>50% performance, >30% architecture, >10% coverage)
+- **This is not just a test - it's proof that code can understand and improve itself**
+
+See [SELF_MODIFICATION_GUIDE.md](./SELF_MODIFICATION_GUIDE.md) for detailed documentation.
+
 ### 📦 `integration_tests.rs`
 Complete end-to-end development workflows simulating real-world scenarios:
 
@@ -55,6 +77,10 @@ cargo test --test '*' comprehensive -- --nocapture --ignored
 ### Run Specific Test Categories
 
 ```bash
+# Self-modification tests (THE ULTIMATE TEST)
+export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
+cargo test --test '*' comprehensive::self_modification -- --nocapture --ignored
+
 # Integration tests only
 cargo test --test '*' comprehensive::integration -- --nocapture --ignored
 
@@ -65,6 +91,17 @@ cargo test --test '*' comprehensive::performance -- --nocapture --ignored
 ### Run Individual Tests
 
 ```bash
+# Self-modification tests (requires PATH export)
+export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
+cargo test --test '*' test_cortex_adds_new_tool_to_itself -- --nocapture --ignored
+cargo test --test '*' test_cortex_optimizes_itself -- --nocapture --ignored
+cargo test --test '*' test_cortex_fixes_bugs_in_itself -- --nocapture --ignored
+cargo test --test '*' test_cortex_improves_architecture -- --nocapture --ignored
+cargo test --test '*' test_cortex_adds_tests_to_itself -- --nocapture --ignored
+cargo test --test '*' test_cortex_enhances_documentation -- --nocapture --ignored
+cargo test --test '*' test_cortex_upgrades_dependencies -- --nocapture --ignored
+cargo test --test '*' test_multi_agent_self_improvement -- --nocapture --ignored
+
 # Integration workflow tests
 cargo test --test '*' test_workflow_add_feature_to_cortex -- --nocapture --ignored
 cargo test --test '*' test_workflow_fix_bug_in_cortex -- --nocapture --ignored

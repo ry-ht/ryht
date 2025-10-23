@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::VirtualFileSystem;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
@@ -317,6 +318,16 @@ async fn list_session_files(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Get all modifications for this session
+    let session_modifications = get_session_modifications(&ctx, &session_id).await?;
+    let mut modifications_map: HashMap<String, &SessionFileModification> = HashMap::new();
+
+    for modification in &session_modifications {
+        // Keep only the latest modification per file
+        modifications_map.entry(modification.file_path.clone())
+            .or_insert(modification);
+    }
+
     // Apply filters and transform to response format
     let mut files: Vec<FileResponse> = vnodes
         .into_iter()
@@ -339,17 +350,19 @@ async fn list_session_files(
             type_match && path_match
         })
         .map(|vnode| {
-            // TODO: For now, we don't track session-specific modifications
-            // In a full implementation, we would check if this file has been modified
-            // in this session by querying the session's modification log
-            let modified_in_session = false;
-            let session_version = None;
-            let base_version = None;
+            // Check if this file has been modified in this session
+            let file_path_str = vnode.path.to_string();
+            let modification = modifications_map.get(&file_path_str);
+
+            let modified_in_session = modification.is_some();
+            let session_version = modification.map(|m| m.version);
+            let base_version = modification.and_then(|m| m.base_version);
+            let change_type = modification.map(|m| m.change_type.clone());
 
             FileResponse {
                 id: vnode.id.to_string(),
                 name: vnode.path.file_name().unwrap_or("").to_string(),
-                path: vnode.path.to_string(),
+                path: file_path_str,
                 file_type: if vnode.is_file() { "file" } else { "directory" }.to_string(),
                 size: vnode.size_bytes as u64,
                 language: vnode.language.map(|l| format!("{:?}", l).to_lowercase()),
@@ -357,7 +370,7 @@ async fn list_session_files(
                 created_at: vnode.created_at,
                 updated_at: vnode.updated_at,
                 modified_in_session: Some(modified_in_session),
-                change_type: if modified_in_session { Some("modified".to_string()) } else { None },
+                change_type,
                 session_version,
                 base_version,
                 encoding: None,
@@ -471,11 +484,13 @@ async fn read_session_file(
     let line_count = content.lines().count();
     let hash = format!("sha256:{:x}", md5::compute(&content_bytes));
 
-    // TODO: Track session-specific modifications
-    // In a full implementation, check if this file has been modified in this session
-    let modified_in_session = false;
-    let session_version = None;
-    let base_version = None;
+    // Check if this file has been modified in this session
+    let file_path_str = vnode.path.to_string();
+    let modification = get_file_modification(&ctx, &session_id, &file_path_str).await?;
+
+    let modified_in_session = modification.is_some();
+    let session_version = modification.as_ref().map(|m| m.version);
+    let base_version = modification.as_ref().and_then(|m| m.base_version);
 
     let metadata = if params.include_metadata {
         let mut meta = serde_json::Map::new();
@@ -597,24 +612,35 @@ async fn write_session_file(
     let existing_file = ctx.vfs.metadata(&workspace_id, &path).await.ok();
     let is_new_file = existing_file.is_none();
 
+    // Get current session modification if any
+    let current_modification = get_file_modification(&ctx, &session_id, &file_path).await?;
+    let current_version = current_modification.as_ref().map(|m| m.version);
+
     // If expected_version is specified, validate it
     if let Some(expected_version) = payload.expected_version {
-        // TODO: In a full implementation, we would check the actual version from session history
-        // For now, we'll do a basic check
-        if let Some(ref existing) = existing_file {
-            // Simulate version check - in reality, this would come from session version tracking
-            let current_version = 1u64; // Placeholder
-            if expected_version != current_version {
+        if let Some(curr_ver) = current_version {
+            if expected_version != curr_ver {
                 return Err(ApiError::VersionConflict {
                     expected: expected_version,
-                    current: current_version,
+                    current: curr_ver,
                     path: file_path.clone(),
                     details: Some(serde_json::json!({
                         "session_id": session_id,
-                        "message": "File has been modified since expected version"
+                        "message": "File has been modified in this session since expected version"
                     })),
                 });
             }
+        } else if expected_version != 0 {
+            // If no session modification exists, expected version should be 0
+            return Err(ApiError::VersionConflict {
+                expected: expected_version,
+                current: 0,
+                path: file_path.clone(),
+                details: Some(serde_json::json!({
+                    "session_id": session_id,
+                    "message": "File has not been modified in this session yet"
+                })),
+            });
         }
     }
 
@@ -688,10 +714,28 @@ async fn write_session_file(
     // Calculate hash
     let hash = format!("sha256:{:x}", md5::compute(payload.content.as_bytes()));
 
-    // TODO: Track session version properly
-    let session_version = 1u64; // Placeholder
-    let base_version = existing_file.as_ref().map(|_| 1u64); // Placeholder
-    let previous_version = if !is_new_file { Some(session_version - 1) } else { None };
+    // Determine base version (version before this session started modifying)
+    let base_version = if is_new_file {
+        None
+    } else {
+        current_modification.as_ref().and_then(|m| m.base_version).or(Some(0))
+    };
+
+    // Record this modification in the session
+    let change_type = if is_new_file { "created" } else { "modified" };
+    let modification = record_file_modification(
+        &ctx,
+        &session_id,
+        &file_path,
+        &vnode.id.to_string(),
+        change_type,
+        &hash,
+        vnode.size_bytes as u64,
+        base_version,
+    ).await?;
+
+    let session_version = modification.version;
+    let previous_version = current_version;
 
     let response = FileWriteResponse {
         id: vnode.id.to_string(),
@@ -880,4 +924,114 @@ async fn list_locks(
     let duration = start.elapsed().as_millis() as u64;
 
     Ok(Json(ApiResponse::success(lock_responses, request_id, duration)))
+}
+
+// ============================================================================
+// Session Modification Tracking Helper Functions
+// ============================================================================
+
+/// Session file modification record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SessionFileModification {
+    id: String,
+    session_id: String,
+    file_path: String,
+    file_id: String,
+    change_type: String,
+    version: u64,
+    base_version: Option<u64>,
+    content_hash: String,
+    size_bytes: u64,
+    created_at: DateTime<Utc>,
+}
+
+/// Get the latest modification record for a file in a session
+async fn get_file_modification(
+    ctx: &SessionContext,
+    session_id: &str,
+    file_path: &str,
+) -> Result<Option<SessionFileModification>, ApiError> {
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let query = format!(
+        "SELECT * FROM session_file_modifications WHERE session_id = '{}' AND file_path = '{}' ORDER BY version DESC LIMIT 1",
+        session_id, file_path
+    );
+
+    let mut result = conn.connection().query(&query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let modifications: Vec<SessionFileModification> = result.take(0)
+        .unwrap_or_default();
+
+    Ok(modifications.into_iter().next())
+}
+
+/// Record a file modification in a session
+async fn record_file_modification(
+    ctx: &SessionContext,
+    session_id: &str,
+    file_path: &str,
+    file_id: &str,
+    change_type: &str,
+    content_hash: &str,
+    size_bytes: u64,
+    base_version: Option<u64>,
+) -> Result<SessionFileModification, ApiError> {
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Get previous version number for this file in this session
+    let previous_mod = get_file_modification(ctx, session_id, file_path).await?;
+    let version = previous_mod.as_ref().map(|m| m.version + 1).unwrap_or(1);
+
+    let modification_id = Uuid::new_v4().to_string();
+    let modification = SessionFileModification {
+        id: modification_id.clone(),
+        session_id: session_id.to_string(),
+        file_path: file_path.to_string(),
+        file_id: file_id.to_string(),
+        change_type: change_type.to_string(),
+        version,
+        base_version,
+        content_hash: content_hash.to_string(),
+        size_bytes,
+        created_at: Utc::now(),
+    };
+
+    let modification_json = serde_json::to_value(&modification)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let _: Option<serde_json::Value> = conn.connection()
+        .create(("session_file_modifications", modification_id))
+        .content(modification_json)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(modification)
+}
+
+/// Get all modified files in a session
+async fn get_session_modifications(
+    ctx: &SessionContext,
+    session_id: &str,
+) -> Result<Vec<SessionFileModification>, ApiError> {
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let query = format!(
+        "SELECT * FROM session_file_modifications WHERE session_id = '{}' ORDER BY created_at DESC",
+        session_id
+    );
+
+    let mut result = conn.connection().query(&query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let modifications: Vec<SessionFileModification> = result.take(0)
+        .unwrap_or_default();
+
+    Ok(modifications)
 }

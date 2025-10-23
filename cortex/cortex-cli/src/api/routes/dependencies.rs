@@ -311,11 +311,18 @@ async fn analyze_impact_impl(
         vec!["Run tests for affected areas".to_string()]
     };
 
+    // Calculate critical paths using longest path algorithm
+    let critical_paths = calculate_critical_paths(
+        &context,
+        &request.changed_entity_ids,
+        &all_affected_ids,
+    ).await?;
+
     let risk_assessment = RiskAssessment {
         overall_risk: overall_risk.to_string(),
         risk_score,
         total_affected: all_affected_ids.len(),
-        critical_paths: vec![], // TODO: Implement critical path detection
+        critical_paths,
         recommendations,
     };
 
@@ -524,4 +531,143 @@ fn generate_json_format(nodes: &[GraphNode], edges: &[GraphEdge]) -> String {
         "edges": edges
     })
     .to_string()
+}
+
+/// Calculate critical paths in dependency graph using longest path algorithm
+/// Returns paths from changed entities that represent critical dependencies
+async fn calculate_critical_paths(
+    context: &DependencyContext,
+    changed_entity_ids: &[String],
+    affected_ids: &HashSet<String>,
+) -> anyhow::Result<Vec<Vec<String>>> {
+    if changed_entity_ids.is_empty() || affected_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let pooled = context.storage.acquire().await?;
+    let conn = pooled.connection();
+
+    // Build dependency graph for affected entities
+    let mut graph: HashMap<String, Vec<(String, f64)>> = HashMap::new();
+    let mut in_degree: HashMap<String, usize> = HashMap::new();
+
+    // Initialize all nodes
+    for entity_id in changed_entity_ids.iter().chain(affected_ids.iter()) {
+        in_degree.entry(entity_id.clone()).or_insert(0);
+    }
+
+    // Query relations for affected entities
+    let all_entity_ids: Vec<String> = changed_entity_ids
+        .iter()
+        .chain(affected_ids.iter())
+        .cloned()
+        .collect();
+
+    for entity_id in &all_entity_ids {
+        let relations_query = format!(
+            "SELECT * FROM relation WHERE source_id = '{}'",
+            entity_id
+        );
+        let mut relations_result = conn.query(&relations_query).await?;
+        let relations: Vec<serde_json::Value> = relations_result.take(0)?;
+
+        for relation in relations {
+            let target_id = relation["target_id"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string();
+
+            // Only consider edges within our affected set
+            if affected_ids.contains(&target_id) || changed_entity_ids.contains(&target_id) {
+                let weight = relation["weight"].as_f64().unwrap_or(1.0);
+
+                graph
+                    .entry(entity_id.clone())
+                    .or_default()
+                    .push((target_id.clone(), weight));
+
+                *in_degree.entry(target_id).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Find longest paths using topological sort + dynamic programming
+    let mut longest_dist: HashMap<String, f64> = HashMap::new();
+    let mut path_predecessor: HashMap<String, String> = HashMap::new();
+
+    // Initialize distances for changed entities
+    for entity_id in changed_entity_ids {
+        longest_dist.insert(entity_id.clone(), 0.0);
+    }
+
+    // Topological sort using Kahn's algorithm
+    let mut queue: Vec<String> = in_degree
+        .iter()
+        .filter(|(_, deg)| **deg == 0)
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    let mut topo_order = Vec::new();
+
+    while let Some(node) = queue.pop() {
+        topo_order.push(node.clone());
+
+        if let Some(neighbors) = graph.get(&node) {
+            for (neighbor, _) in neighbors {
+                if let Some(deg) = in_degree.get_mut(neighbor) {
+                    *deg -= 1;
+                    if *deg == 0 {
+                        queue.push(neighbor.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Calculate longest distances using topological order
+    for node in &topo_order {
+        let current_dist = *longest_dist.get(node).unwrap_or(&f64::NEG_INFINITY);
+
+        if let Some(neighbors) = graph.get(node) {
+            for (neighbor, weight) in neighbors {
+                let new_dist = current_dist + weight;
+                let neighbor_dist = *longest_dist.get(neighbor).unwrap_or(&f64::NEG_INFINITY);
+
+                if new_dist > neighbor_dist {
+                    longest_dist.insert(neighbor.clone(), new_dist);
+                    path_predecessor.insert(neighbor.clone(), node.clone());
+                }
+            }
+        }
+    }
+
+    // Find top critical paths (nodes with longest distances)
+    let mut critical_nodes: Vec<(String, f64)> = longest_dist
+        .iter()
+        .filter(|(id, dist)| **dist > 0.0 && affected_ids.contains(*id))
+        .map(|(id, dist)| (id.clone(), *dist))
+        .collect();
+
+    critical_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Take top 5 critical paths and reconstruct them
+    let mut critical_paths = Vec::new();
+    for (node, _) in critical_nodes.iter().take(5) {
+        let mut path = vec![node.clone()];
+        let mut current = node.clone();
+
+        // Trace back to a changed entity
+        while let Some(pred) = path_predecessor.get(&current) {
+            path.push(pred.clone());
+            current = pred.clone();
+            if changed_entity_ids.contains(&current) {
+                break;
+            }
+        }
+
+        path.reverse();
+        critical_paths.push(path);
+    }
+
+    Ok(critical_paths)
 }

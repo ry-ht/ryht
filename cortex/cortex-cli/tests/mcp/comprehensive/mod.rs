@@ -26,6 +26,17 @@
 //! - Test incremental loading and updates
 //! - Measure ingestion performance (<60 seconds target)
 //!
+//! ### Self-Modification Tests (`self_modification_tests.rs`)
+//! The ultimate tests - Cortex modifying and improving itself:
+//! - Add new MCP tools to its own codebase
+//! - Optimize its own performance
+//! - Detect and fix bugs in itself
+//! - Improve its own architecture
+//! - Add tests to itself
+//! - Enhance its own documentation
+//! - Upgrade its own dependencies
+//! - Multi-agent collaborative self-improvement
+//!
 //! ## Running Tests
 //!
 //! ```bash
@@ -40,7 +51,14 @@
 //!
 //! # Run specific test
 //! cargo test --test comprehensive_tests test_surrealdb_lifecycle -- --nocapture
+//!
+//! # Run self-modification tests
+//! export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
+//! cargo test --test comprehensive_tests self_modification -- --ignored --nocapture
 //! ```
 
 pub mod infrastructure_tests;
 pub mod ingestion_tests;
+pub mod rust_development_tests;
+pub mod typescript_development_tests;
+pub mod self_modification_tests;
