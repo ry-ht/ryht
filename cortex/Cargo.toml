@@ -146,6 +146,7 @@ tree-sitter-typescript = "0.23.2"
 anyhow.workspace = true
 surrealdb.workspace = true
 parking_lot.workspace = true
+ignore.workspace = true
 
 [[test]]
 name = "cross_crate_integration"
@@ -272,6 +273,16 @@ name = "e2e_cortex_complete"
 path = "tests/e2e_cortex_complete.rs"
 harness = true
 
+[[test]]
+name = "test_vfs_ultimate_cortex_load"
+path = "tests/test_vfs_ultimate_cortex_load.rs"
+harness = true
+
+[[test]]
+name = "test_ultimate_cortex_integration"
+path = "tests/test_ultimate_cortex_integration.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
@@ -279,4 +290,8 @@ harness = false
 
 [[bench]]
 name = "e2e_workflows"
+harness = false
+
+[[bench]]
+name = "mcp_tools_performance"
 harness = false

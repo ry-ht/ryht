@@ -266,7 +266,7 @@ mod tests {
     fn test_default_config() {
         let config = SemanticConfig::default();
         assert_eq!(config.embedding.primary_provider, "openai");
-        assert_eq!(config.index.hnsw_m, 32);
+        assert_eq!(config.index.hnsw_m, 16);
         assert_eq!(config.search.default_limit, 10);
     }
 

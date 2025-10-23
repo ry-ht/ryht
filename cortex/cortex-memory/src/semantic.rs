@@ -945,12 +945,10 @@ mod tests {
     use std::time::Duration;
 
     async fn create_test_memory() -> SemanticMemorySystem {
-        // Use a temporary file-based database for tests to ensure persistence
-        let temp_db = format!("file:/tmp/cortex_semantic_test_{}.db", CortexId::new());
-
+        // Use memory database for tests (kv-mem is enabled in Cargo.toml)
         let config = DatabaseConfig {
             connection_mode: ConnectionMode::Local {
-                endpoint: temp_db,
+                endpoint: "memory".to_string(),
             },
             credentials: Credentials {
                 username: None,

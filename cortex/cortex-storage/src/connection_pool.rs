@@ -1577,8 +1577,8 @@ mod tests {
     #[tokio::test]
     async fn test_pool_config_defaults() {
         let config = PoolConfig::default();
-        assert_eq!(config.min_connections, 2);
-        assert_eq!(config.max_connections, 10);
+        assert_eq!(config.min_connections, 5);  // Updated to match optimized default
+        assert_eq!(config.max_connections, 20); // Updated to match optimized default
         assert!(config.warm_connections);
     }
 

@@ -31,7 +31,10 @@ struct EnvGuard {
 impl EnvGuard {
     fn new(key: &str, value: &str) -> Self {
         let old_value = env::var(key).ok();
-        env::set_var(key, value);
+        // SAFETY: We're only using this in tests and cleaning up after ourselves
+        unsafe {
+            env::set_var(key, value);
+        }
         Self {
             key: key.to_string(),
             old_value,

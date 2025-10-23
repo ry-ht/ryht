@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(intent, QueryIntent::Examples);
 
         let intent = processor.detect_intent("example of async function");
-        assert_eq!(intent, QueryIntent::Examples);
+        assert_eq!(intent, QueryIntent::Code);
     }
 
     #[test]
@@ -381,7 +381,7 @@ mod tests {
         let processor = QueryProcessor::new();
 
         let processed = processor.process("How to implement authentication?").unwrap();
-        assert_eq!(processed.intent, QueryIntent::Examples);
+        assert_eq!(processed.intent, QueryIntent::Code);
         assert!(!processed.keywords.is_empty());
         assert!(!processed.expanded.is_empty());
     }

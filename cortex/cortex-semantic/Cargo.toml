@@ -42,8 +42,8 @@ tokenizers = { workspace = true }
 # HNSW index - Using instant-distance for pure Rust HNSW implementation
 instant-distance = "0.6.1"
 
-# Linear algebra
-ndarray = "0.16.1"
+# Linear algebra - pinned to match ort dependency
+ndarray = "0.15.6"
 
 # Parallel processing
 rayon = { workspace = true }
