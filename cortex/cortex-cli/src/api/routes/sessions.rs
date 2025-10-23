@@ -51,14 +51,14 @@ pub fn session_routes(context: SessionContext) -> Router {
     Router::new()
         .route("/api/v1/sessions", get(list_sessions))
         .route("/api/v1/sessions", post(create_session))
-        .route("/api/v1/sessions/:session_id", get(get_session))
-        .route("/api/v1/sessions/:session_id", delete(delete_session))
-        .route("/api/v1/sessions/:session_id/merge", post(merge_session))
+        .route("/api/v1/sessions/{session_id}", get(get_session))
+        .route("/api/v1/sessions/{session_id}", delete(delete_session))
+        .route("/api/v1/sessions/{session_id}/merge", post(merge_session))
         .route("/api/v1/locks", get(list_locks))
         // Session-aware VFS operations (critical for multi-agent coordination)
-        .route("/api/v1/sessions/:session_id/files", get(list_session_files))
-        .route("/api/v1/sessions/:session_id/files/:path", get(read_session_file))
-        .route("/api/v1/sessions/:session_id/files/:path", put(write_session_file))
+        .route("/api/v1/sessions/{session_id}/files", get(list_session_files))
+        .route("/api/v1/sessions/{session_id}/files/{path}", get(read_session_file))
+        .route("/api/v1/sessions/{session_id}/files/{path}", put(write_session_file))
         .with_state(context)
 }
 
@@ -101,7 +101,7 @@ async fn list_sessions(
     Ok(Json(ApiResponse::success(session_responses, request_id, duration)))
 }
 
-/// GET /api/v1/sessions/:session_id - Get session details
+/// GET /api/v1/sessions/{session_id} - Get session details
 async fn get_session(
     State(ctx): State<SessionContext>,
     Path(session_id): Path<String>,
@@ -203,7 +203,7 @@ async fn create_session(
     Ok(Json(ApiResponse::success(session_response, request_id, duration)))
 }
 
-/// DELETE /api/v1/sessions/:session_id - Delete session
+/// DELETE /api/v1/sessions/{session_id} - Delete session
 async fn delete_session(
     State(ctx): State<SessionContext>,
     Path(session_id): Path<String>,
@@ -265,7 +265,7 @@ struct FileReadQuery {
     version: Option<u64>,
 }
 
-/// GET /api/v1/sessions/:session_id/files - List files in session scope
+/// GET /api/v1/sessions/{session_id}/files - List files in session scope
 ///
 /// Returns all files visible within the session scope, including both workspace files
 /// and session-specific modifications.
@@ -425,7 +425,7 @@ async fn list_session_files(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// GET /api/v1/sessions/:session_id/files/:path - Read file from session
+/// GET /api/v1/sessions/{session_id}/files/:path - Read file from session
 ///
 /// Retrieves file content as it appears within the session scope, including any
 /// uncommitted modifications.
@@ -536,7 +536,7 @@ async fn read_session_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// PUT /api/v1/sessions/:session_id/files/:path - Write file in session
+/// PUT /api/v1/sessions/{session_id}/files/:path - Write file in session
 ///
 /// Creates or modifies a file within the session scope. Changes are isolated to
 /// the session until merged.
@@ -831,7 +831,7 @@ pub struct MergeResultResponse {
     pub new_version: u64,
 }
 
-/// POST /api/v1/sessions/:session_id/merge - Merge session changes
+/// POST /api/v1/sessions/{session_id}/merge - Merge session changes
 async fn merge_session(
     State(ctx): State<SessionContext>,
     Path(session_id): Path<String>,

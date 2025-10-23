@@ -138,10 +138,10 @@ pub struct CreateImportRequest {
 pub fn export_routes(context: ExportContext) -> Router {
     Router::new()
         .route("/api/v1/export", post(create_export))
-        .route("/api/v1/export/:id", get(get_export_status))
-        .route("/api/v1/export/:id/download", get(download_export))
+        .route("/api/v1/export/{id}", get(get_export_status))
+        .route("/api/v1/export/{id}/download", get(download_export))
         .route("/api/v1/import", post(create_import))
-        .route("/api/v1/import/:id", get(get_import_status))
+        .route("/api/v1/import/{id}", get(get_import_status))
         .with_state(context)
 }
 
@@ -217,7 +217,7 @@ async fn create_export(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// GET /api/v1/export/:id - Get export job status
+/// GET /api/v1/export/{id} - Get export job status
 async fn get_export_status(
     State(ctx): State<ExportContext>,
     Path(export_id): Path<String>,
@@ -247,7 +247,7 @@ async fn get_export_status(
     Ok(Json(ApiResponse::success(export_job, request_id, duration)))
 }
 
-/// GET /api/v1/export/:id/download - Download export
+/// GET /api/v1/export/{id}/download - Download export
 async fn download_export(
     State(ctx): State<ExportContext>,
     Path(export_id): Path<String>,
@@ -368,7 +368,7 @@ async fn create_import(
     Ok(Json(ApiResponse::success(response, request_id, duration)))
 }
 
-/// GET /api/v1/import/:id - Get import job status
+/// GET /api/v1/import/{id} - Get import job status
 async fn get_import_status(
     State(ctx): State<ExportContext>,
     Path(import_id): Path<String>,

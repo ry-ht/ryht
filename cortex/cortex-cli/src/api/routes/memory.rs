@@ -29,7 +29,7 @@ pub fn memory_routes(context: MemoryContext) -> Router {
     Router::new()
         .route("/api/v1/memory/episodes", get(list_episodes))
         .route("/api/v1/memory/consolidate", post(consolidate_memory))
-        .route("/api/v1/memory/episodes/:episode_id", get(get_episode))
+        .route("/api/v1/memory/episodes/{episode_id}", get(get_episode))
         .route("/api/v1/memory/search", post(search_episodes))
         .route("/api/v1/memory/patterns", get(get_patterns))
         .with_state(context)

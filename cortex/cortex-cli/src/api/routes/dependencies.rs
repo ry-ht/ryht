@@ -25,7 +25,7 @@ pub struct DependencyContext {
 pub fn dependency_routes(context: DependencyContext) -> Router {
     Router::new()
         .route(
-            "/api/v1/workspaces/:id/dependencies",
+            "/api/v1/workspaces/{id}/dependencies",
             get(get_dependency_graph),
         )
         .route("/api/v1/analysis/impact", post(analyze_impact))

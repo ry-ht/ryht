@@ -123,7 +123,7 @@ pub async fn create_default_admin(storage: &Arc<ConnectionManager>) -> anyhow::R
         });
 
         let query = format!(
-            "CREATE users:{} CONTENT {}",
+            "CREATE users:`{}` CONTENT {}",
             admin_id,
             serde_json::to_string(&admin_user)?
         );

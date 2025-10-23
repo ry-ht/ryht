@@ -68,9 +68,9 @@ impl BuildContext {
 pub fn build_routes(context: BuildContext) -> Router {
     Router::new()
         .route("/api/v1/build/trigger", post(trigger_build))
-        .route("/api/v1/build/:id/status", get(get_build_status))
+        .route("/api/v1/build/{id}/status", get(get_build_status))
         .route("/api/v1/test/run", post(run_tests))
-        .route("/api/v1/test/:id/results", get(get_test_results))
+        .route("/api/v1/test/{id}/results", get(get_test_results))
         .with_state(context)
 }
 

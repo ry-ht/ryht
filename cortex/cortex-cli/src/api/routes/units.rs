@@ -26,9 +26,9 @@ pub struct CodeUnitContext {
 /// Create code unit routes
 pub fn code_unit_routes(context: CodeUnitContext) -> Router {
     Router::new()
-        .route("/api/v1/workspaces/:id/units", get(list_code_units))
-        .route("/api/v1/units/:id", get(get_code_unit))
-        .route("/api/v1/units/:id", put(update_code_unit))
+        .route("/api/v1/workspaces/{id}/units", get(list_code_units))
+        .route("/api/v1/units/{id}", get(get_code_unit))
+        .route("/api/v1/units/{id}", put(update_code_unit))
         .with_state(context)
 }
 

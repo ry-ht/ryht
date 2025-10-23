@@ -28,16 +28,16 @@ pub struct VfsContext {
 /// Create VFS routes
 pub fn vfs_routes(context: VfsContext) -> Router {
     Router::new()
-        .route("/api/v1/workspaces/:workspace_id/files", get(list_files))
-        .route("/api/v1/workspaces/:workspace_id/files", post(create_file))
-        .route("/api/v1/workspaces/:workspace_id/tree", get(get_tree))
-        .route("/api/v1/files/:file_id", get(get_file))
-        .route("/api/v1/files/:file_id", put(update_file))
-        .route("/api/v1/files/:file_id", delete(delete_file))
+        .route("/api/v1/workspaces/{workspace_id}/files", get(list_files))
+        .route("/api/v1/workspaces/{workspace_id}/files", post(create_file))
+        .route("/api/v1/workspaces/{workspace_id}/tree", get(get_tree))
+        .route("/api/v1/files/{file_id}", get(get_file))
+        .route("/api/v1/files/{file_id}", put(update_file))
+        .route("/api/v1/files/{file_id}", delete(delete_file))
         .with_state(context)
 }
 
-/// GET /api/v1/workspaces/:workspace_id/files - Browse VFS
+/// GET /api/v1/workspaces/{workspace_id}/files - Browse VFS
 async fn list_files(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,
@@ -227,7 +227,7 @@ async fn list_files(
     }
 }
 
-/// GET /api/v1/files/:file_id - Get file details
+/// GET /api/v1/files/{file_id} - Get file details
 async fn get_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -300,7 +300,7 @@ async fn get_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// POST /api/v1/workspaces/:workspace_id/files - Create file
+/// POST /api/v1/workspaces/{workspace_id}/files - Create file
 async fn create_file(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,
@@ -373,7 +373,7 @@ async fn create_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// PUT /api/v1/files/:file_id - Update file
+/// PUT /api/v1/files/{file_id} - Update file
 async fn update_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -450,7 +450,7 @@ async fn update_file(
     Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
-/// DELETE /api/v1/files/:file_id - Delete file
+/// DELETE /api/v1/files/{file_id} - Delete file
 async fn delete_file(
     State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
@@ -496,7 +496,7 @@ async fn delete_file(
     Ok(Json(ApiResponse::success((), request_id, duration)))
 }
 
-/// GET /api/v1/workspaces/:workspace_id/tree - Get directory tree
+/// GET /api/v1/workspaces/{workspace_id}/tree - Get directory tree
 async fn get_tree(
     State(ctx): State<VfsContext>,
     Path(workspace_id): Path<String>,

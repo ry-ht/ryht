@@ -32,10 +32,10 @@ pub fn workspace_routes(context: WorkspaceContext) -> Router {
     Router::new()
         .route("/api/v1/workspaces", get(list_workspaces))
         .route("/api/v1/workspaces", post(create_workspace))
-        .route("/api/v1/workspaces/:workspace_id", get(get_workspace))
-        .route("/api/v1/workspaces/:workspace_id", put(update_workspace))
-        .route("/api/v1/workspaces/:workspace_id", delete(delete_workspace))
-        .route("/api/v1/workspaces/:workspace_id/sync", post(sync_workspace))
+        .route("/api/v1/workspaces/{workspace_id}", get(get_workspace))
+        .route("/api/v1/workspaces/{workspace_id}", put(update_workspace))
+        .route("/api/v1/workspaces/{workspace_id}", delete(delete_workspace))
+        .route("/api/v1/workspaces/{workspace_id}/sync", post(sync_workspace))
         .with_state(context)
 }
 
@@ -161,7 +161,7 @@ async fn list_workspaces(
     )))
 }
 
-/// GET /api/v1/workspaces/:workspace_id - Get workspace details
+/// GET /api/v1/workspaces/{workspace_id} - Get workspace details
 async fn get_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
@@ -289,7 +289,7 @@ async fn create_workspace(
     Ok(Json(ApiResponse::success(workspace_response, request_id, duration)))
 }
 
-/// DELETE /api/v1/workspaces/:workspace_id - Delete workspace
+/// DELETE /api/v1/workspaces/{workspace_id} - Delete workspace
 async fn delete_workspace(
     auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
@@ -345,7 +345,7 @@ async fn delete_workspace(
     Ok(Json(ApiResponse::success((), request_id, duration)))
 }
 
-/// PUT /api/v1/workspaces/:workspace_id - Update workspace
+/// PUT /api/v1/workspaces/{workspace_id} - Update workspace
 async fn update_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
@@ -424,7 +424,7 @@ async fn update_workspace(
     Ok(Json(ApiResponse::success(workspace_response, request_id, duration)))
 }
 
-/// POST /api/v1/workspaces/:workspace_id/sync - Sync workspace with filesystem
+/// POST /api/v1/workspaces/{workspace_id}/sync - Sync workspace with filesystem
 async fn sync_workspace(
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
