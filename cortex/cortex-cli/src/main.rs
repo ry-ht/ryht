@@ -344,28 +344,55 @@ enum MemoryCommands {
 
 #[derive(Subcommand)]
 enum DbCommands {
-    /// Start the local SurrealDB server
+    /// Start both SurrealDB and Qdrant databases
     Start {
-        /// Bind address (default: 127.0.0.1:8000)
-        #[arg(short, long)]
-        bind: Option<String>,
+        // SurrealDB options
+        /// SurrealDB bind address (default: 127.0.0.1:8000)
+        #[arg(long = "surreal-bind")]
+        surreal_bind: Option<String>,
 
-        /// Data directory
-        #[arg(short, long)]
-        data_dir: Option<PathBuf>,
+        /// SurrealDB data directory
+        #[arg(long = "surreal-data")]
+        surreal_data: Option<PathBuf>,
+
+        // Qdrant options
+        /// Qdrant HTTP port (default: 6333)
+        #[arg(long = "qdrant-port")]
+        qdrant_port: Option<u16>,
+
+        /// Qdrant gRPC port (default: 6334)
+        #[arg(long = "qdrant-grpc-port")]
+        qdrant_grpc_port: Option<u16>,
+
+        /// Qdrant data directory
+        #[arg(long = "qdrant-data")]
+        qdrant_data: Option<PathBuf>,
+
+        // Common options
+        /// Use docker-compose instead of direct binaries
+        #[arg(long)]
+        use_docker: bool,
     },
 
-    /// Stop the local SurrealDB server
+    /// Stop both databases
     Stop,
 
-    /// Restart the local SurrealDB server
+    /// Restart both databases
     Restart,
 
-    /// Check server status
-    Status,
+    /// Check status of both databases
+    Status {
+        /// Show detailed metrics
+        #[arg(short, long)]
+        detailed: bool,
+    },
 
-    /// Install SurrealDB
-    Install,
+    /// Install database binaries
+    Install {
+        /// Which database to install (surrealdb, qdrant, or both)
+        #[arg(short, long, default_value = "both")]
+        database: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -747,8 +774,22 @@ async fn run() -> Result<()> {
         },
 
         Commands::Db(db_cmd) => match db_cmd {
-            DbCommands::Start { bind, data_dir } => {
-                commands::db_start(bind, data_dir).await?;
+            DbCommands::Start {
+                surreal_bind,
+                surreal_data,
+                qdrant_port,
+                qdrant_grpc_port,
+                qdrant_data,
+                use_docker,
+            } => {
+                commands::db_start(
+                    surreal_bind,
+                    surreal_data,
+                    qdrant_port,
+                    qdrant_grpc_port,
+                    qdrant_data,
+                    use_docker,
+                ).await?;
             }
             DbCommands::Stop => {
                 commands::db_stop().await?;
@@ -756,11 +797,11 @@ async fn run() -> Result<()> {
             DbCommands::Restart => {
                 commands::db_restart().await?;
             }
-            DbCommands::Status => {
-                commands::db_status().await?;
+            DbCommands::Status { detailed } => {
+                commands::db_status(detailed).await?;
             }
-            DbCommands::Install => {
-                commands::db_install().await?;
+            DbCommands::Install { database } => {
+                commands::db_install(database).await?;
             }
         },
 

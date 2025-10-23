@@ -410,15 +410,15 @@ async fn check_disk_space() -> DiagnosticResult {
 
 async fn fix_surrealdb_installation() -> Result<()> {
     output::info("Installing SurrealDB...");
-    crate::commands::db_install().await?;
+    crate::commands::db_install("surrealdb".to_string()).await?;
     output::success("SurrealDB installed successfully");
     Ok(())
 }
 
 async fn fix_surrealdb_connection() -> Result<()> {
-    output::info("Starting SurrealDB server...");
-    crate::commands::db_start(None, None).await?;
-    output::success("SurrealDB server started");
+    output::info("Starting database servers...");
+    crate::commands::db_start(None, None, None, None, None, false).await?;
+    output::success("Database servers started");
     Ok(())
 }
 

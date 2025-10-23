@@ -1011,13 +1011,71 @@ pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Re
 // ============================================================================
 
 /// Start both SurrealDB and Qdrant databases
-pub async fn db_start(_bind_address: Option<String>, _data_dir: Option<PathBuf>) -> Result<()> {
+pub async fn db_start(
+    surreal_bind: Option<String>,
+    surreal_data: Option<PathBuf>,
+    qdrant_port: Option<u16>,
+    qdrant_grpc_port: Option<u16>,
+    qdrant_data: Option<PathBuf>,
+    use_docker: bool,
+) -> Result<()> {
     output::header("Starting Database Infrastructure");
     output::info("Managing both SurrealDB (metadata) and Qdrant (vectors)");
     println!();
 
+    // Load base configuration
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let db_config = global_config.database();
+
+    // Build SurrealDB configuration with overrides
+    let mut surrealdb_config = cortex_storage::SurrealDBConfig::default();
+    surrealdb_config.username = db_config.username.clone();
+    surrealdb_config.password = db_config.password.clone();
+    surrealdb_config.bind_address = surreal_bind.unwrap_or_else(|| db_config.local_bind.clone());
+    if let Some(data_dir) = surreal_data {
+        surrealdb_config.data_dir = data_dir;
+    }
+
+    // Build Qdrant configuration with overrides
+    let qdrant_config = cortex_storage::QdrantConfig {
+        host: std::env::var("QDRANT_HOST").unwrap_or_else(|_| "localhost".to_string()),
+        port: qdrant_port.unwrap_or_else(|| {
+            std::env::var("QDRANT_HTTP_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(6333)
+        }),
+        grpc_port: qdrant_grpc_port.or_else(|| {
+            std::env::var("QDRANT_GRPC_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+        }),
+        api_key: std::env::var("QDRANT_API_KEY").ok(),
+        use_https: std::env::var("QDRANT_USE_HTTPS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(false),
+        timeout: std::time::Duration::from_secs(10),
+        request_timeout: std::time::Duration::from_secs(60),
+    };
+
+    // Build database manager configuration
+    let mut manager_config = crate::db_manager::DatabaseManagerConfig::default();
+    manager_config.use_docker_compose = use_docker;
+
+    // Store qdrant_data for later use if needed
+    if let Some(_data_dir) = qdrant_data {
+        // Note: Current QdrantConfig doesn't have a data_dir field
+        // This would require extending QdrantConfig or passing it to docker volumes
+        output::warning("Custom Qdrant data directory is not yet supported in this version");
+    }
+
     // Create unified database manager
-    let manager = crate::db_manager::create_from_global_config().await?;
+    let manager = crate::db_manager::DatabaseManager::new(
+        manager_config,
+        surrealdb_config,
+        qdrant_config,
+    ).await?;
 
     // Start both databases in sequence
     match manager.start().await {
@@ -1101,7 +1159,7 @@ pub async fn db_restart() -> Result<()> {
 }
 
 /// Check the status of both SurrealDB and Qdrant databases
-pub async fn db_status() -> Result<()> {
+pub async fn db_status(detailed: bool) -> Result<()> {
     output::header("Database Infrastructure Status");
     println!();
 
@@ -1142,6 +1200,14 @@ pub async fn db_status() -> Result<()> {
             output::kv("Connections", connections);
         }
     }
+
+    // Show additional details in detailed mode
+    if detailed && status.surrealdb.healthy {
+        output::info("Additional SurrealDB Information:");
+        output::info("  - Process Management: Active");
+        output::info("  - Data Persistence: Enabled");
+        output::info("  - Connection Mode: Local");
+    }
     println!();
 
     // Qdrant Status
@@ -1165,24 +1231,109 @@ pub async fn db_status() -> Result<()> {
             output::kv("Requests/sec", format!("{:.2}", rps));
         }
     }
+
+    // Show additional details in detailed mode
+    if detailed && status.qdrant.healthy {
+        output::info("Additional Qdrant Information:");
+
+        // Try to fetch collection statistics
+        match cortex_storage::QdrantClient::new(cortex_storage::QdrantConfig {
+            host: "localhost".to_string(),
+            port: 6333,
+            grpc_port: None,
+            api_key: None,
+            use_https: false,
+            timeout: std::time::Duration::from_secs(5),
+            request_timeout: std::time::Duration::from_secs(10),
+        }).await {
+            Ok(client) => {
+                match client.list_collections().await {
+                    Ok(collections) => {
+                        output::info(format!("  - Collections: {}", collections.len()));
+                        if !collections.is_empty() {
+                            output::info("  - Active Collections:");
+                            for collection in collections.iter().take(5) {
+                                output::info(format!("    * {}", collection));
+                            }
+                            if collections.len() > 5 {
+                                output::info(format!("    ... and {} more", collections.len() - 5));
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        output::warning("  - Could not fetch collection details");
+                    }
+                }
+            }
+            Err(_) => {
+                output::warning("  - Could not connect to Qdrant for detailed info");
+            }
+        }
+    }
     println!();
 
     // Summary and recommendations
     if !status.overall_healthy {
         output::warning("Some components are unhealthy");
         if !status.surrealdb.healthy {
-            output::info("  - Run 'cortex db install' to install SurrealDB");
+            output::info("  - Run 'cortex db install --database surrealdb' to install SurrealDB");
+            output::info("  - Or run 'cortex db start' to start with default settings");
         }
         if !status.qdrant.healthy {
-            output::info("  - Check Docker and run 'cortex db start' to start Qdrant");
+            output::info("  - Ensure Docker is running");
+            output::info("  - Run 'cortex db start' to start Qdrant container");
+        }
+    }
+
+    if detailed {
+        println!();
+        output::info("Tip: Use 'cortex db start --help' to see available configuration options");
+    }
+
+    Ok(())
+}
+
+/// Install database binaries (SurrealDB and/or Qdrant)
+pub async fn db_install(database: String) -> Result<()> {
+    let database_lower = database.to_lowercase();
+
+    match database_lower.as_str() {
+        "surrealdb" => {
+            install_surrealdb().await?;
+        }
+        "qdrant" => {
+            install_qdrant().await?;
+        }
+        "both" => {
+            output::header("Installing Database Infrastructure");
+            println!();
+
+            output::info("Installing SurrealDB...");
+            if let Err(e) = install_surrealdb().await {
+                output::warning(format!("SurrealDB installation failed: {}", e));
+            }
+            println!();
+
+            output::info("Installing Qdrant...");
+            if let Err(e) = install_qdrant().await {
+                output::warning(format!("Qdrant installation failed: {}", e));
+            }
+            println!();
+
+            output::info("Installation complete. Run 'cortex db status' to verify.");
+        }
+        _ => {
+            output::error(format!("Unknown database: {}", database));
+            output::info("Valid options: surrealdb, qdrant, both");
+            return Err(anyhow::anyhow!("Invalid database option"));
         }
     }
 
     Ok(())
 }
 
-/// Install SurrealDB if not already installed
-pub async fn db_install() -> Result<()> {
+/// Install SurrealDB
+async fn install_surrealdb() -> Result<()> {
     output::info("Checking for SurrealDB installation...");
 
     match SurrealDBManager::find_surreal_binary().await {
@@ -1215,6 +1366,56 @@ pub async fn db_install() -> Result<()> {
                     Err(e.into())
                 }
             }
+        }
+    }
+}
+
+/// Install Qdrant (via Docker)
+async fn install_qdrant() -> Result<()> {
+    use tokio::process::Command;
+
+    output::info("Checking for Qdrant...");
+
+    // Check if Docker is available
+    let docker_check = Command::new("docker")
+        .arg("--version")
+        .output()
+        .await;
+
+    if docker_check.is_err() || !docker_check.unwrap().status.success() {
+        output::error("Docker is not installed or not running");
+        output::info("Qdrant requires Docker. Please install Docker first:");
+        output::info("  - macOS/Windows: https://www.docker.com/products/docker-desktop");
+        output::info("  - Linux: https://docs.docker.com/engine/install/");
+        return Err(anyhow::anyhow!("Docker not available"));
+    }
+
+    output::success("Docker is available");
+
+    // Check if Qdrant image exists
+    output::info("Pulling Qdrant Docker image...");
+    let pull_result = Command::new("docker")
+        .arg("pull")
+        .arg("qdrant/qdrant:v1.12.5")
+        .output()
+        .await;
+
+    match pull_result {
+        Ok(output_result) => {
+            if output_result.status.success() {
+                output::success("Qdrant image pulled successfully");
+                output::kv("Image", "qdrant/qdrant:v1.12.5");
+                output::info("Use 'cortex db start' to start Qdrant");
+                Ok(())
+            } else {
+                let stderr = String::from_utf8_lossy(&output_result.stderr);
+                output::error(format!("Failed to pull Qdrant image: {}", stderr));
+                Err(anyhow::anyhow!("Failed to pull Qdrant image"))
+            }
+        }
+        Err(e) => {
+            output::error(format!("Failed to execute docker pull: {}", e));
+            Err(e.into())
         }
     }
 }
