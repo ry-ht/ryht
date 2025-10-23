@@ -24,15 +24,13 @@ use uuid::Uuid;
 /// Create a test database configuration
 fn create_test_db_config() -> DatabaseConfig {
     DatabaseConfig {
-        connection_mode: ConnectionMode::Local {
-            endpoint: "mem://".to_string(),
-        },
+        connection_mode: ConnectionMode::InMemory,
         credentials: Credentials {
-            username: Some("root".to_string()),
-            password: Some("root".to_string()),
+            username: None,
+            password: None,
         },
         pool_config: PoolConfig {
-            min_connections: 1,
+            min_connections: 0,
             max_connections: 4,
             connection_timeout: Duration::from_secs(10),
             idle_timeout: Some(Duration::from_secs(60)),

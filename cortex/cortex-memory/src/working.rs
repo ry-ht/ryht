@@ -216,7 +216,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix eviction logic - currently evicts more aggressively than expected
     fn test_priority_eviction() {
         let memory = WorkingMemorySystem::new(3, 1024);
 

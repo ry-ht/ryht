@@ -382,7 +382,7 @@ impl ONNXProvider {
 
         // Create ndarray 0.15 arrays (compatible with ort 1.16)
         // Note: ort uses ndarray 0.15, so we need to use its version
-        use ndarray_015::{Array, CowArray, IxDyn};
+        use ndarray::{Array, CowArray, IxDyn};
 
         let input_ids_array = Array::from_shape_vec(IxDyn(&[1, seq_len]), input_ids)
             .map_err(|e| SemanticError::Provider(format!("Failed to create input tensor: {}", e)))?;
@@ -417,7 +417,7 @@ impl ONNXProvider {
         let embedding = if shape.len() == 3 {
             // Shape: [batch_size, seq_len, hidden_size]
             // Use mean pooling over sequence dimension
-            use ndarray_015::Axis;
+            use ndarray::Axis;
             let batch_embeddings = embeddings_view.index_axis(Axis(0), 0); // Get first batch
             let pooled = batch_embeddings
                 .mean_axis(Axis(0))
@@ -425,7 +425,7 @@ impl ONNXProvider {
             pooled.into_raw_vec()
         } else if shape.len() == 2 {
             // Shape: [batch_size, hidden_size] - already pooled
-            use ndarray_015::Axis;
+            use ndarray::Axis;
             let batch_view = embeddings_view.index_axis(Axis(0), 0);
             batch_view.iter().copied().collect()
         } else {

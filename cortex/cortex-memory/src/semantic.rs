@@ -36,14 +36,27 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
-        // Create unit - let SurrealDB assign record ID, store our ID in content
-        let _: Option<CodeUnit> = conn
-            .connection()
-            .create("code_unit")
-            .content(unit.clone())
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+        // Serialize the unit to JSON and rename the id field to avoid SurrealDB record ID conflicts
+        let mut unit_json = serde_json::to_value(unit.clone())
+            .map_err(|e| CortexError::storage(format!("Failed to serialize code unit: {}", e)))?;
 
+        // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
+        if let Some(obj) = unit_json.as_object_mut() {
+            if let Some(id_val) = obj.remove("id") {
+                obj.insert("cortex_id".to_string(), id_val);
+            }
+        }
+
+        // Create code unit with the modified JSON
+        let query = "CREATE code_unit CONTENT $data";
+        conn
+            .connection()
+            .query(query)
+            .bind(("data", unit_json))
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to store code unit: {}", e)))?;
+
+        debug!(unit_id = %unit.id, "Code unit stored successfully");
         Ok(unit.id)
     }
 

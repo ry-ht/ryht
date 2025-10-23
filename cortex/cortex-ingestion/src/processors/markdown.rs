@@ -236,8 +236,12 @@ impl ContentProcessor for MarkdownProcessor {
             serde_json::Value::String("markdown".to_string()),
         );
 
-        Ok(ProcessedContent::new(ContentType::Markdown, text_content)
-            .with_chunks(chunks))
+        // Create ProcessedContent with metadata
+        let mut processed = ProcessedContent::new(ContentType::Markdown, text_content);
+        processed.metadata = metadata;
+        processed.chunks = chunks;
+
+        Ok(processed)
     }
 
     fn supported_extensions(&self) -> Vec<&str> {
@@ -269,7 +273,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // TODO: Fix frontmatter extraction - YAML parsing works but metadata not being returned
     async fn test_markdown_frontmatter() {
         let processor = MarkdownProcessor::new();
         let content = b"---\ntitle: Test\nauthor: John\n---\n# Content\n\nBody text.";

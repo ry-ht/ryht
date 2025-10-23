@@ -312,7 +312,8 @@ impl WorkingMemoryItem {
         let priority_score = self.priority as u32 as f64 * 100.0;
         let age_seconds = (Utc::now() - self.last_accessed).num_seconds() as f64;
         let recency_score = 1000.0 / (1.0 + age_seconds);
-        let access_score = (self.access_count as f64).ln() * 10.0;
+        // Use ln(1 + access_count) to avoid -inf for access_count=0
+        let access_score = ((self.access_count + 1) as f64).ln() * 10.0;
 
         priority_score + recency_score + access_score
     }

@@ -44,8 +44,6 @@ instant-distance = "0.6.1"
 
 # Linear algebra
 ndarray = "0.16.1"
-# ndarray 0.15 for compatibility with ort 1.16 (uses ndarray 0.15 internally)
-ndarray_015 = { package = "ndarray", version = "0.16.1" }
 
 # Parallel processing
 rayon = { workspace = true }

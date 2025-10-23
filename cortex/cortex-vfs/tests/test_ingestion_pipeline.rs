@@ -22,15 +22,13 @@ async fn setup_test_env() -> (
 ) {
     // Create a memory database config for testing
     let config = DatabaseConfig {
-        connection_mode: ConnectionMode::Local {
-            endpoint: "mem://".to_string(),
-        },
+        connection_mode: ConnectionMode::InMemory,
         credentials: Credentials {
             username: None,
             password: None,
         },
         pool_config: PoolConfig {
-            min_connections: 1,
+            min_connections: 0,
             max_connections: 5,
             connection_timeout: Duration::from_secs(30),
             idle_timeout: Some(Duration::from_secs(600)),
@@ -42,7 +40,7 @@ async fn setup_test_env() -> (
                 multiplier: 2.0,
             },
             warm_connections: false,
-            validate_on_checkout: true,
+            validate_on_checkout: false,
             recycle_after_uses: None,
             shutdown_grace_period: Duration::from_secs(5),
         },

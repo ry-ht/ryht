@@ -286,7 +286,6 @@ mod tests {
     use super::*;
     use cortex_core::types::{Project, SystemStats};
     use std::collections::HashMap;
-    use std::path::PathBuf;
 
     // Mock storage for testing
     struct MockStorage;
@@ -364,6 +363,34 @@ mod tests {
                 storage_size_bytes: 0,
                 last_updated: chrono::Utc::now(),
             })
+        }
+
+        async fn create_agent_session(
+            &self,
+            session_id: String,
+            name: String,
+            agent_type: String,
+        ) -> Result<cortex_core::types::AgentSession> {
+            Ok(cortex_core::types::AgentSession {
+                id: session_id,
+                name,
+                agent_type,
+                created_at: chrono::Utc::now(),
+                last_active: chrono::Utc::now(),
+                metadata: HashMap::new(),
+            })
+        }
+
+        async fn delete_agent_session(&self, _session_id: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_agent_session(&self, _session_id: &str) -> Result<Option<cortex_core::types::AgentSession>> {
+            Ok(None)
+        }
+
+        async fn list_agent_sessions(&self) -> Result<Vec<cortex_core::types::AgentSession>> {
+            Ok(Vec::new())
         }
     }
 
