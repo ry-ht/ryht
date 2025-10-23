@@ -389,7 +389,7 @@ enum DbCommands {
 
     /// Install database binaries
     Install {
-        /// Which database to install (surrealdb, qdrant, or both)
+        /// Which database to install (surrealdb, qdrant, qdrant-docker, or both)
         #[arg(short, long, default_value = "both")]
         database: String,
     },

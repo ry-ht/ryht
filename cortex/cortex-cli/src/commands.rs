@@ -1302,7 +1302,10 @@ pub async fn db_install(database: String) -> Result<()> {
             install_surrealdb().await?;
         }
         "qdrant" => {
-            install_qdrant().await?;
+            install_qdrant_binary().await?;
+        }
+        "qdrant-docker" => {
+            install_qdrant_docker().await?;
         }
         "both" => {
             output::header("Installing Database Infrastructure");
@@ -1314,9 +1317,9 @@ pub async fn db_install(database: String) -> Result<()> {
             }
             println!();
 
-            output::info("Installing Qdrant...");
-            if let Err(e) = install_qdrant().await {
-                output::warning(format!("Qdrant installation failed: {}", e));
+            output::info("Installing Qdrant native binary...");
+            if let Err(e) = install_qdrant_binary().await {
+                output::warning(format!("Qdrant binary installation failed: {}", e));
             }
             println!();
 
@@ -1324,7 +1327,7 @@ pub async fn db_install(database: String) -> Result<()> {
         }
         _ => {
             output::error(format!("Unknown database: {}", database));
-            output::info("Valid options: surrealdb, qdrant, both");
+            output::info("Valid options: surrealdb, qdrant, qdrant-docker, both");
             return Err(anyhow::anyhow!("Invalid database option"));
         }
     }
@@ -1370,8 +1373,198 @@ async fn install_surrealdb() -> Result<()> {
     }
 }
 
+/// Install Qdrant native binary from GitHub releases
+async fn install_qdrant_binary() -> Result<()> {
+    output::info("Installing Qdrant binary from GitHub releases...");
+
+    // Detect platform
+    let (os, arch) = detect_platform()?;
+    output::info(format!("Detected platform: {} {}", arch, os));
+
+    // Get latest release info
+    let release_info = get_latest_qdrant_release().await?;
+    let version = release_info["tag_name"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get version from release"))?;
+    output::info(format!("Latest Qdrant version: {}", version));
+
+    // Find appropriate asset for platform
+    let download_url = find_qdrant_asset(&release_info, &os, &arch)?;
+
+    // Download and install
+    download_and_install_qdrant(&download_url, version).await?;
+
+    output::success("Qdrant binary installed successfully");
+    Ok(())
+}
+
+/// Detect the current platform (OS and architecture)
+fn detect_platform() -> Result<(String, String)> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    let os_name = match os {
+        "macos" => "apple-darwin",
+        "linux" => "unknown-linux-musl",
+        "windows" => "pc-windows-msvc",
+        _ => return Err(anyhow::anyhow!("Unsupported OS: {}", os)),
+    };
+
+    let arch_name = match arch {
+        "x86_64" => "x86_64",
+        "aarch64" => "aarch64",
+        _ => return Err(anyhow::anyhow!("Unsupported architecture: {}", arch)),
+    };
+
+    Ok((os_name.to_string(), arch_name.to_string()))
+}
+
+/// Fetch latest Qdrant release information from GitHub API
+async fn get_latest_qdrant_release() -> Result<serde_json::Value> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.github.com/repos/qdrant/qdrant/releases/latest")
+        .header("User-Agent", "cortex-cli")
+        .send()
+        .await
+        .context("Failed to fetch Qdrant release information")?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "GitHub API returned error: {}",
+            response.status()
+        ));
+    }
+
+    let release_info: serde_json::Value = response
+        .json()
+        .await
+        .context("Failed to parse release information")?;
+
+    Ok(release_info)
+}
+
+/// Find the appropriate Qdrant binary asset for the given platform
+fn find_qdrant_asset(release: &serde_json::Value, os: &str, arch: &str) -> Result<String> {
+    let assets = release["assets"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("No assets found in release"))?;
+
+    // Build target string
+    let target = format!("{}-{}", arch, os);
+    output::info(format!("Looking for binary matching: {}", target));
+
+    // Look for matching asset name pattern
+    for asset in assets {
+        let name = asset["name"].as_str().unwrap_or("");
+
+        // Skip checksum files
+        if name.contains(".sha256") || name.contains(".md5") {
+            continue;
+        }
+
+        // Check if this is the right binary for our platform
+        if name.contains(&target) {
+            let download_url = asset["browser_download_url"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("No download URL found for asset"))?;
+
+            output::info(format!("Found matching binary: {}", name));
+            return Ok(download_url.to_string());
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "No Qdrant binary found for platform: {} {}. Available assets: {}",
+        arch,
+        os,
+        assets
+            .iter()
+            .filter_map(|a| a["name"].as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+/// Download and install the Qdrant binary
+async fn download_and_install_qdrant(url: &str, version: &str) -> Result<()> {
+    use std::path::PathBuf;
+
+    // Create installation directory
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .context("Failed to get home directory")?;
+    let install_dir = PathBuf::from(home).join(".cortex").join("bin");
+    std::fs::create_dir_all(&install_dir)
+        .context("Failed to create installation directory")?;
+
+    let binary_path = install_dir.join("qdrant");
+
+    output::info(format!("Downloading Qdrant {} from GitHub...", version));
+    let spinner = output::spinner("Downloading...");
+
+    // Download file
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .context("Failed to download Qdrant binary")?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!(
+            "Failed to download binary: HTTP {}",
+            response.status()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .context("Failed to read binary data")?;
+
+    spinner.finish_and_clear();
+
+    // Write to temp file first
+    let temp_path = install_dir.join("qdrant.tmp");
+    std::fs::write(&temp_path, &bytes)
+        .context("Failed to write binary to disk")?;
+
+    // Make executable on Unix systems
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&temp_path)?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&temp_path, perms)
+            .context("Failed to set executable permissions")?;
+    }
+
+    // Move to final location
+    std::fs::rename(&temp_path, &binary_path)
+        .context("Failed to install binary")?;
+
+    output::success(format!("Installed Qdrant to: {}", binary_path.display()));
+    output::info(format!("Version: {}", version));
+    output::info("Add ~/.cortex/bin to your PATH to use 'qdrant' command");
+
+    // Try to get version to verify installation
+    if let Ok(output) = std::process::Command::new(&binary_path)
+        .arg("--version")
+        .output()
+    {
+        if output.status.success() {
+            let version_output = String::from_utf8_lossy(&output.stdout);
+            output::info(format!("Verified: {}", version_output.trim()));
+        }
+    }
+
+    Ok(())
+}
+
 /// Install Qdrant (via Docker)
-async fn install_qdrant() -> Result<()> {
+async fn install_qdrant_docker() -> Result<()> {
     use tokio::process::Command;
 
     output::info("Checking for Qdrant...");
