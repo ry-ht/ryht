@@ -16,8 +16,7 @@ use cortex_storage::connection_pool::{
     ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig,
 };
 use cortex_storage::{
-    AgentSession, SessionManager, SessionScope, IsolationLevel,
-    MergeEngine, MergeRequest, MergeStrategy,
+    AgentSession, SessionManager, SessionMetadata, SessionScope, IsolationLevel, ResolutionStrategy,
 };
 use cortex_vfs::prelude::*;
 use std::collections::HashMap;
@@ -280,9 +279,21 @@ async fn test_2_multi_agent_sessions() -> Result<()> {
         let session = session_manager
             .create_session(
                 agent_id.clone(),
-                workspace_id,
-                SessionScope::Workspace,
-                IsolationLevel::ReadCommitted,
+                workspace_id.into(),
+                SessionMetadata {
+                    description: format!("Agent {} session", i),
+                    tags: vec!["test".to_string()],
+                    isolation_level: IsolationLevel::ReadCommitted,
+                    scope: SessionScope {
+                        paths: vec![],
+                        read_only_paths: vec![],
+                        units: vec![],
+                        allow_create: true,
+                        allow_delete: true,
+                    },
+                    custom: std::collections::HashMap::new(),
+                },
+                None,
             )
             .await?;
         sessions.push(session);
@@ -351,18 +362,8 @@ async fn test_2_multi_agent_sessions() -> Result<()> {
     // Phase 4: Merge sessions
     info!("Phase 4: Merging sessions");
 
-    let merge_engine = MergeEngine::new(storage.clone());
-
     for session in &sessions {
-        let merge_request = MergeRequest {
-            source_session: session.id,
-            target_session: None, // Merge to main
-            strategy: MergeStrategy::ThreeWay,
-            auto_resolve: true,
-            verify_semantics: true,
-        };
-
-        match merge_engine.merge(merge_request).await {
+        match session_manager.merge_session(&session.id, ResolutionStrategy::AutoMerge).await {
             Ok(result) => {
                 metrics.merges_performed += 1;
                 if !result.conflicts.is_empty() {
@@ -387,7 +388,7 @@ async fn test_2_multi_agent_sessions() -> Result<()> {
     // Phase 6: Cleanup sessions
     info!("Phase 6: Cleaning up sessions");
     for session in sessions {
-        session_manager.end_session(session.id).await.ok();
+        session_manager.abandon_session(&session.id).await.ok();
     }
 
     info!("✅ TEST 2 PASSED: {}", metrics.report());
@@ -638,9 +639,21 @@ async fn test_5_lock_contention() -> Result<()> {
         let session = session_manager
             .create_session(
                 format!("agent-{}", i),
-                workspace_id,
-                SessionScope::Workspace,
-                IsolationLevel::Serializable, // Strictest isolation
+                workspace_id.into(),
+                SessionMetadata {
+                    description: format!("Lock test agent {} session", i),
+                    tags: vec!["test".to_string(), "lock".to_string()],
+                    isolation_level: IsolationLevel::Serializable, // Strictest isolation
+                    scope: SessionScope {
+                        paths: vec![],
+                        read_only_paths: vec![],
+                        units: vec![],
+                        allow_create: true,
+                        allow_delete: true,
+                    },
+                    custom: std::collections::HashMap::new(),
+                },
+                None,
             )
             .await?;
         sessions.push(session);
@@ -701,7 +714,7 @@ async fn test_5_lock_contention() -> Result<()> {
     // Phase 4: Cleanup sessions
     info!("Phase 4: Cleaning up sessions");
     for session in sessions {
-        session_manager.end_session(session.id).await.ok();
+        session_manager.abandon_session(&session.id).await.ok();
     }
 
     info!("✅ TEST 5 PASSED: {}", metrics.report());
@@ -878,18 +891,42 @@ async fn test_7_complete_integration() -> Result<()> {
     let agent1 = session_manager
         .create_session(
             "agent-1".to_string(),
-            workspace_id,
-            SessionScope::Workspace,
-            IsolationLevel::ReadCommitted,
+            workspace_id.into(),
+            SessionMetadata {
+                description: "Agent 1 session".to_string(),
+                tags: vec!["test".to_string()],
+                isolation_level: IsolationLevel::ReadCommitted,
+                scope: SessionScope {
+                    paths: vec![],
+                    read_only_paths: vec![],
+                    units: vec![],
+                    allow_create: true,
+                    allow_delete: true,
+                },
+                custom: std::collections::HashMap::new(),
+            },
+            None,
         )
         .await?;
 
     let agent2 = session_manager
         .create_session(
             "agent-2".to_string(),
-            workspace_id,
-            SessionScope::Workspace,
-            IsolationLevel::ReadCommitted,
+            workspace_id.into(),
+            SessionMetadata {
+                description: "Agent 2 session".to_string(),
+                tags: vec!["test".to_string()],
+                isolation_level: IsolationLevel::ReadCommitted,
+                scope: SessionScope {
+                    paths: vec![],
+                    read_only_paths: vec![],
+                    units: vec![],
+                    allow_create: true,
+                    allow_delete: true,
+                },
+                custom: std::collections::HashMap::new(),
+            },
+            None,
         )
         .await?;
 
@@ -926,25 +963,15 @@ async fn test_7_complete_integration() -> Result<()> {
         "Fix auth bug".to_string(),
         "agent-2".to_string(),
         project_id,
-        EpisodeType::BugFix,
+        EpisodeType::Bugfix,
     );
     cognitive.remember_episode(&episode2).await?;
 
     // Phase 5: Merge sessions
     info!("Phase 5: Merging sessions");
 
-    let merge_engine = MergeEngine::new(storage.clone());
-
-    for session in &[agent1, agent2] {
-        let merge_request = MergeRequest {
-            source_session: session.id,
-            target_session: None,
-            strategy: MergeStrategy::ThreeWay,
-            auto_resolve: true,
-            verify_semantics: true,
-        };
-
-        match merge_engine.merge(merge_request).await {
+    for session in &[&agent1, &agent2] {
+        match session_manager.merge_session(&session.id, ResolutionStrategy::AutoMerge).await {
             Ok(_) => metrics.merges_performed += 1,
             Err(e) => warn!("Merge failed: {}", e),
         }
@@ -971,8 +998,8 @@ async fn test_7_complete_integration() -> Result<()> {
     let stats = cognitive.get_statistics().await?;
     assert!(stats.episodic.total_episodes >= 2);
 
-    session_manager.end_session(agent1.id).await.ok();
-    session_manager.end_session(agent2.id).await.ok();
+    session_manager.abandon_session(&agent1.id).await.ok();
+    session_manager.abandon_session(&agent2.id).await.ok();
 
     info!("✅ TEST 7 PASSED: {}", metrics.report());
     Ok(())

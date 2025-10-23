@@ -974,7 +974,7 @@ pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Re
 // Database Management Commands
 // ============================================================================
 
-/// Start the local SurrealDB server
+/// Start the local SurrealDB server in background
 pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -> Result<()> {
     output::info("Starting SurrealDB server...");
 
@@ -992,29 +992,19 @@ pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -
 
     match manager.start().await {
         Ok(_) => {
-            output::success("SurrealDB server started successfully");
+            output::success("SurrealDB server started successfully in background");
             output::kv("URL", manager.connection_url());
             output::kv("Data", manager.config().data_dir.display());
             output::kv("Logs", manager.config().log_file.display());
-            output::info("Press Ctrl+C to stop the server");
+            output::kv("PID file", manager.config().pid_file.display());
+            output::info("Use 'cortex db stop' to stop the server");
+            output::info("Use 'cortex db status' to check server status");
             println!();
 
-            // Wait for shutdown signal (Ctrl+C)
-            match tokio::signal::ctrl_c().await {
-                Ok(()) => {
-                    output::info("Shutdown signal received, stopping server...");
-                    if let Err(e) = manager.stop().await {
-                        output::error(format!("Error during shutdown: {}", e));
-                        return Err(e.into());
-                    }
-                    output::success("SurrealDB server stopped gracefully");
-                    Ok(())
-                }
-                Err(e) => {
-                    output::error(format!("Failed to listen for shutdown signal: {}", e));
-                    Err(e.into())
-                }
-            }
+            // Don't wait for shutdown - server runs in background
+            // The process is configured with kill_on_drop(false) so it continues running
+            std::mem::forget(manager); // Prevent Drop from being called
+            Ok(())
         }
         Err(e) => {
             output::error(format!("Failed to start SurrealDB server: {}", e));

@@ -71,7 +71,7 @@ mod types_tests {
         assert!(request.recursive);
         assert_eq!(request.file_type, Some("file".to_string()));
         assert_eq!(request.language, Some("rust".to_string()));
-        assert_eq!(request.limit, Some(10));
+        assert_eq!(request.limit, 10);
         assert_eq!(request.offset, Some(5));
     }
 
@@ -83,7 +83,7 @@ mod types_tests {
         assert!(!request.recursive); // Default from serde
         assert_eq!(request.file_type, None);
         assert_eq!(request.language, None);
-        assert_eq!(request.limit, None);
+        assert_eq!(request.limit, 20); // Default value from default_file_limit()
         assert_eq!(request.offset, None);
     }
 
