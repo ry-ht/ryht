@@ -1458,14 +1458,8 @@ pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
 // ============================================================================
 
 /// Start the REST API server
-pub async fn server_start(host: String, port: u16, workers: Option<usize>) -> Result<()> {
-    output::header("Starting Cortex REST API Server");
-    output::kv("Host", &host);
-    output::kv("Port", port);
-    if let Some(w) = workers {
-        output::kv("Workers", w);
-    }
-
+/// Run server in blocking mode (used internally by background process)
+pub async fn server_run_blocking(host: String, port: u16, workers: Option<usize>) -> Result<()> {
     let config = crate::api::server::ServerConfig {
         host,
         port,
@@ -1473,11 +1467,80 @@ pub async fn server_start(host: String, port: u16, workers: Option<usize>) -> Re
     };
 
     let server = crate::api::RestApiServer::with_config(config).await?;
-
-    output::success("REST API server started successfully");
-    output::info("Press Ctrl+C to stop");
-
     server.serve().await?;
+
+    Ok(())
+}
+
+/// Start server in background
+pub async fn server_start(host: String, port: u16, workers: Option<usize>) -> Result<()> {
+    use crate::server_manager::{ServerManager, ServerConfig};
+
+    output::info("Starting Cortex REST API Server...");
+
+    let config = ServerConfig {
+        host,
+        port,
+        workers,
+        ..Default::default()
+    };
+
+    let manager = ServerManager::new(config);
+
+    manager.start().await?;
+
+    output::success("REST API server started successfully in background");
+    output::kv("URL", format!("http://{}:{}", manager.config().host, manager.config().port));
+    output::kv("Logs", manager.config().log_file.display());
+    output::kv("PID file", manager.config().pid_file.display());
+    output::info("Use 'cortex server stop' to stop the server");
+    output::info("Use 'cortex server status' to check server status");
+    println!();
+
+    Ok(())
+}
+
+/// Stop the REST API server
+pub async fn server_stop() -> Result<()> {
+    use crate::server_manager::{ServerManager, ServerConfig};
+
+    output::info("Stopping Cortex REST API Server...");
+
+    let config = ServerConfig::default();
+    let manager = ServerManager::new(config);
+
+    manager.stop().await?;
+
+    output::success("REST API server stopped successfully");
+
+    Ok(())
+}
+
+/// Check REST API server status
+pub async fn server_status() -> Result<()> {
+    use crate::server_manager::{ServerManager, ServerConfig, ServerStatus};
+
+    output::header("Cortex REST API Server Status");
+
+    let config = ServerConfig::default();
+    output::kv("URL", format!("http://{}:{}", config.host, config.port));
+    output::kv("Logs", config.log_file.display());
+    output::kv("PID file", config.pid_file.display());
+    println!();
+
+    let manager = ServerManager::new(config);
+
+    match manager.status().await {
+        ServerStatus::Running => {
+            output::success("Status: Running");
+        }
+        ServerStatus::Stopped => {
+            output::info("Status: Stopped");
+        }
+        ServerStatus::Unknown => {
+            output::warning("Status: Unknown");
+        }
+    }
 
     Ok(())
 }

@@ -191,17 +191,20 @@ enum Commands {
         mode: String,
     },
 
-    /// Start the REST API server
-    Server {
-        /// Server host address
-        #[arg(long, default_value = "127.0.0.1")]
+    /// REST API server management
+    #[command(subcommand)]
+    Server(ServerCommands),
+
+    /// Internal command to run server (hidden)
+    #[command(hide = true)]
+    #[command(name = "internal-server-run")]
+    InternalServerRun {
+        #[arg(long)]
         host: String,
 
-        /// Server port
-        #[arg(long, default_value = "8080")]
+        #[arg(long)]
         port: u16,
 
-        /// Number of worker threads
         #[arg(long)]
         workers: Option<usize>,
     },
@@ -358,6 +361,30 @@ enum DbCommands {
 
     /// Install SurrealDB
     Install,
+}
+
+#[derive(Subcommand)]
+enum ServerCommands {
+    /// Start the REST API server
+    Start {
+        /// Server host address
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Server port
+        #[arg(long, default_value = "8080")]
+        port: u16,
+
+        /// Number of worker threads
+        #[arg(long)]
+        workers: Option<usize>,
+    },
+
+    /// Stop the REST API server
+    Stop,
+
+    /// Check server status
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -740,8 +767,21 @@ async fn run() -> Result<()> {
             }
         },
 
-        Commands::Server { host, port, workers } => {
-            commands::server_start(host, port, workers).await?;
+        Commands::Server(server_cmd) => match server_cmd {
+            ServerCommands::Start { host, port, workers } => {
+                commands::server_start(host, port, workers).await?;
+            }
+            ServerCommands::Stop => {
+                commands::server_stop().await?;
+            }
+            ServerCommands::Status => {
+                commands::server_status().await?;
+            }
+        },
+
+        Commands::InternalServerRun { host, port, workers } => {
+            // This is the internal blocking server run command
+            commands::server_run_blocking(host, port, workers).await?;
         }
     }
 

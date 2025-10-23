@@ -9,6 +9,7 @@ pub mod output;
 pub mod testing;
 pub mod mcp;
 pub mod api;
+pub mod server_manager;
 
 pub use commands::*;
 pub use config::*;

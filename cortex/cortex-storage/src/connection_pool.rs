@@ -810,9 +810,10 @@ impl PooledConnection {
 
     /// Check connection health
     pub async fn check_health(&self) -> bool {
-        // Try a simple query to verify connection health
+        // Try a simple info query to verify connection health
+        // Using INFO FOR DB which is lightweight and always available
         let result = self.connection()
-            .query("SELECT * FROM system::health LIMIT 1")
+            .query("INFO FOR DB")
             .await;
 
         let healthy = result.is_ok();
@@ -1063,6 +1064,9 @@ impl HealthMonitor {
     /// Run health check loop
     async fn run(&self) {
         let mut interval = tokio::time::interval(self.check_interval);
+
+        // Skip the first immediate tick to allow connections to stabilize
+        interval.tick().await;
 
         while self.running.load(Ordering::Relaxed) {
             interval.tick().await;
