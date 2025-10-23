@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod config;
+pub mod db_manager;
 pub mod doctor;
 pub mod export;
 pub mod interactive;

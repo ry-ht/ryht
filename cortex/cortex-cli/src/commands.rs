@@ -7,7 +7,7 @@ use crate::mcp::CortexMcpServer;
 use crate::output::{self, format_bytes, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
 use cortex_memory::CognitiveManager;
-use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBConfig, SurrealDBManager};
+use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
     VirtualPath, VNode, Workspace, WorkspaceType, SourceType,
@@ -1010,147 +1010,172 @@ pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Re
 // Database Management Commands
 // ============================================================================
 
-/// Start the local SurrealDB server in background
-pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -> Result<()> {
-    output::info("Starting SurrealDB server...");
-
-    // Load global config to get database credentials
-    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
-    let db_config = global_config.database();
-
-    let mut config = SurrealDBConfig::default();
-
-    // Use credentials from global config
-    config.username = db_config.username.clone();
-    config.password = db_config.password.clone();
-
-    // Override bind address from global config if not provided as argument
-    if let Some(addr) = bind_address {
-        config.bind_address = addr;
-    } else {
-        // Use local_bind from config
-        config.bind_address = db_config.local_bind.clone();
-    }
-
-    if let Some(dir) = data_dir {
-        config.data_dir = dir;
-    }
-
-    let mut manager = SurrealDBManager::new(config).await?;
-
-    match manager.start().await {
-        Ok(_) => {
-            output::success("SurrealDB server started successfully in background");
-            output::kv("URL", manager.connection_url());
-            output::kv("Data", manager.config().data_dir.display());
-            output::kv("Logs", manager.config().log_file.display());
-            output::kv("PID file", manager.config().pid_file.display());
-            output::info("Use 'cortex db stop' to stop the server");
-            output::info("Use 'cortex db status' to check server status");
-            println!();
-
-            // Don't wait for shutdown - server runs in background
-            // The process is configured with kill_on_drop(false) so it continues running
-            std::mem::forget(manager); // Prevent Drop from being called
-            Ok(())
-        }
-        Err(e) => {
-            output::error(format!("Failed to start SurrealDB server: {}", e));
-            Err(e.into())
-        }
-    }
-}
-
-/// Stop the local SurrealDB server
-pub async fn db_stop() -> Result<()> {
-    output::info("Stopping SurrealDB server...");
-
-    // Load global config to ensure consistent configuration
-    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
-    let db_config = global_config.database();
-
-    let mut config = SurrealDBConfig::default();
-    config.username = db_config.username.clone();
-    config.password = db_config.password.clone();
-    config.bind_address = db_config.local_bind.clone();
-
-    let mut manager = SurrealDBManager::new(config).await?;
-
-    match manager.stop().await {
-        Ok(_) => {
-            output::success("SurrealDB server stopped successfully");
-            Ok(())
-        }
-        Err(e) => {
-            output::error(format!("Failed to stop SurrealDB server: {}", e));
-            Err(e.into())
-        }
-    }
-}
-
-/// Restart the local SurrealDB server
-pub async fn db_restart() -> Result<()> {
-    output::info("Restarting SurrealDB server...");
-
-    // Load global config to ensure consistent configuration
-    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
-    let db_config = global_config.database();
-
-    let mut config = SurrealDBConfig::default();
-    config.username = db_config.username.clone();
-    config.password = db_config.password.clone();
-    config.bind_address = db_config.local_bind.clone();
-
-    let mut manager = SurrealDBManager::new(config).await?;
-
-    match manager.restart().await {
-        Ok(_) => {
-            output::success("SurrealDB server restarted successfully");
-            output::kv("URL", manager.connection_url());
-            Ok(())
-        }
-        Err(e) => {
-            output::error(format!("Failed to restart SurrealDB server: {}", e));
-            Err(e.into())
-        }
-    }
-}
-
-/// Check the status of the local SurrealDB server
-pub async fn db_status() -> Result<()> {
-    // Load global config to ensure consistent configuration
-    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
-    let db_config = global_config.database();
-
-    let mut config = SurrealDBConfig::default();
-    config.username = db_config.username.clone();
-    config.password = db_config.password.clone();
-    config.bind_address = db_config.local_bind.clone();
-
-    let manager = SurrealDBManager::new(config).await?;
-
-    output::header("SurrealDB Server Status");
-    output::kv("URL", manager.connection_url());
-    output::kv("Data", manager.config().data_dir.display());
-    output::kv("Logs", manager.config().log_file.display());
-    output::kv("PID file", manager.config().pid_file.display());
+/// Start both SurrealDB and Qdrant databases
+pub async fn db_start(_bind_address: Option<String>, _data_dir: Option<PathBuf>) -> Result<()> {
+    output::header("Starting Database Infrastructure");
+    output::info("Managing both SurrealDB (metadata) and Qdrant (vectors)");
     println!();
 
-    let is_running = manager.is_running().await;
+    // Create unified database manager
+    let manager = crate::db_manager::create_from_global_config().await?;
 
-    if is_running {
-        output::success("Status: Running");
+    // Start both databases in sequence
+    match manager.start().await {
+        Ok(_) => {
+            println!();
+            output::success("Database infrastructure started successfully");
+            output::info("Both SurrealDB and Qdrant are running and healthy");
+            println!();
 
-        match manager.health_check().await {
-            Ok(_) => {
-                output::success("Health: Healthy");
-            }
-            Err(e) => {
-                output::error(format!("Health: Unhealthy ({})", e));
-            }
+            // Show connection information
+            let status = manager.status().await?;
+            output::kv("SurrealDB URL", &status.surrealdb.url);
+            output::kv("Qdrant URL", &status.qdrant.url);
+            println!();
+
+            output::info("Use 'cortex db stop' to stop all databases");
+            output::info("Use 'cortex db status' to check health and metrics");
+            println!();
+            Ok(())
         }
+        Err(e) => {
+            output::error(format!("Failed to start database infrastructure: {}", e));
+            output::warning("Some databases may have started - run 'cortex db status' to check");
+            Err(e)
+        }
+    }
+}
+
+/// Stop both SurrealDB and Qdrant databases
+pub async fn db_stop() -> Result<()> {
+    output::header("Stopping Database Infrastructure");
+    output::info("Stopping Qdrant and SurrealDB in reverse order");
+    println!();
+
+    // Create unified database manager
+    let manager = crate::db_manager::create_from_global_config().await?;
+
+    // Stop both databases in reverse order
+    match manager.stop().await {
+        Ok(_) => {
+            println!();
+            output::success("Database infrastructure stopped successfully");
+            output::info("All databases have been shut down gracefully");
+            Ok(())
+        }
+        Err(e) => {
+            output::error(format!("Failed to stop all databases: {}", e));
+            output::warning("Some databases may still be running - check 'cortex db status'");
+            Err(e)
+        }
+    }
+}
+
+/// Restart both SurrealDB and Qdrant databases
+pub async fn db_restart() -> Result<()> {
+    output::header("Restarting Database Infrastructure");
+    output::info("Gracefully restarting all databases");
+    println!();
+
+    // Create unified database manager
+    let manager = crate::db_manager::create_from_global_config().await?;
+
+    // Restart both databases
+    match manager.restart().await {
+        Ok(_) => {
+            println!();
+            output::success("Database infrastructure restarted successfully");
+
+            // Show connection information
+            let status = manager.status().await?;
+            output::kv("SurrealDB URL", &status.surrealdb.url);
+            output::kv("Qdrant URL", &status.qdrant.url);
+            println!();
+            Ok(())
+        }
+        Err(e) => {
+            output::error(format!("Failed to restart database infrastructure: {}", e));
+            Err(e)
+        }
+    }
+}
+
+/// Check the status of both SurrealDB and Qdrant databases
+pub async fn db_status() -> Result<()> {
+    output::header("Database Infrastructure Status");
+    println!();
+
+    // Create unified database manager
+    let manager = crate::db_manager::create_from_global_config().await?;
+
+    // Get combined status
+    let spinner = output::spinner("Checking database health...");
+    let status = manager.status().await?;
+    spinner.finish_and_clear();
+
+    // Overall status
+    if status.overall_healthy {
+        output::success("Overall Status: Healthy");
     } else {
-        output::warning("Status: Stopped");
+        output::error("Overall Status: Degraded");
+    }
+    println!();
+
+    // SurrealDB Status
+    output::header("SurrealDB (Metadata & Relational)");
+    output::kv("URL", &status.surrealdb.url);
+    output::kv("Running", if status.surrealdb.running { "Yes" } else { "No" });
+    output::kv("Healthy", if status.surrealdb.healthy { "Yes" } else { "No" });
+
+    if let Some(ref error) = status.surrealdb.error {
+        output::error(format!("Error: {}", error));
+    }
+
+    if let Some(ref metrics) = status.surrealdb.metrics {
+        if let Some(uptime) = metrics.uptime_seconds {
+            output::kv("Uptime", format!("{}s", uptime));
+        }
+        if let Some(memory) = metrics.memory_mb {
+            output::kv("Memory", format!("{} MB", memory));
+        }
+        if let Some(connections) = metrics.connections {
+            output::kv("Connections", connections);
+        }
+    }
+    println!();
+
+    // Qdrant Status
+    output::header("Qdrant (Vector Database)");
+    output::kv("URL", &status.qdrant.url);
+    output::kv("Running", if status.qdrant.running { "Yes" } else { "No" });
+    output::kv("Healthy", if status.qdrant.healthy { "Yes" } else { "No" });
+
+    if let Some(ref error) = status.qdrant.error {
+        output::error(format!("Error: {}", error));
+    }
+
+    if let Some(ref metrics) = status.qdrant.metrics {
+        if let Some(uptime) = metrics.uptime_seconds {
+            output::kv("Uptime", format!("{}s", uptime));
+        }
+        if let Some(memory) = metrics.memory_mb {
+            output::kv("Memory", format!("{} MB", memory));
+        }
+        if let Some(rps) = metrics.requests_per_sec {
+            output::kv("Requests/sec", format!("{:.2}", rps));
+        }
+    }
+    println!();
+
+    // Summary and recommendations
+    if !status.overall_healthy {
+        output::warning("Some components are unhealthy");
+        if !status.surrealdb.healthy {
+            output::info("  - Run 'cortex db install' to install SurrealDB");
+        }
+        if !status.qdrant.healthy {
+            output::info("  - Check Docker and run 'cortex db start' to start Qdrant");
+        }
     }
 
     Ok(())

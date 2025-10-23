@@ -38,28 +38,16 @@ once_cell = { workspace = true }
 dashmap = { workspace = true }
 parking_lot = { workspace = true }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
-md5 = "0.8.0"
 
 # Qdrant client for vector storage
 qdrant-client = { version = "1.15.0", features = ["serde"] }
-
-# Bloom filter for quick existence checks
-probabilistic-collections = "0.7.0"
-
-# Hashing for consistency verification
-sha2 = { workspace = true }
-
-# Metrics and monitoring
-prometheus = "0.14.0"
-
-# Stream processing
-async-stream = "0.3.6"
 
 # Process management
 dirs = "6.0.0"
 
 # HTTP client for health checks
 reqwest = { version = "0.12.24", features = ["json"] }
+md5 = "0.8.0"
 
 # Unix-specific dependencies
 [target.'cfg(unix)'.dependencies]

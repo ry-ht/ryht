@@ -320,6 +320,27 @@ name = "migration_e2e"
 path = "tests/migration_e2e.rs"
 harness = true
 
+# Advanced Self-Test Suite (Cortex Testing Itself)
+[[test]]
+name = "self_test_complete_workflow"
+path = "tests/self_test_complete_workflow.rs"
+harness = true
+
+[[test]]
+name = "self_test_mcp_tools_advanced"
+path = "tests/self_test_mcp_tools_advanced.rs"
+harness = true
+
+[[test]]
+name = "self_test_semantic_search"
+path = "tests/self_test_semantic_search.rs"
+harness = true
+
+[[test]]
+name = "self_test_memory_system"
+path = "tests/self_test_memory_system.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
