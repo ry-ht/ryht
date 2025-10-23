@@ -1,0 +1,135 @@
+# Prometheus Alert Rules for Cortex
+
+groups:
+  - name: qdrant_alerts
+    interval: 30s
+    rules:
+      # Qdrant is down
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: qdrant
+        annotations:
+          summary: "Qdrant instance is down"
+          description: "Qdrant instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      # High memory usage
+      - alert: QdrantHighMemoryUsage
+        expr: (qdrant_app_memory_bytes / (1024^3)) > 6
+        for: 5m
+        labels:
+          severity: warning
+          component: qdrant
+        annotations:
+          summary: "Qdrant high memory usage"
+          description: "Qdrant instance {{ $labels.instance }} is using {{ $value | humanize }}GB of memory."
+
+      # Collection indexing lag
+      - alert: QdrantIndexingLag
+        expr: qdrant_collections_vectors_total - qdrant_collections_indexed_vectors_total > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: qdrant
+        annotations:
+          summary: "Qdrant indexing lag detected"
+          description: "Collection {{ $labels.collection }} has {{ $value }} unindexed vectors."
+
+      # High search latency
+      - alert: QdrantHighSearchLatency
+        expr: histogram_quantile(0.95, rate(qdrant_search_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: qdrant
+        annotations:
+          summary: "Qdrant high search latency"
+          description: "95th percentile search latency is {{ $value }}s on {{ $labels.instance }}."
+
+      # Segment optimization needed
+      - alert: QdrantSegmentOptimizationNeeded
+        expr: qdrant_collections_segments_total > 50
+        for: 15m
+        labels:
+          severity: info
+          component: qdrant
+        annotations:
+          summary: "Qdrant collection needs optimization"
+          description: "Collection {{ $labels.collection }} has {{ $value }} segments."
+
+  - name: surrealdb_alerts
+    interval: 30s
+    rules:
+      # SurrealDB is down
+      - alert: SurrealDBDown
+        expr: up{job="surrealdb"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: surrealdb
+        annotations:
+          summary: "SurrealDB instance is down"
+          description: "SurrealDB instance {{ $labels.instance }} has been down for more than 1 minute."
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on {{ $labels.instance }}."
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% on {{ $labels.instance }}."
+
+  - name: cortex_api_alerts
+    interval: 30s
+    rules:
+      # API is down
+      - alert: CortexAPIDown
+        expr: up{job="cortex-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: cortex-api
+        annotations:
+          summary: "Cortex API is down"
+          description: "Cortex API instance {{ $labels.instance }} has been down for more than 2 minutes."
+
+      # High error rate
+      - alert: CortexAPIHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: cortex-api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+
+      # High latency
+      - alert: CortexAPIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: cortex-api
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile API latency is {{ $value }}s on {{ $labels.instance }}."

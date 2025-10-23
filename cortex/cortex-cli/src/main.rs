@@ -184,6 +184,10 @@ enum Commands {
     #[command(subcommand)]
     Mcp(McpCommands),
 
+    /// Qdrant vector database operations
+    #[command(subcommand)]
+    Qdrant(QdrantCommands),
+
     /// Interactive mode
     Interactive {
         /// Interactive mode to enter (wizard, search, menu)
@@ -514,6 +518,113 @@ impl From<FlushScopeArg> for FlushScope {
     }
 }
 
+#[derive(Subcommand)]
+enum QdrantCommands {
+    /// Initialize Qdrant collections
+    Init {
+        /// Force recreate existing collections
+        #[arg(short, long)]
+        force: bool,
+
+        /// Skip verification after creation
+        #[arg(long)]
+        skip_verify: bool,
+    },
+
+    /// Check Qdrant health and statistics
+    Status {
+        /// Show detailed collection information
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Filter by collection name
+        #[arg(short, long)]
+        collection: Option<String>,
+    },
+
+    /// Migrate data from HNSW to Qdrant
+    Migrate {
+        /// Source collection or path
+        source: String,
+
+        /// Target Qdrant collection
+        #[arg(short, long)]
+        target: String,
+
+        /// Batch size for migration
+        #[arg(short, long, default_value = "500")]
+        batch_size: usize,
+
+        /// Enable dry-run mode
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Verify Qdrant data consistency
+    Verify {
+        /// Collection to verify (all if not specified)
+        #[arg(short, long)]
+        collection: Option<String>,
+
+        /// Fix inconsistencies automatically
+        #[arg(short, long)]
+        fix: bool,
+    },
+
+    /// Run performance benchmarks
+    Benchmark {
+        /// Collection to benchmark
+        #[arg(short, long)]
+        collection: Option<String>,
+
+        /// Number of queries to run
+        #[arg(short, long, default_value = "100")]
+        num_queries: usize,
+
+        /// Vector dimensionality for test data
+        #[arg(short, long, default_value = "1536")]
+        dimensions: usize,
+    },
+
+    /// Create a snapshot of Qdrant data
+    Snapshot {
+        /// Collection to snapshot (all if not specified)
+        #[arg(short, long)]
+        collection: Option<String>,
+
+        /// Output directory for snapshot
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Restore from a snapshot
+    Restore {
+        /// Snapshot file or directory
+        snapshot: PathBuf,
+
+        /// Target collection (required if snapshot contains single collection)
+        #[arg(short, long)]
+        collection: Option<String>,
+    },
+
+    /// Optimize collection (trigger segment optimization)
+    Optimize {
+        /// Collection to optimize
+        collection: String,
+
+        /// Wait for optimization to complete
+        #[arg(short, long)]
+        wait: bool,
+    },
+
+    /// List all collections
+    List {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
@@ -723,6 +834,36 @@ async fn run() -> Result<()> {
             }
             McpCommands::Info { detailed, category } => {
                 commands::mcp_info(detailed, category).await?;
+            }
+        },
+
+        Commands::Qdrant(qdrant_cmd) => match qdrant_cmd {
+            QdrantCommands::Init { force, skip_verify } => {
+                commands::qdrant_init(force, skip_verify).await?;
+            }
+            QdrantCommands::Status { detailed, collection } => {
+                commands::qdrant_status(detailed, collection, format).await?;
+            }
+            QdrantCommands::Migrate { source, target, batch_size, dry_run } => {
+                commands::qdrant_migrate(source, target, batch_size, dry_run).await?;
+            }
+            QdrantCommands::Verify { collection, fix } => {
+                commands::qdrant_verify(collection, fix).await?;
+            }
+            QdrantCommands::Benchmark { collection, num_queries, dimensions } => {
+                commands::qdrant_benchmark(collection, num_queries, dimensions, format).await?;
+            }
+            QdrantCommands::Snapshot { collection, output } => {
+                commands::qdrant_snapshot(collection, output).await?;
+            }
+            QdrantCommands::Restore { snapshot, collection } => {
+                commands::qdrant_restore(snapshot, collection).await?;
+            }
+            QdrantCommands::Optimize { collection, wait } => {
+                commands::qdrant_optimize(collection, wait).await?;
+            }
+            QdrantCommands::List { detailed } => {
+                commands::qdrant_list(detailed, format).await?;
             }
         },
 

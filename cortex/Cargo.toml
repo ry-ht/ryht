@@ -304,6 +304,22 @@ name = "test_ultimate_cortex_integration"
 path = "tests/test_ultimate_cortex_integration.rs"
 harness = true
 
+# Qdrant Integration Tests (comprehensive)
+[[test]]
+name = "e2e_qdrant_integration"
+path = "tests/e2e_qdrant_integration.rs"
+harness = true
+
+[[test]]
+name = "e2e_cortex_workflow"
+path = "tests/e2e_cortex_workflow.rs"
+harness = true
+
+[[test]]
+name = "migration_e2e"
+path = "tests/migration_e2e.rs"
+harness = true
+
 # Benchmarks
 [[bench]]
 name = "performance_benchmarks"
@@ -315,4 +331,8 @@ harness = false
 
 [[bench]]
 name = "mcp_tools_performance"
+harness = false
+
+[[bench]]
+name = "qdrant_benchmark"
 harness = false

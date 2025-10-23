@@ -11,17 +11,13 @@
 use crate::connection_pool::ConnectionManager;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use qdrant_client::{
-    client::QdrantClient,
-    qdrant::{
-        vectors_config::Config, CreateCollection, Distance, PointStruct, UpsertPointsBuilder,
-        VectorParams, VectorsConfig, DeletePointsBuilder, Filter, Condition, FieldCondition,
-        Match, SearchPoints, PointsIdsList, PointsSelector,
-    },
+use qdrant_client::qdrant::{
+    CreateCollectionBuilder, Distance, PointStruct, UpsertPointsBuilder,
+    VectorParamsBuilder, DeletePointsBuilder, PointsIdsList,
 };
+use qdrant_client::Qdrant;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -337,7 +333,7 @@ pub struct DataSyncManager {
     surreal: Arc<ConnectionManager>,
 
     /// Qdrant client
-    qdrant: Arc<QdrantClient>,
+    qdrant: Arc<Qdrant>,
 
     /// Write-ahead log
     wal: Arc<WalManager>,
@@ -362,8 +358,8 @@ impl DataSyncManager {
         info!("Initializing DataSyncManager");
 
         // Create Qdrant client
-        let qdrant = QdrantClient::from_url(&config.qdrant_url)
-            .build()
+        let qdrant_config = qdrant_client::config::QdrantConfig::from_url(&config.qdrant_url);
+        let qdrant = Qdrant::new(qdrant_config)
             .map_err(|e| CortexError::connection(format!("Failed to create Qdrant client: {}", e)))?;
 
         // Initialize WAL directory
@@ -404,20 +400,11 @@ impl DataSyncManager {
     ) -> Result<()> {
         info!("Creating Qdrant collection: {}", collection_name);
 
-        let create_collection = CreateCollection {
-            collection_name: collection_name.to_string(),
-            vectors_config: Some(VectorsConfig {
-                config: Some(Config::Params(VectorParams {
-                    size: vector_size,
-                    distance: distance.into(),
-                    ..Default::default()
-                })),
-            }),
-            ..Default::default()
-        };
-
         self.qdrant
-            .create_collection(&create_collection)
+            .create_collection(
+                CreateCollectionBuilder::new(collection_name)
+                    .vectors_config(VectorParamsBuilder::new(vector_size, distance))
+            )
             .await
             .map_err(|e| CortexError::storage(format!("Failed to create Qdrant collection: {}", e)))?;
 
@@ -618,7 +605,7 @@ impl DataSyncManager {
         );
 
         self.qdrant
-            .upsert_points(&collection_name, None, vec![point], None)
+            .upsert_points(UpsertPointsBuilder::new(&collection_name, vec![point]))
             .await
             .map_err(|e| CortexError::storage(format!("Failed to write to Qdrant: {}", e)))?;
 
@@ -698,7 +685,7 @@ impl DataSyncManager {
                 .collect();
 
             self.qdrant
-                .upsert_points(&collection_name, None, points, None)
+                .upsert_points(UpsertPointsBuilder::new(&collection_name, points))
                 .await
                 .map_err(|e| CortexError::storage(format!("Failed to batch write to Qdrant: {}", e)))?;
 
@@ -728,16 +715,13 @@ impl DataSyncManager {
         let collection_name = format!("{}_vectors", entity_type);
         let point_id = id.to_string().into();
 
-        let selector = PointsSelector {
-            points_selector_one_of: Some(qdrant_client::qdrant::points_selector::PointsSelectorOneOf::Points(
-                PointsIdsList {
-                    ids: vec![point_id],
-                }
-            )),
-        };
-
         self.qdrant
-            .delete_points(&collection_name, None, &selector, None)
+            .delete_points(
+                DeletePointsBuilder::new(&collection_name)
+                    .points(PointsIdsList {
+                        ids: vec![point_id],
+                    })
+            )
             .await
             .map_err(|e| CortexError::storage(format!("Failed to delete from Qdrant: {}", e)))?;
 

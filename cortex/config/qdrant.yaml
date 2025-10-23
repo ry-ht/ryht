@@ -1,0 +1,98 @@
+# Qdrant Server Configuration
+# This file is used by the Qdrant Docker container
+# Reference: https://qdrant.tech/documentation/guides/configuration/
+
+log_level: INFO
+
+service:
+  # API ports
+  http_port: 6333
+  grpc_port: 6334
+
+  # Enable gRPC and HTTP
+  enable_cors: true
+  enable_tls: false
+
+  # Maximum request size (100MB)
+  max_request_size_mb: 100
+
+storage:
+  # Storage path inside container
+  storage_path: /qdrant/storage
+
+  # Snapshot path
+  snapshots_path: /qdrant/storage/snapshots
+
+  # On-disk storage for vectors (set to false for in-memory)
+  on_disk_vectors: false
+
+  # WAL configuration
+  wal:
+    wal_capacity_mb: 32
+    wal_segments_ahead: 2
+
+  # Performance optimizers
+  optimizers:
+    # Number of segments (higher = better parallelism)
+    default_segment_number: 8
+
+    # Maximum segment size before splitting
+    max_segment_size_kb: 200000
+
+    # Deleted vectors threshold before optimization
+    deleted_threshold: 0.2
+
+    # Minimum vectors before vacuum
+    vacuum_min_vector_number: 1000
+
+    # Memory-mapped threshold
+    memmap_threshold_kb: 50000
+
+    # Indexing threshold (batch before building HNSW)
+    indexing_threshold_kb: 20000
+
+    # Flush interval for persistence
+    flush_interval_sec: 5
+
+    # Maximum threads for optimization (0 = auto)
+    max_optimization_threads: 16
+
+  # HNSW index defaults
+  hnsw_index:
+    # Number of edges per node
+    m: 16
+
+    # Neighbors during construction
+    ef_construct: 100
+
+    # Switch to HNSW after this many vectors
+    full_scan_threshold: 10000
+
+    # Maximum number of threads for indexing (0 = auto, max 16 recommended)
+    max_indexing_threads: 0
+
+    # Store index on disk
+    on_disk: false
+
+  # Performance settings
+  performance:
+    # Maximum number of threads for search operations
+    max_search_threads: 0
+
+    # Maximum number of optimization threads
+    max_optimization_threads: 16
+
+# Cluster configuration (for multi-node setup)
+cluster:
+  # Enable clustering
+  enabled: false
+
+  # Node information
+  # p2p:
+  #   port: 6335
+
+  # consensus:
+  #   tick_period_ms: 100
+
+# Telemetry (disabled for privacy)
+telemetry_disabled: false

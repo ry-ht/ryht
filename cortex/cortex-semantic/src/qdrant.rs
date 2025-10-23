@@ -15,16 +15,15 @@ use crate::index::{SearchResult as IndexSearchResult, VectorIndex};
 use crate::types::{DocumentId, SimilarityMetric, Vector};
 use async_trait::async_trait;
 use dashmap::DashMap;
-use qdrant_client::prelude::*;
-use qdrant_client::qdrant::vectors_config::Config;
 use qdrant_client::qdrant::{
-    quantization_config::Quantization, CollectionOperationResponse, CreateCollection,
+    quantization_config::Quantization, CreateCollectionBuilder, CreateFieldIndexCollectionBuilder,
     Distance as QdrantDistance, HnswConfigDiff, OptimizersConfigDiff, PointStruct, QuantizationConfig,
-    QuantizationType as QdrantQuantizationType, ScalarQuantization, SearchPoints, VectorParams,
-    VectorsConfig, WithPayloadSelector, WithVectorsSelector, PointsSelector, PointsIdsList,
+    QuantizationType as QdrantQuantizationType, ScalarQuantization, SearchPointsBuilder, VectorParamsBuilder,
+    FieldType, DeletePointsBuilder, PointsIdsList, UpsertPointsBuilder,
     VectorsOutput,
 };
 use qdrant_client::qdrant::PointId;
+use qdrant_client::Qdrant;
 use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
@@ -43,7 +42,7 @@ use uuid::Uuid;
 /// - Payload filtering during search
 /// - Connection pooling and retries
 pub struct QdrantVectorStore {
-    client: Arc<QdrantClient>,
+    client: Arc<Qdrant>,
     config: QdrantConfig,
     collection_name: String,
     dimension: usize,
@@ -100,22 +99,23 @@ impl QdrantVectorStore {
     }
 
     /// Create Qdrant client with retry logic.
-    async fn create_client(config: &QdrantConfig) -> Result<QdrantClient> {
+    async fn create_client(config: &QdrantConfig) -> Result<Qdrant> {
         let mut retries = 0;
         let max_retries = config.max_retries;
 
         loop {
-            let mut client_config = QdrantClient::from_url(&config.url);
+            // Create client configuration
+            let mut client_config = qdrant_client::config::QdrantConfig::from_url(&config.url);
 
             // Set API key if provided
             if let Some(api_key) = &config.api_key {
-                client_config.api_key = Some(api_key.clone());
+                client_config.set_api_key(api_key);
             }
 
             // Set timeout
-            client_config.timeout = Duration::from_secs(config.timeout_seconds);
+            client_config.set_timeout(Duration::from_secs(config.timeout_seconds));
 
-            match client_config.build() {
+            match Qdrant::new(client_config) {
                 Ok(client) => {
                     // Verify connection
                     match client.health_check().await {
@@ -176,85 +176,70 @@ impl QdrantVectorStore {
             SimilarityMetric::DotProduct => QdrantDistance::Dot,
         };
 
-        // Create vector configuration
-        let vectors_config = VectorsConfig {
-            config: Some(Config::Params(VectorParams {
-                size: self.dimension as u64,
-                distance: distance.into(),
-                hnsw_config: Some(HnswConfigDiff {
-                    m: Some(self.config.hnsw_config.m),
-                    ef_construct: Some(self.config.hnsw_config.ef_construct),
-                    full_scan_threshold: Some(self.config.hnsw_config.full_scan_threshold),
-                    max_indexing_threads: Some(self.config.hnsw_config.max_indexing_threads),
-                    on_disk: Some(false),
-                    ..Default::default()
-                }),
-                quantization_config: self.create_quantization_config(),
-                on_disk: Some(self.config.on_disk_payload),
-                ..Default::default()
-            })),
-        };
-
-        // Create collection
-        let response: CollectionOperationResponse = self
-            .client
-            .create_collection(&CreateCollection {
-                collection_name: self.collection_name.clone(),
-                vectors_config: Some(vectors_config),
-                shard_number: Some(self.config.shard_number),
-                replication_factor: Some(self.config.replication_factor),
-                optimizers_config: Some(OptimizersConfigDiff {
-                    indexing_threshold: Some(20000),
-                    memmap_threshold: Some(50000),
-                    ..Default::default()
-                }),
+        // Create vector params builder
+        let mut vector_params = VectorParamsBuilder::new(self.dimension as u64, distance)
+            .hnsw_config(HnswConfigDiff {
+                m: Some(self.config.hnsw_config.m),
+                ef_construct: Some(self.config.hnsw_config.ef_construct),
+                full_scan_threshold: Some(self.config.hnsw_config.full_scan_threshold),
+                max_indexing_threads: Some(self.config.hnsw_config.max_indexing_threads),
+                on_disk: Some(false),
                 ..Default::default()
             })
+            .on_disk(self.config.on_disk_payload);
+
+        // Add quantization if enabled
+        if let Some(quantization) = self.create_quantization() {
+            vector_params = vector_params.quantization_config(quantization);
+        }
+
+        // Create collection using builder
+        self.client
+            .create_collection(
+                CreateCollectionBuilder::new(&self.collection_name)
+                    .vectors_config(vector_params)
+                    .shard_number(self.config.shard_number)
+                    .replication_factor(self.config.replication_factor)
+                    .optimizers_config(OptimizersConfigDiff {
+                        indexing_threshold: Some(20000),
+                        memmap_threshold: Some(50000),
+                        ..Default::default()
+                    })
+            )
             .await
             .map_err(|e| SemanticError::Qdrant(format!("Failed to create collection: {}", e)))?;
 
-        if response.result {
-            info!("Collection '{}' created successfully", self.collection_name);
+        info!("Collection '{}' created successfully", self.collection_name);
 
-            // Create payload indexes for efficient filtering
-            self.create_payload_indexes().await?;
-        } else {
-            return Err(SemanticError::Qdrant(format!(
-                "Failed to create collection: {}",
-                self.collection_name
-            )));
-        }
+        // Create payload indexes for efficient filtering
+        self.create_payload_indexes().await?;
 
         Ok(())
     }
 
     /// Create quantization configuration based on settings.
-    fn create_quantization_config(&self) -> Option<QuantizationConfig> {
+    fn create_quantization(&self) -> Option<Quantization> {
         if !self.config.enable_quantization {
             return None;
         }
 
-        let quantization = match self.config.quantization_type {
-            QuantizationType::Scalar => Quantization::Scalar(ScalarQuantization {
+        match self.config.quantization_type {
+            QuantizationType::Scalar => Some(Quantization::Scalar(ScalarQuantization {
                 r#type: QdrantQuantizationType::Int8.into(),
                 quantile: Some(0.99),
                 always_ram: Some(true),
                 ..Default::default()
-            }),
+            })),
             QuantizationType::Product => {
                 // Product quantization - more aggressive compression
-                Quantization::Product(qdrant_client::qdrant::ProductQuantization {
+                Some(Quantization::Product(qdrant_client::qdrant::ProductQuantization {
                     compression: qdrant_client::qdrant::CompressionRatio::X16.into(),
                     always_ram: Some(true),
                     ..Default::default()
-                })
+                }))
             }
-            QuantizationType::None => return None,
-        };
-
-        Some(QuantizationConfig {
-            quantization: Some(quantization),
-        })
+            QuantizationType::None => None,
+        }
     }
 
     /// Create payload indexes for efficient filtering.
@@ -264,11 +249,11 @@ impl QdrantVectorStore {
         // Create index for entity_type field
         self.client
             .create_field_index(
-                &self.collection_name,
-                "entity_type",
-                qdrant_client::qdrant::FieldType::Keyword,
-                None,
-                None,
+                CreateFieldIndexCollectionBuilder::new(
+                    &self.collection_name,
+                    "entity_type",
+                    FieldType::Keyword,
+                )
             )
             .await
             .map_err(|e| SemanticError::Qdrant(format!("Failed to create entity_type index: {}", e)))?;
@@ -276,11 +261,11 @@ impl QdrantVectorStore {
         // Create index for workspace_id field
         self.client
             .create_field_index(
-                &self.collection_name,
-                "workspace_id",
-                qdrant_client::qdrant::FieldType::Keyword,
-                None,
-                None,
+                CreateFieldIndexCollectionBuilder::new(
+                    &self.collection_name,
+                    "workspace_id",
+                    FieldType::Keyword,
+                )
             )
             .await
             .map_err(|e| SemanticError::Qdrant(format!("Failed to create workspace_id index: {}", e)))?;
@@ -288,11 +273,11 @@ impl QdrantVectorStore {
         // Create index for created_at field
         self.client
             .create_field_index(
-                &self.collection_name,
-                "created_at",
-                qdrant_client::qdrant::FieldType::Integer,
-                None,
-                None,
+                CreateFieldIndexCollectionBuilder::new(
+                    &self.collection_name,
+                    "created_at",
+                    FieldType::Integer,
+                )
             )
             .await
             .map_err(|e| SemanticError::Qdrant(format!("Failed to create created_at index: {}", e)))?;
@@ -307,7 +292,10 @@ impl QdrantVectorStore {
         let max_retries = self.config.max_retries;
 
         loop {
-            match self.client.upsert_points(&self.collection_name, None, vec![point.clone()], None).await {
+            match self.client
+                .upsert_points(UpsertPointsBuilder::new(&self.collection_name, vec![point.clone()]))
+                .await
+            {
                 Ok(_) => {
                     self.metrics
                         .total_inserts
@@ -446,7 +434,10 @@ impl VectorIndex for QdrantVectorStore {
             let max_retries = self.config.max_retries;
 
             loop {
-                match self.client.upsert_points(&self.collection_name, None, points.clone(), None).await {
+                match self.client
+                    .upsert_points(UpsertPointsBuilder::new(&self.collection_name, points.clone()))
+                    .await
+                {
                     Ok(_) => {
                         total_inserted += chunk.len();
                         self.metrics
@@ -502,30 +493,19 @@ impl VectorIndex for QdrantVectorStore {
             .total_searches
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        // Create search request
-        let search_points = SearchPoints {
-            collection_name: self.collection_name.clone(),
-            vector: query.to_vec(),
-            limit: k as u64,
-            with_payload: Some(WithPayloadSelector {
-                selector_options: Some(
-                    qdrant_client::qdrant::with_payload_selector::SelectorOptions::Enable(true),
-                ),
-            }),
-            with_vectors: Some(WithVectorsSelector {
-                selector_options: Some(
-                    qdrant_client::qdrant::with_vectors_selector::SelectorOptions::Enable(true),
-                ),
-            }),
-            ..Default::default()
-        };
-
         // Execute search with retry
         let mut retries = 0;
         let max_retries = self.config.max_retries;
 
         let response = loop {
-            match self.client.search_points(&search_points).await {
+            match self.client
+                .search_points(
+                    SearchPointsBuilder::new(&self.collection_name, query.to_vec(), k as u64)
+                        .with_payload(true)
+                        .with_vectors(true)
+                )
+                .await
+            {
                 Ok(response) => break response,
                 Err(e) if retries < max_retries => {
                     warn!(
@@ -584,21 +564,15 @@ impl VectorIndex for QdrantVectorStore {
         let mut retries = 0;
         let max_retries = self.config.max_retries;
 
-        // Create PointsSelector for deletion
-        let selector = PointsSelector {
-            points_selector_one_of: Some(
-                qdrant_client::qdrant::points_selector::PointsSelectorOneOf::Points(
-                    PointsIdsList {
-                        ids: vec![point_id.clone()],
-                    },
-                ),
-            ),
-        };
-
         loop {
             match self
                 .client
-                .delete_points(&self.collection_name, None, &selector, None)
+                .delete_points(
+                    DeletePointsBuilder::new(&self.collection_name)
+                        .points(PointsIdsList {
+                            ids: vec![point_id.clone()],
+                        })
+                )
                 .await
             {
                 Ok(_) => {

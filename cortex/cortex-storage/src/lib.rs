@@ -22,6 +22,9 @@ pub mod sync_manager;
 pub mod consistency;
 pub mod migration;
 
+// Qdrant vector database client
+pub mod qdrant;
+
 // In-memory pool for testing (available in all builds for integration tests)
 pub mod in_memory_pool;
 
@@ -71,6 +74,12 @@ pub use migration::{
     MigrationReport, MigrationStatus, VerificationReport,
 };
 
+// Re-export Qdrant types
+pub use qdrant::{
+    CollectionConfig, CollectionStats, DistanceMetric, HnswConfig, OptimizerConfig,
+    QdrantClient, QdrantConfig,
+};
+
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::connection::{ConnectionConfig, ConnectionMode};
@@ -117,5 +126,11 @@ pub mod prelude {
     pub use crate::migration::{
         EntityWithVector, MigrationConfig, MigrationManager, MigrationProgress,
         MigrationReport, MigrationStatus, VerificationReport,
+    };
+
+    // Qdrant
+    pub use crate::qdrant::{
+        CollectionConfig, CollectionStats, DistanceMetric, HnswConfig, OptimizerConfig,
+        QdrantClient, QdrantConfig,
     };
 }

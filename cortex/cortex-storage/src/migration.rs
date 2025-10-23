@@ -15,17 +15,15 @@ use crate::sync_manager::{DataSyncManager, SyncEntity, SyncConfig};
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
 use async_stream::stream;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::{Stream, StreamExt};
-use qdrant_client::client::QdrantClient;
+use qdrant_client::Qdrant;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
 // ============================================================================
@@ -241,7 +239,7 @@ pub struct MigrationManager {
     surreal: Arc<ConnectionManager>,
 
     /// Qdrant client
-    qdrant: Arc<QdrantClient>,
+    qdrant: Arc<Qdrant>,
 
     /// Sync manager for coordinated writes
     sync_manager: Arc<DataSyncManager>,
@@ -272,8 +270,8 @@ impl MigrationManager {
         let qdrant_url = std::env::var("QDRANT_URL")
             .unwrap_or_else(|_| "http://localhost:6333".to_string());
 
-        let qdrant = QdrantClient::from_url(&qdrant_url)
-            .build()
+        let qdrant_config = qdrant_client::config::QdrantConfig::from_url(&qdrant_url);
+        let qdrant = Qdrant::new(qdrant_config)
             .map_err(|e| CortexError::connection(format!("Failed to create Qdrant client: {}", e)))?;
 
         let qdrant = Arc::new(qdrant);

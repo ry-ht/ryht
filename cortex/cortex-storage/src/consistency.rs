@@ -9,18 +9,16 @@
 //! - Comprehensive metrics and monitoring
 
 use crate::connection_pool::ConnectionManager;
-use crate::sync_manager::SyncEntity;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use probabilistic_collections::bloom::BloomFilter;
-use qdrant_client::client::QdrantClient;
-use qdrant_client::qdrant::{ScrollPoints, Filter, Condition, FieldCondition, Match, PointsIdsList, PointsSelector};
+use qdrant_client::qdrant::{ScrollPointsBuilder, PointsIdsList, DeletePointsBuilder, GetPointsBuilder};
+use qdrant_client::Qdrant;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument, warn};
@@ -203,7 +201,7 @@ pub struct ConsistencyChecker {
     surreal: Arc<ConnectionManager>,
 
     /// Qdrant client
-    qdrant: Arc<QdrantClient>,
+    qdrant: Arc<Qdrant>,
 
     /// Bloom filter for quick existence checks (per entity type)
     bloom_filters: Arc<DashMap<String, RwLock<BloomFilter<String>>>>,
@@ -217,7 +215,7 @@ impl ConsistencyChecker {
     pub fn new(
         config: ConsistencyConfig,
         surreal: Arc<ConnectionManager>,
-        qdrant: Arc<QdrantClient>,
+        qdrant: Arc<Qdrant>,
     ) -> Self {
         Self {
             config,
@@ -293,12 +291,9 @@ impl ConsistencyChecker {
         // Try to retrieve the point
         let result = self.qdrant
             .get_points(
-                collection_name,
-                None,
-                &[id.to_string().into()],
-                Some(false), // Don't fetch vectors
-                Some(false), // Don't fetch payload
-                None,
+                GetPointsBuilder::new(&collection_name, vec![id.to_string().into()])
+                    .with_vectors(false)
+                    .with_payload(false)
             )
             .await;
 
@@ -337,12 +332,9 @@ impl ConsistencyChecker {
         let collection_name = format!("{}_vectors", entity_type);
         let qdrant_result = self.qdrant
             .get_points(
-                collection_name,
-                None,
-                &[id.to_string().into()],
-                Some(false), // Don't fetch vectors
-                Some(true),  // Fetch payload
-                None,
+                GetPointsBuilder::new(&collection_name, vec![id.to_string().into()])
+                    .with_vectors(false)
+                    .with_payload(true)
             )
             .await
             .map_err(|e| CortexError::storage(format!("Failed to get Qdrant data: {}", e)))?;
@@ -465,16 +457,17 @@ impl ConsistencyChecker {
         let mut offset = None;
 
         loop {
+            let mut scroll_builder = ScrollPointsBuilder::new(&collection_name)
+                .limit(100)
+                .with_payload(false)
+                .with_vectors(false);
+
+            if let Some(offset_val) = offset {
+                scroll_builder = scroll_builder.offset(offset_val);
+            }
+
             let scroll_result = self.qdrant
-                .scroll(&ScrollPoints {
-                    collection_name: collection_name.clone(),
-                    filter: None,
-                    offset,
-                    limit: Some(100),
-                    with_payload: Some(false.into()),
-                    with_vectors: Some(false.into()),
-                    ..Default::default()
-                })
+                .scroll(scroll_builder)
                 .await
                 .map_err(|e| CortexError::storage(format!("Failed to scroll Qdrant: {}", e)))?;
 
@@ -587,7 +580,7 @@ impl ConsistencyChecker {
     /// Execute a specific repair action
     async fn execute_repair(&self, action: RepairAction) -> Result<()> {
         match action {
-            RepairAction::InsertVector { entity_id, entity_type } => {
+            RepairAction::InsertVector { entity_id: _, entity_type: _ } => {
                 // Get full entity data from SurrealDB and insert into Qdrant
                 // This would need access to the sync manager or embedding generation
                 warn!("InsertVector repair not fully implemented yet");
@@ -597,21 +590,18 @@ impl ConsistencyChecker {
                 let collection_name = format!("{}_vectors", entity_type);
                 let point_id = entity_id.to_string().into();
 
-                let selector = PointsSelector {
-                    points_selector_one_of: Some(qdrant_client::qdrant::points_selector::PointsSelectorOneOf::Points(
-                        PointsIdsList {
-                            ids: vec![point_id],
-                        }
-                    )),
-                };
-
                 self.qdrant
-                    .delete_points(&collection_name, None, &selector, None)
+                    .delete_points(
+                        DeletePointsBuilder::new(&collection_name)
+                            .points(PointsIdsList {
+                                ids: vec![point_id],
+                            })
+                    )
                     .await
                     .map_err(|e| CortexError::storage(format!("Failed to delete orphan: {}", e)))?;
                 Ok(())
             }
-            RepairAction::UpdateVector { entity_id, entity_type } => {
+            RepairAction::UpdateVector { entity_id: _, entity_type: _ } => {
                 warn!("UpdateVector repair not fully implemented yet");
                 Ok(())
             }
@@ -626,16 +616,13 @@ impl ConsistencyChecker {
                 let collection_name = format!("{}_vectors", entity_type);
                 let point_id = entity_id.to_string().into();
 
-                let selector = PointsSelector {
-                    points_selector_one_of: Some(qdrant_client::qdrant::points_selector::PointsSelectorOneOf::Points(
-                        PointsIdsList {
-                            ids: vec![point_id],
-                        }
-                    )),
-                };
-
                 self.qdrant
-                    .delete_points(&collection_name, None, &selector, None)
+                    .delete_points(
+                        DeletePointsBuilder::new(&collection_name)
+                            .points(PointsIdsList {
+                                ids: vec![point_id],
+                            })
+                    )
                     .await
                     .map_err(|e| CortexError::storage(format!("Failed to delete from Qdrant: {}", e)))?;
 
