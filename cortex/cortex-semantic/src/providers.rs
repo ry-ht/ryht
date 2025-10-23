@@ -249,10 +249,10 @@ impl EmbeddingProvider for OpenAIProvider {
 pub struct ONNXProvider {
     model: EmbeddingModel,
     dimension: usize,
-    #[allow(dead_code)]
     session: Option<Arc<RwLock<ort::Session>>>,
-    #[allow(dead_code)]
     tokenizer: Option<Arc<tokenizers::Tokenizer>>,
+    #[allow(dead_code)]  // Keep environment alive for the session
+    environment: Option<Arc<ort::Environment>>,
     use_mock: bool,
 }
 
@@ -261,21 +261,26 @@ impl ONNXProvider {
         info!("Initializing ONNX provider with model: {}", config.model_name);
 
         // Try to load ONNX model and tokenizer
-        let (session, tokenizer, use_mock) = if let Some(model_path) = &config.model_path {
+        let (session, tokenizer, environment, use_mock) = if let Some(model_path) = &config.model_path {
             let path_str = model_path.to_string_lossy().to_string();
             match Self::load_model(&path_str).await {
-                Ok((sess, tok)) => {
+                Ok((env, sess, tok)) => {
                     info!("ONNX model loaded successfully from: {}", path_str);
-                    (Some(Arc::new(RwLock::new(sess))), Some(Arc::new(tok)), false)
+                    (
+                        Some(Arc::new(RwLock::new(sess))),
+                        Some(Arc::new(tok)),
+                        Some(Arc::new(env)),
+                        false
+                    )
                 }
                 Err(e) => {
                     warn!("Failed to load ONNX model: {}. Using mock embeddings.", e);
-                    (None, None, true)
+                    (None, None, None, true)
                 }
             }
         } else {
             info!("No model path provided. Using mock embeddings for testing.");
-            (None, None, true)
+            (None, None, None, true)
         };
 
         Ok(Self {
@@ -283,25 +288,168 @@ impl ONNXProvider {
             dimension: config.dimension,
             session,
             tokenizer,
+            environment,
             use_mock,
         })
     }
 
     async fn load_model(
-        _model_path: &str,
-    ) -> Result<(ort::Session, tokenizers::Tokenizer)> {
-        // TODO: Fix for ort 1.16 API - temporarily disabled
-        // The ort API has changed in v1.16. For now, use mock provider.
-        Err(SemanticError::Provider(
-            "ONNX provider temporarily disabled - use mock or openai provider".to_string()
-        ).into())
+        model_path: &str,
+    ) -> Result<(ort::Environment, ort::Session, tokenizers::Tokenizer)> {
+        use std::path::Path;
+
+        let model_path_obj = Path::new(model_path);
+
+        // Check if model file exists
+        if !model_path_obj.exists() {
+            return Err(SemanticError::Provider(format!(
+                "ONNX model file not found: {}. Please download all-MiniLM-L6-v2 ONNX model.",
+                model_path
+            )));
+        }
+
+        // Create ONNX Runtime environment (required for ort 1.16 API)
+        let environment = ort::Environment::builder()
+            .with_name("cortex_semantic")
+            .with_log_level(ort::LoggingLevel::Warning)
+            .build()?
+            .into_arc();
+
+        info!("ONNX Runtime environment created");
+
+        // Load ONNX model using ort 1.16 API
+        // Use SessionBuilder::new() followed by with_model_from_file()
+        let session = ort::SessionBuilder::new(&environment)?
+            .with_optimization_level(ort::GraphOptimizationLevel::Level3)?
+            .with_intra_threads(4)?
+            .with_model_from_file(model_path)?;
+
+        info!("ONNX session created successfully from: {}", model_path);
+
+        // Load tokenizer
+        // Look for tokenizer.json in the same directory as the model
+        let model_dir = model_path_obj.parent().ok_or_else(|| {
+            SemanticError::Provider("Invalid model path - no parent directory".to_string())
+        })?;
+
+        let tokenizer_path = model_dir.join("tokenizer.json");
+
+        if !tokenizer_path.exists() {
+            return Err(SemanticError::Provider(format!(
+                "Tokenizer file not found: {}. Please ensure tokenizer.json is in the same directory as the model.",
+                tokenizer_path.display()
+            )));
+        }
+
+        let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| SemanticError::Provider(format!("Failed to load tokenizer: {}", e)))?;
+
+        info!("Tokenizer loaded successfully from: {}", tokenizer_path.display());
+
+        // Extract environment from Arc to return it
+        let env = Arc::try_unwrap(environment)
+            .unwrap_or_else(|arc| (*arc).clone());
+
+        Ok((env, session, tokenizer))
     }
 
-    fn generate_embedding_real(&self, _text: &str) -> Result<Vector> {
-        // TODO: Fix for ort 1.16 API - temporarily disabled
-        Err(SemanticError::Provider(
-            "ONNX provider temporarily disabled - use mock or openai provider".to_string()
-        ).into())
+    fn generate_embedding_real(&self, text: &str) -> Result<Vector> {
+        // Validate that we have session and tokenizer
+        let session = self.session.as_ref().ok_or_else(|| {
+            SemanticError::Provider("ONNX session not initialized".to_string())
+        })?;
+
+        let tokenizer = self.tokenizer.as_ref().ok_or_else(|| {
+            SemanticError::Provider("Tokenizer not initialized".to_string())
+        })?;
+
+        // Tokenize input text
+        let encoding = tokenizer.encode(text, true)
+            .map_err(|e| SemanticError::Provider(format!("Tokenization failed: {}", e)))?;
+
+        let token_ids = encoding.get_ids();
+        let attention_mask = encoding.get_attention_mask();
+
+        // Convert to i64 for ONNX input
+        let input_ids: Vec<i64> = token_ids.iter().map(|&id| id as i64).collect();
+        let attention_mask_i64: Vec<i64> = attention_mask.iter().map(|&m| m as i64).collect();
+
+        let seq_len = input_ids.len();
+
+        // Get allocator for creating ONNX values
+        let session_guard = session.read();
+        let allocator_ptr = session_guard.allocator();
+
+        // Create ndarray 0.15 arrays (compatible with ort 1.16)
+        // Note: ort uses ndarray 0.15, so we need to use its version
+        use ndarray_015::{Array, CowArray, IxDyn};
+
+        let input_ids_array = Array::from_shape_vec(IxDyn(&[1, seq_len]), input_ids)
+            .map_err(|e| SemanticError::Provider(format!("Failed to create input tensor: {}", e)))?;
+
+        let attention_mask_array = Array::from_shape_vec(IxDyn(&[1, seq_len]), attention_mask_i64)
+            .map_err(|e| SemanticError::Provider(format!("Failed to create attention mask tensor: {}", e)))?;
+
+        // Convert to CowArrays for ort
+        let input_ids_cow: CowArray<i64, IxDyn> = CowArray::from(input_ids_array);
+        let attention_mask_cow: CowArray<i64, IxDyn> = CowArray::from(attention_mask_array);
+
+        let input_ids_value = ort::Value::from_array(allocator_ptr, &input_ids_cow)?;
+        let attention_mask_value = ort::Value::from_array(allocator_ptr, &attention_mask_cow)?;
+
+        // Run inference using ort 1.16 API
+        // Session::run takes a Vec<Value>
+        let outputs = session_guard.run(vec![input_ids_value, attention_mask_value])?;
+
+        // Extract embeddings from output
+        // For sentence transformers, we typically get output with shape [batch_size, seq_len, hidden_size]
+        // We need to pool it to get [batch_size, hidden_size]
+        let output_tensor = &outputs[0];
+
+        // Try to extract as f32 tensor using ort 1.16 API
+        let embeddings_raw = output_tensor
+            .try_extract::<f32>()?;
+
+        let embeddings_view = embeddings_raw.view();
+        let shape = embeddings_view.shape();
+
+        // Handle different output shapes and convert to Vec<f32>
+        let embedding = if shape.len() == 3 {
+            // Shape: [batch_size, seq_len, hidden_size]
+            // Use mean pooling over sequence dimension
+            use ndarray_015::Axis;
+            let batch_embeddings = embeddings_view.index_axis(Axis(0), 0); // Get first batch
+            let pooled = batch_embeddings
+                .mean_axis(Axis(0))
+                .ok_or_else(|| SemanticError::Provider("Failed to pool embeddings".to_string()))?;
+            pooled.into_raw_vec()
+        } else if shape.len() == 2 {
+            // Shape: [batch_size, hidden_size] - already pooled
+            use ndarray_015::Axis;
+            let batch_view = embeddings_view.index_axis(Axis(0), 0);
+            batch_view.iter().copied().collect()
+        } else {
+            return Err(SemanticError::Provider(format!(
+                "Unexpected output shape: {:?}",
+                shape
+            )));
+        };
+
+        // Normalize the embedding (L2 normalization)
+        let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let normalized_embedding: Vec<f32> = if norm > 1e-12 {
+            embedding.iter().map(|x| x / norm).collect()
+        } else {
+            embedding
+        };
+
+        debug!(
+            "Generated embedding with dimension {} for text: '{}'",
+            normalized_embedding.len(),
+            text.chars().take(50).collect::<String>()
+        );
+
+        Ok(normalized_embedding)
     }
 
     fn generate_mock_embedding(&self, text: &str) -> Vector {

@@ -39,13 +39,13 @@ reqwest = { workspace = true }
 ort = { workspace = true }
 tokenizers = { workspace = true }
 
-# HNSW index
-hnsw = "0.11.0"
-space = "0.19.0"
-rand_chacha = "0.9.0"
+# HNSW index - Using instant-distance for pure Rust HNSW implementation
+instant-distance = "0.6.1"
 
 # Linear algebra
 ndarray = "0.16.1"
+# ndarray 0.15 for compatibility with ort 1.16 (uses ndarray 0.15 internally)
+ndarray_015 = { package = "ndarray", version = "0.16.1" }
 
 # Parallel processing
 rayon = { workspace = true }
@@ -86,4 +86,8 @@ harness = false
 
 [[bench]]
 name = "search_performance"
+harness = false
+
+[[bench]]
+name = "hnsw_comparison"
 harness = false

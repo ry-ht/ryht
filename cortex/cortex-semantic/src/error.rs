@@ -53,4 +53,14 @@ pub enum SemanticError {
 
     #[error("Concurrent operation error: {0}")]
     Concurrent(String),
+
+    #[error("ONNX Runtime error: {0}")]
+    OnnxRuntime(String),
+}
+
+// Implement From<ort::OrtError> for SemanticError
+impl From<ort::OrtError> for SemanticError {
+    fn from(err: ort::OrtError) -> Self {
+        SemanticError::OnnxRuntime(err.to_string())
+    }
 }

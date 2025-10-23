@@ -583,6 +583,130 @@ impl VirtualFileSystem {
 
         Ok(())
     }
+
+    // ============================================================================
+    // Ergonomic Helper Methods for Tests
+    // ============================================================================
+
+    /// Create a new file in VFS with content.
+    ///
+    /// This is a convenience method that combines write_file and returns the VNode.
+    /// It will create a new file if it doesn't exist, or fail if it already exists.
+    pub async fn create_file(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+        content: &[u8],
+    ) -> Result<VNode> {
+        debug!("Creating file: {} in workspace {}", path, workspace_id);
+
+        // Check if file already exists
+        if self.exists(workspace_id, path).await? {
+            return Err(CortexError::invalid_input(
+                format!("File already exists: {}", path)
+            ));
+        }
+
+        // Calculate content hash
+        let content_hash = Self::hash_content(content);
+
+        // Store content (deduplicated)
+        self.store_content(&content_hash, content).await?;
+
+        // Create new vnode
+        let mut vnode = VNode::new_file(
+            *workspace_id,
+            path.clone(),
+            content_hash.clone(),
+            content.len(),
+        );
+
+        // Detect language
+        if let Some(ext) = path.extension() {
+            vnode.language = Some(Language::from_extension(ext));
+        }
+
+        // Save vnode to database
+        self.save_vnode(&vnode).await?;
+
+        // Cache content
+        self.content_cache.put(content_hash, content.to_vec());
+
+        Ok(vnode)
+    }
+
+    /// Get a file from VFS by path, returning the VNode with content.
+    ///
+    /// This is a convenience method for tests that returns the full VNode.
+    /// Returns Ok(VNode) if file exists, or Err if not found.
+    pub async fn get_file(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+    ) -> Result<VNode> {
+        debug!("Getting file: {} in workspace {}", path, workspace_id);
+
+        // Get vnode
+        let vnode = self.get_vnode(workspace_id, path).await?
+            .ok_or_else(|| CortexError::not_found("File", path.to_string()))?;
+
+        // Check if it's a file
+        if !vnode.is_file() {
+            return Err(CortexError::invalid_input(format!("Not a file: {}", path)));
+        }
+
+        // Note: We don't preload the content here as it would be wasteful
+        // The caller can use read_file() if they need the content bytes
+        Ok(vnode)
+    }
+
+    /// Update an existing file's content.
+    ///
+    /// This is a convenience method that updates a file and returns the updated VNode.
+    /// It will increment the version and update the content hash.
+    pub async fn update_file(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+        content: &[u8],
+    ) -> Result<VNode> {
+        debug!("Updating file: {} in workspace {}", path, workspace_id);
+
+        // Get existing vnode
+        let mut vnode = self.get_vnode(workspace_id, path).await?
+            .ok_or_else(|| CortexError::not_found("File", path.to_string()))?;
+
+        // Check if it's a file
+        if !vnode.is_file() {
+            return Err(CortexError::invalid_input(format!("Not a file: {}", path)));
+        }
+
+        // Check if read-only
+        if vnode.read_only {
+            return Err(CortexError::invalid_input(
+                format!("File is read-only: {}", path)
+            ));
+        }
+
+        // Calculate new content hash
+        let content_hash = Self::hash_content(content);
+
+        // Store content (deduplicated)
+        self.store_content(&content_hash, content).await?;
+
+        // Update vnode
+        vnode.content_hash = Some(content_hash.clone());
+        vnode.size_bytes = content.len();
+        vnode.mark_modified();
+
+        // Save updated vnode
+        self.save_vnode(&vnode).await?;
+
+        // Cache content
+        self.content_cache.put(content_hash, content.to_vec());
+
+        Ok(vnode)
+    }
 }
 
 // Note: MaterializationEngine, ExternalProjectLoader, and ForkManager
