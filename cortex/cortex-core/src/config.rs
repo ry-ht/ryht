@@ -257,6 +257,12 @@ pub struct McpConfig {
     pub cors_enabled: bool,
     /// Maximum request size in megabytes
     pub max_request_size_mb: u64,
+    /// Log file for stdio mode
+    pub log_file_stdio: String,
+    /// Log file for HTTP mode
+    pub log_file_http: String,
+    /// Log level for MCP server (trace, debug, info, warn, error)
+    pub log_level: String,
 }
 
 /// Authentication and security configuration
@@ -353,10 +359,16 @@ impl Default for IngestionConfig {
 
 impl Default for McpConfig {
     fn default() -> Self {
+        let home = dirs::home_dir().expect("Could not determine home directory");
+        let ryht_dir = home.join(".ryht").join("cortex").join("mcp");
+
         Self {
             server_bind: "127.0.0.1:3000".to_string(),
             cors_enabled: true,
             max_request_size_mb: 10,
+            log_file_stdio: ryht_dir.join("logs").join("mcp-stdio.log").to_string_lossy().to_string(),
+            log_file_http: ryht_dir.join("logs").join("mcp-http.log").to_string_lossy().to_string(),
+            log_level: "info".to_string(),
         }
     }
 }

@@ -17,6 +17,42 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 // ============================================================================
+// Logging Utilities
+// ============================================================================
+
+/// Initialize file-based logging (for MCP stdio mode - no stdout/stderr!)
+fn init_file_logging(log_file: &str, log_level: &str) -> Result<()> {
+    use tracing_subscriber::fmt;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::EnvFilter;
+
+    // Create log directory if it doesn't exist
+    if let Some(parent) = std::path::Path::new(log_file).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Open log file for appending
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)?;
+
+    // Create filter from log level
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(log_level));
+
+    // Initialize file-only subscriber (NO stdout/stderr!)
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().with_writer(Arc::new(file)))
+        .try_init()
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {}", e))?;
+
+    Ok(())
+}
+
+// ============================================================================
 // Init Command
 // ============================================================================
 
@@ -1195,15 +1231,20 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
 
 /// Start MCP server in stdio mode
 pub async fn mcp_stdio() -> Result<()> {
-    output::header("Starting Cortex MCP Server (stdio mode)");
-    output::info("Initializing server...");
+    // Load config to get log file path
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let mcp_config = global_config.mcp();
+
+    // Initialize file logging for stdio mode (NO stdout/stderr output!)
+    init_file_logging(&mcp_config.log_file_stdio, &mcp_config.log_level)?;
+
+    tracing::info!("Starting Cortex MCP Server (stdio mode)");
+    tracing::info!("Log file: {}", mcp_config.log_file_stdio);
 
     let server = CortexMcpServer::new().await
         .context("Failed to initialize MCP server")?;
 
-    output::success("MCP server started successfully");
-    output::info("Listening on stdio");
-    output::info("Press Ctrl+C to stop");
+    tracing::info!("MCP server started successfully, listening on stdio");
 
     server.serve_stdio().await?;
     Ok(())
@@ -1211,6 +1252,13 @@ pub async fn mcp_stdio() -> Result<()> {
 
 /// Start MCP server in HTTP mode
 pub async fn mcp_http(address: String, port: u16) -> Result<()> {
+    // Load config to get log file path
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let mcp_config = global_config.mcp();
+
+    // Initialize file logging for HTTP mode
+    init_file_logging(&mcp_config.log_file_http, &mcp_config.log_level)?;
+
     output::header("Starting Cortex MCP Server (HTTP mode)");
     output::kv("Address", &address);
     output::kv("Port", port);
@@ -1224,6 +1272,9 @@ pub async fn mcp_http(address: String, port: u16) -> Result<()> {
     output::success("MCP server started successfully");
     output::info(format!("Listening on http://{}", bind_addr));
     output::info("Press Ctrl+C to stop");
+
+    tracing::info!("MCP HTTP server started on {}", bind_addr);
+    tracing::info!("Log file: {}", mcp_config.log_file_http);
 
     server.serve_http(&bind_addr).await?;
     Ok(())

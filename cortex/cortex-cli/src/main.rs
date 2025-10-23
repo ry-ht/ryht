@@ -525,8 +525,12 @@ async fn main() {
 async fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialize logging
-    init_logging(cli.verbose);
+    // Skip default logging for MCP stdio mode (it will use file-only logging)
+    let is_mcp_stdio = matches!(&cli.command, Commands::Mcp(McpCommands::Stdio));
+
+    if !is_mcp_stdio {
+        init_logging(cli.verbose);
+    }
 
     let format = OutputFormat::from(cli.format);
 
