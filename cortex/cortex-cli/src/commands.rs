@@ -978,10 +978,22 @@ pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Re
 pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -> Result<()> {
     output::info("Starting SurrealDB server...");
 
+    // Load global config to get database credentials
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let db_config = global_config.database();
+
     let mut config = SurrealDBConfig::default();
 
+    // Use credentials from global config
+    config.username = db_config.username.clone();
+    config.password = db_config.password.clone();
+
+    // Override bind address from global config if not provided as argument
     if let Some(addr) = bind_address {
         config.bind_address = addr;
+    } else {
+        // Use local_bind from config
+        config.bind_address = db_config.local_bind.clone();
     }
 
     if let Some(dir) = data_dir {
@@ -1017,7 +1029,15 @@ pub async fn db_start(bind_address: Option<String>, data_dir: Option<PathBuf>) -
 pub async fn db_stop() -> Result<()> {
     output::info("Stopping SurrealDB server...");
 
-    let config = SurrealDBConfig::default();
+    // Load global config to ensure consistent configuration
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let db_config = global_config.database();
+
+    let mut config = SurrealDBConfig::default();
+    config.username = db_config.username.clone();
+    config.password = db_config.password.clone();
+    config.bind_address = db_config.local_bind.clone();
+
     let mut manager = SurrealDBManager::new(config).await?;
 
     match manager.stop().await {
@@ -1036,7 +1056,15 @@ pub async fn db_stop() -> Result<()> {
 pub async fn db_restart() -> Result<()> {
     output::info("Restarting SurrealDB server...");
 
-    let config = SurrealDBConfig::default();
+    // Load global config to ensure consistent configuration
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let db_config = global_config.database();
+
+    let mut config = SurrealDBConfig::default();
+    config.username = db_config.username.clone();
+    config.password = db_config.password.clone();
+    config.bind_address = db_config.local_bind.clone();
+
     let mut manager = SurrealDBManager::new(config).await?;
 
     match manager.restart().await {
@@ -1054,7 +1082,15 @@ pub async fn db_restart() -> Result<()> {
 
 /// Check the status of the local SurrealDB server
 pub async fn db_status() -> Result<()> {
-    let config = SurrealDBConfig::default();
+    // Load global config to ensure consistent configuration
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let db_config = global_config.database();
+
+    let mut config = SurrealDBConfig::default();
+    config.username = db_config.username.clone();
+    config.password = db_config.password.clone();
+    config.bind_address = db_config.local_bind.clone();
+
     let manager = SurrealDBManager::new(config).await?;
 
     output::header("SurrealDB Server Status");
