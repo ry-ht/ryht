@@ -47,6 +47,23 @@ pub trait Storage: Send + Sync {
 
     /// Get system statistics
     async fn get_stats(&self) -> Result<SystemStats>;
+
+    /// Create a new agent session
+    async fn create_agent_session(
+        &self,
+        session_id: String,
+        name: String,
+        agent_type: String,
+    ) -> Result<AgentSession>;
+
+    /// Delete an agent session
+    async fn delete_agent_session(&self, session_id: &str) -> Result<()>;
+
+    /// Get an agent session by ID
+    async fn get_agent_session(&self, session_id: &str) -> Result<Option<AgentSession>>;
+
+    /// List all agent sessions
+    async fn list_agent_sessions(&self) -> Result<Vec<AgentSession>>;
 }
 
 /// Trait for document ingestion.

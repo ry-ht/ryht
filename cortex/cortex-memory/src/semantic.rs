@@ -895,6 +895,33 @@ impl SemanticMemorySystem {
             })
         }
     }
+
+    /// Forget semantic units created before a specific date
+    pub async fn forget_before(&self, before: &chrono::DateTime<chrono::Utc>) -> Result<usize> {
+        info!(before = %before, "Forgetting semantic units before date");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        // Delete code units created before the specified date
+        let query = "DELETE code_unit WHERE created_at < $before";
+        let mut result = conn
+            .connection()
+            .query(query)
+            .bind(("before", before.to_rfc3339()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // SurrealDB DELETE returns the deleted records
+        let deleted_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let deleted_count = deleted_json.len();
+        info!(deleted_count, "Forgotten semantic units before date");
+        Ok(deleted_count)
+    }
 }
 
 #[cfg(test)]

@@ -25,8 +25,7 @@
 //! ```
 
 use cortex_parser::CodeParser;
-use cortex_storage::ConnectionManager;
-use cortex_storage::connection::ConnectionConfig;
+use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType
@@ -72,7 +71,13 @@ struct TypeScriptTestResult {
 impl TypeScriptTestHarness {
     /// Create a new test harness with in-memory database
     pub async fn new() -> Self {
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: PoolConnectionMode::InMemory,
+            credentials: Credentials::default(),
+            pool_config: PoolConfig::default(),
+            namespace: "cortex_test".to_string(),
+            database: "main".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -97,18 +102,15 @@ impl TypeScriptTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: "typescript-test-project".to_string(),
-            root_path: PathBuf::from("/tmp/typescript-test-project"),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: {
-                let mut meta = HashMap::new();
-                meta.insert("language".to_string(), serde_json::json!("typescript"));
-                meta.insert("framework".to_string(), serde_json::json!("react"));
-                meta
-            },
+            namespace: "cortex_test".to_string(),
+            source_path: Some(PathBuf::from("/tmp/typescript-test-project")),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         // Store workspace
@@ -542,12 +544,7 @@ async fn test_create_react_component() {
     let mut harness = TypeScriptTestHarness::new().await;
 
     let start = Instant::now();
-    let vfs_ctx = tools::vfs::VfsContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.loader.clone(),
-        harness.engine.clone(),
-    );
+    let vfs_ctx = tools::vfs::VfsContext::new(harness.vfs.clone());
 
     // Step 1: Create component file with interfaces
     let create_tool = tools::vfs::VfsCreateFileTool::new(vfs_ctx.clone());
@@ -793,11 +790,7 @@ const useUser = (id: string) => {
 };
 "#;
 
-    let ctx = tools::code_manipulation::CodeManipulationContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.parser.clone(),
-    );
+    let ctx = tools::code_manipulation::CodeManipulationContext::new(harness.storage.clone());
 
     // Simulate refactoring operations
     let extract_interface_tool = tools::code_manipulation::CodeCreateUnitTool::new(ctx.clone());
@@ -909,11 +902,7 @@ const handleResponse = (response: ApiResponse): Product[] => {
 };
 "#;
 
-    let ai_ctx = tools::ai_assisted::AiAssistedContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.semantic_memory.clone(),
-    );
+    let ai_ctx = tools::ai_assisted::AiAssistedContext::new(harness.storage.clone());
 
     let suggest_tool = tools::ai_assisted::AiSuggestFixTool::new(ai_ctx);
 
@@ -1044,13 +1033,9 @@ const processOrder = async (order: Order): Promise<Order> => {
 };
 "#;
 
-    let ai_ctx = tools::ai_assisted::AiAssistedContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.semantic_memory.clone(),
-    );
+    let ai_ctx = tools::ai_assisted::AiAssistedContext::new(harness.storage.clone());
 
-    let generate_tool = tools::ai_assisted::AiGenerateCodeTool::new(ai_ctx);
+    let generate_tool = tools::ai_assisted::AiSuggestRefactoringTool::new(ai_ctx);
 
     let generate_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
@@ -1179,7 +1164,7 @@ export const ExpensiveList: React.FC<ExpensiveListProps> = ({ items }) => {
         harness.vfs.clone(),
     );
 
-    let analyze_tool = tools::code_quality::CodeAnalyzeComplexityTool::new(quality_ctx);
+    let analyze_tool = tools::code_quality::QualityAnalyzeComplexityTool::new(quality_ctx);
 
     let analyze_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
@@ -1233,12 +1218,12 @@ async fn test_security_audit() {
 
     let start = Instant::now();
 
-    let security_ctx = tools::security_analysis::SecurityContext::new(
+    let security_ctx = tools::security_analysis::SecurityAnalysisContext::new(
         harness.storage.clone(),
         harness.vfs.clone(),
     );
 
-    let audit_tool = tools::security_analysis::SecurityAuditTool::new(security_ctx);
+    let audit_tool = tools::security_analysis::SecurityScanTool::new(security_ctx);
 
     let audit_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
@@ -1299,7 +1284,7 @@ async fn test_generate_typescript_tests() {
         harness.parser.clone(),
     );
 
-    let generate_tool = tools::testing::TestGenerateUnitTestsTool::new(testing_ctx);
+    let generate_tool = tools::testing::TestGenerateTool::new(testing_ctx);
 
     let generate_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
@@ -1454,14 +1439,14 @@ async fn test_analyze_typescript_architecture() {
 
     let start = Instant::now();
 
-    let arch_ctx = tools::architecture_analysis::ArchitectureContext::new(
+    let arch_ctx = tools::architecture_analysis::ArchitectureAnalysisContext::new(
         harness.storage.clone(),
         harness.vfs.clone(),
     );
 
     // Test dependency analysis
-    let deps_tool = tools::dependency_analysis::DepsBuildGraphTool::new(
-        tools::dependency_analysis::DependencyContext::new(
+    let deps_tool = tools::dependency_analysis::DepsGenerateGraphTool::new(
+        tools::dependency_analysis::DependencyAnalysisContext::new(
             harness.storage.clone(),
             harness.vfs.clone(),
         )
@@ -1477,8 +1462,8 @@ async fn test_analyze_typescript_architecture() {
     let deps_result = deps_tool.execute(deps_input, &ToolContext::default()).await;
 
     // Test circular import detection
-    let cycles_tool = tools::dependency_analysis::DepsDetectCyclesTool::new(
-        tools::dependency_analysis::DependencyContext::new(
+    let cycles_tool = tools::dependency_analysis::DepsFindCyclesTool::new(
+        tools::dependency_analysis::DependencyAnalysisContext::new(
             harness.storage.clone(),
             harness.vfs.clone(),
         )
@@ -1492,7 +1477,7 @@ async fn test_analyze_typescript_architecture() {
     let cycles_result = cycles_tool.execute(cycles_input, &ToolContext::default()).await;
 
     // Test unused code detection
-    let unused_tool = tools::semantic_search::SearchUnusedCodeTool::new(
+    let unused_tool = tools::semantic_search::SearchCodeTool::new(
         tools::semantic_search::SemanticSearchContext::new(
             harness.storage.clone(),
             harness.semantic_memory.clone(),

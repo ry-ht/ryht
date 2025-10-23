@@ -26,8 +26,7 @@
 //! - Tests tool interactions and dependencies
 
 use cortex_parser::CodeParser;
-use cortex_storage::ConnectionManager;
-use cortex_storage::connection::ConnectionConfig;
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex_cli::mcp::tools;
@@ -64,7 +63,13 @@ struct ToolTestResult {
 impl ToolTestHarness {
     /// Create a new test harness with in-memory database
     pub async fn new() -> Self {
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -89,13 +94,15 @@ impl ToolTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-self-test".to_string(),
-            root_path: PathBuf::from("/Users/taaliman/projects/luxquant/ry-ht/ryht/cortex"),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(PathBuf::from("/Users/taaliman/projects/luxquant/ry-ht/ryht/cortex")),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         // Store workspace
@@ -663,7 +670,7 @@ async fn test_semantic_search_tools() {
     // Test 1: cortex.search.semantic
     {
         let start = Instant::now();
-        let tool = tools::semantic_search::SearchSemanticTool::new(ctx.clone());
+        let tool = tools::semantic_search::SearchCodeTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -704,7 +711,7 @@ async fn test_dependency_analysis_tools() {
     println!("\n=== Testing Dependency Analysis Tools (10 tools) ===");
     let mut harness = ToolTestHarness::new().await;
 
-    let ctx = tools::dependency_analysis::DependencyContext::new(
+    let ctx = tools::dependency_analysis::DependencyAnalysisContext::new(
         harness.storage.clone(),
         harness.vfs.clone(),
     );

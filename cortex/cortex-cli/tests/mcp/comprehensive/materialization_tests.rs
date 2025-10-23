@@ -14,7 +14,7 @@
 //! 8. Data integrity - Verify no corruption or data loss
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType,
@@ -44,7 +44,13 @@ impl MaterializationTestHarness {
     async fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -85,13 +91,15 @@ impl MaterializationTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: name.to_string(),
-            root_path: path.to_path_buf(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(path.to_path_buf()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self.storage.acquire().await.expect("Failed to acquire connection");
@@ -137,14 +145,14 @@ async fn test_full_materialization() {
     println!("[2/6] Loading project into VFS...");
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     let load_result = harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
-    println!("  - Files loaded: {}", load_result.files_loaded);
+    println!("  - Files loaded: {}", load_result.files_imported);
     println!("  - Units extracted: {}", load_result.units_extracted);
 
-    assert!(load_result.files_loaded >= 3, "Expected at least 3 files loaded");
+    assert!(load_result.files_imported >= 3, "Expected at least 3 files loaded");
 
     // Step 3: Modify some files in VFS
     println!("[3/6] Modifying files in VFS...");
@@ -222,7 +230,7 @@ async fn test_partial_materialization() {
 
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -233,7 +241,7 @@ async fn test_partial_materialization() {
 
     let flush_result = harness.engine
         .flush(
-            FlushScope::Path(cortex_vfs::VirtualPath::from_str("src").unwrap()),
+            FlushScope::Path(cortex_vfs::VirtualPath::new("src").unwrap()),
             &target_dir,
             FlushOptions::default(),
         )
@@ -265,7 +273,7 @@ async fn test_incremental_materialization() {
 
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -327,7 +335,7 @@ async fn test_materialization_rollback() {
 
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -379,7 +387,7 @@ async fn test_materialization_data_integrity() {
 
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -432,7 +440,7 @@ async fn test_materialize_and_run_tests() {
 
     let workspace_id = harness.create_workspace("test_workspace", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -479,7 +487,7 @@ async fn test_large_file_materialization() {
     println!("\n[1/4] Loading large project into VFS...");
     let load_start = Instant::now();
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
     println!("  - Load time: {}ms", load_start.elapsed().as_millis());
@@ -620,7 +628,7 @@ pub fn function_{}(x: i32) -> i32 {{
 
 async fn modify_vfs_files(harness: &MaterializationTestHarness, workspace_id: Uuid) {
     // Modify lib.rs in VFS
-    let lib_path = cortex_vfs::VirtualPath::from_str("src/lib.rs").unwrap();
+    let lib_path = cortex_vfs::VirtualPath::new("src/lib.rs").unwrap();
 
     let new_content = r#"//! Modified test library
 
@@ -648,7 +656,7 @@ pub fn divide(a: i32, b: i32) -> i32 {
 }
 
 async fn modify_single_vfs_file(harness: &MaterializationTestHarness, workspace_id: Uuid) {
-    let lib_path = cortex_vfs::VirtualPath::from_str("src/lib.rs").unwrap();
+    let lib_path = cortex_vfs::VirtualPath::new("src/lib.rs").unwrap();
 
     let new_content = r#"//! Modified once
 
@@ -726,7 +734,7 @@ async fn compare_vfs_with_disk(
     let files_to_compare = vec!["src/lib.rs", "src/main.rs"];
 
     for file_path in files_to_compare {
-        let vpath = cortex_vfs::VirtualPath::from_str(file_path).unwrap();
+        let vpath = cortex_vfs::VirtualPath::new(file_path).unwrap();
 
         // Read from VFS
         let vfs_content = match harness.vfs.get_file(workspace_id, &vpath).await {

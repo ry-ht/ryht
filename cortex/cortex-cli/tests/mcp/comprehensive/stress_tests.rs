@@ -15,7 +15,7 @@
 //! 9. Failure recovery - System resilience
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType, VirtualPath,
@@ -47,7 +47,13 @@ impl StressTestHarness {
     async fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -88,13 +94,15 @@ impl StressTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: name.to_string(),
-            root_path: path.to_path_buf(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(path.to_path_buf()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self.storage.acquire().await.expect("Failed to acquire connection");
@@ -189,7 +197,7 @@ async fn test_concurrent_file_operations() {
 
         tasks.spawn(async move {
             let op_start = Instant::now();
-            let path = VirtualPath::from_str(&format!("stress/file_{}.rs", i)).unwrap();
+            let path = VirtualPath::new(&format!("stress/file_{}.rs", i)).unwrap();
             let content = format!("// File {} content\npub fn func_{}() {{ }}", i, i);
 
             let result = vfs.create_file(workspace_id, &path, content.as_bytes()).await;
@@ -291,7 +299,7 @@ async fn test_memory_leak_detection_long_running() {
 
         // Perform operations
         for i in 0..operations_per_iteration {
-            let path = VirtualPath::from_str(&format!("file_{}.rs", i)).unwrap();
+            let path = VirtualPath::new(&format!("file_{}.rs", i)).unwrap();
             harness.vfs
                 .create_file(workspace_id, &path, b"content")
                 .await
@@ -393,7 +401,7 @@ async fn test_vfs_cache_overflow() {
     let start = Instant::now();
 
     for i in 0..file_count {
-        let path = VirtualPath::from_str(&format!("cache/file_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("cache/file_{}.rs", i)).unwrap();
         harness.vfs
             .create_file(workspace_id, &path, format!("// File {}", i).as_bytes())
             .await
@@ -413,7 +421,7 @@ async fn test_vfs_cache_overflow() {
     let mut successful_reads = 0;
 
     for i in 0..file_count {
-        let path = VirtualPath::from_str(&format!("cache/file_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("cache/file_{}.rs", i)).unwrap();
         if harness.vfs.get_file(workspace_id, &path).await.is_ok() {
             successful_reads += 1;
         }
@@ -457,7 +465,7 @@ async fn test_large_file_handling() {
         println!("  Creating {} file...", name);
 
         let content = generate_large_content(*size);
-        let path = VirtualPath::from_str(&format!("large_{}.rs", name)).unwrap();
+        let path = VirtualPath::new(&format!("large_{}.rs", name)).unwrap();
 
         let start = Instant::now();
         let result = harness.vfs
@@ -475,7 +483,7 @@ async fn test_large_file_handling() {
     for (name, size) in &file_sizes {
         println!("  Reading {} file...", name);
 
-        let path = VirtualPath::from_str(&format!("large_{}.rs", name)).unwrap();
+        let path = VirtualPath::new(&format!("large_{}.rs", name)).unwrap();
 
         let start = Instant::now();
         let result = harness.vfs.get_file(workspace_id, &path).await;
@@ -491,7 +499,7 @@ async fn test_large_file_handling() {
 
     println!("[3/4] Updating large files...");
 
-    let path = VirtualPath::from_str("large_1MB.rs").unwrap();
+    let path = VirtualPath::new("large_1MB.rs").unwrap();
     let new_content = generate_large_content(1_500_000);
 
     let start = Instant::now();
@@ -528,7 +536,7 @@ async fn test_deep_dependency_graphs() {
 
     let start = Instant::now();
     let load_result = harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await;
     let duration = start.elapsed();
 
@@ -537,13 +545,13 @@ async fn test_deep_dependency_graphs() {
     assert!(load_result.is_ok(), "Failed to load deep dependency project");
 
     let result = load_result.unwrap();
-    println!("  Files loaded: {}", result.files_loaded);
+    println!("  Files loaded: {}", result.files_imported);
     println!("  Units extracted: {}", result.units_extracted);
 
     println!("[3/3] Deep dependency handling: PASSED");
 
     assert!(
-        result.files_loaded >= depth,
+        result.files_imported >= depth,
         "Not all dependency levels loaded"
     );
 }
@@ -565,7 +573,7 @@ async fn test_semantic_search_scale() {
     let start = Instant::now();
 
     for i in 0..embedding_count {
-        let path = VirtualPath::from_str(&format!("semantic/mod_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("semantic/mod_{}.rs", i)).unwrap();
         let content = format!(
             "/// Function number {}\npub fn function_{}(x: i32) -> i32 {{\n    x * {}\n}}",
             i, i, i
@@ -640,7 +648,7 @@ async fn test_multi_agent_stress() {
             let mut failed = 0;
 
             for op_id in 0..operations_per_agent {
-                let path = VirtualPath::from_str(&format!("agent_{}/file_{}.rs", agent_id, op_id)).unwrap();
+                let path = VirtualPath::new(&format!("agent_{}/file_{}.rs", agent_id, op_id)).unwrap();
                 let content = format!("// Agent {} operation {}", agent_id, op_id);
 
                 if harness.vfs
@@ -698,7 +706,7 @@ async fn test_system_failure_recovery() {
 
     // Create some files
     for i in 0..10 {
-        let path = VirtualPath::from_str(&format!("recovery/file_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("recovery/file_{}.rs", i)).unwrap();
         harness.vfs
             .create_file(workspace_id, &path, b"initial content")
             .await
@@ -712,7 +720,7 @@ async fn test_system_failure_recovery() {
     let mut recovery_count = 0;
 
     for i in 0..10 {
-        let path = VirtualPath::from_str(&format!("recovery/file_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("recovery/file_{}.rs", i)).unwrap();
 
         // Try to update file
         if harness.vfs
@@ -741,7 +749,7 @@ async fn test_system_failure_recovery() {
     // Verify all files still accessible
     let mut accessible = 0;
     for i in 0..10 {
-        let path = VirtualPath::from_str(&format!("recovery/file_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("recovery/file_{}.rs", i)).unwrap();
         if harness.vfs.get_file(workspace_id, &path).await.is_ok() {
             accessible += 1;
         }
@@ -754,7 +762,7 @@ async fn test_system_failure_recovery() {
     println!("[4/5] Testing transaction rollback...");
 
     // Test that failed transactions don't leave partial state
-    let rollback_path = VirtualPath::from_str("rollback/test.rs").unwrap();
+    let rollback_path = VirtualPath::new("rollback/test.rs").unwrap();
     harness.vfs
         .create_file(workspace_id, &rollback_path, b"rollback test")
         .await
@@ -785,7 +793,7 @@ async fn test_performance_under_load() {
     let mut failed = 0;
 
     while start_time.elapsed().as_secs() < duration_secs {
-        let path = VirtualPath::from_str(&format!("perf/file_{}.rs", operation_count)).unwrap();
+        let path = VirtualPath::new(&format!("perf/file_{}.rs", operation_count)).unwrap();
         let content = format!("// Operation {}", operation_count);
 
         if harness.vfs

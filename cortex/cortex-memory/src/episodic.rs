@@ -4,7 +4,7 @@
 //! the system to learn from past work and extract successful patterns.
 
 use crate::types::*;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
 use cortex_storage::ConnectionManager;
@@ -438,6 +438,44 @@ impl EpisodicMemorySystem {
         }
 
         info!(deleted_count, "Forgotten episodes below threshold");
+        Ok(deleted_count)
+    }
+
+    /// Forget episodes created before a specific date
+    pub async fn forget_before(&self, before: &DateTime<Utc>, workspace_id: Option<CortexId>) -> Result<usize> {
+        info!(before = %before, workspace_id = ?workspace_id, "Forgetting episodes before date");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        // Build query with optional workspace filter
+        let query = if let Some(_workspace) = workspace_id {
+            format!("DELETE episode WHERE created_at < $before AND workspace_id = $workspace_id")
+        } else {
+            format!("DELETE episode WHERE created_at < $before")
+        };
+
+        let mut query_builder = conn
+            .connection()
+            .query(&query)
+            .bind(("before", before.to_rfc3339()));
+
+        if let Some(workspace) = workspace_id {
+            query_builder = query_builder.bind(("workspace_id", workspace.to_string()));
+        }
+
+        let mut result = query_builder
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // SurrealDB DELETE returns the deleted records
+        let deleted_json: Vec<serde_json::Value> = result.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let deleted_count = deleted_json.len();
+        info!(deleted_count, "Forgotten episodes before date");
         Ok(deleted_count)
     }
 

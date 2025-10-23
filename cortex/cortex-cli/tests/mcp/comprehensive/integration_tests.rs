@@ -31,7 +31,7 @@
 //! ```
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex_cli::mcp::tools::{
@@ -189,7 +189,13 @@ impl IntegrationHarness {
             .expect("Failed to get parent directory")
             .to_path_buf();
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -228,54 +234,47 @@ impl IntegrationHarness {
     }
 
     fn vfs_context(&self) -> VfsContext {
-        VfsContext::new(
-            self.storage.clone(),
-            self.vfs.clone(),
-            self.loader.clone(),
-            self.engine.clone(),
-        )
+        VfsContext::new(self.vfs.clone())
     }
 
     fn code_nav_context(&self) -> CodeNavContext {
-        CodeNavContext::new(self.storage.clone(), self.vfs.clone())
+        CodeNavContext::new(self.storage.clone())
     }
 
     fn code_manipulation_context(&self) -> CodeManipulationContext {
-        CodeManipulationContext::new(
-            self.storage.clone(),
-            self.vfs.clone(),
-            self.parser.clone(),
-        )
+        CodeManipulationContext::new(self.storage.clone())
     }
 
-    async fn create_cortex_workspace(&self) -> Result<Uuid, String> {
+    async fn create_cortex_workspace(&self) -> Result<Uuid> {
         let workspace_id = Uuid::new_v4();
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-self-test".to_string(),
-            root_path: self.cortex_root.clone(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(self.cortex_root.clone()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self.storage.acquire().await
-            .map_err(|e| format!("Failed to acquire connection: {}", e))?;
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to acquire connection: {}", e)))?;
 
         let _: Option<Workspace> = conn
             .connection()
             .create(("workspace", workspace_id.to_string()))
             .content(workspace)
             .await
-            .map_err(|e| format!("Failed to create workspace: {}", e))?;
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create workspace: {}", e)))?;
 
         Ok(workspace_id)
     }
 
-    async fn load_cortex_subset(&self, workspace_id: Uuid, crates: &[&str]) -> Result<usize, String> {
+    async fn load_cortex_subset(&self, workspace_id: Uuid, crates: &[&str]) -> Result<usize> {
         let mut total_files = 0;
 
         for crate_name in crates {
@@ -285,11 +284,11 @@ impl IntegrationHarness {
             }
 
             let result = self.loader
-                .load_project(workspace_id, &crate_path, &Default::default())
+                .import_project(&crate_path, &Default::default())
                 .await
-                .map_err(|e| format!("Failed to load crate {}: {}", crate_name, e))?;
+                .map_err(|e| ToolError::ExecutionFailed(format!("Failed to load crate {}: {}", crate_name, e)))?;
 
-            total_files += result.files_loaded;
+            total_files += result.files_imported;
         }
 
         Ok(total_files)

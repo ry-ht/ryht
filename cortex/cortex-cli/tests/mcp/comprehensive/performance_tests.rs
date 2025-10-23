@@ -35,7 +35,7 @@
 //! ```
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex_cli::mcp::tools::{
@@ -337,7 +337,13 @@ impl PerformanceHarness {
             .expect("Failed to get parent directory")
             .to_path_buf();
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -375,13 +381,15 @@ impl PerformanceHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: name.to_string(),
-            root_path: self.cortex_root.clone(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(self.cortex_root.clone()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self.storage.acquire().await
@@ -398,16 +406,11 @@ impl PerformanceHarness {
     }
 
     fn code_nav_context(&self) -> CodeNavContext {
-        CodeNavContext::new(self.storage.clone(), self.vfs.clone())
+        CodeNavContext::new(self.storage.clone())
     }
 
     fn vfs_context(&self) -> VfsContext {
-        VfsContext::new(
-            self.storage.clone(),
-            self.vfs.clone(),
-            self.loader.clone(),
-            self.engine.clone(),
-        )
+        VfsContext::new(self.vfs.clone())
     }
 
     /// Estimate memory usage (simplified - real implementation would use memory_stats crate)
@@ -441,18 +444,18 @@ async fn test_token_efficiency_comparison() {
 
     // Load cortex-vfs for testing
     let load_result = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-vfs"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-vfs"), &Default::default())
         .await
         .expect("Failed to load project");
 
-    println!("\nLoaded {} files for token efficiency testing", load_result.files_loaded);
+    println!("\nLoaded {} files for token efficiency testing", load_result.files_imported);
 
     let mut comparisons = Vec::new();
 
     // Scenario 1: Find function definition
     {
         // Traditional: Read all files, search for pattern
-        let traditional = load_result.files_loaded * 200; // Avg 200 tokens per file
+        let traditional = load_result.files_imported * 200; // Avg 200 tokens per file
 
         // MCP: Semantic search + definition lookup
         let mcp = 50 + 30; // Search query + result
@@ -467,7 +470,7 @@ async fn test_token_efficiency_comparison() {
     // Scenario 2: List directory with metadata
     {
         // Traditional: Read directory, stat each file
-        let traditional = 100 + (load_result.files_loaded * 20);
+        let traditional = 100 + (load_result.files_imported * 20);
 
         // MCP: VFS list_directory with cached metadata
         let mcp = 80;
@@ -482,7 +485,7 @@ async fn test_token_efficiency_comparison() {
     // Scenario 3: Search for pattern in code
     {
         // Traditional: Grep all files
-        let traditional = load_result.files_loaded * 150;
+        let traditional = load_result.files_imported * 150;
 
         // MCP: Semantic search with indexed content
         let mcp = 100;
@@ -512,7 +515,7 @@ async fn test_token_efficiency_comparison() {
     // Scenario 5: Navigate call hierarchy
     {
         // Traditional: Manual AST traversal across multiple files
-        let traditional = load_result.files_loaded * 180;
+        let traditional = load_result.files_imported * 180;
 
         // MCP: Pre-computed call graph
         let mcp = 150;
@@ -527,7 +530,7 @@ async fn test_token_efficiency_comparison() {
     // Scenario 6: Find all references to symbol
     {
         // Traditional: Grep + manual verification in each file
-        let traditional = load_result.files_loaded * 200;
+        let traditional = load_result.files_imported * 200;
 
         // MCP: Indexed reference lookup
         let mcp = 120;
@@ -602,7 +605,7 @@ async fn test_operation_latency_measurements() {
     // Load test data
     let load_start = Instant::now();
     let _load_result = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-vfs"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-vfs"), &Default::default())
         .await
         .expect("Failed to load project");
     let load_latency = load_start.elapsed().as_millis();
@@ -683,7 +686,7 @@ async fn test_memory_usage_analysis() {
 
     // Load small project
     let _ = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-core"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-core"), &Default::default())
         .await;
 
     let (vfs, semantic, db) = harness.estimate_memory_usage();
@@ -691,7 +694,7 @@ async fn test_memory_usage_analysis() {
 
     // Load medium project
     let _ = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-vfs"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-vfs"), &Default::default())
         .await;
 
     let (vfs, semantic, db) = harness.estimate_memory_usage();
@@ -699,7 +702,7 @@ async fn test_memory_usage_analysis() {
 
     // Load large project (CLI with all dependencies)
     let _ = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-cli"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-cli"), &Default::default())
         .await;
 
     let (vfs, semantic, db) = harness.estimate_memory_usage();
@@ -732,7 +735,7 @@ async fn test_cache_hit_rate_measurements() {
 
     // Load project
     let _ = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-vfs"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-vfs"), &Default::default())
         .await;
 
     let nav_ctx = harness.code_nav_context();
@@ -821,20 +824,20 @@ async fn test_scale_performance() {
         // Load project
         let load_start = Instant::now();
         let load_result = harness.loader
-            .load_project(workspace_id, &harness.cortex_root.join(crate_name), &Default::default())
+            .import_project(&harness.cortex_root.join(crate_name), &Default::default())
             .await
             .expect("Failed to load project");
         let load_latency = load_start.elapsed().as_millis();
 
-        println!("  Loaded {} files in {} ms", load_result.files_loaded, load_latency);
+        println!("  Loaded {} files in {} ms", load_result.files_imported, load_latency);
 
         metrics.record_operation(
             "Load project",
             load_latency,
             100,
             false,
-            load_result.files_loaded * 2,
-            load_result.files_loaded as i64 * 50_000,
+            load_result.files_imported * 2,
+            load_result.files_imported as i64 * 50_000,
         );
 
         // Test navigation performance
@@ -874,7 +877,7 @@ async fn test_concurrent_operations_throughput() {
 
     // Load project
     let _ = harness.loader
-        .load_project(workspace_id, &harness.cortex_root.join("cortex-vfs"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex-vfs"), &Default::default())
         .await;
 
     let nav_ctx = Arc::new(harness.code_nav_context());

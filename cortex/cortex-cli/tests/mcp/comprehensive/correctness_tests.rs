@@ -16,7 +16,7 @@
 //! 10. Data consistency - Cross-system validation
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType, VirtualPath,
@@ -46,7 +46,13 @@ impl CorrectnessTestHarness {
     async fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -87,13 +93,15 @@ impl CorrectnessTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: name.to_string(),
-            root_path: path.to_path_buf(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(path.to_path_buf()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self.storage.acquire().await.expect("Failed to acquire connection");
@@ -265,7 +273,7 @@ async fn test_tool_schema_validation() {
 
     let workspace_id = harness.create_workspace("schema_test", &source_dir).await;
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -308,21 +316,21 @@ async fn test_idempotent_operations() {
 
     println!("\n[1/5] Testing idempotent project loading...");
     let load1 = harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project (1st time)");
 
     let load2 = harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project (2nd time)");
 
     report.add_check(
-        load1.files_loaded == load2.files_loaded,
-        if load1.files_loaded != load2.files_loaded {
+        load1.files_imported == load2.files_imported,
+        if load1.files_imported != load2.files_imported {
             Some(format!(
                 "Project load not idempotent: {} vs {}",
-                load1.files_loaded, load2.files_loaded
+                load1.files_imported, load2.files_imported
             ))
         } else {
             None
@@ -330,7 +338,7 @@ async fn test_idempotent_operations() {
     );
 
     println!("[2/5] Testing idempotent file creation...");
-    let test_path = VirtualPath::from_str("test_file.rs").unwrap();
+    let test_path = VirtualPath::new("test_file.rs").unwrap();
     let test_content = b"// Test content";
 
     harness.vfs
@@ -432,7 +440,7 @@ async fn test_edge_cases() {
     let workspace_id = Uuid::new_v4();
 
     println!("\n[1/8] Testing empty file handling...");
-    let empty_path = VirtualPath::from_str("empty.rs").unwrap();
+    let empty_path = VirtualPath::new("empty.rs").unwrap();
     let result = harness.vfs.create_file(workspace_id, &empty_path, b"").await;
     report.add_check(result.is_ok(), None);
 
@@ -441,7 +449,7 @@ async fn test_edge_cases() {
         .map(|i| format!("directory_{}", i))
         .collect();
     let long_path_str = format!("{}/file.rs", long_path_components.join("/"));
-    let long_path = VirtualPath::from_str(&long_path_str).unwrap();
+    let long_path = VirtualPath::new(&long_path_str).unwrap();
     let result = harness.vfs.create_file(workspace_id, &long_path, b"content").await;
     report.add_check(result.is_ok(), None);
 
@@ -452,14 +460,14 @@ async fn test_edge_cases() {
         "file_with_underscores.rs",
     ];
     for filename in special_chars {
-        let path = VirtualPath::from_str(filename).unwrap();
+        let path = VirtualPath::new(filename).unwrap();
         let result = harness.vfs.create_file(workspace_id, &path, b"content").await;
         report.add_check(result.is_ok(), None);
     }
 
     println!("[4/8] Testing Unicode in file content...");
     let unicode_content = "// 测试 Unicode 内容\n// Тест Unicode контент\n// 🦀 Rust emoji\n";
-    let unicode_path = VirtualPath::from_str("unicode.rs").unwrap();
+    let unicode_path = VirtualPath::new("unicode.rs").unwrap();
     let result = harness.vfs.create_file(workspace_id, &unicode_path, unicode_content.as_bytes()).await;
     report.add_check(result.is_ok(), None);
 
@@ -468,13 +476,13 @@ async fn test_edge_cases() {
 
     println!("[6/8] Testing boundary values...");
     // Test with zero-length operations
-    let zero_path = VirtualPath::from_str("a").unwrap();
+    let zero_path = VirtualPath::new("a").unwrap();
     let result = harness.vfs.create_file(workspace_id, &zero_path, b"x").await;
     report.add_check(result.is_ok(), None);
 
     println!("[7/8] Testing invalid workspace IDs...");
     let invalid_workspace = Uuid::new_v4();
-    let invalid_path = VirtualPath::from_str("test.rs").unwrap();
+    let invalid_path = VirtualPath::new("test.rs").unwrap();
     let result = harness.vfs.get_file(invalid_workspace, &invalid_path).await;
     report.add_check(
         result.is_err(),
@@ -487,7 +495,7 @@ async fn test_edge_cases() {
 
     println!("[8/8] Testing null/empty operations...");
     // Test operations with minimal valid input
-    let minimal_path = VirtualPath::from_str("x").unwrap();
+    let minimal_path = VirtualPath::new("x").unwrap();
     let result = harness.vfs.create_file(workspace_id, &minimal_path, b"").await;
     report.add_check(result.is_ok(), None);
 
@@ -511,7 +519,7 @@ async fn test_error_recovery() {
 
     println!("\n[1/5] Testing recovery from file not found...");
     let workspace_id = Uuid::new_v4();
-    let nonexistent = VirtualPath::from_str("nonexistent.rs").unwrap();
+    let nonexistent = VirtualPath::new("nonexistent.rs").unwrap();
     let result = harness.vfs.get_file(workspace_id, &nonexistent).await;
 
     report.add_check(
@@ -525,7 +533,7 @@ async fn test_error_recovery() {
 
     println!("[2/5] Testing recovery from invalid paths...");
     // Test with absolute path (should be rejected)
-    let result = VirtualPath::from_str("/absolute/path");
+    let result = VirtualPath::new("/absolute/path");
     report.add_check(result.is_err(), None);
 
     println!("[3/5] Testing recovery from duplicate creation...");
@@ -534,7 +542,7 @@ async fn test_error_recovery() {
         harness.temp_path(),
     ).await;
 
-    let dup_path = VirtualPath::from_str("duplicate.rs").unwrap();
+    let dup_path = VirtualPath::new("duplicate.rs").unwrap();
     harness.vfs.create_file(workspace_id, &dup_path, b"content").await.ok();
     let result = harness.vfs.create_file(workspace_id, &dup_path, b"content2").await;
 
@@ -543,7 +551,7 @@ async fn test_error_recovery() {
 
     println!("[4/5] Testing recovery from parser errors...");
     let invalid_rust = "fn invalid syntax {{{ ]] }}";
-    let invalid_path = VirtualPath::from_str("invalid.rs").unwrap();
+    let invalid_path = VirtualPath::new("invalid.rs").unwrap();
 
     harness.vfs
         .create_file(workspace_id, &invalid_path, invalid_rust.as_bytes())
@@ -609,7 +617,7 @@ async fn test_memory_leak_detection() {
         let workspace_id = harness.create_workspace(&format!("test_{}", i), &source_dir).await;
 
         harness.loader
-            .load_project(workspace_id, &source_dir, &Default::default())
+            .import_project(&source_dir, &Default::default())
             .await
             .ok();
 
@@ -643,8 +651,8 @@ async fn test_transaction_integrity() {
 
     println!("\n[1/4] Testing atomicity...");
     // Multiple operations should succeed or fail together
-    let path1 = VirtualPath::from_str("file1.rs").unwrap();
-    let path2 = VirtualPath::from_str("file2.rs").unwrap();
+    let path1 = VirtualPath::new("file1.rs").unwrap();
+    let path2 = VirtualPath::new("file2.rs").unwrap();
 
     harness.vfs.create_file(workspace_id, &path1, b"content1").await.ok();
     harness.vfs.create_file(workspace_id, &path2, b"content2").await.ok();
@@ -667,7 +675,7 @@ async fn test_transaction_integrity() {
 
     println!("[4/4] Testing durability...");
     // Data should persist after operations complete
-    let durable_path = VirtualPath::from_str("durable.rs").unwrap();
+    let durable_path = VirtualPath::new("durable.rs").unwrap();
     harness.vfs.create_file(workspace_id, &durable_path, b"durable content").await.ok();
 
     // Verify it can be read back
@@ -706,7 +714,7 @@ async fn test_data_consistency() {
 
     println!("\n[1/3] Loading project and verifying consistency...");
     harness.loader
-        .load_project(workspace_id, &source_dir, &Default::default())
+        .import_project(&source_dir, &Default::default())
         .await
         .expect("Failed to load project");
 
@@ -779,7 +787,6 @@ async fn scan_for_todos(root: &Path) -> TodoScanResult {
     result
 }
 
-#[async_recursion::async_recursion]
 async fn scan_directory_for_todos(dir: &Path, result: &mut TodoScanResult) {
     if let Ok(mut entries) = fs::read_dir(dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
@@ -834,7 +841,7 @@ async fn validate_vfs_tool_schemas(
     report: &mut CorrectnessReport,
 ) {
     // Test file creation returns proper result
-    let path = VirtualPath::from_str("schema_test.rs").unwrap();
+    let path = VirtualPath::new("schema_test.rs").unwrap();
     let result = harness.vfs.create_file(workspace_id, &path, b"content").await;
 
     report.add_check(
@@ -893,7 +900,7 @@ async fn test_concurrent_operations(
     // Spawn multiple concurrent file operations
     for i in 0..10 {
         let vfs = harness.vfs.clone();
-        let path = VirtualPath::from_str(&format!("concurrent_{}.rs", i)).unwrap();
+        let path = VirtualPath::new(&format!("concurrent_{}.rs", i)).unwrap();
 
         tasks.spawn(async move {
             vfs.create_file(workspace_id, &path, format!("content {}", i).as_bytes()).await
@@ -925,7 +932,7 @@ async fn test_concurrent_isolation(
 ) {
     use tokio::task::JoinSet;
 
-    let isolation_path = VirtualPath::from_str("isolation.rs").unwrap();
+    let isolation_path = VirtualPath::new("isolation.rs").unwrap();
     harness.vfs.create_file(workspace_id, &isolation_path, b"initial").await.ok();
 
     let mut tasks = JoinSet::new();

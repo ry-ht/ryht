@@ -166,6 +166,35 @@ impl CognitiveManager {
         self.episodic.forget_unimportant(threshold).await
     }
 
+    /// Forget: Remove memories before a specific date
+    #[instrument(skip(self))]
+    pub async fn forget_before(&self, before: &chrono::DateTime<chrono::Utc>, workspace: Option<&str>) -> Result<usize> {
+        info!(before = %before, workspace = ?workspace, "Forgetting memories before date");
+
+        // Parse workspace string to CortexId if provided
+        let workspace_id = if let Some(ws) = workspace {
+            Some(CortexId::parse(ws).map_err(|e| {
+                cortex_core::error::CortexError::invalid_input(format!("Invalid workspace ID: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        // Delete from episodic memory
+        let episodic_deleted = self.episodic.forget_before(before, workspace_id).await?;
+
+        // Delete from semantic memory (semantic units don't have workspace filtering)
+        let semantic_deleted = if workspace.is_none() {
+            self.semantic.forget_before(before).await?
+        } else {
+            0
+        };
+
+        let total_deleted = episodic_deleted + semantic_deleted;
+        info!(episodic_deleted, semantic_deleted, total_deleted, "Memories forgotten");
+        Ok(total_deleted)
+    }
+
     /// Dream: Offline consolidation and pattern extraction
     #[instrument(skip(self))]
     pub async fn dream(&self) -> Result<Vec<LearnedPattern>> {

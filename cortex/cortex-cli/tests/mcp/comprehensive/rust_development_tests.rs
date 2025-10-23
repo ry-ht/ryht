@@ -40,7 +40,7 @@ use cortex_cli::mcp::tools::{
 };
 use cortex_memory::SemanticMemorySystem;
 use cortex_parser::CodeParser;
-use cortex_storage::{connection::ConnectionConfig, ConnectionManager};
+use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, MaterializationEngine, SourceType,
     VirtualFileSystem, Workspace, WorkspaceType,
@@ -153,7 +153,13 @@ impl TestMetrics {
 impl RustDevHarness {
     async fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: PoolConnectionMode::InMemory,
+            credentials: Credentials::default(),
+            pool_config: PoolConfig::default(),
+            namespace: "cortex_test".to_string(),
+            database: "main".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -193,13 +199,15 @@ impl RustDevHarness {
         let workspace = Workspace {
             id: self.workspace_id,
             name: name.to_string(),
-            root_path,
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: "cortex_test".to_string(),
+            source_path: Some(root_path),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = self
@@ -274,11 +282,7 @@ async fn test_implement_new_feature() {
     println!("\n[Step 1] Creating cache trait with generics and lifetimes...");
     let start = Instant::now();
 
-    let manip_ctx = CodeManipulationContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.parser.clone(),
-    );
+    let manip_ctx = CodeManipulationContext::new(harness.storage.clone());
     let create_tool = CodeCreateUnitTool::new(manip_ctx.clone());
 
     let cache_trait = r#"/// Generic cache trait with lifetime bounds
@@ -532,11 +536,7 @@ async fn test_refactor_complex_code() {
     println!("\n[Step 2] Applying extract function refactoring...");
     let start = Instant::now();
 
-    let manip_ctx = CodeManipulationContext::new(
-        harness.storage.clone(),
-        harness.vfs.clone(),
-        harness.parser.clone(),
-    );
+    let manip_ctx = CodeManipulationContext::new(harness.storage.clone());
     let extract_tool = ExtractFunctionTool::new(manip_ctx.clone());
 
     let input = json!({
@@ -727,7 +727,7 @@ async fn test_optimize_performance() {
     let start = Instant::now();
 
     let ai_ctx = AiAssistedContext::new(harness.storage.clone());
-    let optimize_tool = AiOptimizeCodeTool::new(ai_ctx);
+    let optimize_tool = AiSuggestOptimizationTool::new(ai_ctx);
 
     let input = json!({
         "scope_path": "/src/lib.rs",

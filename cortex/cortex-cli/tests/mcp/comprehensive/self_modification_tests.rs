@@ -76,7 +76,7 @@
 //! ```
 
 use cortex_parser::CodeParser;
-use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
+use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType
@@ -266,7 +266,13 @@ impl SelfModificationHarness {
             .expect("Failed to get parent directory")
             .to_path_buf();
 
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: PoolConnectionMode::InMemory,
+            credentials: Credentials::default(),
+            pool_config: PoolConfig::default(),
+            namespace: "cortex_test".to_string(),
+            database: "main".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -291,13 +297,15 @@ impl SelfModificationHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-self-modification".to_string(),
-            root_path: cortex_root.clone(),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: "cortex_test".to_string(),
+            source_path: Some(cortex_root.clone()),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = storage.acquire().await.expect("Failed to acquire connection");
@@ -329,24 +337,15 @@ impl SelfModificationHarness {
     }
 
     fn vfs_context(&self) -> VfsContext {
-        VfsContext::new(
-            self.storage.clone(),
-            self.vfs.clone(),
-            self.loader.clone(),
-            self.engine.clone(),
-        )
+        VfsContext::new(self.vfs.clone())
     }
 
     fn code_nav_context(&self) -> CodeNavContext {
-        CodeNavContext::new(self.storage.clone(), self.vfs.clone())
+        CodeNavContext::new(self.storage.clone())
     }
 
     fn code_manipulation_context(&self) -> CodeManipulationContext {
-        CodeManipulationContext::new(
-            self.storage.clone(),
-            self.vfs.clone(),
-            self.parser.clone(),
-        )
+        CodeManipulationContext::new(self.storage.clone())
     }
 
     fn ai_assisted_context(&self) -> AiAssistedContext {
@@ -370,14 +369,14 @@ impl SelfModificationHarness {
     }
 
     fn documentation_context(&self) -> DocumentationContext {
-        DocumentationContext::new(self.storage.clone(), self.vfs.clone())
+        DocumentationContext::new(self.storage.clone())
     }
 
     fn dependency_context(&self) -> DependencyAnalysisContext {
         DependencyAnalysisContext::new(self.storage.clone())
     }
 
-    async fn load_cortex_crates(&self, crates: &[&str]) -> Result<usize, String> {
+    async fn load_cortex_crates(&self, crates: &[&str]) -> Result<usize> {
         let mut total_files = 0;
 
         for crate_name in crates {
@@ -388,28 +387,32 @@ impl SelfModificationHarness {
             }
 
             let result = self.loader
-                .load_project(self.workspace_id, &crate_path, &Default::default())
+                .import_project(&crate_path, &Default::default())
                 .await
-                .map_err(|e| format!("Failed to load crate {}: {}", crate_name, e))?;
+                .map_err(|e| ToolError::ExecutionFailed(format!("Failed to load crate {}: {}", crate_name, e)))?;
 
-            total_files += result.files_loaded;
-            println!("  Loaded {} files from {}", result.files_loaded, crate_name);
+            total_files += result.files_imported;
+            println!("  Loaded {} files from {}", result.files_imported, crate_name);
         }
 
         Ok(total_files)
     }
 
-    async fn materialize_to_temp(&self, subpath: &str) -> Result<PathBuf, String> {
+    async fn materialize_to_temp(&self, subpath: &str) -> Result<PathBuf> {
         let target_dir = self.temp_dir.path().join(subpath);
         fs::create_dir_all(&target_dir).await
-            .map_err(|e| format!("Failed to create target directory: {}", e))?;
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create target directory: {}", e)))?;
 
-        let vfs_ctx = self.vfs_context();
-        let _result = vfs_ctx.materialize_files(json!({
-            "workspace_id": self.workspace_id.to_string(),
-            "target_path": target_dir.to_str().unwrap(),
-            "include_metadata": true
-        })).await.map_err(|e| format!("Failed to materialize: {}", e))?;
+        // Use the MaterializationEngine directly
+        use cortex_vfs::{FlushScope, FlushOptions};
+        let _result = self.engine
+            .flush(
+                FlushScope::Workspace(self.workspace_id),
+                &target_dir,
+                FlushOptions::default(),
+            )
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to materialize: {}", e)))?;
 
         Ok(target_dir)
     }

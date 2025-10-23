@@ -10,6 +10,7 @@ DEFINE TABLE embeddings SCHEMAFULL;
 DEFINE TABLE symbols SCHEMAFULL;
 DEFINE TABLE relations SCHEMAFULL;
 DEFINE TABLE episodes SCHEMAFULL;
+DEFINE TABLE agent_sessions SCHEMAFULL;
 
 -- Projects table
 DEFINE FIELD name ON projects TYPE string;
@@ -91,6 +92,17 @@ DEFINE INDEX episodes_session ON episodes FIELDS session_id;
 DEFINE INDEX episodes_importance ON episodes FIELDS importance;
 DEFINE INDEX episodes_created_at ON episodes FIELDS created_at;
 DEFINE INDEX episodes_outcome ON episodes FIELDS outcome;
+
+-- Agent sessions table
+DEFINE FIELD id ON agent_sessions TYPE string;
+DEFINE FIELD name ON agent_sessions TYPE string;
+DEFINE FIELD agent_type ON agent_sessions TYPE string;
+DEFINE FIELD created_at ON agent_sessions TYPE datetime;
+DEFINE FIELD last_active ON agent_sessions TYPE datetime;
+DEFINE FIELD metadata ON agent_sessions TYPE object;
+
+DEFINE INDEX agent_sessions_id ON agent_sessions FIELDS id UNIQUE;
+DEFINE INDEX agent_sessions_created_at ON agent_sessions FIELDS created_at;
 "#;
 
 /// Initialize the database schema

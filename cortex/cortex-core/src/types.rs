@@ -215,6 +215,37 @@ pub struct SystemStats {
     pub last_updated: DateTime<Utc>,
 }
 
+/// Represents an agent session.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentSession {
+    pub id: String,
+    pub name: String,
+    pub agent_type: String,
+    pub created_at: DateTime<Utc>,
+    pub last_active: DateTime<Utc>,
+    pub metadata: HashMap<String, String>,
+}
+
+impl AgentSession {
+    /// Create a new agent session
+    pub fn new(id: String, name: String, agent_type: String) -> Self {
+        let now = Utc::now();
+        Self {
+            id,
+            name,
+            agent_type,
+            created_at: now,
+            last_active: now,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Update the last active timestamp
+    pub fn update_last_active(&mut self) {
+        self.last_active = Utc::now();
+    }
+}
+
 // ============================================================================
 // Code Unit Schema - Comprehensive Semantic Memory
 // ============================================================================

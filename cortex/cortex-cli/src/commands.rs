@@ -814,17 +814,30 @@ pub async fn agent_create(name: String, agent_type: String) -> Result<()> {
 
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
 
-    let session_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now();
 
-    // TODO: Create agent session
-    // storage.create_agent_session(session_id, name, agent_type).await?;
+    // Create agent session in database
+    let _: Option<serde_json::Value> = conn.connection()
+        .create(("agent_sessions", session_id.clone()))
+        .content(serde_json::json!({
+            "id": session_id,
+            "name": name,
+            "agent_type": agent_type,
+            "created_at": now,
+            "last_active": now,
+            "metadata": serde_json::json!({}),
+        }))
+        .await
+        .context("Failed to create agent session")?;
 
     spinner.finish_and_clear();
 
     output::success(format!("Created agent session: {}", name));
-    output::kv("Session ID", session_id);
-    output::kv("Type", agent_type);
+    output::kv("Session ID", &session_id);
+    output::kv("Type", &agent_type);
 
     Ok(())
 }
@@ -832,15 +845,40 @@ pub async fn agent_create(name: String, agent_type: String) -> Result<()> {
 /// List agent sessions
 pub async fn agent_list(format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
+
+    // Query agent sessions from database
+    let sessions: Vec<cortex_core::types::AgentSession> = conn.connection()
+        .select("agent_sessions")
+        .await
+        .context("Failed to fetch agent sessions from database")?;
 
     match format {
         OutputFormat::Json => {
-            let sessions: Vec<serde_json::Value> = vec![];
             output::output(&sessions, format)?;
         }
         _ => {
             output::header("Agent Sessions");
-            output::info("No active sessions");
+            if sessions.is_empty() {
+                output::info("No active sessions");
+            } else {
+                let table = TableBuilder::new()
+                    .header(vec!["Session ID", "Name", "Type", "Created", "Last Active"]);
+
+                let mut table_with_rows = table;
+                for session in sessions {
+                    table_with_rows = table_with_rows.row(vec![
+                        session.id,
+                        session.name,
+                        session.agent_type,
+                        session.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        session.last_active.format("%Y-%m-%d %H:%M:%S").to_string(),
+                    ]);
+                }
+
+                table_with_rows.print();
+            }
         }
     }
 
@@ -858,9 +896,13 @@ pub async fn agent_delete(session_id: String) -> Result<()> {
 
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
 
-    // TODO: Delete agent session
-    // storage.delete_agent_session(&session_id).await?;
+    // Delete agent session from database
+    let _: Option<cortex_core::types::AgentSession> = conn.connection()
+        .delete(("agent_sessions", &session_id))
+        .await
+        .context("Failed to delete agent session")?;
 
     spinner.finish_and_clear();
     output::success(format!("Deleted agent session: {}", session_id));
@@ -875,21 +917,25 @@ pub async fn agent_delete(session_id: String) -> Result<()> {
 /// Consolidate memory (move from working to episodic/semantic)
 pub async fn memory_consolidate(workspace: Option<String>) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone());
+    let _workspace_name = workspace.or(config.active_workspace.clone());
 
     let spinner = output::spinner("Consolidating memory...");
 
     let storage = create_storage(&config).await?;
     let memory = CognitiveManager::new(storage);
 
-    // TODO: Trigger consolidation
-    // let report = memory.consolidate(workspace_name.as_deref()).await?;
+    // Trigger consolidation
+    let report = memory.consolidate().await?;
 
     spinner.finish_and_clear();
 
     output::success("Memory consolidation complete");
-    output::kv("Episodes created", 0);
-    output::kv("Semantic nodes created", 0);
+    output::kv("Episodes processed", report.episodes_processed as i64);
+    output::kv("Patterns extracted", report.patterns_extracted as i64);
+    output::kv("Memories decayed", report.memories_decayed as i64);
+    output::kv("Duplicates merged", report.duplicates_merged as i64);
+    output::kv("Knowledge links created", report.knowledge_links_created as i64);
+    output::kv("Duration (ms)", report.duration_ms as i64);
 
     Ok(())
 }
@@ -908,13 +954,18 @@ pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Re
     let storage = create_storage(&config).await?;
     let memory = CognitiveManager::new(storage);
 
-    // TODO: Delete old memory
-    // let deleted = memory.forget_before(&before_date, workspace.as_deref()).await?;
+    // Parse the date string to DateTime<Utc>
+    let before = chrono::DateTime::parse_from_rfc3339(&before_date)
+        .map_err(|e| cortex_core::error::CortexError::invalid_input(format!("Invalid date format: {}. Expected RFC3339 format (e.g., 2024-01-01T00:00:00Z)", e)))?
+        .with_timezone(&chrono::Utc);
+
+    // Delete old memory
+    let deleted = memory.forget_before(&before, workspace.as_deref()).await?;
 
     spinner.finish_and_clear();
 
     output::success("Memory deleted");
-    output::kv("Episodes deleted", 0);
+    output::kv("Total memories deleted", deleted as i64);
 
     Ok(())
 }

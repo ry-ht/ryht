@@ -339,6 +339,117 @@ impl Storage for SurrealStorage {
             last_updated: chrono::Utc::now(),
         })
     }
+
+    async fn create_agent_session(
+        &self,
+        session_id: String,
+        name: String,
+        agent_type: String,
+    ) -> Result<AgentSession> {
+        let db = self.pool.get().await?;
+
+        let session = AgentSession::new(session_id.clone(), name, agent_type);
+
+        // Construct the content map manually to ensure proper datetime serialization
+        let content = serde_json::json!({
+            "id": session.id,
+            "name": session.name,
+            "agent_type": session.agent_type,
+            "created_at": Datetime::from(session.created_at),
+            "last_active": Datetime::from(session.last_active),
+            "metadata": session.metadata,
+        });
+
+        let _: Option<serde_json::Value> = db.upsert(("agent_sessions", session_id))
+            .content(content)
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to create agent session: {}", e)))?;
+
+        Ok(session)
+    }
+
+    async fn delete_agent_session(&self, session_id: &str) -> Result<()> {
+        let db = self.pool.get().await?;
+
+        let _: Option<serde_json::Value> = db
+            .delete(("agent_sessions", session_id))
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to delete agent session: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn get_agent_session(&self, session_id: &str) -> Result<Option<AgentSession>> {
+        let db = self.pool.get().await?;
+
+        let query = format!("SELECT id, name, agent_type, created_at, last_active, metadata FROM agent_sessions:⟨{}⟩", session_id);
+
+        let mut response = db
+            .query(query)
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to get agent session: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct AgentSessionRow {
+            id: String,
+            name: String,
+            agent_type: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            last_active: chrono::DateTime<chrono::Utc>,
+            metadata: std::collections::HashMap<String, String>,
+        }
+
+        let rows: Vec<AgentSessionRow> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to extract agent session: {}", e)))?;
+
+        if let Some(row) = rows.into_iter().next() {
+            Ok(Some(AgentSession {
+                id: row.id,
+                name: row.name,
+                agent_type: row.agent_type,
+                created_at: row.created_at,
+                last_active: row.last_active,
+                metadata: row.metadata,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn list_agent_sessions(&self) -> Result<Vec<AgentSession>> {
+        let db = self.pool.get().await?;
+
+        let query = "SELECT id, name, agent_type, created_at, last_active, metadata FROM agent_sessions ORDER BY created_at DESC";
+
+        let mut response = db
+            .query(query)
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to list agent sessions: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct AgentSessionRow {
+            id: String,
+            name: String,
+            agent_type: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            last_active: chrono::DateTime<chrono::Utc>,
+            metadata: std::collections::HashMap<String, String>,
+        }
+
+        let rows: Vec<AgentSessionRow> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to extract agent sessions: {}", e)))?;
+
+        let sessions = rows.into_iter().map(|row| AgentSession {
+            id: row.id,
+            name: row.name,
+            agent_type: row.agent_type,
+            created_at: row.created_at,
+            last_active: row.last_active,
+            metadata: row.metadata,
+        }).collect();
+
+        Ok(sessions)
+    }
 }
 
 #[cfg(test)]

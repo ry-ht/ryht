@@ -18,7 +18,7 @@
 
 use cortex_parser::CodeParser;
 use cortex_storage::ConnectionManager;
-use cortex_storage::connection::ConnectionConfig;
+use cortex_storage::DatabaseConfig;
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex_cli::mcp::tools;
@@ -58,7 +58,13 @@ struct AdvancedToolTestResult {
 impl AdvancedToolTestHarness {
     /// Create a new test harness with in-memory database
     pub async fn new() -> Self {
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: cortex_storage::connection_pool::ConnectionMode::InMemory,
+            credentials: cortex_storage::Credentials { username: None, password: None },
+            pool_config: cortex_storage::PoolConfig::default(),
+            namespace: "test".to_string(),
+            database: "cortex".to_string(),
+        };
         let storage = Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -83,13 +89,15 @@ impl AdvancedToolTestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-advanced-test".to_string(),
-            root_path: PathBuf::from("/Users/taaliman/projects/luxquant/ry-ht/ryht/cortex"),
             workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("test_{}", workspace_id),
+            source_path: Some(PathBuf::from("/Users/taaliman/projects/luxquant/ry-ht/ryht/cortex")),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         // Store workspace
@@ -196,7 +204,7 @@ async fn test_type_analysis_tools() {
     // Test 1: cortex.type.infer
     {
         let start = Instant::now();
-        let tool = tools::type_analysis::TypeInferTool::new(ctx.clone());
+        let tool = tools::type_analysis::CodeInferTypesTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -233,7 +241,7 @@ async fn test_type_analysis_tools() {
     // Test 2: cortex.type.check
     {
         let start = Instant::now();
-        let tool = tools::type_analysis::TypeCheckTool::new(ctx.clone());
+        let tool = tools::type_analysis::CodeCheckTypesTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -269,7 +277,7 @@ async fn test_type_analysis_tools() {
     // Test 3: cortex.type.suggest_improvements
     {
         let start = Instant::now();
-        let tool = tools::type_analysis::TypeSuggestImprovementsTool::new(ctx.clone());
+        let tool = tools::type_analysis::CodeSuggestTypeAnnotationsTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -304,7 +312,7 @@ async fn test_type_analysis_tools() {
     // Test 4: cortex.type.analyze_coverage
     {
         let start = Instant::now();
-        let tool = tools::type_analysis::TypeAnalyzeCoverageTool::new(ctx.clone());
+        let tool = tools::type_analysis::CodeAnalyzeTypeCoverageTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -438,7 +446,7 @@ async fn test_ai_assisted_tools() {
     // Test 3: cortex.ai.optimize_code
     {
         let start = Instant::now();
-        let tool = tools::ai_assisted::AiOptimizeCodeTool::new(ctx.clone());
+        let tool = tools::ai_assisted::AiSuggestOptimizationTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -465,7 +473,7 @@ async fn test_ai_assisted_tools() {
     // Test 4: cortex.ai.fix_bugs
     {
         let start = Instant::now();
-        let tool = tools::ai_assisted::AiFixBugsTool::new(ctx.clone());
+        let tool = tools::ai_assisted::AiSuggestFixTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -492,7 +500,7 @@ async fn test_ai_assisted_tools() {
     // Test 5: cortex.ai.generate_docs
     {
         let start = Instant::now();
-        let tool = tools::ai_assisted::AiGenerateDocsTool::new(ctx.clone());
+        let tool = tools::ai_assisted::AiGenerateDocstringTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -563,7 +571,7 @@ async fn test_security_analysis_tools() {
     // Test 1: cortex.security.scan_vulnerabilities
     {
         let start = Instant::now();
-        let tool = tools::security_analysis::SecurityScanVulnerabilitiesTool::new(ctx.clone());
+        let tool = tools::security_analysis::SecurityScanTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -626,7 +634,7 @@ async fn test_security_analysis_tools() {
     // Test 3: cortex.security.detect_secrets
     {
         let start = Instant::now();
-        let tool = tools::security_analysis::SecurityDetectSecretsTool::new(ctx.clone());
+        let tool = tools::security_analysis::SecurityAnalyzeSecretsTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -697,7 +705,7 @@ async fn test_architecture_analysis_tools() {
     // Test 1: cortex.arch.visualize_structure
     {
         let start = Instant::now();
-        let tool = tools::architecture_analysis::ArchVisualizeStructureTool::new(ctx.clone());
+        let tool = tools::architecture_analysis::ArchVisualizeTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -847,7 +855,7 @@ async fn test_advanced_testing_tools() {
     // Test 1: cortex.test.generate_property_tests
     {
         let start = Instant::now();
-        let tool = tools::advanced_testing::TestGeneratePropertyTestsTool::new(ctx.clone());
+        let tool = tools::advanced_testing::TestGeneratePropertyTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -874,7 +882,7 @@ async fn test_advanced_testing_tools() {
     // Test 2: cortex.test.run_mutation_testing
     {
         let start = Instant::now();
-        let tool = tools::advanced_testing::TestRunMutationTestingTool::new(ctx.clone());
+        let tool = tools::advanced_testing::TestGenerateMutationTool::new(ctx.clone());
 
         let input = json!({
             "workspace_id": harness.workspace_id.to_string(),
@@ -924,7 +932,7 @@ async fn test_complete_security_audit_workflow() {
     );
 
     // Step 1: Scan for vulnerabilities
-    let scan_tool = tools::security_analysis::SecurityScanVulnerabilitiesTool::new(sec_ctx.clone());
+    let scan_tool = tools::security_analysis::SecurityScanTool::new(sec_ctx.clone());
     let scan_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
         "scope": "workspace",
@@ -941,7 +949,7 @@ async fn test_complete_security_audit_workflow() {
     let _ = deps_tool.execute(deps_input, &ToolContext::default()).await;
 
     // Step 3: Detect secrets
-    let secrets_tool = tools::security_analysis::SecurityDetectSecretsTool::new(sec_ctx.clone());
+    let secrets_tool = tools::security_analysis::SecurityAnalyzeSecretsTool::new(sec_ctx.clone());
     let secrets_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
         "scope": "workspace"
@@ -1007,7 +1015,7 @@ async fn test_ai_code_improvement_workflow() {
     let _ = refactor_tool.execute(refactor_input, &ToolContext::default()).await;
 
     // Step 3: Optimize code
-    let optimize_tool = tools::ai_assisted::AiOptimizeCodeTool::new(ai_ctx.clone());
+    let optimize_tool = tools::ai_assisted::AiSuggestOptimizationTool::new(ai_ctx.clone());
     let optimize_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
         "unit_id": "test_unit",
@@ -1016,7 +1024,7 @@ async fn test_ai_code_improvement_workflow() {
     let _ = optimize_tool.execute(optimize_input, &ToolContext::default()).await;
 
     // Step 4: Generate documentation
-    let docs_tool = tools::ai_assisted::AiGenerateDocsTool::new(ai_ctx);
+    let docs_tool = tools::ai_assisted::AiGenerateDocstringTool::new(ai_ctx);
     let docs_input = json!({
         "workspace_id": harness.workspace_id.to_string(),
         "unit_id": "test_unit",
