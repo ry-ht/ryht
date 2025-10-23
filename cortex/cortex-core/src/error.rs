@@ -140,6 +140,21 @@ impl CortexError {
         Self::Internal(msg.into())
     }
 
+    /// Create a new connection error (maps to Internal)
+    pub fn connection(msg: impl Into<String>) -> Self {
+        Self::Internal(format!("Connection error: {}", msg.into()))
+    }
+
+    /// Create a new serialization error from a string message
+    pub fn serialization(msg: impl Into<String>) -> Self {
+        Self::Internal(format!("Serialization error: {}", msg.into()))
+    }
+
+    /// Create a new migration error (maps to Internal)
+    pub fn migration(msg: impl Into<String>) -> Self {
+        Self::Internal(format!("Migration error: {}", msg.into()))
+    }
+
     /// Check if this is a not found error
     pub fn is_not_found(&self) -> bool {
         matches!(self, Self::NotFound { .. })

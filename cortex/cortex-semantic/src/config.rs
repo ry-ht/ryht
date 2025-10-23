@@ -11,6 +11,8 @@ pub struct SemanticConfig {
     pub index: IndexConfig,
     pub search: SearchConfig,
     pub cache: CacheConfig,
+    pub qdrant: QdrantConfig,
+    pub vector_store: VectorStoreConfig,
 }
 
 impl Default for SemanticConfig {
@@ -20,6 +22,8 @@ impl Default for SemanticConfig {
             index: IndexConfig::default(),
             search: SearchConfig::default(),
             cache: CacheConfig::default(),
+            qdrant: QdrantConfig::default(),
+            vector_store: VectorStoreConfig::default(),
         }
     }
 }
@@ -256,6 +260,167 @@ impl Default for CacheConfig {
             query_cache_ttl_seconds: 300, // 5 minutes
         }
     }
+}
+
+/// Qdrant vector store configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QdrantConfig {
+    /// Qdrant server URL
+    pub url: String,
+
+    /// Optional API key for authentication
+    pub api_key: Option<String>,
+
+    /// gRPC port (default 6334)
+    pub grpc_port: u16,
+
+    /// Request timeout in seconds
+    pub timeout_seconds: u64,
+
+    /// Collection name prefix
+    pub collection_prefix: String,
+
+    /// Default collection name
+    pub collection_name: String,
+
+    /// HNSW configuration for Qdrant
+    pub hnsw_config: QdrantHnswConfig,
+
+    /// Enable quantization for memory efficiency
+    pub enable_quantization: bool,
+
+    /// Quantization type (scalar or product)
+    pub quantization_type: QuantizationType,
+
+    /// Number of replicas
+    pub replication_factor: u32,
+
+    /// Number of shards
+    pub shard_number: u32,
+
+    /// Enable on-disk storage for large collections
+    pub on_disk_payload: bool,
+
+    /// Write batch size for bulk operations
+    pub write_batch_size: usize,
+
+    /// Max retries for operations
+    pub max_retries: usize,
+
+    /// Enable connection pooling
+    pub enable_connection_pool: bool,
+}
+
+impl Default for QdrantConfig {
+    fn default() -> Self {
+        Self {
+            url: std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6333".to_string()),
+            api_key: std::env::var("QDRANT_API_KEY").ok(),
+            grpc_port: 6334,
+            timeout_seconds: 30,
+            collection_prefix: "cortex_".to_string(),
+            collection_name: "semantic_vectors".to_string(),
+            hnsw_config: QdrantHnswConfig::default(),
+            enable_quantization: true,
+            quantization_type: QuantizationType::Scalar,
+            replication_factor: 1,
+            shard_number: 1,
+            on_disk_payload: false,
+            write_batch_size: 100,
+            max_retries: 3,
+            enable_connection_pool: true,
+        }
+    }
+}
+
+/// Qdrant-specific HNSW configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QdrantHnswConfig {
+    /// Number of edges per node in the index graph (m parameter)
+    pub m: u64,
+
+    /// Number of neighbors to consider during construction
+    pub ef_construct: u64,
+
+    /// Full scan threshold for small collections
+    pub full_scan_threshold: u64,
+
+    /// Max optimization threads
+    pub max_indexing_threads: u64,
+}
+
+impl Default for QdrantHnswConfig {
+    fn default() -> Self {
+        Self {
+            m: 16,
+            ef_construct: 200,
+            full_scan_threshold: 10000,
+            max_indexing_threads: 0, // 0 = auto
+        }
+    }
+}
+
+/// Quantization type for vector compression.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantizationType {
+    /// Scalar quantization (8-bit)
+    Scalar,
+    /// Product quantization (higher compression)
+    Product,
+    /// No quantization
+    None,
+}
+
+/// Vector store backend selection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorStoreConfig {
+    /// Backend type: "hnsw" (in-memory) or "qdrant"
+    pub backend: VectorStoreBackend,
+
+    /// Migration mode for dual-write
+    pub migration_mode: MigrationMode,
+
+    /// Enable consistency verification
+    pub enable_consistency_check: bool,
+
+    /// Consistency check interval in seconds
+    pub consistency_check_interval_seconds: u64,
+}
+
+impl Default for VectorStoreConfig {
+    fn default() -> Self {
+        Self {
+            backend: VectorStoreBackend::Hnsw,
+            migration_mode: MigrationMode::SingleStore,
+            enable_consistency_check: false,
+            consistency_check_interval_seconds: 300,
+        }
+    }
+}
+
+/// Vector store backend type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VectorStoreBackend {
+    /// In-memory HNSW index
+    Hnsw,
+    /// Qdrant vector database
+    Qdrant,
+}
+
+/// Migration mode for transitioning between backends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MigrationMode {
+    /// Single store operation (no migration)
+    SingleStore,
+    /// Write to both stores, read from old
+    DualWrite,
+    /// Write to both stores, read from both and verify consistency
+    DualVerify,
+    /// Write to both stores, read from new (primary)
+    NewPrimary,
 }
 
 #[cfg(test)]

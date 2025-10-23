@@ -42,6 +42,9 @@ tokenizers = { workspace = true }
 # HNSW index - Using instant-distance for pure Rust HNSW implementation
 instant-distance = "0.6.1"
 
+# Qdrant vector store
+qdrant-client = "1.15.0"
+
 # Linear algebra - pinned to match ort dependency
 ndarray = "0.15.6"
 

@@ -1,7 +1,7 @@
 //! Main semantic search engine implementation.
 
 use crate::cache::{EmbeddingCache, EmbeddingCacheKey, QueryCache, QueryCacheKey, CachedSearchResult};
-use crate::config::SemanticConfig;
+use crate::config::{SemanticConfig, VectorStoreBackend, MigrationMode};
 use crate::error::Result;
 use crate::index::{HNSWIndex, VectorIndex, IndexStats};
 use crate::providers::{EmbeddingProvider, ProviderManager};
@@ -14,14 +14,13 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 /// Main semantic search engine.
 pub struct SemanticSearchEngine {
     config: SemanticConfig,
     provider: Arc<ProviderManager>,
-    index: Arc<RwLock<HNSWIndex>>,
+    index: Arc<dyn VectorIndex>,
     documents: Arc<DashMap<DocumentId, IndexedDocument>>,
     query_processor: QueryProcessor,
     ranker: Ranker,
@@ -61,12 +60,8 @@ impl SemanticSearchEngine {
         let dimension = provider.dimension();
         info!("Using embedding dimension: {}", dimension);
 
-        // Create or load index
-        let index = if let Some(_persist_path) = &config.index.persist_path {
-            HNSWIndex::load_or_create(config.index.clone(), dimension).await?
-        } else {
-            HNSWIndex::new(config.index.clone(), dimension)?
-        };
+        // Create index based on backend configuration
+        let index: Arc<dyn VectorIndex> = Self::create_index(&config, dimension).await?;
 
         // Create caches
         let embedding_cache = if config.cache.enable_embedding_cache {
@@ -99,7 +94,107 @@ impl SemanticSearchEngine {
         Ok(Self {
             config,
             provider,
-            index: Arc::new(RwLock::new(index)),
+            index,
+            documents: Arc::new(DashMap::new()),
+            query_processor: QueryProcessor::new(),
+            ranker,
+            embedding_cache,
+            query_cache,
+        })
+    }
+
+    /// Create index based on backend configuration.
+    async fn create_index(config: &SemanticConfig, dimension: usize) -> Result<Arc<dyn VectorIndex>> {
+        let similarity_metric = config.index.similarity_metric;
+
+        let index: Arc<dyn VectorIndex> = match config.vector_store.backend {
+            VectorStoreBackend::Hnsw => {
+                info!("Using HNSW in-memory index");
+                let hnsw = if let Some(_persist_path) = &config.index.persist_path {
+                    HNSWIndex::load_or_create(config.index.clone(), dimension).await?
+                } else {
+                    HNSWIndex::new(config.index.clone(), dimension)?
+                };
+                Arc::new(hnsw)
+            }
+            VectorStoreBackend::Qdrant => {
+                info!("Using Qdrant vector store");
+                let qdrant = crate::qdrant::QdrantVectorStore::new(
+                    config.qdrant.clone(),
+                    dimension,
+                    similarity_metric,
+                )
+                .await?;
+
+                // Handle migration mode
+                match config.vector_store.migration_mode {
+                    MigrationMode::SingleStore => Arc::new(qdrant),
+                    MigrationMode::DualWrite | MigrationMode::DualVerify | MigrationMode::NewPrimary => {
+                        info!("Creating hybrid store for migration mode: {:?}", config.vector_store.migration_mode);
+
+                        // Create old HNSW store
+                        let hnsw = if let Some(_persist_path) = &config.index.persist_path {
+                            HNSWIndex::load_or_create(config.index.clone(), dimension).await?
+                        } else {
+                            HNSWIndex::new(config.index.clone(), dimension)?
+                        };
+
+                        // Create hybrid store
+                        let hybrid = crate::hybrid::HybridVectorStore::new(
+                            Arc::new(hnsw),
+                            Arc::new(qdrant),
+                            config.vector_store.migration_mode,
+                        );
+
+                        Arc::new(hybrid)
+                    }
+                }
+            }
+        };
+
+        Ok(index)
+    }
+
+    /// Create a new semantic search engine with custom vector store.
+    pub async fn with_vector_store(
+        config: SemanticConfig,
+        vector_store: Arc<dyn VectorIndex>,
+    ) -> Result<Self> {
+        info!("Initializing semantic search engine with custom vector store");
+
+        // Create provider manager
+        let provider = Arc::new(ProviderManager::from_config(&config.embedding).await?);
+
+        // Create caches
+        let embedding_cache = if config.cache.enable_embedding_cache {
+            Some(EmbeddingCache::new(
+                config.cache.embedding_cache_size,
+                Duration::from_secs(config.cache.embedding_cache_ttl_seconds),
+            ))
+        } else {
+            None
+        };
+
+        let query_cache = if config.cache.enable_query_cache {
+            Some(QueryCache::new(
+                config.cache.query_cache_size,
+                Duration::from_secs(config.cache.query_cache_ttl_seconds),
+            ))
+        } else {
+            None
+        };
+
+        // Create ranker
+        let ranker = Ranker::new(if config.search.enable_hybrid_search {
+            RankingStrategy::Hybrid
+        } else {
+            RankingStrategy::Semantic
+        });
+
+        Ok(Self {
+            config,
+            provider,
+            index: vector_store,
             documents: Arc::new(DashMap::new()),
             query_processor: QueryProcessor::new(),
             ranker,
@@ -136,10 +231,7 @@ impl SemanticSearchEngine {
         self.documents.insert(doc_id.clone(), indexed_doc);
 
         // Insert into index
-        {
-            let index = self.index.write().await;
-            index.insert(doc_id, embedding).await?;
-        } // Explicitly drop write lock
+        self.index.insert(doc_id, embedding).await?;
 
         debug!("Document indexed successfully");
         Ok(())
@@ -179,10 +271,7 @@ impl SemanticSearchEngine {
         }
 
         // Batch insert into index
-        {
-            let index = self.index.write().await;
-            index.insert_batch(index_items).await?;
-        } // Explicitly drop write lock
+        self.index.insert_batch(index_items).await?;
 
         info!("Batch indexing completed");
         Ok(())
@@ -227,8 +316,7 @@ impl SemanticSearchEngine {
         let query_embedding = self.generate_embedding(&processed_query.normalized).await?;
 
         // Search in index
-        let index = self.index.read().await;
-        let mut index_results = index.search(&query_embedding, limit * 2).await?;
+        let mut index_results = self.index.search(&query_embedding, limit * 2).await?;
 
         // Apply filters
         index_results.retain(|result| self.matches_filter(&result.doc_id, &filter));
@@ -307,10 +395,7 @@ impl SemanticSearchEngine {
         self.documents.remove(doc_id);
 
         // Remove from index
-        {
-            let index = self.index.write().await;
-            index.remove(doc_id).await?;
-        } // Explicitly drop write lock before cache invalidation
+        self.index.remove(doc_id).await?;
 
         // Invalidate caches
         self.invalidate_caches().await;
@@ -327,10 +412,7 @@ impl SemanticSearchEngine {
         self.documents.clear();
 
         // Clear index
-        {
-            let index = self.index.write().await;
-            index.clear().await?;
-        } // Explicitly drop write lock before cache invalidation
+        self.index.clear().await?;
 
         // Invalidate caches
         self.invalidate_caches().await;
@@ -343,27 +425,22 @@ impl SemanticSearchEngine {
     pub async fn save_index(&self) -> Result<()> {
         if let Some(persist_path) = &self.config.index.persist_path {
             info!("Saving index to: {}", persist_path.display());
-            let index = self.index.read().await;
-            index.save(persist_path).await?;
-            // Read lock automatically dropped here
+            self.index.save(persist_path).await?;
         }
         Ok(())
     }
 
     /// Load index from disk.
-    pub async fn load_index(&self, path: &Path) -> Result<()> {
-        info!("Loading index from: {}", path.display());
-        {
-            let mut index = self.index.write().await;
-            index.load(path).await?;
-        } // Explicitly drop write lock
+    /// Note: This method is deprecated for trait object stores as it requires mutable access.
+    /// Use backend-specific loading mechanisms instead.
+    pub async fn load_index(&self, _path: &Path) -> Result<()> {
+        info!("Load operation not supported with trait object stores");
         Ok(())
     }
 
     /// Get index statistics.
     pub async fn stats(&self) -> IndexStats {
-        let index = self.index.read().await;
-        index.stats().await
+        self.index.stats().await
     }
 
     /// Get document count.

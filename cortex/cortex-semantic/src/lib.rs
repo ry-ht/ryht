@@ -50,8 +50,13 @@ pub mod ranking;
 pub mod cache;
 pub mod types;
 pub mod error;
+pub mod qdrant;
+pub mod hybrid;
 
-pub use config::{SemanticConfig, EmbeddingProviderConfig, IndexConfig, SearchConfig};
+pub use config::{
+    SemanticConfig, EmbeddingProviderConfig, IndexConfig, SearchConfig, QdrantConfig,
+    VectorStoreConfig, VectorStoreBackend, MigrationMode, QuantizationType,
+};
 pub use providers::{EmbeddingProvider, OpenAIProvider, ONNXProvider, OllamaProvider, MockProvider};
 pub use index::{VectorIndex, HNSWIndex, IndexStats};
 pub use query::{QueryProcessor, QueryExpander, QueryIntent};
@@ -59,13 +64,19 @@ pub use search::{SemanticSearchEngine, SearchResult, SearchFilter};
 pub use ranking::{Ranker, RankingStrategy, ScoringAlgorithm};
 pub use types::{Vector, DocumentId, EmbeddingModel, EntityType};
 pub use error::{SemanticError, Result};
+pub use qdrant::{QdrantVectorStore, QdrantMetrics};
+pub use hybrid::{HybridVectorStore, HybridMetrics, MigrationReport, ConsistencyStatus};
 
 /// Re-export commonly used types
 pub mod prelude {
-    pub use crate::config::{SemanticConfig, EmbeddingProviderConfig};
+    pub use crate::config::{
+        SemanticConfig, EmbeddingProviderConfig, QdrantConfig, VectorStoreBackend, MigrationMode,
+    };
     pub use crate::providers::{EmbeddingProvider, OpenAIProvider};
     pub use crate::index::VectorIndex;
     pub use crate::search::{SemanticSearchEngine, SearchResult};
     pub use crate::types::{Vector, DocumentId};
     pub use crate::error::{SemanticError, Result};
+    pub use crate::qdrant::QdrantVectorStore;
+    pub use crate::hybrid::HybridVectorStore;
 }

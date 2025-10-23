@@ -56,11 +56,30 @@ pub enum SemanticError {
 
     #[error("ONNX Runtime error: {0}")]
     OnnxRuntime(String),
+
+    #[error("Qdrant error: {0}")]
+    Qdrant(String),
+
+    #[error("Vector store error: {0}")]
+    VectorStore(String),
+
+    #[error("Consistency error: {0}")]
+    Consistency(String),
+
+    #[error("Migration error: {0}")]
+    Migration(String),
 }
 
 // Implement From<ort::OrtError> for SemanticError
 impl From<ort::OrtError> for SemanticError {
     fn from(err: ort::OrtError) -> Self {
         SemanticError::OnnxRuntime(err.to_string())
+    }
+}
+
+// Implement From<qdrant_client::QdrantError> for SemanticError
+impl From<qdrant_client::QdrantError> for SemanticError {
+    fn from(err: qdrant_client::QdrantError) -> Self {
+        SemanticError::Qdrant(err.to_string())
     }
 }

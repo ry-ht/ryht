@@ -109,7 +109,7 @@ pub trait VectorIndex: Send + Sync {
 }
 
 /// Search result from index.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
     pub doc_id: DocumentId,
     pub score: f32,

@@ -1,7 +1,8 @@
 //! Storage layer for Cortex using SurrealDB.
 //!
 //! This crate provides connection pooling, query execution, and data persistence
-//! for the Cortex cognitive memory system.
+//! for the Cortex cognitive memory system, including dual-storage synchronization
+//! with Qdrant vector database.
 
 pub mod connection;
 pub mod surreal;
@@ -15,6 +16,11 @@ pub mod merge;
 pub mod merge_engine;
 pub mod session_aware_storage;
 pub mod locks;
+
+// Dual-storage synchronization modules
+pub mod sync_manager;
+pub mod consistency;
+pub mod migration;
 
 // In-memory pool for testing (available in all builds for integration tests)
 pub mod in_memory_pool;
@@ -49,6 +55,22 @@ pub use merge::{
 
 pub use merge_engine::MergeEngine;
 
+// Re-export dual-storage synchronization types
+pub use sync_manager::{
+    DataSyncManager, SyncConfig, SyncEntity, SyncEvent, SyncEventType,
+    SyncMetricsSnapshot, SyncOperation, SyncResult,
+};
+
+pub use consistency::{
+    ConsistencyChecker, ConsistencyConfig, ConsistencyMetricsSnapshot,
+    ConsistencyReport, ConsistencyStatus, RepairAction, RepairResult,
+};
+
+pub use migration::{
+    EntityWithVector, MigrationConfig, MigrationManager, MigrationProgress,
+    MigrationReport, MigrationStatus, VerificationReport,
+};
+
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::connection::{ConnectionConfig, ConnectionMode};
@@ -80,4 +102,20 @@ pub mod prelude {
         Operation, ResolutionType, SemanticAnalyzer, VerificationResult,
     };
     pub use crate::merge_engine::MergeEngine;
+
+    // Dual-storage synchronization
+    pub use crate::sync_manager::{
+        DataSyncManager, SyncConfig, SyncEntity, SyncEvent, SyncEventType,
+        SyncMetricsSnapshot, SyncOperation, SyncResult,
+    };
+
+    pub use crate::consistency::{
+        ConsistencyChecker, ConsistencyConfig, ConsistencyMetricsSnapshot,
+        ConsistencyReport, ConsistencyStatus, RepairAction, RepairResult,
+    };
+
+    pub use crate::migration::{
+        EntityWithVector, MigrationConfig, MigrationManager, MigrationProgress,
+        MigrationReport, MigrationStatus, VerificationReport,
+    };
 }

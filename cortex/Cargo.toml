@@ -60,7 +60,7 @@ chrono = { version = "0.4.42", features = ["serde"] }
 time = { version = "0.3.44", features = ["serde", "macros"] }
 
 # UUID
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uuid = { version = "1.18.1", features = ["v4", "v5", "serde"] }
 
 # Hashing and crypto
 blake3 = "1.8.2"
@@ -147,10 +147,31 @@ anyhow.workspace = true
 surrealdb.workspace = true
 parking_lot.workspace = true
 ignore.workspace = true
+proptest.workspace = true
 
 [[test]]
 name = "cross_crate_integration"
 path = "tests/cross_crate_integration.rs"
+harness = true
+
+[[test]]
+name = "mcp_tools_comprehensive_test"
+path = "tests/mcp_tools_comprehensive_test.rs"
+harness = true
+
+[[test]]
+name = "vfs_integration_test"
+path = "tests/vfs_integration_test.rs"
+harness = true
+
+[[test]]
+name = "code_generation_test"
+path = "tests/code_generation_test.rs"
+harness = true
+
+[[test]]
+name = "llm_efficiency_test"
+path = "tests/llm_efficiency_test.rs"
 harness = true
 
 [[test]]

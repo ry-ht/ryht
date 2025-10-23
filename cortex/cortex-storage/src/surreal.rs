@@ -26,6 +26,114 @@ impl SurrealStorage {
         crate::schema::init_schema(&*conn).await?;
         Ok(Self::new(pool))
     }
+
+    // ============================================================================
+    // Dual-Storage Coordination Methods
+    // ============================================================================
+
+    /// Update vector sync status for an entity
+    pub async fn update_vector_sync_status(
+        &self,
+        id: CortexId,
+        table: &str,
+        synced: bool,
+    ) -> Result<()> {
+        let db = self.pool.get().await?;
+        let query = format!(
+            "UPDATE {}:{} SET vector_synced = $synced, last_synced_at = time::now()",
+            table, id
+        );
+
+        db.query(query)
+            .bind(("synced", synced))
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to update sync status: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Mark entity as having a vector embedding
+    pub async fn mark_entity_with_vector(
+        &self,
+        id: CortexId,
+        table: &str,
+        vector_id: CortexId,
+    ) -> Result<()> {
+        let db = self.pool.get().await?;
+        let query = format!(
+            "UPDATE {}:{} SET has_vector = true, vector_id = $vector_id, vector_synced = true, last_synced_at = time::now()",
+            table, id
+        );
+
+        db.query(query)
+            .bind(("vector_id", vector_id.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to mark entity with vector: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get entities that need vector sync
+    pub async fn get_unsynced_entities(&self, table: &str, limit: usize) -> Result<Vec<CortexId>> {
+        let db = self.pool.get().await?;
+        let query = format!(
+            "SELECT meta::id(id) AS id_str FROM {} WHERE vector_synced = false OR vector_synced IS NONE LIMIT {}",
+            table, limit
+        );
+
+        let mut response = db.query(&query).await
+            .map_err(|e| CortexError::storage(format!("Failed to get unsynced entities: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct IdRecord {
+            id_str: String,
+        }
+
+        let records: Vec<IdRecord> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to parse IDs: {}", e)))?;
+
+        Ok(records.into_iter()
+            .filter_map(|r| CortexId::parse(&r.id_str).ok())
+            .collect::<Vec<_>>())
+    }
+
+    /// Get vector_id reference for an entity
+    pub async fn get_vector_id(&self, id: CortexId, table: &str) -> Result<Option<String>> {
+        let db = self.pool.get().await?;
+        let query = format!("SELECT vector_id FROM {}:{}", table, id);
+
+        let mut response = db.query(&query).await
+            .map_err(|e| CortexError::storage(format!("Failed to get vector_id: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct VectorIdRecord {
+            vector_id: Option<String>,
+        }
+
+        let records: Vec<VectorIdRecord> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to parse vector_id: {}", e)))?;
+
+        Ok(records.first().and_then(|r| r.vector_id.clone()))
+    }
+
+    /// Check if entity has synced vector
+    pub async fn has_synced_vector(&self, id: CortexId, table: &str) -> Result<bool> {
+        let db = self.pool.get().await?;
+        let query = format!("SELECT vector_synced FROM {}:{}", table, id);
+
+        let mut response = db.query(&query).await
+            .map_err(|e| CortexError::storage(format!("Failed to check sync status: {}", e)))?;
+
+        #[derive(serde::Deserialize)]
+        struct SyncRecord {
+            vector_synced: Option<bool>,
+        }
+
+        let records: Vec<SyncRecord> = response.take(0)
+            .map_err(|e| CortexError::storage(format!("Failed to parse sync status: {}", e)))?;
+
+        Ok(records.first().and_then(|r| r.vector_synced).unwrap_or(false))
+    }
 }
 
 #[async_trait]
@@ -170,6 +278,7 @@ impl Storage for SurrealStorage {
         let db = self.pool.get().await?;
 
         // Construct the content map manually to ensure proper datetime serialization
+        // Added vector_id for dual-storage coordination with Qdrant
         let content = serde_json::json!({
             "project_id": format!("projects:{}", document.project_id),
             "path": document.path,
@@ -179,6 +288,9 @@ impl Storage for SurrealStorage {
             "created_at": Datetime::from(document.created_at),
             "updated_at": Datetime::from(document.updated_at),
             "metadata": document.metadata,
+            "vector_id": document.id.to_string(), // Reference to Qdrant vector ID (if embedded)
+            "has_vector": false, // Flag indicating if this document has a vector embedding
+            "vector_synced": false, // Sync status with Qdrant
         });
 
         // Use upsert to avoid ID conflicts
@@ -231,12 +343,16 @@ impl Storage for SurrealStorage {
         let db = self.pool.get().await?;
 
         // Construct the content map manually to ensure proper datetime serialization
+        // Added vector_id for dual-storage coordination with Qdrant
         let content = serde_json::json!({
             "entity_id": embedding.entity_id.to_string(),
             "entity_type": embedding.entity_type,
             "vector": embedding.vector,
             "model": embedding.model,
             "created_at": Datetime::from(embedding.created_at),
+            "vector_id": embedding.id.to_string(), // Reference to Qdrant vector ID
+            "vector_synced": true, // Flag indicating sync status with Qdrant
+            "last_synced_at": Datetime::from(chrono::Utc::now()),
         });
 
         let _: Option<serde_json::Value> = db.upsert(("embeddings", embedding.id.to_string()))
@@ -266,6 +382,7 @@ impl Storage for SurrealStorage {
         let db = self.pool.get().await?;
 
         // Construct the content map manually to ensure proper datetime serialization
+        // Added vector_id for dual-storage coordination with Qdrant
         let content = serde_json::json!({
             "project_id": format!("projects:{}", episode.project_id),
             "session_id": episode.session_id,
@@ -275,6 +392,9 @@ impl Storage for SurrealStorage {
             "created_at": Datetime::from(episode.created_at),
             "accessed_count": episode.accessed_count,
             "last_accessed_at": episode.last_accessed_at.map(Datetime::from),
+            "vector_id": episode.id.to_string(), // Reference to Qdrant vector ID
+            "has_vector": false, // Flag indicating if this episode has a vector embedding
+            "vector_synced": false, // Sync status with Qdrant
         });
 
         let _: Option<serde_json::Value> = db.upsert(("episodes", episode.id.to_string()))
