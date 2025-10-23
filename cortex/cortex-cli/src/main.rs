@@ -13,7 +13,7 @@
 //! cortex search "authentication logic"
 //!
 //! # Start MCP server
-//! cortex serve
+//! cortex mcp http
 //!
 //! # Manage database
 //! cortex db start
@@ -135,17 +135,6 @@ enum Commands {
     /// List entities
     #[command(subcommand)]
     List(ListCommands),
-
-    /// Start the MCP server
-    Serve {
-        /// Server address
-        #[arg(short, long, default_value = "127.0.0.1")]
-        address: String,
-
-        /// Server port
-        #[arg(short, long, default_value = "3000")]
-        port: u16,
-    },
 
     /// Flush VFS to disk
     Flush {
@@ -568,10 +557,6 @@ async fn run() -> Result<()> {
                 commands::list_episodes(workspace, limit, format).await?;
             }
         },
-
-        Commands::Serve { address, port } => {
-            commands::serve_mcp(address, port).await?;
-        }
 
         Commands::Flush {
             workspace,

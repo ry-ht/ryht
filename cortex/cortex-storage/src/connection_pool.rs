@@ -572,13 +572,7 @@ impl ConnectionPool {
                 .context("Failed to connect to SurrealDB")?
         };
 
-        // Use namespace and database first
-        db.use_ns(&self.namespace)
-            .use_db(&self.database)
-            .await
-            .context("Failed to set namespace/database")?;
-
-        // Authenticate if credentials provided
+        // Authenticate first (required before using namespace/database)
         if let (Some(username), Some(password)) = (&self.credentials.username, &self.credentials.password) {
             db.signin(surrealdb::opt::auth::Root {
                 username,
@@ -587,6 +581,12 @@ impl ConnectionPool {
             .await
             .context("Authentication failed")?;
         }
+
+        // Then use namespace and database
+        db.use_ns(&self.namespace)
+            .use_db(&self.database)
+            .await
+            .context("Failed to set namespace/database")?;
 
         let conn = PooledConnectionInner {
             id: Uuid::new_v4(),

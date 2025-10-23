@@ -54,13 +54,7 @@ impl ConnectionPool {
             .await
             .map_err(|e| CortexError::database(format!("Failed to connect: {}", e)))?;
 
-        // Use namespace and database
-        db.use_ns(&self.config.namespace)
-            .use_db(&self.config.database)
-            .await
-            .map_err(|e| CortexError::database(format!("Failed to use namespace/database: {}", e)))?;
-
-        // Authenticate if credentials are provided
+        // Authenticate first (required before using namespace/database)
         if let (Some(username), Some(password)) = (&self.config.username, &self.config.password) {
             db.signin(surrealdb::opt::auth::Root {
                 username,
@@ -69,6 +63,12 @@ impl ConnectionPool {
             .await
             .map_err(|e| CortexError::database(format!("Authentication failed: {}", e)))?;
         }
+
+        // Then use namespace and database
+        db.use_ns(&self.config.namespace)
+            .use_db(&self.config.database)
+            .await
+            .map_err(|e| CortexError::database(format!("Failed to use namespace/database: {}", e)))?;
 
         let db = Arc::new(db);
         let mut id = self.next_id.write();
