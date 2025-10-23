@@ -375,26 +375,14 @@ pub enum QuantizationType {
 /// Vector store backend selection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorStoreConfig {
-    /// Backend type: "hnsw" (in-memory) or "qdrant"
+    /// Backend type: always "qdrant" in this version
     pub backend: VectorStoreBackend,
-
-    /// Migration mode for dual-write
-    pub migration_mode: MigrationMode,
-
-    /// Enable consistency verification
-    pub enable_consistency_check: bool,
-
-    /// Consistency check interval in seconds
-    pub consistency_check_interval_seconds: u64,
 }
 
 impl Default for VectorStoreConfig {
     fn default() -> Self {
         Self {
-            backend: VectorStoreBackend::Hnsw,
-            migration_mode: MigrationMode::SingleStore,
-            enable_consistency_check: false,
-            consistency_check_interval_seconds: 300,
+            backend: VectorStoreBackend::Qdrant,
         }
     }
 }
@@ -403,24 +391,8 @@ impl Default for VectorStoreConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VectorStoreBackend {
-    /// In-memory HNSW index
-    Hnsw,
     /// Qdrant vector database
     Qdrant,
-}
-
-/// Migration mode for transitioning between backends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MigrationMode {
-    /// Single store operation (no migration)
-    SingleStore,
-    /// Write to both stores, read from old
-    DualWrite,
-    /// Write to both stores, read from both and verify consistency
-    DualVerify,
-    /// Write to both stores, read from new (primary)
-    NewPrimary,
 }
 
 #[cfg(test)]

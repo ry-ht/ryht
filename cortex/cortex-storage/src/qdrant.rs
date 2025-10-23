@@ -156,6 +156,7 @@ impl Default for OptimizerConfig {
 /// Qdrant client wrapper with connection pooling
 pub struct QdrantClient {
     client: Arc<Qdrant>,
+    #[allow(dead_code)]
     config: QdrantConfig,
     collections: Arc<RwLock<HashMap<String, CollectionConfig>>>,
 }

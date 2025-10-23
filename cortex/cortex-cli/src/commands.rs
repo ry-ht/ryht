@@ -1631,3 +1631,19 @@ pub async fn server_status() -> Result<()> {
 
     Ok(())
 }
+
+// ============================================================================
+// Qdrant Commands (re-exported from qdrant_commands module)
+// ============================================================================
+
+pub use crate::qdrant_commands::{
+    qdrant_init,
+    qdrant_status,
+    qdrant_migrate,
+    qdrant_verify,
+    qdrant_benchmark,
+    qdrant_snapshot,
+    qdrant_restore,
+    qdrant_optimize,
+    qdrant_list,
+};

@@ -172,26 +172,26 @@ pub async fn qdrant_status(
             }
         }
         OutputFormat::Human => {
-            let mut table = TableBuilder::new();
-            table.set_header(vec![
-                "Collection",
-                "Vectors",
-                "Indexed",
-                "Points",
-                "Segments",
-                "Status",
-            ]);
+            let table = TableBuilder::new()
+                .header(vec![
+                    "Collection",
+                    "Vectors",
+                    "Indexed",
+                    "Points",
+                    "Segments",
+                    "Status",
+                ]);
 
-            for stat in stats {
-                table.add_row(vec![
+            let table = stats.into_iter().fold(table, |table, stat| {
+                table.row(vec![
                     stat.name,
                     stat.vectors_count.to_string(),
                     stat.indexed_vectors_count.to_string(),
                     stat.points_count.to_string(),
                     stat.segments_count.to_string(),
                     stat.status,
-                ]);
-            }
+                ])
+            });
 
             table.print();
 
@@ -204,7 +204,7 @@ pub async fn qdrant_status(
                     println!("  Optimizer Status: {:?}", info.optimizer_status);
                     println!("  Vectors: {}", info.vectors_count.unwrap_or(0));
                     println!("  Points: {}", info.points_count.unwrap_or(0));
-                    println!("  Segments: {}", info.segments_count.unwrap_or(0));
+                    println!("  Segments: {}", info.segments_count);
                 }
             }
         }
@@ -314,12 +314,12 @@ pub async fn qdrant_benchmark(
 
     // Generate random vectors
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let mut latencies = Vec::new();
 
     for i in 0..num_queries {
-        let vector: Vec<f32> = (0..dimensions).map(|_| rng.gen::<f32>()).collect();
+        let vector: Vec<f32> = (0..dimensions).map(|_| rng.random::<f32>()).collect();
 
         let start = Instant::now();
         let results = client.search(&collection_name, vector, 10, None).await?;
@@ -459,12 +459,13 @@ pub async fn qdrant_list(detailed: bool, format: OutputFormat) -> Result<()> {
         }
         OutputFormat::Human => {
             if detailed {
-                let mut table = TableBuilder::new();
-                table.set_header(vec!["Collection", "Vectors", "Indexed", "Segments", "Status"]);
+                let table = TableBuilder::new()
+                    .header(vec!["Collection", "Vectors", "Indexed", "Segments", "Status"]);
 
+                let mut table = table;
                 for name in collections {
                     if let Ok(stats) = client.get_collection_stats(&name).await {
-                        table.add_row(vec![
+                        table = table.row(vec![
                             stats.name,
                             stats.vectors_count.to_string(),
                             stats.indexed_vectors_count.to_string(),

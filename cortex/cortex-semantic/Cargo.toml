@@ -39,9 +39,6 @@ reqwest = { workspace = true }
 ort = { workspace = true }
 tokenizers = { workspace = true }
 
-# HNSW index - Using instant-distance for pure Rust HNSW implementation
-instant-distance = "0.6.1"
-
 # Qdrant vector store
 qdrant-client = "1.15.0"
 
@@ -87,8 +84,4 @@ harness = false
 
 [[bench]]
 name = "search_performance"
-harness = false
-
-[[bench]]
-name = "hnsw_comparison"
 harness = false

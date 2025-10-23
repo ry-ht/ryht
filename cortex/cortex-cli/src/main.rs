@@ -23,6 +23,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use cortex_cli::{commands, output, OutputFormat};
+use cortex_cli::qdrant_commands;
 use cortex_vfs::{FlushScope, WorkspaceType};
 use std::path::PathBuf;
 use std::process;
@@ -839,31 +840,31 @@ async fn run() -> Result<()> {
 
         Commands::Qdrant(qdrant_cmd) => match qdrant_cmd {
             QdrantCommands::Init { force, skip_verify } => {
-                commands::qdrant_init(force, skip_verify).await?;
+                qdrant_commands::qdrant_init(force, skip_verify).await?;
             }
             QdrantCommands::Status { detailed, collection } => {
-                commands::qdrant_status(detailed, collection, format).await?;
+                qdrant_commands::qdrant_status(detailed, collection, format).await?;
             }
             QdrantCommands::Migrate { source, target, batch_size, dry_run } => {
-                commands::qdrant_migrate(source, target, batch_size, dry_run).await?;
+                qdrant_commands::qdrant_migrate(source, target, batch_size, dry_run).await?;
             }
             QdrantCommands::Verify { collection, fix } => {
-                commands::qdrant_verify(collection, fix).await?;
+                qdrant_commands::qdrant_verify(collection, fix).await?;
             }
             QdrantCommands::Benchmark { collection, num_queries, dimensions } => {
-                commands::qdrant_benchmark(collection, num_queries, dimensions, format).await?;
+                qdrant_commands::qdrant_benchmark(collection, num_queries, dimensions, format).await?;
             }
             QdrantCommands::Snapshot { collection, output } => {
-                commands::qdrant_snapshot(collection, output).await?;
+                qdrant_commands::qdrant_snapshot(collection, output).await?;
             }
             QdrantCommands::Restore { snapshot, collection } => {
-                commands::qdrant_restore(snapshot, collection).await?;
+                qdrant_commands::qdrant_restore(snapshot, collection).await?;
             }
             QdrantCommands::Optimize { collection, wait } => {
-                commands::qdrant_optimize(collection, wait).await?;
+                qdrant_commands::qdrant_optimize(collection, wait).await?;
             }
             QdrantCommands::List { detailed } => {
-                commands::qdrant_list(detailed, format).await?;
+                qdrant_commands::qdrant_list(detailed, format).await?;
             }
         },
 

@@ -173,11 +173,13 @@ pub struct RepairResult {
 
 /// Merkle tree node for consistency verification
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ConsistencyNode {
     id: String,
     hash: Vec<u8>,
 }
 
+#[allow(dead_code)]
 impl ConsistencyNode {
     fn new(id: String, data: &[u8]) -> Self {
         let mut hasher = Sha256::new();
@@ -316,6 +318,7 @@ impl ConsistencyChecker {
         #[derive(serde::Deserialize)]
         struct Record {
             vector_id: String,
+            #[allow(dead_code)]
             timestamp: DateTime<Utc>,
         }
 

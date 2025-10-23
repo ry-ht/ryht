@@ -239,6 +239,7 @@ pub struct MigrationManager {
     surreal: Arc<ConnectionManager>,
 
     /// Qdrant client
+    #[allow(dead_code)]
     qdrant: Arc<Qdrant>,
 
     /// Sync manager for coordinated writes
@@ -251,6 +252,7 @@ pub struct MigrationManager {
     progress: Arc<RwLock<Option<MigrationProgress>>>,
 
     /// Worker semaphore
+    #[allow(dead_code)]
     worker_semaphore: Arc<Semaphore>,
 
     /// Adaptive batch size controller

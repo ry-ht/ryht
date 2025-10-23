@@ -2,20 +2,19 @@
 //!
 //! This crate provides comprehensive semantic search capabilities including:
 //! - Multiple embedding providers (OpenAI, ONNX Runtime, Ollama)
-//! - HNSW-based vector similarity search
-//! - Hybrid keyword + semantic search
+//! - Qdrant vector database for production-ready search
+//! - Advanced features: quantization, hybrid search, batch operations
 //! - Query expansion and refinement
 //! - Result re-ranking and scoring
-//! - Index persistence and incremental updates
 //!
 //! # Architecture
 //!
 //! The semantic search system consists of several key components:
 //!
 //! - **Embedding Providers**: Generate vector embeddings from text
-//! - **Vector Index**: HNSW index for fast similarity search
+//! - **Vector Store**: Qdrant vector database for fast similarity search
 //! - **Query Processor**: Parse and expand natural language queries
-//! - **Search Engine**: Orchestrates search across multiple indexes
+//! - **Search Engine**: Orchestrates search operations
 //! - **Ranking System**: Scores and re-ranks results
 //!
 //! # Example
@@ -43,7 +42,6 @@
 
 pub mod config;
 pub mod providers;
-pub mod index;
 pub mod query;
 pub mod search;
 pub mod ranking;
@@ -51,32 +49,27 @@ pub mod cache;
 pub mod types;
 pub mod error;
 pub mod qdrant;
-pub mod hybrid;
 
 pub use config::{
     SemanticConfig, EmbeddingProviderConfig, IndexConfig, SearchConfig, QdrantConfig,
-    VectorStoreConfig, VectorStoreBackend, MigrationMode, QuantizationType,
+    VectorStoreConfig, VectorStoreBackend, QuantizationType,
 };
 pub use providers::{EmbeddingProvider, OpenAIProvider, ONNXProvider, OllamaProvider, MockProvider};
-pub use index::{VectorIndex, HNSWIndex, IndexStats};
+pub use qdrant::{VectorIndex, QdrantVectorStore, QdrantMetrics, IndexStats, SearchResult as QdrantSearchResult, SearchFilter as QdrantSearchFilter, SparseVector};
 pub use query::{QueryProcessor, QueryExpander, QueryIntent};
 pub use search::{SemanticSearchEngine, SearchResult, SearchFilter};
 pub use ranking::{Ranker, RankingStrategy, ScoringAlgorithm};
 pub use types::{Vector, DocumentId, EmbeddingModel, EntityType};
 pub use error::{SemanticError, Result};
-pub use qdrant::{QdrantVectorStore, QdrantMetrics};
-pub use hybrid::{HybridVectorStore, HybridMetrics, MigrationReport, ConsistencyStatus};
 
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::config::{
-        SemanticConfig, EmbeddingProviderConfig, QdrantConfig, VectorStoreBackend, MigrationMode,
+        SemanticConfig, EmbeddingProviderConfig, QdrantConfig, VectorStoreBackend,
     };
     pub use crate::providers::{EmbeddingProvider, OpenAIProvider};
-    pub use crate::index::VectorIndex;
+    pub use crate::qdrant::{VectorIndex, QdrantVectorStore};
     pub use crate::search::{SemanticSearchEngine, SearchResult};
     pub use crate::types::{Vector, DocumentId};
     pub use crate::error::{SemanticError, Result};
-    pub use crate::qdrant::QdrantVectorStore;
-    pub use crate::hybrid::HybridVectorStore;
 }

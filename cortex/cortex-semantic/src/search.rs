@@ -1,17 +1,16 @@
 //! Main semantic search engine implementation.
 
 use crate::cache::{EmbeddingCache, EmbeddingCacheKey, QueryCache, QueryCacheKey, CachedSearchResult};
-use crate::config::{SemanticConfig, VectorStoreBackend, MigrationMode};
+use crate::config::SemanticConfig;
 use crate::error::Result;
-use crate::index::{HNSWIndex, VectorIndex, IndexStats};
 use crate::providers::{EmbeddingProvider, ProviderManager};
+use crate::qdrant::{VectorIndex, QdrantVectorStore};
 use crate::query::QueryProcessor;
 use crate::ranking::{Ranker, RankableDocument, RankingStrategy};
 use crate::types::{DocumentId, EntityType, IndexedDocument, Vector};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info};
@@ -49,9 +48,9 @@ pub struct SearchResult {
 }
 
 impl SemanticSearchEngine {
-    /// Create a new semantic search engine.
+    /// Create a new semantic search engine with Qdrant backend.
     pub async fn new(config: SemanticConfig) -> Result<Self> {
-        info!("Initializing semantic search engine");
+        info!("Initializing semantic search engine with Qdrant backend");
 
         // Create provider manager
         let provider = Arc::new(ProviderManager::from_config(&config.embedding).await?);
@@ -60,8 +59,16 @@ impl SemanticSearchEngine {
         let dimension = provider.dimension();
         info!("Using embedding dimension: {}", dimension);
 
-        // Create index based on backend configuration
-        let index: Arc<dyn VectorIndex> = Self::create_index(&config, dimension).await?;
+        // Create Qdrant vector store
+        let similarity_metric = config.index.similarity_metric;
+        let qdrant_store = QdrantVectorStore::new(
+            config.qdrant.clone(),
+            dimension,
+            similarity_metric,
+        )
+        .await?;
+
+        let index: Arc<dyn VectorIndex> = Arc::new(qdrant_store);
 
         // Create caches
         let embedding_cache = if config.cache.enable_embedding_cache {
@@ -101,58 +108,6 @@ impl SemanticSearchEngine {
             embedding_cache,
             query_cache,
         })
-    }
-
-    /// Create index based on backend configuration.
-    async fn create_index(config: &SemanticConfig, dimension: usize) -> Result<Arc<dyn VectorIndex>> {
-        let similarity_metric = config.index.similarity_metric;
-
-        let index: Arc<dyn VectorIndex> = match config.vector_store.backend {
-            VectorStoreBackend::Hnsw => {
-                info!("Using HNSW in-memory index");
-                let hnsw = if let Some(_persist_path) = &config.index.persist_path {
-                    HNSWIndex::load_or_create(config.index.clone(), dimension).await?
-                } else {
-                    HNSWIndex::new(config.index.clone(), dimension)?
-                };
-                Arc::new(hnsw)
-            }
-            VectorStoreBackend::Qdrant => {
-                info!("Using Qdrant vector store");
-                let qdrant = crate::qdrant::QdrantVectorStore::new(
-                    config.qdrant.clone(),
-                    dimension,
-                    similarity_metric,
-                )
-                .await?;
-
-                // Handle migration mode
-                match config.vector_store.migration_mode {
-                    MigrationMode::SingleStore => Arc::new(qdrant),
-                    MigrationMode::DualWrite | MigrationMode::DualVerify | MigrationMode::NewPrimary => {
-                        info!("Creating hybrid store for migration mode: {:?}", config.vector_store.migration_mode);
-
-                        // Create old HNSW store
-                        let hnsw = if let Some(_persist_path) = &config.index.persist_path {
-                            HNSWIndex::load_or_create(config.index.clone(), dimension).await?
-                        } else {
-                            HNSWIndex::new(config.index.clone(), dimension)?
-                        };
-
-                        // Create hybrid store
-                        let hybrid = crate::hybrid::HybridVectorStore::new(
-                            Arc::new(hnsw),
-                            Arc::new(qdrant),
-                            config.vector_store.migration_mode,
-                        );
-
-                        Arc::new(hybrid)
-                    }
-                }
-            }
-        };
-
-        Ok(index)
     }
 
     /// Create a new semantic search engine with custom vector store.
@@ -421,31 +376,24 @@ impl SemanticSearchEngine {
         Ok(())
     }
 
-    /// Save index to disk.
-    pub async fn save_index(&self) -> Result<()> {
-        if let Some(persist_path) = &self.config.index.persist_path {
-            info!("Saving index to: {}", persist_path.display());
-            self.index.save(persist_path).await?;
-        }
-        Ok(())
-    }
-
-    /// Load index from disk.
-    /// Note: This method is deprecated for trait object stores as it requires mutable access.
-    /// Use backend-specific loading mechanisms instead.
-    pub async fn load_index(&self, _path: &Path) -> Result<()> {
-        info!("Load operation not supported with trait object stores");
-        Ok(())
-    }
-
     /// Get index statistics.
-    pub async fn stats(&self) -> IndexStats {
+    pub async fn stats(&self) -> crate::qdrant::IndexStats {
         self.index.stats().await
     }
 
     /// Get document count.
     pub async fn document_count(&self) -> usize {
         self.documents.len()
+    }
+
+    /// Create a snapshot for backup.
+    pub async fn create_snapshot(&self) -> Result<String> {
+        self.index.create_snapshot().await
+    }
+
+    /// Optimize the index.
+    pub async fn optimize(&self) -> Result<()> {
+        self.index.optimize().await
     }
 
     /// Generate embedding for text with caching.
@@ -537,7 +485,7 @@ impl SemanticSearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{EmbeddingProviderConfig, IndexConfig};
+    use crate::config::EmbeddingProviderConfig;
 
     async fn create_test_engine() -> SemanticSearchEngine {
         let mut config = SemanticConfig::default();
