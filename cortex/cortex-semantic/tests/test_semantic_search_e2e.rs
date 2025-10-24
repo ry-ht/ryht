@@ -821,8 +821,8 @@ async fn test_index_stats_and_memory() {
     println!("  Total vectors: {}", stats.total_vectors);
     println!("  Dimension: {}", stats.dimension);
     println!("  Metric: {:?}", stats.metric);
-    println!("  HNSW M: {}", stats.hnsw_m);
-    println!("  HNSW ef_construction: {}", stats.hnsw_ef_construction);
+    println!("  Indexed vectors: {}", stats.indexed_vectors);
+    println!("  Collection status: {}", stats.collection_status);
 
     assert_eq!(stats.total_vectors, 100);
     assert_eq!(stats.dimension, EMBEDDING_DIMENSION);

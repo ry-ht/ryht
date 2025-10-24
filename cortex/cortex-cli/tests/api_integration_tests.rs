@@ -96,7 +96,9 @@ impl ApiTestClient {
 /// Helper to setup test database in temp directory
 async fn setup_test_database() -> TempDir {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    std::env::set_var("CORTEX_DATA_DIR", temp_dir.path());
+    unsafe {
+        std::env::set_var("CORTEX_DATA_DIR", temp_dir.path());
+    }
     temp_dir
 }
 

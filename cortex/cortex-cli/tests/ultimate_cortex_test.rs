@@ -11,9 +11,10 @@
 
 use cortex_cli::mcp::server::CortexMcpServer;
 use cortex_vfs::VirtualFileSystem;
-use cortex_core::analysis::dependency_graph::DependencyGraph;
-use cortex_core::code_intelligence::semantic_search::SemanticSearch;
-use cortex_memory::conversational::ConversationalMemory;
+// DISABLED: Module doesn't exist - use cortex_core::analysis::dependency_graph::DependencyGraph;
+// DISABLED: Module doesn't exist - use cortex_core::code_intelligence::semantic_search::SemanticSearch;
+// DISABLED: Module doesn't exist - use cortex_memory::conversational::ConversationalMemory;
+use cortex_memory::MemoryStore;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
@@ -138,10 +139,9 @@ struct TestContext {
 
 impl TestContext {
     async fn new() -> Result<Self> {
-        let vfs = Arc::new(RwLock::new(VirtualFileSystem::new()));
-        let memory = Arc::new(RwLock::new(ConversationalMemory::new()));
+        let vfs = Arc::new(RwLock::new(VirtualFileSystem::new().await?));
         let server = Arc::new(RwLock::new(
-            CortexMcpServer::new(vfs.clone(), memory).await?
+            CortexMcpServer::new(vfs.clone()).await?
         ));
 
         let temp_dir = std::env::temp_dir().join(format!("cortex_ultimate_test_{}",

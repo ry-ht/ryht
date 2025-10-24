@@ -8,7 +8,8 @@ use std::collections::HashMap;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt::init();
+    // Note: tracing_subscriber is not in dependencies, commenting out
+    // tracing_subscriber::fmt::init();
 
     println!("=== Cortex Semantic Search Example ===\n");
 
@@ -203,8 +204,8 @@ async fn main() -> anyhow::Result<()> {
     println!("  Total vectors: {}", stats.total_vectors);
     println!("  Dimension: {}", stats.dimension);
     println!("  Similarity metric: {:?}", stats.metric);
-    println!("  HNSW M: {}", stats.hnsw_m);
-    println!("  HNSW ef_construction: {}", stats.hnsw_ef_construction);
+    println!("  Indexed vectors: {}", stats.indexed_vectors);
+    println!("  Collection status: {}", stats.collection_status);
 
     println!("\n=== Example Complete ===");
 

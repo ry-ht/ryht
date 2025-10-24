@@ -26,8 +26,8 @@ fn test_pre_tool_use_hook_input_deserialization() {
 
     if let HookInput::PreToolUse(input) = result.unwrap() {
         assert_eq!(input.tool_name, "Bash");
-        assert_eq!(input.session_id, "test-session");
-        assert_eq!(input.cwd, "/current/dir");
+        assert_eq!(input.base.session_id, "test-session");
+        assert_eq!(input.base.cwd, "/current/dir");
     } else {
         panic!("Expected PreToolUse variant");
     }
@@ -50,7 +50,7 @@ fn test_post_tool_use_hook_input_deserialization() {
 
     if let HookInput::PostToolUse(input) = result.unwrap() {
         assert_eq!(input.tool_name, "Bash");
-        assert_eq!(input.session_id, "test-session");
+        assert_eq!(input.base.session_id, "test-session");
     } else {
         panic!("Expected PostToolUse variant");
     }
@@ -71,7 +71,7 @@ fn test_user_prompt_submit_hook_input_deserialization() {
 
     if let HookInput::UserPromptSubmit(input) = result.unwrap() {
         assert_eq!(input.prompt, "What is 2 + 2?");
-        assert_eq!(input.session_id, "test-session");
+        assert_eq!(input.base.session_id, "test-session");
     } else {
         panic!("Expected UserPromptSubmit variant");
     }
@@ -148,7 +148,7 @@ fn test_sync_hook_output_serialization() {
         continue_: Some(true),
         suppress_output: Some(false),
         stop_reason: Some("Completed successfully".to_string()),
-        decision: Some("block".to_string()),
+        // decision field doesn't exist - removed
         system_message: Some("Test message".to_string()),
         reason: Some("Test reason".to_string()),
         hook_specific_output: None,

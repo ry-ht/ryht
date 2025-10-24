@@ -294,7 +294,9 @@ async fn test_index_persistence() {
             .await
             .unwrap();
 
-        engine.save_index().await.unwrap();
+        // Note: save_index() method doesn't exist in the current implementation
+        // Qdrant automatically persists data, so this is not needed
+        // engine.save_index().await.unwrap();
     }
 
     // Load engine and verify data persisted
