@@ -485,17 +485,44 @@ impl SemanticSearchEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::EmbeddingProviderConfig;
+    use crate::qdrant::MockVectorStore;
+    use crate::types::SimilarityMetric;
 
+    /// Create a test engine with real Qdrant backend.
+    /// Requires Qdrant server running - use for integration tests only.
     async fn create_test_engine() -> SemanticSearchEngine {
         let mut config = SemanticConfig::default();
         config.embedding.primary_provider = "mock".to_string();
         config.embedding.fallback_providers = vec![];
 
+        // Use unique collection name for each test to avoid conflicts
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        config.qdrant.collection_name = format!("test_{}", timestamp);
+
         SemanticSearchEngine::new(config).await.unwrap()
     }
 
+    /// Create a test engine with MockVectorStore backend.
+    /// No Qdrant required - use for fast unit tests.
+    async fn create_test_engine_with_mock(dimension: usize) -> SemanticSearchEngine {
+        let mut config = SemanticConfig::default();
+        config.embedding.primary_provider = "mock".to_string();
+        config.embedding.fallback_providers = vec![];
+
+        let mock_store = MockVectorStore::new(dimension, SimilarityMetric::Cosine);
+        let vector_store: Arc<dyn VectorIndex> = Arc::new(mock_store);
+
+        SemanticSearchEngine::with_vector_store(config, vector_store)
+            .await
+            .unwrap()
+    }
+
+    // Integration tests - require Qdrant server running
     #[tokio::test]
+    #[ignore] // Requires Qdrant server running
     async fn test_index_and_search() {
         let engine = create_test_engine().await;
 
@@ -528,6 +555,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires Qdrant server running
     async fn test_batch_indexing() {
         let engine = create_test_engine().await;
 
@@ -558,6 +586,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires Qdrant server running
     async fn test_remove_document() {
         let engine = create_test_engine().await;
 
@@ -579,6 +608,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires Qdrant server running
     async fn test_search_with_filter() {
         let engine = create_test_engine().await;
 
@@ -631,6 +661,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires Qdrant server running
     async fn test_clear() {
         let engine = create_test_engine().await;
 
@@ -649,5 +680,284 @@ mod tests {
         engine.clear().await.unwrap();
 
         assert_eq!(engine.document_count().await, 0);
+    }
+
+    // Unit tests with MockVectorStore - no Qdrant required
+    #[tokio::test]
+    async fn test_mock_index_and_search() {
+        // Mock embedding dimension is 384 (from ONNX MiniLM)
+        let engine = create_test_engine_with_mock(384).await;
+
+        // Index documents
+        engine
+            .index_document(
+                "doc1".to_string(),
+                "This is a test document about machine learning".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        engine
+            .index_document(
+                "doc2".to_string(),
+                "This is about natural language processing".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        // Search - with mock provider, results should still work
+        let results = engine.search("machine learning", 10).await.unwrap();
+
+        assert!(!results.is_empty());
+        // Note: Mock provider returns predictable vectors, so we just verify basic functionality
+        assert_eq!(engine.document_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn test_mock_batch_indexing() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        let documents = vec![
+            (
+                "doc1".to_string(),
+                "Content 1".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            ),
+            (
+                "doc2".to_string(),
+                "Content 2".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            ),
+            (
+                "doc3".to_string(),
+                "Content 3".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            ),
+        ];
+
+        engine.index_batch(documents).await.unwrap();
+
+        assert_eq!(engine.document_count().await, 3);
+    }
+
+    #[tokio::test]
+    async fn test_mock_remove_document() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        engine
+            .index_document(
+                "doc1".to_string(),
+                "Test content".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(engine.document_count().await, 1);
+
+        engine.remove_document(&"doc1".to_string()).await.unwrap();
+
+        assert_eq!(engine.document_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_filter() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        let mut metadata1 = HashMap::new();
+        metadata1.insert("language".to_string(), "rust".to_string());
+
+        let mut metadata2 = HashMap::new();
+        metadata2.insert("language".to_string(), "python".to_string());
+
+        engine
+            .index_document(
+                "doc1".to_string(),
+                "Rust content".to_string(),
+                EntityType::Code,
+                metadata1.clone(),
+            )
+            .await
+            .unwrap();
+
+        engine
+            .index_document(
+                "doc2".to_string(),
+                "Python content".to_string(),
+                EntityType::Code,
+                metadata2.clone(),
+            )
+            .await
+            .unwrap();
+
+        // Verify documents were indexed
+        assert_eq!(engine.document_count().await, 2);
+
+        // Test 1: Filter by entity type only
+        let filter = SearchFilter {
+            entity_type: Some(EntityType::Code),
+            min_score: Some(-1.0),
+            ..Default::default()
+        };
+
+        let results = engine.search_with_filter("content", 10, filter).await.unwrap();
+        assert_eq!(results.len(), 2, "Expected 2 results with Code entity type");
+
+        // Test 2: Filter by metadata
+        let filter = SearchFilter {
+            metadata_filters: {
+                let mut map = HashMap::new();
+                map.insert("language".to_string(), "rust".to_string());
+                map
+            },
+            min_score: Some(-1.0),
+            ..Default::default()
+        };
+
+        let results = engine.search_with_filter("content", 10, filter).await.unwrap();
+        // Should only return doc1 with language=rust
+        assert!(results.len() >= 1, "Expected at least 1 result with language=rust");
+        // Verify all results have the correct metadata
+        for result in &results {
+            let lang = result.metadata.get("language");
+            assert_eq!(lang.map(|s| s.as_str()), Some("rust"),
+                "Result {} has language={:?}, expected rust", result.id, lang);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_clear() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        engine
+            .index_document(
+                "doc1".to_string(),
+                "Test".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(engine.document_count().await, 1);
+
+        engine.clear().await.unwrap();
+
+        assert_eq!(engine.document_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_multiple_searches() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        // Index several documents
+        for i in 1..=5 {
+            engine
+                .index_document(
+                    format!("doc{}", i),
+                    format!("Document content number {}", i),
+                    EntityType::Document,
+                    HashMap::new(),
+                )
+                .await
+                .unwrap();
+        }
+
+        // Perform multiple searches with very low threshold (mock embeddings may have lower scores)
+        let filter = SearchFilter {
+            min_score: Some(-1.0),
+            ..Default::default()
+        };
+
+        let results1 = engine.search_with_filter("content", 3, filter.clone()).await.unwrap();
+        assert_eq!(results1.len(), 3);
+
+        let results2 = engine.search_with_filter("document", 5, filter.clone()).await.unwrap();
+        assert_eq!(results2.len(), 5);
+
+        let results3 = engine.search_with_filter("number", 2, filter).await.unwrap();
+        assert_eq!(results3.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_mock_metadata_filter_simple() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        // Create two documents with distinct tags
+        let mut metadata1 = HashMap::new();
+        metadata1.insert("tag".to_string(), "A".to_string());
+
+        let mut metadata2 = HashMap::new();
+        metadata2.insert("tag".to_string(), "B".to_string());
+
+        engine
+            .index_document(
+                "docA".to_string(),
+                "Content A".to_string(),
+                EntityType::Document,
+                metadata1,
+            )
+            .await
+            .unwrap();
+
+        engine
+            .index_document(
+                "docB".to_string(),
+                "Content B".to_string(),
+                EntityType::Document,
+                metadata2,
+            )
+            .await
+            .unwrap();
+
+        // Search with filter for tag=A
+        let mut meta_filter = HashMap::new();
+        meta_filter.insert("tag".to_string(), "A".to_string());
+
+        let filter = SearchFilter {
+            metadata_filters: meta_filter,
+            min_score: Some(-1.0),
+            ..Default::default()
+        };
+
+        let results = engine.search_with_filter("Content", 10, filter).await.unwrap();
+
+        // Debug: print what we got
+        eprintln!("Results count: {}", results.len());
+        for (i, result) in results.iter().enumerate() {
+            eprintln!("Result {}: id={}, tag={:?}", i, result.id, result.metadata.get("tag"));
+        }
+
+        assert_eq!(results.len(), 1, "Expected 1 result with tag=A");
+        assert_eq!(results[0].id, "docA");
+    }
+
+    #[tokio::test]
+    async fn test_mock_stats() {
+        let engine = create_test_engine_with_mock(384).await;
+
+        // Index some documents
+        engine
+            .index_document(
+                "doc1".to_string(),
+                "Test".to_string(),
+                EntityType::Document,
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        let stats = engine.stats().await;
+        assert_eq!(stats.total_vectors, 1);
+        assert_eq!(stats.dimension, 384);
+        assert_eq!(stats.collection_status, "Green");
     }
 }

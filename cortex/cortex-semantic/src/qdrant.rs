@@ -870,6 +870,168 @@ impl VectorIndex for QdrantVectorStore {
     }
 }
 
+/// Mock vector store for testing without Qdrant.
+///
+/// This implementation stores vectors in memory and uses cosine similarity
+/// for search operations. It's designed for unit tests that don't require
+/// a real Qdrant server.
+#[cfg(test)]
+pub struct MockVectorStore {
+    dimension: usize,
+    similarity_metric: SimilarityMetric,
+    vectors: Arc<DashMap<DocumentId, (Vector, HashMap<String, serde_json::Value>)>>,
+}
+
+#[cfg(test)]
+impl MockVectorStore {
+    /// Create a new mock vector store.
+    pub fn new(dimension: usize, similarity_metric: SimilarityMetric) -> Self {
+        Self {
+            dimension,
+            similarity_metric,
+            vectors: Arc::new(DashMap::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl VectorIndex for MockVectorStore {
+    async fn insert(&self, doc_id: DocumentId, vector: Vector) -> Result<()> {
+        self.insert_with_payload(doc_id, vector, HashMap::new()).await
+    }
+
+    async fn insert_with_payload(
+        &self,
+        doc_id: DocumentId,
+        vector: Vector,
+        payload: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        if vector.len() != self.dimension {
+            return Err(SemanticError::DimensionMismatch {
+                expected: self.dimension,
+                got: vector.len(),
+            });
+        }
+
+        self.vectors.insert(doc_id, (vector, payload));
+        Ok(())
+    }
+
+    async fn insert_batch(&self, items: Vec<(DocumentId, Vector)>) -> Result<()> {
+        let items_with_payloads: Vec<_> = items
+            .into_iter()
+            .map(|(doc_id, vector)| (doc_id, vector, HashMap::new()))
+            .collect();
+
+        self.insert_batch_with_payloads(items_with_payloads).await
+    }
+
+    async fn insert_batch_with_payloads(
+        &self,
+        items: Vec<(DocumentId, Vector, HashMap<String, serde_json::Value>)>,
+    ) -> Result<()> {
+        for (doc_id, vector, payload) in items {
+            self.insert_with_payload(doc_id, vector, payload).await?;
+        }
+        Ok(())
+    }
+
+    async fn search(&self, query: &[f32], k: usize) -> Result<Vec<SearchResult>> {
+        self.search_with_options(query, k, None, None).await
+    }
+
+    async fn search_with_options(
+        &self,
+        query: &[f32],
+        k: usize,
+        _filter: Option<SearchFilter>,
+        _params: Option<SearchParams>,
+    ) -> Result<Vec<SearchResult>> {
+        if query.len() != self.dimension {
+            return Err(SemanticError::DimensionMismatch {
+                expected: self.dimension,
+                got: query.len(),
+            });
+        }
+
+        // Calculate similarity scores for all vectors
+        let mut results: Vec<_> = self
+            .vectors
+            .iter()
+            .map(|entry| {
+                let doc_id = entry.key().clone();
+                let (vector, payload) = entry.value();
+                let score = self.similarity_metric.calculate(query, vector);
+
+                SearchResult {
+                    doc_id,
+                    score,
+                    vector: Some(vector.clone()),
+                    payload: payload.clone(),
+                }
+            })
+            .collect();
+
+        // Sort by score (descending)
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take top k results
+        results.truncate(k);
+
+        Ok(results)
+    }
+
+    async fn hybrid_search(
+        &self,
+        dense_query: &[f32],
+        _sparse_query: Option<SparseVector>,
+        k: usize,
+    ) -> Result<Vec<SearchResult>> {
+        // Mock implementation just uses dense search
+        self.search(dense_query, k).await
+    }
+
+    async fn remove(&self, doc_id: &DocumentId) -> Result<()> {
+        self.vectors.remove(doc_id);
+        Ok(())
+    }
+
+    async fn remove_batch(&self, doc_ids: Vec<DocumentId>) -> Result<()> {
+        for doc_id in doc_ids {
+            self.vectors.remove(&doc_id);
+        }
+        Ok(())
+    }
+
+    async fn len(&self) -> usize {
+        self.vectors.len()
+    }
+
+    async fn clear(&self) -> Result<()> {
+        self.vectors.clear();
+        Ok(())
+    }
+
+    async fn stats(&self) -> IndexStats {
+        IndexStats {
+            total_vectors: self.vectors.len(),
+            dimension: self.dimension,
+            metric: self.similarity_metric,
+            indexed_vectors: self.vectors.len(),
+            collection_status: "Green".to_string(),
+        }
+    }
+
+    async fn create_snapshot(&self) -> Result<String> {
+        Ok("mock_snapshot".to_string())
+    }
+
+    async fn optimize(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -903,6 +1065,7 @@ mod tests {
         vec
     }
 
+    // Integration tests - require Qdrant server running
     #[tokio::test]
     #[ignore] // Requires Qdrant server running
     async fn test_qdrant_insert_and_search() {
@@ -983,5 +1146,167 @@ mod tests {
 
         // Cleanup
         store.clear().await.unwrap();
+    }
+
+    // Unit tests with MockVectorStore - no Qdrant required
+    #[tokio::test]
+    async fn test_mock_insert_and_search() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 100);
+
+        store.insert("doc1".to_string(), vec1.clone()).await.unwrap();
+        store.insert("doc2".to_string(), vec2.clone()).await.unwrap();
+
+        // Search - should find exact match first
+        let results = store.search(&vec1, 2).await.unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].doc_id, "doc1");
+        assert!(results[0].score > 0.99); // Near-perfect match
+
+        // Verify len
+        assert_eq!(store.len().await, 2);
+    }
+
+    #[tokio::test]
+    async fn test_mock_batch_operations() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Batch insert
+        let items = vec![
+            ("doc1".to_string(), create_test_vector(128, 1)),
+            ("doc2".to_string(), create_test_vector(128, 2)),
+            ("doc3".to_string(), create_test_vector(128, 3)),
+        ];
+
+        store.insert_batch(items).await.unwrap();
+
+        assert_eq!(store.len().await, 3);
+    }
+
+    #[tokio::test]
+    async fn test_mock_with_payload() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let vec1 = create_test_vector(128, 1);
+        let mut payload = HashMap::new();
+        payload.insert("entity_type".to_string(), json!("document"));
+        payload.insert("workspace_id".to_string(), json!("workspace1"));
+
+        store
+            .insert_with_payload("doc1".to_string(), vec1.clone(), payload)
+            .await
+            .unwrap();
+
+        let results = store.search(&vec1, 1).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].payload.get("entity_type").unwrap(), "document");
+    }
+
+    #[tokio::test]
+    async fn test_mock_remove() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let vec1 = create_test_vector(128, 1);
+        store.insert("doc1".to_string(), vec1).await.unwrap();
+
+        assert_eq!(store.len().await, 1);
+
+        store.remove(&"doc1".to_string()).await.unwrap();
+
+        assert_eq!(store.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_remove_batch() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let items = vec![
+            ("doc1".to_string(), create_test_vector(128, 1)),
+            ("doc2".to_string(), create_test_vector(128, 2)),
+            ("doc3".to_string(), create_test_vector(128, 3)),
+        ];
+
+        store.insert_batch(items).await.unwrap();
+        assert_eq!(store.len().await, 3);
+
+        store.remove_batch(vec!["doc1".to_string(), "doc2".to_string()]).await.unwrap();
+        assert_eq!(store.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_mock_clear() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let items = vec![
+            ("doc1".to_string(), create_test_vector(128, 1)),
+            ("doc2".to_string(), create_test_vector(128, 2)),
+        ];
+
+        store.insert_batch(items).await.unwrap();
+        assert_eq!(store.len().await, 2);
+
+        store.clear().await.unwrap();
+        assert_eq!(store.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_dimension_mismatch() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let vec_wrong_dim = vec![1.0; 64]; // Wrong dimension
+        let result = store.insert("doc1".to_string(), vec_wrong_dim).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(SemanticError::DimensionMismatch { expected, got }) => {
+                assert_eq!(expected, 128);
+                assert_eq!(got, 64);
+            }
+            _ => panic!("Expected DimensionMismatch error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_cosine_similarity_ranking() {
+        let store = MockVectorStore::new(3, SimilarityMetric::Cosine);
+
+        // Insert three vectors with known similarities to query
+        let query = vec![1.0, 0.0, 0.0];
+        let vec1 = vec![1.0, 0.0, 0.0]; // Perfect match
+        let vec2 = vec![0.7, 0.7, 0.0]; // ~45 degrees
+        let vec3 = vec![0.0, 1.0, 0.0]; // Orthogonal
+
+        store.insert("doc1".to_string(), vec1).await.unwrap();
+        store.insert("doc2".to_string(), vec2).await.unwrap();
+        store.insert("doc3".to_string(), vec3).await.unwrap();
+
+        let results = store.search(&query, 3).await.unwrap();
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].doc_id, "doc1"); // Perfect match should be first
+        assert_eq!(results[1].doc_id, "doc2"); // Angled match second
+        assert_eq!(results[2].doc_id, "doc3"); // Orthogonal last
+    }
+
+    #[tokio::test]
+    async fn test_mock_stats() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        let items = vec![
+            ("doc1".to_string(), create_test_vector(128, 1)),
+            ("doc2".to_string(), create_test_vector(128, 2)),
+        ];
+
+        store.insert_batch(items).await.unwrap();
+
+        let stats = store.stats().await;
+        assert_eq!(stats.total_vectors, 2);
+        assert_eq!(stats.dimension, 128);
+        assert_eq!(stats.metric, SimilarityMetric::Cosine);
+        assert_eq!(stats.indexed_vectors, 2);
+        assert_eq!(stats.collection_status, "Green");
     }
 }

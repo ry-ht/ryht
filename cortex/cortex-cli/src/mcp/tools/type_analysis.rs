@@ -487,7 +487,7 @@ impl Tool for CodeCheckTypesTool {
             total_warnings: warnings.len() as i32,
             type_errors,
             warnings,
-            files_checked,
+            files_checked: files_checked,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))

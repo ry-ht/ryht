@@ -726,8 +726,6 @@ pub async fn flush_vfs(
 
 /// Show system statistics
 pub async fn show_stats(format: OutputFormat) -> Result<()> {
-    use cortex_core::traits::Storage;
-
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
 
