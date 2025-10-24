@@ -64,7 +64,7 @@ fn create_test_workspace() -> Uuid {
 async fn test_single_file_reference_count() {
     let vfs = create_test_vfs().await;
     let workspace_id = create_test_workspace();
-    let path = VirtualPath::from_str("/test.txt").expect("Valid path");
+    let path = VirtualPath::new("/test.txt").expect("Valid path");
     let content = b"Hello, world!";
 
     // Write file once
@@ -89,9 +89,9 @@ async fn test_duplicate_content_deduplication() {
 
     // Write same content to multiple files
     let paths = vec![
-        VirtualPath::from_str("/file1.txt").expect("Valid path"),
-        VirtualPath::from_str("/file2.txt").expect("Valid path"),
-        VirtualPath::from_str("/file3.txt").expect("Valid path"),
+        VirtualPath::new("/file1.txt").expect("Valid path"),
+        VirtualPath::new("/file2.txt").expect("Valid path"),
+        VirtualPath::new("/file3.txt").expect("Valid path"),
     ];
 
     for path in &paths {
@@ -119,8 +119,8 @@ async fn test_different_content_separate_storage() {
     let content1 = b"Content A";
     let content2 = b"Content B";
 
-    let path1 = VirtualPath::from_str("/file1.txt").expect("Valid path");
-    let path2 = VirtualPath::from_str("/file2.txt").expect("Valid path");
+    let path1 = VirtualPath::new("/file1.txt").expect("Valid path");
+    let path2 = VirtualPath::new("/file2.txt").expect("Valid path");
 
     vfs.write_file(&workspace_id, &path1, content1)
         .await
@@ -161,7 +161,7 @@ async fn test_concurrent_writes_same_content() {
     for i in 0..num_tasks {
         let vfs_clone = Arc::clone(&vfs);
         let ws_id = workspace_id;
-        let path = VirtualPath::from_str(&format!("/concurrent_{}.txt", i))
+        let path = VirtualPath::new(&format!("/concurrent_{}.txt", i))
             .expect("Valid path");
         let data = content.to_vec();
 
@@ -187,7 +187,7 @@ async fn test_concurrent_writes_same_content() {
 
     // Verify all files are readable with correct content
     for i in 0..num_tasks {
-        let path = VirtualPath::from_str(&format!("/concurrent_{}.txt", i))
+        let path = VirtualPath::new(&format!("/concurrent_{}.txt", i))
             .expect("Valid path");
         let read_content = vfs
             .read_file(&workspace_id, &path)
@@ -214,7 +214,7 @@ async fn test_concurrent_writes_different_content() {
     for i in 0..num_tasks {
         let vfs_clone = Arc::clone(&vfs);
         let ws_id = workspace_id;
-        let path = VirtualPath::from_str(&format!("/unique_{}.txt", i))
+        let path = VirtualPath::new(&format!("/unique_{}.txt", i))
             .expect("Valid path");
         let content = format!("Unique content for file {}", i).into_bytes();
 
@@ -240,7 +240,7 @@ async fn test_concurrent_writes_different_content() {
 
     // Verify each file has its unique content
     for i in 0..num_tasks {
-        let path = VirtualPath::from_str(&format!("/unique_{}.txt", i))
+        let path = VirtualPath::new(&format!("/unique_{}.txt", i))
             .expect("Valid path");
         let expected_content = format!("Unique content for file {}", i);
         let read_content = vfs
@@ -261,7 +261,7 @@ async fn test_concurrent_writes_different_content() {
 async fn test_concurrent_overwrites_same_file() {
     let vfs = Arc::new(create_test_vfs().await);
     let workspace_id = create_test_workspace();
-    let path = VirtualPath::from_str("/overwrite_target.txt").expect("Valid path");
+    let path = VirtualPath::new("/overwrite_target.txt").expect("Valid path");
 
     // Write initial content
     vfs.write_file(&workspace_id, &path, b"Initial content")
@@ -333,7 +333,7 @@ async fn test_high_concurrency_mixed_operations() {
 
         tasks.spawn(async move {
             // Half write shared content, half write unique content
-            let path = VirtualPath::from_str(&format!("/stress_{}.txt", i))
+            let path = VirtualPath::new(&format!("/stress_{}.txt", i))
                 .expect("Valid path");
 
             let content = if i % 2 == 0 {
@@ -377,7 +377,7 @@ async fn test_rapid_sequential_writes_same_content() {
     let num_files = 100;
 
     for i in 0..num_files {
-        let path = VirtualPath::from_str(&format!("/rapid_{}.txt", i))
+        let path = VirtualPath::new(&format!("/rapid_{}.txt", i))
             .expect("Valid path");
 
         vfs.write_file(&workspace_id, &path, content)
@@ -387,7 +387,7 @@ async fn test_rapid_sequential_writes_same_content() {
 
     // Verify all files exist and have correct content
     for i in 0..num_files {
-        let path = VirtualPath::from_str(&format!("/rapid_{}.txt", i))
+        let path = VirtualPath::new(&format!("/rapid_{}.txt", i))
             .expect("Valid path");
 
         let read_content = vfs
@@ -416,7 +416,7 @@ async fn test_atomic_reference_count_consistency() {
     for i in 0..num_tasks {
         let vfs_clone = Arc::clone(&vfs);
         let ws_id = workspace_id;
-        let path = VirtualPath::from_str(&format!("/atomic_{}.txt", i))
+        let path = VirtualPath::new(&format!("/atomic_{}.txt", i))
             .expect("Valid path");
         let data = content.to_vec();
 
@@ -432,7 +432,7 @@ async fn test_atomic_reference_count_consistency() {
 
     // All files should be readable (verifying atomic operations succeeded)
     for i in 0..num_tasks {
-        let path = VirtualPath::from_str(&format!("/atomic_{}.txt", i))
+        let path = VirtualPath::new(&format!("/atomic_{}.txt", i))
             .expect("Valid path");
 
         let read_content = vfs
@@ -462,7 +462,7 @@ async fn test_no_race_condition_in_content_storage() {
     for i in 0..num_tasks {
         let vfs_clone = Arc::clone(&vfs);
         let ws_id = workspace_id;
-        let path = VirtualPath::from_str(&format!("/large_{}.bin", i))
+        let path = VirtualPath::new(&format!("/large_{}.bin", i))
             .expect("Valid path");
         let data = large_content.clone();
 
@@ -488,7 +488,7 @@ async fn test_no_race_condition_in_content_storage() {
 
     // Verify all files have correct content
     for i in 0..num_tasks {
-        let path = VirtualPath::from_str(&format!("/large_{}.bin", i))
+        let path = VirtualPath::new(&format!("/large_{}.bin", i))
             .expect("Valid path");
 
         let read_content = vfs
@@ -521,7 +521,7 @@ async fn test_content_cache_with_deduplication() {
     let content = b"Cached content";
 
     // Write and read to populate cache
-    let path1 = VirtualPath::from_str("/cached1.txt").expect("Valid path");
+    let path1 = VirtualPath::new("/cached1.txt").expect("Valid path");
     vfs.write_file(&workspace_id, &path1, content)
         .await
         .expect("Should write file");
@@ -532,7 +532,7 @@ async fn test_content_cache_with_deduplication() {
         .expect("Should read file");
 
     // Write same content to another file (should be deduplicated and cached)
-    let path2 = VirtualPath::from_str("/cached2.txt").expect("Valid path");
+    let path2 = VirtualPath::new("/cached2.txt").expect("Valid path");
     vfs.write_file(&workspace_id, &path2, content)
         .await
         .expect("Should write file");
@@ -550,7 +550,7 @@ async fn test_content_cache_with_deduplication() {
 async fn test_concurrent_reads_with_cache() {
     let vfs = Arc::new(create_test_vfs().await);
     let workspace_id = create_test_workspace();
-    let path = VirtualPath::from_str("/cached_read.txt").expect("Valid path");
+    let path = VirtualPath::new("/cached_read.txt").expect("Valid path");
     let content = b"Content for concurrent reads";
 
     // Write file

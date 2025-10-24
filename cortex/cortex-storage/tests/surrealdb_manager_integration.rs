@@ -500,7 +500,7 @@ async fn test_auto_restart_exponential_backoff() {
     let (mut config, _temp) = create_test_config(15);
     config.max_restart_attempts = 3;
 
-    let mut manager = SurrealDBManager::new(config).await.unwrap();
+    let _manager = SurrealDBManager::new(config).await.unwrap();
 
     println!("→ Testing exponential backoff...");
 
@@ -524,7 +524,8 @@ async fn test_auto_restart_exponential_backoff() {
 #[ignore]
 async fn test_auto_restart_max_attempts() {
     let (mut config, _temp) = create_test_config(16);
-    config.max_restart_attempts = 2;
+    let max_restart_attempts = 2;
+    config.max_restart_attempts = max_restart_attempts;
 
     let mut manager = SurrealDBManager::new(config).await.unwrap();
 
@@ -537,22 +538,22 @@ async fn test_auto_restart_max_attempts() {
     sleep(Duration::from_secs(1)).await;
 
     // Simulate reaching max restart attempts by calling auto_restart multiple times
-    let mut last_result = Ok(());
+    let mut _last_result = Ok(());
     for i in 0..5 {
         let result = manager.auto_restart().await;
         let restart_count = manager.restart_count();
 
         if result.is_err() {
             println!("  Auto-restart attempt {} failed (restart_count: {})", i + 1, restart_count);
-            last_result = result;
+            _last_result = result;
             break;
         } else {
             println!("  Auto-restart attempt {} succeeded (restart_count: {})", i + 1, restart_count);
             sleep(Duration::from_secs(1)).await;
-            last_result = result;
+            _last_result = result;
 
             // If we've hit the limit, next one should fail
-            if restart_count >= config.max_restart_attempts {
+            if restart_count >= max_restart_attempts {
                 println!("  Reached max attempts, next restart should fail");
                 break;
             }
@@ -711,7 +712,7 @@ async fn test_production_concurrent_requests() {
     let url = manager.connection_url();
     let mut handles = vec![];
 
-    for i in 0..100 {
+    for _i in 0..100 {
         let url = url.clone();
         let handle = tokio::spawn(async move {
             let client = reqwest::Client::builder()

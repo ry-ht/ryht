@@ -11,7 +11,7 @@
 //! - Performance benchmarks
 
 use cortex_storage::merge::*;
-use cortex_core::types::{CodeUnit, CodeUnitType, Language, Parameter, Visibility};
+use cortex_core::types::{CodeUnit, CodeUnitType, Language};
 
 // =============================================================================
 // DiffEngine Tests (30 tests)

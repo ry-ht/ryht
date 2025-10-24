@@ -76,12 +76,32 @@ impl SemanticChunker {
     /// Split text by sentences
     fn split_sentences(text: &str) -> Vec<String> {
         // Enhanced sentence splitting with abbreviation handling
-        let sentence_regex = Regex::new(r"(?<=[.!?])\s+(?=[A-Z])").unwrap();
-        sentence_regex
-            .split(text)
-            .filter(|s| !s.trim().is_empty())
-            .map(|s| s.trim().to_string())
-            .collect()
+        // Match sentence boundaries: period/exclamation/question followed by space and capital letter
+        let sentence_regex = Regex::new(r"([.!?])\s+([A-Z])").unwrap();
+
+        let mut sentences = Vec::new();
+        let mut last_end = 0;
+
+        for cap in sentence_regex.captures_iter(text) {
+            if let Some(m) = cap.get(0) {
+                // Include the sentence terminator, exclude the space and next capital
+                let end = m.start() + 1; // +1 to include the punctuation
+                if end > last_end {
+                    sentences.push(text[last_end..end].trim().to_string());
+                    last_end = m.end() - 1; // -1 to keep the capital letter for next sentence
+                }
+            }
+        }
+
+        // Add the last sentence
+        if last_end < text.len() {
+            let last = text[last_end..].trim().to_string();
+            if !last.is_empty() {
+                sentences.push(last);
+            }
+        }
+
+        sentences.into_iter().filter(|s| !s.is_empty()).collect()
     }
 
     /// Split text by paragraphs

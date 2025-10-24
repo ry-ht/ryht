@@ -321,17 +321,22 @@ pub struct User {
 
 impl User {
     pub fn new(username: String, password: String, email: String) -> Self {
+        // Hash password using bcrypt with cost factor 12
+        let password_hash = bcrypt::hash(&password, 12)
+            .expect("Failed to hash password");
+
         Self {
             id: Uuid::new_v4(),
             username,
-            password_hash: password, // TODO: Hash password
+            password_hash,
             email,
             created_at: chrono::Utc::now(),
         }
     }
 
     pub fn verify_password(&self, password: &str) -> bool {
-        self.password_hash == password // TODO: Use bcrypt
+        bcrypt::verify(password, &self.password_hash)
+            .unwrap_or(false)
     }
 }
 "#),

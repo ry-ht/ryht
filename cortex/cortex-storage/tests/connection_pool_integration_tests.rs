@@ -26,6 +26,9 @@ fn test_config() -> DatabaseConfig {
             max_lifetime: Some(Duration::from_secs(60)),
             retry_policy: RetryPolicy::default(),
             warm_connections: true,
+            validate_on_checkout: true,
+            recycle_after_uses: None,
+            shutdown_grace_period: Duration::from_secs(30),
         },
         namespace: "test".to_string(),
         database: "test".to_string(),
@@ -117,7 +120,7 @@ async fn test_concurrent_access() {
 
     let mut handles = Vec::new();
 
-    for i in 0..10 {
+    for _i in 0..10 {
         let manager = manager.clone();
         let handle = tokio::spawn(async move {
             let conn = manager.acquire().await.unwrap();
@@ -236,8 +239,8 @@ async fn test_multiple_agent_sessions() {
     .unwrap();
 
     // Both sessions should use the same connection pool
-    let conn1 = session1.acquire().await.unwrap();
-    let conn2 = session2.acquire().await.unwrap();
+    let _conn1 = session1.acquire().await.unwrap();
+    let _conn2 = session2.acquire().await.unwrap();
 
     // But have different session IDs
     assert_ne!(session1.session_id, session2.session_id);
@@ -392,7 +395,7 @@ async fn test_max_lifetime() {
     };
 
     let manager = ConnectionManager::new(config).await.unwrap();
-    let conn_id = {
+    let _conn_id = {
         let conn = manager.acquire().await.unwrap();
         conn.id()
     };
@@ -454,7 +457,7 @@ async fn test_retry_policy_max_attempts() {
     let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
 
     let mut attempt = 0;
-    let result = manager
+    let result: Result<(), _> = manager
         .execute_with_retry(|| {
             attempt += 1;
             Box::pin(async move {
@@ -705,7 +708,7 @@ async fn test_with_transaction_rollback_on_error() {
 
     let conn = manager.acquire().await.unwrap();
 
-    let result = conn.with_transaction(|_conn| {
+    let result: Result<(), _> = conn.with_transaction(|_conn| {
         Box::pin(async move {
             Err(cortex_core::error::CortexError::database("Simulated error"))
         })
@@ -794,17 +797,15 @@ async fn test_connection_marked_for_recycling() {
 #[tokio::test]
 async fn test_is_shutting_down() {
     let config = test_config();
-    let manager = ConnectionManager::new(config).await.unwrap();
+    let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
 
     assert!(!manager.is_shutting_down());
 
     // Start shutdown in background
-    let shutdown_handle = {
-        let manager_clone = manager.clone();
-        tokio::spawn(async move {
-            manager_clone.shutdown().await
-        })
-    };
+    let manager_clone = Arc::clone(&manager);
+    let shutdown_handle = tokio::spawn(async move {
+        manager_clone.shutdown().await
+    });
 
     // Give it a moment to start
     sleep(Duration::from_millis(100)).await;
@@ -829,7 +830,7 @@ async fn test_acquire_during_shutdown_fails() {
     let manager = Arc::new(ConnectionManager::new(config).await.unwrap());
 
     // Start shutdown
-    let manager_clone = manager.clone();
+    let manager_clone = Arc::clone(&manager);
     tokio::spawn(async move {
         manager_clone.shutdown().await
     });

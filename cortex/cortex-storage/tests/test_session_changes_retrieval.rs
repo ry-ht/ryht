@@ -311,9 +311,8 @@ async fn test_find_changes_from_merge_engine() {
         session_id: "test_session_changes".to_string(),
         target_namespace: "main".to_string(),
         strategy: MergeStrategy::AutoMerge,
+        user_id: None,
         verify_semantics: false,
-        allow_partial: false,
-        conflict_resolution: None,
     };
 
     // Merge should handle session with no changes

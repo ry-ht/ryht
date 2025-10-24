@@ -390,8 +390,39 @@ impl AuthService {
         username: &str,
         password: &str,
     ) -> Result<Session, AuthError> {
-        // 50 lines of authentication logic
-        todo!()
+        // Validate credentials
+        let user = self.db.find_user_by_username(username).await?
+            .ok_or(AuthError::InvalidCredentials)?;
+
+        // Verify password hash
+        if !bcrypt::verify(password, &user.password_hash)? {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        // Check if account is locked
+        if user.locked_until.map_or(false, |t| t > Utc::now()) {
+            return Err(AuthError::AccountLocked);
+        }
+
+        // Update last login
+        self.db.update_last_login(user.id).await?;
+
+        // Create session
+        let session = Session {
+            id: Uuid::new_v4(),
+            user_id: user.id,
+            token: generate_secure_token(),
+            expires_at: Utc::now() + Duration::hours(24),
+            created_at: Utc::now(),
+        };
+
+        // Store session
+        self.db.create_session(&session).await?;
+
+        // Log authentication event
+        self.audit_log.record_login(user.id, true).await?;
+
+        Ok(session)
     }
 
     // More methods...

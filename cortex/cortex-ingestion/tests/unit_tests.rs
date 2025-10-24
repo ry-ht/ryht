@@ -6,10 +6,10 @@
 
 #[test]
 fn test_fixed_size_chunker() {
-    use cortex_ingestion::chunker::FixedSizeChunker;
-    use cortex_core::traits::Chunker;
+    use cortex_ingestion::chunker::Chunker;
+    use cortex_core::traits::Chunker as ChunkerTrait;
 
-    let chunker = FixedSizeChunker::new(100, 10);
+    let chunker = Chunker::new(100, 10);
     let content = "a".repeat(250);
 
     let chunks = chunker.chunk(&content);
@@ -20,10 +20,10 @@ fn test_fixed_size_chunker() {
 
 #[test]
 fn test_semantic_chunker_paragraphs() {
-    use cortex_ingestion::chunker::SemanticChunker;
+    use cortex_ingestion::chunker::{SemanticChunker, ChunkStrategy};
     use cortex_core::traits::Chunker;
 
-    let chunker = SemanticChunker::new_paragraph_based(500);
+    let chunker = SemanticChunker::with_strategy(500, 50, ChunkStrategy::Paragraph);
     let content = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.";
 
     let chunks = chunker.chunk(content);
@@ -33,10 +33,10 @@ fn test_semantic_chunker_paragraphs() {
 
 #[test]
 fn test_chunker_empty_content() {
-    use cortex_ingestion::chunker::FixedSizeChunker;
-    use cortex_core::traits::Chunker;
+    use cortex_ingestion::chunker::Chunker;
+    use cortex_core::traits::Chunker as ChunkerTrait;
 
-    let chunker = FixedSizeChunker::new(100, 10);
+    let chunker = Chunker::new(100, 10);
     let chunks = chunker.chunk("");
 
     assert_eq!(chunks.len(), 0);
@@ -44,10 +44,10 @@ fn test_chunker_empty_content() {
 
 #[test]
 fn test_chunker_overlap() {
-    use cortex_ingestion::chunker::FixedSizeChunker;
-    use cortex_core::traits::Chunker;
+    use cortex_ingestion::chunker::Chunker;
+    use cortex_core::traits::Chunker as ChunkerTrait;
 
-    let chunker = FixedSizeChunker::new(50, 10);
+    let chunker = Chunker::new(50, 10);
     assert_eq!(chunker.overlap(), 10);
 
     let content = "a".repeat(100);
@@ -62,211 +62,157 @@ fn test_chunker_overlap() {
 // ============================================================================
 
 #[test]
-fn test_extension_filter() {
-    use cortex_ingestion::filters::ExtensionFilter;
-    use cortex_ingestion::filters::FileFilter;
+fn test_content_filter() {
+    use cortex_ingestion::filters::ContentFilter;
 
-    let filter = ExtensionFilter::new(vec!["rs", "toml"]);
+    let mut filter = ContentFilter::new().with_min_quality(0.3);
 
-    assert!(filter.should_include("test.rs"));
-    assert!(filter.should_include("Cargo.toml"));
-    assert!(!filter.should_include("test.txt"));
+    let good_content = "This is high quality content with good variety and sufficient length.";
+    let result = filter.should_accept(good_content, "hash1");
+    assert!(result.accepted);
+
+    // Test duplicate detection
+    let result = filter.should_accept(good_content, "hash1");
+    assert!(!result.accepted);
 }
 
 #[test]
-fn test_size_filter() {
-    use cortex_ingestion::filters::SizeFilter;
-    use cortex_ingestion::filters::FileFilter;
+fn test_quality_scoring() {
+    use cortex_ingestion::filters::calculate_quality_score;
 
-    let filter = SizeFilter::new(0, 1024 * 1024); // 0 to 1MB
+    let good_text = "This is a well-written piece with good variety and structure.";
+    let metrics = calculate_quality_score(good_text);
+    assert!(metrics.score > 0.5);
+    assert!(metrics.readability > 0.0);
+    assert!(metrics.density > 0.0);
 
-    assert!(filter.should_include_size(500));
-    assert!(filter.should_include_size(1024 * 1024));
-    assert!(!filter.should_include_size(2 * 1024 * 1024));
-}
-
-#[test]
-fn test_gitignore_filter() {
-    use cortex_ingestion::filters::GitignoreFilter;
-    use cortex_ingestion::filters::FileFilter;
-
-    let filter = GitignoreFilter::default();
-
-    assert!(!filter.should_include("target/debug/app"));
-    assert!(!filter.should_include(".git/config"));
-    assert!(!filter.should_include("node_modules/package"));
-}
-
-#[test]
-fn test_combined_filters() {
-    use cortex_ingestion::filters::{ExtensionFilter, SizeFilter, CombinedFilter};
-    use cortex_ingestion::filters::FileFilter;
-
-    let ext_filter = ExtensionFilter::new(vec!["rs"]);
-    let size_filter = SizeFilter::new(0, 10000);
-
-    let combined = CombinedFilter::new(vec![
-        Box::new(ext_filter),
-        Box::new(size_filter),
-    ]);
-
-    // Should pass both filters
-    assert!(combined.should_include("test.rs") && combined.should_include_size(5000));
-
-    // Should fail extension filter
-    assert!(!combined.should_include("test.txt"));
-}
-
-// ============================================================================
-// Extractor Tests
-// ============================================================================
-
-#[test]
-fn test_text_extractor() {
-    use cortex_ingestion::extractor::TextExtractor;
-
-    let extractor = TextExtractor::new();
-    let content = b"Hello, world!";
-
-    let result = extractor.extract(content);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "Hello, world!");
-}
-
-#[test]
-fn test_text_extractor_invalid_utf8() {
-    use cortex_ingestion::extractor::TextExtractor;
-
-    let extractor = TextExtractor::new();
-    let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
-
-    let result = extractor.extract(&invalid_utf8);
-    // Should handle invalid UTF-8 gracefully
-    assert!(result.is_ok() || result.is_err());
+    let poor_text = "a a a a a";
+    let metrics = calculate_quality_score(poor_text);
+    assert!(metrics.score < 0.5);
 }
 
 // ============================================================================
 // Processor Tests - Plain Text
 // ============================================================================
 
-#[test]
-fn test_txt_processor() {
+#[tokio::test]
+async fn test_txt_processor() {
     use cortex_ingestion::processors::txt::TxtProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = TxtProcessor::new();
     let content = b"Line 1\nLine 2\nLine 3";
 
-    let result = processor.process("test.txt", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.content.contains("Line 1"));
-    assert!(processed.content.contains("Line 3"));
+    assert!(processed.text_content.contains("Line 1"));
+    assert!(processed.text_content.contains("Line 3"));
 }
 
-#[test]
-fn test_txt_processor_empty() {
+#[tokio::test]
+async fn test_txt_processor_empty() {
     use cortex_ingestion::processors::txt::TxtProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = TxtProcessor::new();
-    let result = processor.process("empty.txt", b"");
+    let result = processor.process(b"").await;
 
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().content, "");
+    assert_eq!(result.unwrap().text_content, "");
 }
 
 // ============================================================================
 // Processor Tests - Markdown
 // ============================================================================
 
-#[test]
-fn test_markdown_processor_headers() {
+#[tokio::test]
+async fn test_markdown_processor_headers() {
     use cortex_ingestion::processors::markdown::MarkdownProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = MarkdownProcessor::new();
     let content = b"# Header 1\n\nParagraph\n\n## Header 2";
 
-    let result = processor.process("test.md", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.metadata.contains_key("headers"));
+    assert!(processed.metadata.contains_key("heading_count"));
 }
 
-#[test]
-fn test_markdown_processor_code_blocks() {
+#[tokio::test]
+async fn test_markdown_processor_code_blocks() {
     use cortex_ingestion::processors::markdown::MarkdownProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = MarkdownProcessor::new();
     let content = b"```rust\nfn main() {}\n```";
 
-    let result = processor.process("code.md", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.metadata.contains_key("code_blocks"));
+    assert!(processed.metadata.contains_key("code_block_count"));
 }
 
-#[test]
-fn test_markdown_processor_links() {
+#[tokio::test]
+async fn test_markdown_processor_links() {
     use cortex_ingestion::processors::markdown::MarkdownProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = MarkdownProcessor::new();
     let content = b"[Link text](https://example.com)";
 
-    let result = processor.process("links.md", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.metadata.contains_key("links"));
+    assert!(processed.metadata.contains_key("link_count"));
 }
 
 // ============================================================================
 // Processor Tests - JSON
 // ============================================================================
 
-#[test]
-fn test_json_processor_valid() {
+#[tokio::test]
+async fn test_json_processor_valid() {
     use cortex_ingestion::processors::json::JsonProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = JsonProcessor::new();
     let content = br#"{"name": "test", "value": 123}"#;
 
-    let result = processor.process("data.json", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.content.contains("name"));
-    assert!(processed.content.contains("test"));
+    assert!(processed.text_content.contains("name"));
+    assert!(processed.text_content.contains("test"));
 }
 
-#[test]
-fn test_json_processor_invalid() {
+#[tokio::test]
+async fn test_json_processor_invalid() {
     use cortex_ingestion::processors::json::JsonProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = JsonProcessor::new();
     let content = b"invalid json {";
 
-    let result = processor.process("invalid.json", content);
+    let result = processor.process(content).await;
     assert!(result.is_err());
 }
 
-#[test]
-fn test_json_processor_nested() {
+#[tokio::test]
+async fn test_json_processor_nested() {
     use cortex_ingestion::processors::json::JsonProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = JsonProcessor::new();
     let content = br#"{"nested": {"key": "value", "array": [1, 2, 3]}}"#;
 
-    let result = processor.process("nested.json", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 }
 
@@ -274,27 +220,27 @@ fn test_json_processor_nested() {
 // Processor Tests - YAML
 // ============================================================================
 
-#[test]
-fn test_yaml_processor_valid() {
+#[tokio::test]
+async fn test_yaml_processor_valid() {
     use cortex_ingestion::processors::yaml::YamlProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = YamlProcessor::new();
     let content = b"name: test\nvalue: 123";
 
-    let result = processor.process("config.yaml", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 }
 
-#[test]
-fn test_yaml_processor_list() {
+#[tokio::test]
+async fn test_yaml_processor_list() {
     use cortex_ingestion::processors::yaml::YamlProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = YamlProcessor::new();
     let content = b"- item1\n- item2\n- item3";
 
-    let result = processor.process("list.yaml", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 }
 
@@ -302,43 +248,31 @@ fn test_yaml_processor_list() {
 // Processor Tests - CSV
 // ============================================================================
 
-#[test]
-fn test_csv_processor_headers() {
+#[tokio::test]
+async fn test_csv_processor_headers() {
     use cortex_ingestion::processors::csv::CsvProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = CsvProcessor::new();
     let content = b"name,age,city\nAlice,30,NYC\nBob,25,LA";
 
-    let result = processor.process("data.csv", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.metadata.contains_key("columns"));
-    assert!(processed.metadata.contains_key("rows"));
+    assert!(processed.metadata.contains_key("column_count"));
+    assert!(processed.metadata.contains_key("row_count"));
 }
 
-#[test]
-fn test_csv_processor_no_headers() {
+#[tokio::test]
+async fn test_csv_processor_row_chunks() {
     use cortex_ingestion::processors::csv::CsvProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
-    let processor = CsvProcessor::new_without_headers();
-    let content = b"Alice,30,NYC\nBob,25,LA";
+    let processor = CsvProcessor::with_row_chunks();
+    let content = b"name,age,city\nAlice,30,NYC\nBob,25,LA";
 
-    let result = processor.process("data.csv", content);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_csv_processor_custom_delimiter() {
-    use cortex_ingestion::processors::csv::CsvProcessor;
-    use cortex_ingestion::processors::Processor;
-
-    let processor = CsvProcessor::with_delimiter(b'\t');
-    let content = b"name\tage\tcity\nAlice\t30\tNYC";
-
-    let result = processor.process("data.tsv", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 }
 
@@ -346,51 +280,51 @@ fn test_csv_processor_custom_delimiter() {
 // Processor Tests - HTML
 // ============================================================================
 
-#[test]
-fn test_html_processor_extract_text() {
+#[tokio::test]
+async fn test_html_processor_extract_text() {
     use cortex_ingestion::processors::html::HtmlProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = HtmlProcessor::new();
     let content = b"<html><body><h1>Title</h1><p>Paragraph</p></body></html>";
 
-    let result = processor.process("page.html", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(processed.content.contains("Title"));
-    assert!(processed.content.contains("Paragraph"));
+    assert!(processed.text_content.contains("Title"));
+    assert!(processed.text_content.contains("Paragraph"));
 }
 
-#[test]
-fn test_html_processor_metadata() {
+#[tokio::test]
+async fn test_html_processor_metadata() {
     use cortex_ingestion::processors::html::HtmlProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = HtmlProcessor::new();
     let content = b"<html><head><title>Page Title</title></head><body>Content</body></html>";
 
-    let result = processor.process("page.html", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
     assert!(processed.metadata.contains_key("title"));
 }
 
-#[test]
-fn test_html_processor_strip_scripts() {
+#[tokio::test]
+async fn test_html_processor_strip_scripts() {
     use cortex_ingestion::processors::html::HtmlProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::processors::ContentProcessor;
 
     let processor = HtmlProcessor::new();
     let content = b"<html><body><script>alert('test')</script><p>Content</p></body></html>";
 
-    let result = processor.process("page.html", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
-    assert!(!processed.content.contains("alert"));
-    assert!(processed.content.contains("Content"));
+    assert!(!processed.text_content.contains("alert"));
+    assert!(processed.text_content.contains("Content"));
 }
 
 // ============================================================================
@@ -402,33 +336,13 @@ fn test_embedding_config() {
     use cortex_ingestion::embeddings::EmbeddingConfig;
 
     let config = EmbeddingConfig {
-        model: "text-embedding-3-small".to_string(),
-        dimension: 1536,
         batch_size: 32,
-        api_key: Some("test-key".to_string()),
+        cache_enabled: true,
+        max_text_length: 8000,
     };
 
-    assert_eq!(config.dimension, 1536);
     assert_eq!(config.batch_size, 32);
-}
-
-#[test]
-fn test_embedding_request_batching() {
-    use cortex_ingestion::embeddings::EmbeddingBatch;
-
-    let mut batch = EmbeddingBatch::new(10);
-
-    batch.add("text 1");
-    batch.add("text 2");
-
-    assert_eq!(batch.len(), 2);
-    assert!(!batch.is_full());
-
-    for i in 3..=10 {
-        batch.add(&format!("text {}", i));
-    }
-
-    assert!(batch.is_full());
+    assert!(config.cache_enabled);
 }
 
 // ============================================================================
@@ -436,18 +350,23 @@ fn test_embedding_request_batching() {
 // ============================================================================
 
 #[test]
-fn test_project_loader_config() {
-    use cortex_ingestion::project_loader::LoaderConfig;
+fn test_project_import_options() {
+    use cortex_ingestion::project_loader::ProjectImportOptions;
 
-    let config = LoaderConfig {
-        max_file_size: 10 * 1024 * 1024, // 10MB
-        follow_symlinks: false,
-        include_hidden: false,
-        parallel_workers: 4,
+    let options = ProjectImportOptions {
+        read_only: false,
+        create_fork: false,
+        include_patterns: vec![],
+        exclude_patterns: vec![],
+        max_depth: Some(5),
+        process_code: true,
+        generate_embeddings: false,
+        follow_links: false,
+        respect_gitignore: true,
     };
 
-    assert_eq!(config.max_file_size, 10 * 1024 * 1024);
-    assert!(!config.follow_symlinks);
+    assert_eq!(options.max_depth, Some(5));
+    assert!(options.respect_gitignore);
 }
 
 #[test]
@@ -456,113 +375,50 @@ fn test_project_stats() {
 
     let mut stats = ProjectStats::default();
 
-    stats.files_processed += 10;
-    stats.bytes_processed += 1024 * 1024;
-    stats.errors += 1;
+    stats.file_count += 10;
+    stats.total_size_bytes += 1024 * 1024;
+    stats.directory_count += 1;
 
-    assert_eq!(stats.files_processed, 10);
-    assert_eq!(stats.bytes_processed, 1024 * 1024);
-    assert_eq!(stats.errors, 1);
-}
-
-// ============================================================================
-// Ingester Tests
-// ============================================================================
-
-#[test]
-fn test_ingester_config() {
-    use cortex_ingestion::ingester::IngesterConfig;
-
-    let config = IngesterConfig {
-        chunk_size: 1000,
-        chunk_overlap: 100,
-        generate_embeddings: true,
-        parallel_workers: 4,
-        max_file_size: 100 * 1024 * 1024,
-    };
-
-    assert_eq!(config.chunk_size, 1000);
-    assert!(config.generate_embeddings);
-}
-
-#[test]
-fn test_ingestion_result() {
-    use cortex_ingestion::ingester::IngestionResult;
-    use cortex_core::id::CortexId;
-
-    let result = IngestionResult {
-        document_id: CortexId::new(),
-        chunks_created: 5,
-        embeddings_created: 5,
-        processing_time_ms: 1500,
-        errors: vec![],
-    };
-
-    assert_eq!(result.chunks_created, 5);
-    assert_eq!(result.embeddings_created, 5);
-    assert!(result.errors.is_empty());
-}
-
-#[test]
-fn test_ingestion_result_with_errors() {
-    use cortex_ingestion::ingester::IngestionResult;
-    use cortex_core::id::CortexId;
-
-    let mut result = IngestionResult {
-        document_id: CortexId::new(),
-        chunks_created: 3,
-        embeddings_created: 2,
-        processing_time_ms: 2000,
-        errors: vec![],
-    };
-
-    result.errors.push("Failed to generate embedding for chunk 3".to_string());
-
-    assert_eq!(result.chunks_created, 3);
-    assert_eq!(result.embeddings_created, 2);
-    assert_eq!(result.errors.len(), 1);
+    assert_eq!(stats.file_count, 10);
+    assert_eq!(stats.total_size_bytes, 1024 * 1024);
+    assert_eq!(stats.directory_count, 1);
 }
 
 // ============================================================================
 // Integration-style Tests
 // ============================================================================
 
-#[test]
-fn test_end_to_end_text_processing() {
+#[tokio::test]
+async fn test_end_to_end_text_processing() {
     use cortex_ingestion::processors::txt::TxtProcessor;
-    use cortex_ingestion::processors::Processor;
-    use cortex_ingestion::chunker::FixedSizeChunker;
-    use cortex_core::traits::Chunker;
+    use cortex_ingestion::processors::ContentProcessor;
+    use cortex_ingestion::chunker::Chunker;
+    use cortex_core::traits::Chunker as ChunkerTrait;
 
     let processor = TxtProcessor::new();
     let content = b"This is a test document with multiple sentences. It should be processed and chunked correctly.";
 
-    let result = processor.process("test.txt", content);
+    let result = processor.process(content).await;
     assert!(result.is_ok());
 
     let processed = result.unwrap();
 
-    let chunker = FixedSizeChunker::new(50, 10);
-    let chunks = chunker.chunk(&processed.content);
+    let chunker = Chunker::new(50, 10);
+    let chunks = chunker.chunk(&processed.text_content);
 
     assert!(chunks.len() > 0);
 }
 
 #[test]
 fn test_filter_then_process_workflow() {
-    use cortex_ingestion::filters::{ExtensionFilter, FileFilter};
-    use cortex_ingestion::processors::txt::TxtProcessor;
-    use cortex_ingestion::processors::Processor;
+    use cortex_ingestion::filters::{should_ignore_file, is_text_file};
+    use std::path::Path;
 
-    let filter = ExtensionFilter::new(vec!["txt", "md"]);
+    // Test text file detection
+    assert!(is_text_file(Path::new("doc.txt")));
+    assert!(is_text_file(Path::new("README.md")));
 
-    // Should process
-    if filter.should_include("doc.txt") {
-        let processor = TxtProcessor::new();
-        let result = processor.process("doc.txt", b"content");
-        assert!(result.is_ok());
-    }
-
-    // Should skip
-    assert!(!filter.should_include("image.png"));
+    // Test ignore file detection
+    assert!(!should_ignore_file(Path::new("doc.txt")));
+    assert!(should_ignore_file(Path::new("image.png")));
 }

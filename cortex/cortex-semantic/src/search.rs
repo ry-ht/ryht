@@ -522,7 +522,6 @@ mod tests {
 
     // Integration tests - require Qdrant server running
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_index_and_search() {
         let engine = create_test_engine().await;
 
@@ -555,7 +554,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_batch_indexing() {
         let engine = create_test_engine().await;
 
@@ -586,7 +584,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_remove_document() {
         let engine = create_test_engine().await;
 
@@ -608,7 +605,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_search_with_filter() {
         let engine = create_test_engine().await;
 
@@ -661,7 +657,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_clear() {
         let engine = create_test_engine().await;
 

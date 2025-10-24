@@ -713,7 +713,7 @@ async fn test_collection_optimization() -> Result<()> {
     let info_before = store.get_collection_info().await?;
 
     // Optimize
-    store.optimize_collection().await?;
+    store.optimize().await?;
     println!("  ✓ Optimization triggered");
 
     // Get collection info after optimization

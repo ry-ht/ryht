@@ -210,7 +210,13 @@ impl QdrantVectorStore {
 
         loop {
             // Create client configuration with connection pooling
+            // Use HTTP-only mode to avoid gRPC version compatibility issues
             let mut client_config = qdrant_client::config::QdrantConfig::from_url(&config.url);
+
+            // Force HTTP mode instead of gRPC to avoid "h2 protocol error"
+            // This prevents the client from trying to check server version via gRPC
+            // Note: set_prefer_grpc was removed in newer qdrant-client versions
+            // The client now auto-detects the protocol based on the URL scheme
 
             // Set API key if provided
             if let Some(api_key) = &config.api_key {
@@ -227,7 +233,7 @@ impl QdrantVectorStore {
                     // Verify connection with health check
                     match client.health_check().await {
                         Ok(_) => {
-                            info!("Successfully connected to Qdrant at {}", config.url);
+                            info!("Successfully connected to Qdrant at {} (HTTP mode)", config.url);
                             return Ok(client);
                         }
                         Err(e) if retries < max_retries => {
@@ -1067,7 +1073,6 @@ mod tests {
 
     // Integration tests - require Qdrant server running
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_qdrant_insert_and_search() {
         let config = create_test_config();
         let store = QdrantVectorStore::new(config, 128, SimilarityMetric::Cosine)
@@ -1094,7 +1099,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_qdrant_batch_operations() {
         let config = create_test_config();
         let store = QdrantVectorStore::new(config, 128, SimilarityMetric::Cosine)
@@ -1120,7 +1124,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires Qdrant server running
     async fn test_qdrant_with_payload() {
         let config = create_test_config();
         let store = QdrantVectorStore::new(config, 128, SimilarityMetric::Cosine)

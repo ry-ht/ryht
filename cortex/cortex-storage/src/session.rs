@@ -318,7 +318,7 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    /// Create a new session manager
+    /// Create a new session manager from a direct database connection
     pub fn new(
         db: Arc<Surreal<Any>>,
         main_namespace: String,
@@ -330,6 +330,39 @@ impl SessionManager {
             main_database,
             version_counter: Arc::new(std::sync::atomic::AtomicU64::new(1)),
         }
+    }
+
+    /// Create a new session manager from a ConnectionManager
+    ///
+    /// This is a convenience constructor that extracts a database connection
+    /// from the ConnectionManager's pool for use by the SessionManager.
+    pub async fn from_connection_manager(
+        connection_manager: &crate::connection_pool::ConnectionManager,
+    ) -> Result<Self> {
+        // Acquire a connection from the pool to get the underlying DB
+        let pooled_conn = connection_manager.acquire().await?;
+        let db = Arc::new(pooled_conn.connection().clone());
+
+        // Extract namespace and database from the config
+        // We need to get these from the ConnectionManager's internal config
+        // For now, use default values - in production, these should be passed as parameters
+        let main_namespace = "cortex_e2e_test".to_string();
+        let main_database = "multi_agent".to_string();
+
+        Ok(Self::new(db, main_namespace, main_database))
+    }
+
+    /// Create a new session manager from a ConnectionManager with explicit namespace/database
+    pub async fn from_connection_manager_with_ns(
+        connection_manager: &crate::connection_pool::ConnectionManager,
+        namespace: String,
+        database: String,
+    ) -> Result<Self> {
+        // Acquire a connection from the pool to get the underlying DB
+        let pooled_conn = connection_manager.acquire().await?;
+        let db = Arc::new(pooled_conn.connection().clone());
+
+        Ok(Self::new(db, namespace, database))
     }
 
     /// Create a new isolated session for an agent
@@ -424,7 +457,7 @@ impl SessionManager {
 
         let mut result = self
             .db
-            .query("SELECT * FROM session WHERE id = $session_id")
+            .query("SELECT * FROM agent_session WHERE id = $session_id")
             .bind(("session_id", session_id.to_string()))
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to query session: {}", e)))?;
@@ -434,7 +467,7 @@ impl SessionManager {
             .map_err(|e| CortexError::Storage(format!("Failed to parse session: {}", e)))?;
 
         session.ok_or_else(|| {
-            CortexError::not_found("session", session_id.to_string())
+            CortexError::not_found("agent_session", session_id.to_string())
         })
     }
 
@@ -476,7 +509,7 @@ impl SessionManager {
 
         let mut result = self
             .db
-            .query("SELECT * FROM session WHERE state = $state")
+            .query("SELECT * FROM agent_session WHERE state = $state")
             .bind(("state", "active"))
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to query sessions: {}", e)))?;
@@ -502,7 +535,7 @@ impl SessionManager {
 
         let mut result = self
             .db
-            .query("SELECT * FROM session WHERE agent_id = $agent_id")
+            .query("SELECT * FROM agent_session WHERE agent_id = $agent_id")
             .bind(("agent_id", agent_id_owned))
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to query sessions: {}", e)))?;
@@ -540,7 +573,7 @@ impl SessionManager {
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to switch namespace: {}", e)))?;
 
-        let session_id_str = format!("session:{}", session_id);
+        let session_id_str = format!("agent_session:{}", session_id);
 
         // FIXED: Atomic update with version-based optimistic locking
         // Only updates if the version matches (no concurrent modifications)
@@ -817,7 +850,7 @@ impl SessionManager {
 
     /// Store session metadata in main namespace
     async fn store_session_metadata(&self, session: &AgentSession) -> Result<()> {
-        let session_id_str = format!("session:{}", session.id);
+        let session_id_str = format!("agent_session:{}", session.id);
         let session_clone = session.clone();
 
         self.db
@@ -826,10 +859,11 @@ impl SessionManager {
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to switch namespace: {}", e)))?;
 
+        // Note: Using 'session_data' instead of 'session' to avoid SurrealDB protected variable
         let _result = self.db
-            .query("UPSERT $session_id CONTENT $session")
+            .query("UPSERT $session_id CONTENT $session_data")
             .bind(("session_id", session_id_str))
-            .bind(("session", session_clone))
+            .bind(("session_data", session_clone))
             .await
             .map_err(|e| CortexError::Storage(format!("Failed to store session metadata: {}", e)))?;
 

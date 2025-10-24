@@ -2,11 +2,10 @@
 
 use cortex_core::id::CortexId;
 use cortex_core::traits::{Ingester, Storage};
-use cortex_core::types::{Document, Embedding, Episode, Project, SystemStats};
+use cortex_core::types::{Document, Embedding, Episode, Project, SystemStats, AgentSession};
 use cortex_core::error::Result;
 use cortex_ingestion::prelude::*;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -76,6 +75,34 @@ impl Storage for MockStorage {
             storage_size_bytes: 0,
             last_updated: chrono::Utc::now(),
         })
+    }
+
+    async fn create_agent_session(
+        &self,
+        session_id: String,
+        name: String,
+        agent_type: String,
+    ) -> Result<AgentSession> {
+        Ok(AgentSession {
+            id: session_id,
+            name,
+            agent_type,
+            created_at: chrono::Utc::now(),
+            last_active: chrono::Utc::now(),
+            metadata: std::collections::HashMap::new(),
+        })
+    }
+
+    async fn delete_agent_session(&self, _session_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_agent_session(&self, _session_id: &str) -> Result<Option<AgentSession>> {
+        Ok(None)
+    }
+
+    async fn list_agent_sessions(&self) -> Result<Vec<AgentSession>> {
+        Ok(Vec::new())
     }
 }
 
@@ -202,6 +229,8 @@ async fn test_txt_processor() {
 
 #[tokio::test]
 async fn test_semantic_chunker() {
+    use cortex_core::traits::Chunker;
+
     let chunker = SemanticChunker::new(100, 10);
     let text = "First sentence. Second sentence. Third sentence. Fourth sentence with more text.";
     let chunks = chunker.chunk(text);
@@ -214,6 +243,8 @@ async fn test_semantic_chunker() {
 
 #[tokio::test]
 async fn test_code_chunker() {
+    use cortex_core::traits::Chunker;
+
     let chunker = CodeChunker::new(200, 20);
     let code = r#"
 fn function1() {
@@ -232,6 +263,8 @@ fn function2() {
 
 #[tokio::test]
 async fn test_hierarchical_chunker() {
+    use cortex_ingestion::HierarchicalChunker;
+
     let chunker = HierarchicalChunker::new(500, 100, 20);
     let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10);
 
@@ -274,7 +307,7 @@ async fn test_project_analysis() {
 
 #[tokio::test]
 async fn test_embedding_service() {
-    use cortex_ingestion::embeddings::{EmbeddingProvider, MockEmbeddingProvider};
+    use cortex_ingestion::embeddings::MockEmbeddingProvider;
 
     let provider = Arc::new(MockEmbeddingProvider::new(384));
     let service = EmbeddingService::with_provider(provider);
@@ -289,7 +322,7 @@ async fn test_embedding_service() {
 
 #[tokio::test]
 async fn test_embedding_with_progress() {
-    use cortex_ingestion::embeddings::{EmbeddingProvider, MockEmbeddingProvider};
+    use cortex_ingestion::embeddings::MockEmbeddingProvider;
 
     let provider = Arc::new(MockEmbeddingProvider::new(384));
     let service = EmbeddingService::with_provider(provider);
@@ -305,7 +338,7 @@ async fn test_embedding_with_progress() {
 
 #[tokio::test]
 async fn test_content_filter() {
-    use cortex_ingestion::filters::{ContentFilter, calculate_quality_score};
+    use cortex_ingestion::filters::ContentFilter;
 
     let mut filter = ContentFilter::new().with_min_quality(0.3);
 
@@ -341,7 +374,7 @@ async fn test_quality_scoring() {
 #[tokio::test]
 async fn test_metadata_extraction() {
     use cortex_ingestion::extractor::{
-        extract_code_blocks, extract_links, extract_headings,
+        extract_links, extract_headings,
     };
 
     let content = r#"
@@ -349,17 +382,10 @@ async fn test_metadata_extraction() {
 
 Some text with a [link](https://example.com).
 
-```rust
-fn main() {}
-```
-
 ## Sub Heading
 
 More content.
 "#;
-
-    let code_blocks = extract_code_blocks(content);
-    assert!(!code_blocks.is_empty());
 
     let links = extract_links(content);
     assert!(!links.is_empty());
@@ -420,6 +446,8 @@ async fn test_processor_factory() {
 
 #[tokio::test]
 async fn test_large_file_chunking() {
+    use cortex_core::traits::Chunker;
+
     let chunker = SemanticChunker::new(512, 50);
     let large_text = "This is a sentence. ".repeat(1000);
 

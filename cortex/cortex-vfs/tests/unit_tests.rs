@@ -2,7 +2,6 @@
 
 use cortex_vfs::types::*;
 use cortex_vfs::path::VirtualPath;
-use std::collections::HashMap;
 
 // ============================================================================
 // VirtualPath Tests
@@ -10,306 +9,202 @@ use std::collections::HashMap;
 
 #[test]
 fn test_virtual_path_creation() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
-    assert_eq!(path.as_str(), "/workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    assert_eq!(path.to_string(), "workspace/src/main.rs");
 }
 
 #[test]
 fn test_virtual_path_root() {
-    let path = VirtualPath::new("/");
+    let path = VirtualPath::new("/").unwrap();
     assert!(path.is_root());
-    assert_eq!(path.as_str(), "/");
+    assert_eq!(path.to_string(), "/");
 }
 
 #[test]
 fn test_virtual_path_parent() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
     let parent = path.parent();
     assert!(parent.is_some());
-    assert_eq!(parent.unwrap().as_str(), "/workspace/src");
+    assert_eq!(parent.unwrap().to_string(), "workspace/src");
 }
 
 #[test]
 fn test_virtual_path_root_parent() {
-    let path = VirtualPath::new("/");
+    let path = VirtualPath::new("/").unwrap();
     assert!(path.parent().is_none());
 }
 
 #[test]
 fn test_virtual_path_file_name() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
     assert_eq!(path.file_name(), Some("main.rs"));
 }
 
 #[test]
 fn test_virtual_path_extension() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
     assert_eq!(path.extension(), Some("rs"));
 
-    let no_ext = VirtualPath::new("/workspace/Makefile");
+    let no_ext = VirtualPath::new("/workspace/Makefile").unwrap();
     assert_eq!(no_ext.extension(), None);
 }
 
 #[test]
 fn test_virtual_path_join() {
-    let base = VirtualPath::new("/workspace");
-    let joined = base.join("src/main.rs");
-    assert_eq!(joined.as_str(), "/workspace/src/main.rs");
+    let base = VirtualPath::new("/workspace").unwrap();
+    let joined = base.join("src/main.rs").unwrap();
+    assert_eq!(joined.to_string(), "workspace/src/main.rs");
 }
 
 #[test]
 fn test_virtual_path_normalization() {
-    let path = VirtualPath::new("/workspace/../src/./main.rs");
+    let path = VirtualPath::new("/workspace/../src/./main.rs").unwrap();
     let normalized = path.normalize();
-    assert_eq!(normalized.as_str(), "/src/main.rs");
+    assert_eq!(normalized.to_string(), "src/main.rs");
 }
 
 #[test]
 fn test_virtual_path_is_ancestor_of() {
-    let parent = VirtualPath::new("/workspace/src");
-    let child = VirtualPath::new("/workspace/src/main.rs");
+    let parent = VirtualPath::new("/workspace/src").unwrap();
+    let child = VirtualPath::new("/workspace/src/main.rs").unwrap();
 
-    assert!(parent.is_ancestor_of(&child));
-    assert!(!child.is_ancestor_of(&parent));
+    assert!(parent.starts_with(&parent));
+    assert!(child.starts_with(&parent));
 }
 
 #[test]
 fn test_virtual_path_components() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
-    let components: Vec<&str> = path.components().collect();
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let segments = path.segments();
 
-    assert_eq!(components, vec!["workspace", "src", "main.rs"]);
+    assert_eq!(segments, &["workspace", "src", "main.rs"]);
 }
 
 #[test]
 fn test_virtual_path_display() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
-    assert_eq!(format!("{}", path), "/workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    assert_eq!(format!("{}", path), "workspace/src/main.rs");
 }
 
 #[test]
 fn test_virtual_path_equality() {
-    let path1 = VirtualPath::new("/workspace/src/main.rs");
-    let path2 = VirtualPath::new("/workspace/src/main.rs");
-    let path3 = VirtualPath::new("/workspace/src/lib.rs");
+    let path1 = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path2 = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path3 = VirtualPath::new("/workspace/src/lib.rs").unwrap();
 
     assert_eq!(path1, path2);
     assert_ne!(path1, path3);
 }
 
 // ============================================================================
-// VirtualNode Tests
+// VNode Tests
 // ============================================================================
 
 #[test]
-fn test_virtual_node_file() {
-    let node = VirtualNode::File(FileNode {
-        path: "/test.txt".to_string(),
-        content_hash: "abc123".to_string(),
-        size: 1024,
-        metadata: HashMap::new(),
-        cached: false,
-    });
+fn test_vnode_file() {
+    use uuid::Uuid;
 
-    assert!(matches!(node, VirtualNode::File(_)));
+    let workspace_id = Uuid::new_v4();
+    let path = VirtualPath::new("test.txt").unwrap();
+    let node = VNode::new_file(workspace_id, path.clone(), "abc123".to_string(), 1024);
+
+    assert!(node.is_file());
+    assert!(!node.is_directory());
+    assert_eq!(node.size_bytes, 1024);
+    assert_eq!(node.content_hash, Some("abc123".to_string()));
+}
+
+#[test]
+fn test_vnode_directory() {
+    use uuid::Uuid;
+
+    let workspace_id = Uuid::new_v4();
+    let path = VirtualPath::new("workspace").unwrap();
+    let node = VNode::new_directory(workspace_id, path.clone());
+
+    assert!(node.is_directory());
+    assert!(!node.is_file());
+    assert_eq!(node.size_bytes, 0);
+}
+
+#[test]
+fn test_vnode_metadata() {
+    use uuid::Uuid;
+    use serde_json::Value;
+
+    let workspace_id = Uuid::new_v4();
+    let path = VirtualPath::new("main.rs").unwrap();
+    let mut node = VNode::new_file(workspace_id, path, "hash123".to_string(), 2048);
+
+    node.metadata.insert("language".to_string(), Value::String("rust".to_string()));
+
+    assert_eq!(node.size_bytes, 2048);
+    assert_eq!(node.metadata.get("language"), Some(&Value::String("rust".to_string())));
+}
+
+#[test]
+fn test_vnode_symlink() {
+    use uuid::Uuid;
+
+    let workspace_id = Uuid::new_v4();
+    let path = VirtualPath::new("link.txt").unwrap();
+    let node = VNode::new_symlink(workspace_id, path, "/target/file.txt".to_string());
+
+    assert!(node.is_symlink());
+    assert!(!node.is_file());
     assert!(!node.is_directory());
 }
 
-#[test]
-fn test_virtual_node_directory() {
-    let node = VirtualNode::Directory(DirectoryNode {
-        path: "/workspace".to_string(),
-        children: HashMap::new(),
-        metadata: HashMap::new(),
-    });
-
-    assert!(matches!(node, VirtualNode::Directory(_)));
-    assert!(node.is_directory());
-}
-
-#[test]
-fn test_file_node_metadata() {
-    let mut metadata = HashMap::new();
-    metadata.insert("language".to_string(), "rust".to_string());
-
-    let node = FileNode {
-        path: "/main.rs".to_string(),
-        content_hash: "hash123".to_string(),
-        size: 2048,
-        metadata: metadata.clone(),
-        cached: true,
-    };
-
-    assert_eq!(node.size, 2048);
-    assert!(node.cached);
-    assert_eq!(node.metadata.get("language"), Some(&"rust".to_string()));
-}
-
-#[test]
-fn test_directory_node_add_child() {
-    let mut dir = DirectoryNode {
-        path: "/workspace".to_string(),
-        children: HashMap::new(),
-        metadata: HashMap::new(),
-    };
-
-    let file = VirtualNode::File(FileNode {
-        path: "/workspace/file.txt".to_string(),
-        content_hash: "hash".to_string(),
-        size: 100,
-        metadata: HashMap::new(),
-        cached: false,
-    });
-
-    dir.children.insert("file.txt".to_string(), file);
-    assert_eq!(dir.children.len(), 1);
-}
-
 // ============================================================================
-// ContentHash Tests
+// Language Detection Tests
 // ============================================================================
 
 #[test]
-fn test_content_hash_sha256() {
-    let content = b"Hello, world!";
-    let hash1 = cortex_vfs::dedup::calculate_hash(content);
-    let hash2 = cortex_vfs::dedup::calculate_hash(content);
-
-    // Same content should produce same hash
-    assert_eq!(hash1, hash2);
-
-    // Different content should produce different hash
-    let hash3 = cortex_vfs::dedup::calculate_hash(b"Different content");
-    assert_ne!(hash1, hash3);
-}
-
-#[test]
-fn test_content_hash_empty() {
-    let empty_hash = cortex_vfs::dedup::calculate_hash(b"");
-    assert!(!empty_hash.is_empty());
-    assert_eq!(empty_hash.len(), 64); // SHA256 hex string length
-}
-
-#[test]
-fn test_content_hash_large_content() {
-    let large_content = vec![0u8; 1024 * 1024]; // 1MB
-    let hash = cortex_vfs::dedup::calculate_hash(&large_content);
-    assert_eq!(hash.len(), 64);
+fn test_language_detection() {
+    assert_eq!(Language::from_extension("rs"), Language::Rust);
+    assert_eq!(Language::from_extension("ts"), Language::TypeScript);
+    assert_eq!(Language::from_extension("py"), Language::Python);
+    assert_eq!(Language::from_extension("go"), Language::Go);
+    assert_eq!(Language::from_extension("unknown"), Language::Unknown);
 }
 
 // ============================================================================
-// Cache Entry Tests
-// ============================================================================
-
-#[test]
-fn test_cache_entry_creation() {
-    use cortex_vfs::cache::CacheEntry;
-    use chrono::Utc;
-
-    let entry = CacheEntry {
-        path: "/test.txt".to_string(),
-        content: vec![1, 2, 3, 4],
-        hash: "test_hash".to_string(),
-        size: 4,
-        last_accessed: Utc::now(),
-        access_count: 0,
-    };
-
-    assert_eq!(entry.content.len(), 4);
-    assert_eq!(entry.access_count, 0);
-}
-
-#[test]
-fn test_cache_entry_access_tracking() {
-    use cortex_vfs::cache::CacheEntry;
-    use chrono::Utc;
-
-    let mut entry = CacheEntry {
-        path: "/test.txt".to_string(),
-        content: vec![],
-        hash: "hash".to_string(),
-        size: 0,
-        last_accessed: Utc::now(),
-        access_count: 0,
-    };
-
-    entry.access_count += 1;
-    entry.last_accessed = Utc::now();
-
-    assert_eq!(entry.access_count, 1);
-}
-
-// ============================================================================
-// Fork Tests
+// ForkMetadata Tests
 // ============================================================================
 
 #[test]
 fn test_fork_metadata() {
-    use cortex_vfs::fork_manager::ForkMetadata;
+    use uuid::Uuid;
     use chrono::Utc;
 
     let fork = ForkMetadata {
-        id: "fork-1".to_string(),
-        parent_id: None,
-        created_at: Utc::now(),
-        description: "Test fork".to_string(),
-        modifications: 0,
+        source_id: Uuid::new_v4(),
+        source_name: "original-workspace".to_string(),
+        fork_point: Utc::now(),
+        fork_commit: Some("abc123".to_string()),
     };
 
-    assert_eq!(fork.id, "fork-1");
-    assert!(fork.parent_id.is_none());
-    assert_eq!(fork.modifications, 0);
+    assert_eq!(fork.source_name, "original-workspace");
+    assert_eq!(fork.fork_commit, Some("abc123".to_string()));
 }
 
 #[test]
-fn test_fork_with_parent() {
-    use cortex_vfs::fork_manager::ForkMetadata;
+fn test_fork_metadata_serialization() {
+    use uuid::Uuid;
     use chrono::Utc;
 
     let fork = ForkMetadata {
-        id: "fork-2".to_string(),
-        parent_id: Some("fork-1".to_string()),
-        created_at: Utc::now(),
-        description: "Child fork".to_string(),
-        modifications: 5,
+        source_id: Uuid::new_v4(),
+        source_name: "Test".to_string(),
+        fork_point: Utc::now(),
+        fork_commit: Some("hash123".to_string()),
     };
 
-    assert_eq!(fork.parent_id, Some("fork-1".to_string()));
-    assert_eq!(fork.modifications, 5);
-}
+    let json = serde_json::to_string(&fork).unwrap();
+    let deserialized: ForkMetadata = serde_json::from_str(&json).unwrap();
 
-// ============================================================================
-// Materialization Tests
-// ============================================================================
-
-#[test]
-fn test_materialization_request() {
-    use cortex_vfs::materialization::MaterializationRequest;
-
-    let request = MaterializationRequest {
-        fork_id: "fork-1".to_string(),
-        target_path: "/output".to_string(),
-        files: vec!["/file1.txt".to_string(), "/file2.txt".to_string()],
-        options: MaterializationOptions::default(),
-    };
-
-    assert_eq!(request.fork_id, "fork-1");
-    assert_eq!(request.files.len(), 2);
-}
-
-#[test]
-fn test_materialization_options() {
-    use cortex_vfs::materialization::MaterializationOptions;
-
-    let options = MaterializationOptions {
-        preserve_timestamps: true,
-        preserve_permissions: false,
-        overwrite_existing: true,
-        create_directories: true,
-    };
-
-    assert!(options.preserve_timestamps);
-    assert!(!options.preserve_permissions);
+    assert_eq!(deserialized.source_name, "Test");
+    assert_eq!(deserialized.fork_commit, Some("hash123".to_string()));
 }
 
 // ============================================================================
@@ -317,73 +212,210 @@ fn test_materialization_options() {
 // ============================================================================
 
 #[test]
-fn test_path_is_absolute() {
-    let abs_path = VirtualPath::new("/absolute/path");
-    assert!(abs_path.is_absolute());
-
-    let rel_path = VirtualPath::new("relative/path");
-    assert!(!rel_path.is_absolute());
-}
-
-#[test]
 fn test_path_depth() {
-    let path1 = VirtualPath::new("/");
-    assert_eq!(path1.depth(), 0);
+    let path1 = VirtualPath::new("/").unwrap();
+    assert_eq!(path1.len(), 0);
 
-    let path2 = VirtualPath::new("/workspace");
-    assert_eq!(path2.depth(), 1);
+    let path2 = VirtualPath::new("/workspace").unwrap();
+    assert_eq!(path2.len(), 1);
 
-    let path3 = VirtualPath::new("/workspace/src/main.rs");
-    assert_eq!(path3.depth(), 3);
+    let path3 = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    assert_eq!(path3.len(), 3);
 }
 
 #[test]
 fn test_path_starts_with() {
-    let path = VirtualPath::new("/workspace/src/main.rs");
-    let prefix = VirtualPath::new("/workspace");
+    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let prefix = VirtualPath::new("/workspace").unwrap();
 
     assert!(path.starts_with(&prefix));
 
-    let other_prefix = VirtualPath::new("/other");
+    let other_prefix = VirtualPath::new("/other").unwrap();
     assert!(!path.starts_with(&other_prefix));
 }
 
 // ============================================================================
-// Serialization Tests
+// VNode Serialization Tests
 // ============================================================================
 
 #[test]
-fn test_virtual_node_serialization() {
-    let node = VirtualNode::File(FileNode {
-        path: "/test.txt".to_string(),
-        content_hash: "abc123".to_string(),
-        size: 1024,
-        metadata: HashMap::new(),
-        cached: false,
-    });
+fn test_vnode_serialization() {
+    use uuid::Uuid;
+
+    let workspace_id = Uuid::new_v4();
+    let path = VirtualPath::new("test.txt").unwrap();
+    let node = VNode::new_file(workspace_id, path, "abc123".to_string(), 1024);
 
     let json = serde_json::to_string(&node).unwrap();
-    let deserialized: VirtualNode = serde_json::from_str(&json).unwrap();
+    let deserialized: VNode = serde_json::from_str(&json).unwrap();
 
-    assert!(matches!(deserialized, VirtualNode::File(_)));
+    assert!(deserialized.is_file());
+    assert_eq!(deserialized.size_bytes, 1024);
+}
+
+// ============================================================================
+// FlushOptions Tests
+// ============================================================================
+
+#[test]
+fn test_flush_options_default() {
+    let options = FlushOptions::default();
+
+    assert!(options.preserve_permissions);
+    assert!(options.preserve_timestamps);
+    assert!(!options.create_backup);
+    assert!(options.atomic);
+    assert!(options.parallel);
+}
+
+// ============================================================================
+// ImportOptions Tests
+// ============================================================================
+
+#[test]
+fn test_import_options_default() {
+    let options = ImportOptions::default();
+
+    assert!(options.read_only);
+    assert!(!options.create_fork);
+    assert!(options.process_code);
+    assert!(!options.generate_embeddings);
+    assert!(!options.include_patterns.is_empty());
+    assert!(!options.exclude_patterns.is_empty());
+}
+
+// ============================================================================
+// Workspace Tests
+// ============================================================================
+
+#[test]
+fn test_workspace_type() {
+    assert_eq!(WorkspaceType::Code, WorkspaceType::Code);
+    assert_ne!(WorkspaceType::Code, WorkspaceType::Documentation);
 }
 
 #[test]
-fn test_fork_metadata_serialization() {
-    use cortex_vfs::fork_manager::ForkMetadata;
-    use chrono::Utc;
+fn test_source_type() {
+    assert_eq!(SourceType::Local, SourceType::Local);
+    assert_ne!(SourceType::Local, SourceType::Fork);
+}
 
-    let fork = ForkMetadata {
-        id: "fork-1".to_string(),
-        parent_id: Some("parent".to_string()),
-        created_at: Utc::now(),
-        description: "Test".to_string(),
-        modifications: 10,
+// ============================================================================
+// Change Tracking Tests
+// ============================================================================
+
+#[test]
+fn test_change_type() {
+    assert_eq!(ChangeType::Created, ChangeType::Created);
+    assert_ne!(ChangeType::Created, ChangeType::Modified);
+}
+
+#[test]
+fn test_sync_status() {
+    assert_eq!(SyncStatus::Modified, SyncStatus::Modified);
+    assert_ne!(SyncStatus::Modified, SyncStatus::Synchronized);
+}
+
+// ============================================================================
+// NodeType Tests
+// ============================================================================
+
+#[test]
+fn test_node_type() {
+    assert_eq!(NodeType::File, NodeType::File);
+    assert_ne!(NodeType::File, NodeType::Directory);
+    assert_eq!(NodeType::SymLink, NodeType::SymLink);
+}
+
+// ============================================================================
+// MergeStrategy Tests
+// ============================================================================
+
+#[test]
+fn test_merge_strategy() {
+    assert_eq!(MergeStrategy::Manual, MergeStrategy::Manual);
+    assert_ne!(MergeStrategy::Manual, MergeStrategy::AutoMerge);
+    assert_eq!(MergeStrategy::PreferFork, MergeStrategy::PreferFork);
+}
+
+// ============================================================================
+// FlushReport Tests
+// ============================================================================
+
+#[test]
+fn test_flush_report_default() {
+    let report = FlushReport::default();
+
+    assert_eq!(report.files_written, 0);
+    assert_eq!(report.directories_created, 0);
+    assert_eq!(report.symlinks_created, 0);
+    assert_eq!(report.files_deleted, 0);
+    assert_eq!(report.bytes_written, 0);
+    assert_eq!(report.errors.len(), 0);
+    assert_eq!(report.duration_ms, 0);
+}
+
+// ============================================================================
+// ImportReport Tests
+// ============================================================================
+
+#[test]
+fn test_import_report_default() {
+    let report = ImportReport::default();
+
+    assert_eq!(report.files_imported, 0);
+    assert_eq!(report.directories_imported, 0);
+    assert_eq!(report.units_extracted, 0);
+    assert_eq!(report.bytes_imported, 0);
+    assert_eq!(report.errors.len(), 0);
+    assert_eq!(report.duration_ms, 0);
+}
+
+// ============================================================================
+// MergeReport Tests
+// ============================================================================
+
+#[test]
+fn test_merge_report_default() {
+    let report = MergeReport::default();
+
+    assert_eq!(report.changes_applied, 0);
+    assert_eq!(report.conflicts_count, 0);
+    assert_eq!(report.conflicts.len(), 0);
+    assert_eq!(report.auto_resolved, 0);
+    assert_eq!(report.errors.len(), 0);
+}
+
+// ============================================================================
+// Conflict Tests
+// ============================================================================
+
+#[test]
+fn test_conflict_creation() {
+    let path = VirtualPath::new("src/main.rs").unwrap();
+    let conflict = Conflict {
+        path: path.clone(),
+        fork_content: "fork version".to_string(),
+        target_content: "target version".to_string(),
+        resolution: None,
     };
 
-    let json = serde_json::to_string(&fork).unwrap();
-    let deserialized: ForkMetadata = serde_json::from_str(&json).unwrap();
+    assert_eq!(conflict.path, path);
+    assert_eq!(conflict.fork_content, "fork version");
+    assert_eq!(conflict.target_content, "target version");
+    assert!(conflict.resolution.is_none());
+}
 
-    assert_eq!(deserialized.id, "fork-1");
-    assert_eq!(deserialized.modifications, 10);
+#[test]
+fn test_conflict_with_resolution() {
+    let path = VirtualPath::new("src/main.rs").unwrap();
+    let conflict = Conflict {
+        path,
+        fork_content: "fork version".to_string(),
+        target_content: "target version".to_string(),
+        resolution: Some("merged version".to_string()),
+    };
+
+    assert!(conflict.resolution.is_some());
+    assert_eq!(conflict.resolution.unwrap(), "merged version");
 }

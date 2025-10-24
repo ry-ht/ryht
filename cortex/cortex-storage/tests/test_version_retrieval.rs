@@ -57,6 +57,8 @@ async fn setup_test_entity(
     namespace: &str,
 ) -> anyhow::Result<()> {
     let conn = storage.acquire().await?;
+    let entity_id = entity_id.to_string();
+    let content = content.to_string();
 
     conn.connection()
         .use_ns(namespace)
@@ -81,6 +83,8 @@ async fn setup_base_version(
     content: &str,
 ) -> anyhow::Result<()> {
     let conn = storage.acquire().await?;
+    let entity_id = entity_id.to_string();
+    let content = content.to_string();
 
     conn.connection()
         .use_ns("main")

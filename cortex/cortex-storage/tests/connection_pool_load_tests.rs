@@ -27,6 +27,9 @@ fn load_test_config(max_connections: usize) -> DatabaseConfig {
             max_lifetime: Some(Duration::from_secs(300)),
             retry_policy: RetryPolicy::default(),
             warm_connections: true,
+            validate_on_checkout: true,
+            recycle_after_uses: None,
+            shutdown_grace_period: Duration::from_secs(30),
         },
         namespace: "load_test".to_string(),
         database: "load_test".to_string(),
@@ -45,7 +48,7 @@ async fn test_high_concurrency_reads() {
     let start = Instant::now();
     let mut handles = Vec::new();
 
-    for i in 0..num_tasks {
+    for _i in 0..num_tasks {
         let manager = manager.clone();
         let success_count = success_count.clone();
         let error_count = error_count.clone();

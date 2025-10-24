@@ -144,6 +144,120 @@ fn create_realistic_semantic_unit(i: usize, file_path: &str) -> SemanticUnit {
     }
 }
 
+fn convert_semantic_to_code_unit(unit: &SemanticUnit) -> cortex_core::types::CodeUnit {
+    use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Visibility, Parameter, Complexity as CoreComplexity, CodeUnitStatus, Language};
+    use std::collections::HashMap;
+
+    let unit_type = match unit.unit_type {
+        CodeUnitType::Function => CoreCodeUnitType::Function,
+        CodeUnitType::Method => CoreCodeUnitType::Method,
+        CodeUnitType::AsyncFunction => CoreCodeUnitType::AsyncFunction,
+        CodeUnitType::Generator => CoreCodeUnitType::Generator,
+        CodeUnitType::Lambda => CoreCodeUnitType::Lambda,
+        CodeUnitType::Class => CoreCodeUnitType::Class,
+        CodeUnitType::Struct => CoreCodeUnitType::Struct,
+        CodeUnitType::Enum => CoreCodeUnitType::Enum,
+        CodeUnitType::Union => CoreCodeUnitType::Union,
+        CodeUnitType::Interface => CoreCodeUnitType::Interface,
+        CodeUnitType::Trait => CoreCodeUnitType::Trait,
+        CodeUnitType::TypeAlias => CoreCodeUnitType::TypeAlias,
+        CodeUnitType::Typedef => CoreCodeUnitType::Typedef,
+        CodeUnitType::Const => CoreCodeUnitType::Const,
+        CodeUnitType::Static => CoreCodeUnitType::Static,
+        CodeUnitType::Variable => CoreCodeUnitType::Variable,
+        CodeUnitType::Module => CoreCodeUnitType::Module,
+        CodeUnitType::Namespace => CoreCodeUnitType::Namespace,
+        CodeUnitType::Package => CoreCodeUnitType::Package,
+        CodeUnitType::ImplBlock => CoreCodeUnitType::ImplBlock,
+        CodeUnitType::Decorator => CoreCodeUnitType::Decorator,
+        CodeUnitType::Macro => CoreCodeUnitType::Macro,
+        CodeUnitType::Template => CoreCodeUnitType::Template,
+        CodeUnitType::Test => CoreCodeUnitType::Test,
+        CodeUnitType::Benchmark => CoreCodeUnitType::Benchmark,
+        CodeUnitType::Example => CoreCodeUnitType::Example,
+    };
+
+    let visibility = match unit.visibility.to_lowercase().as_str() {
+        "public" | "pub" => Visibility::Public,
+        "private" => Visibility::Private,
+        "protected" => Visibility::Protected,
+        "internal" => Visibility::Internal,
+        "package" => Visibility::Package,
+        _ => Visibility::Private,
+    };
+
+    CodeUnit {
+        id: unit.id,
+        unit_type,
+        name: unit.name.clone(),
+        qualified_name: unit.qualified_name.clone(),
+        display_name: unit.display_name.clone(),
+        file_path: unit.file_path.clone(),
+        language: Language::Rust,
+        start_line: unit.start_line as usize,
+        end_line: unit.end_line as usize,
+        start_column: unit.start_column as usize,
+        end_column: unit.end_column as usize,
+        start_byte: 0,
+        end_byte: 0,
+        signature: unit.signature.clone(),
+        body: Some(unit.body.clone()),
+        docstring: unit.docstring.clone(),
+        comments: Vec::new(),
+        return_type: unit.return_type.clone(),
+        parameters: unit.parameters.iter().map(|p| Parameter {
+            name: p.clone(),
+            param_type: None,
+            default_value: None,
+            is_optional: false,
+            is_variadic: false,
+            attributes: Vec::new(),
+        }).collect(),
+        type_parameters: Vec::new(),
+        generic_constraints: Vec::new(),
+        throws: Vec::new(),
+        visibility,
+        attributes: Vec::new(),
+        modifiers: unit.modifiers.clone(),
+        is_async: unit.modifiers.contains(&"async".to_string()),
+        is_unsafe: unit.modifiers.contains(&"unsafe".to_string()),
+        is_const: unit.modifiers.contains(&"const".to_string()),
+        is_static: unit.modifiers.contains(&"static".to_string()),
+        is_abstract: false,
+        is_virtual: false,
+        is_override: false,
+        is_final: false,
+        is_exported: unit.visibility == "pub",
+        is_default_export: false,
+        complexity: CoreComplexity {
+            cyclomatic: unit.complexity.cyclomatic,
+            cognitive: unit.complexity.cognitive,
+            nesting: unit.complexity.nesting,
+            lines: unit.complexity.lines,
+            parameters: unit.parameters.len() as u32,
+            returns: if unit.return_type.is_some() { 1 } else { 0 },
+        },
+        test_coverage: unit.test_coverage.map(|c| c as f64),
+        has_tests: unit.has_tests,
+        has_documentation: unit.has_documentation,
+        language_specific: HashMap::new(),
+        embedding: unit.embedding.clone(),
+        embedding_model: Some("text-embedding-3-small".to_string()),
+        summary: Some(unit.summary.clone()),
+        purpose: Some(unit.purpose.clone()),
+        ast_node_type: None,
+        ast_metadata: None,
+        status: CodeUnitStatus::Active,
+        version: 1,
+        created_at: unit.created_at,
+        updated_at: unit.updated_at,
+        created_by: "system".to_string(),
+        updated_by: "system".to_string(),
+        tags: Vec::new(),
+        metadata: HashMap::new(),
+    }
+}
+
 fn create_realistic_pattern(i: usize, pattern_type: PatternType, success: bool) -> LearnedPattern {
     let mut pattern = LearnedPattern::new(
         pattern_type,
@@ -342,9 +456,10 @@ async fn test_3_semantic_memory_graph() {
     for i in 0..50_000 {
         let file_idx = i / 100;
         let file_path = format!("src/module_{}/handler_{}.rs", file_idx / 10, file_idx % 10);
-        let unit = create_realistic_semantic_unit(i, &file_path);
-        let id = unit.id;
-        semantic.store_unit(&unit).await.expect("Failed to store unit");
+        let semantic_unit = create_realistic_semantic_unit(i, &file_path);
+        let id = semantic_unit.id;
+        let code_unit = convert_semantic_to_code_unit(&semantic_unit);
+        semantic.store_unit(&code_unit).await.expect("Failed to store unit");
         unit_ids.push(id);
 
         if (i + 1) % 5000 == 0 {
