@@ -74,7 +74,6 @@ async fn list_code_units_impl(
 
     // Build query filters
     let limit = params.limit.min(1000);
-    let offset = params.offset.unwrap_or(0);
 
     let mut query = format!(
         "SELECT * FROM code_unit WHERE file_path CONTAINS '{}'",
@@ -110,7 +109,7 @@ async fn list_code_units_impl(
         query.push_str(&format!(" AND has_documentation = {}", has_docs));
     }
 
-    query.push_str(&format!(" LIMIT {} START {}", limit, offset));
+    query.push_str(&format!(" LIMIT {}", limit));
 
     // Execute query
     let mut result = conn.query(&query).await?;
@@ -168,7 +167,6 @@ async fn list_code_units_impl(
         units: unit_responses,
         total,
         limit,
-        offset,
     })
 }
 

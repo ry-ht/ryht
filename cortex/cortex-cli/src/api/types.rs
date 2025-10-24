@@ -166,9 +166,6 @@ pub struct FileListRequest {
     pub cursor: Option<String>,
     #[serde(default = "default_file_limit")]
     pub limit: usize,
-    // Legacy offset-based pagination (deprecated, but kept for backward compatibility)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub offset: Option<usize>,
 }
 
 fn default_file_limit() -> usize {
@@ -418,9 +415,6 @@ pub struct CodeUnitListRequest {
     pub cursor: Option<String>,
     #[serde(default = "default_units_limit")]
     pub limit: usize,
-    // Legacy offset-based pagination (deprecated, but kept for backward compatibility)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub offset: Option<usize>,
 }
 
 fn default_units_limit() -> usize {
@@ -474,7 +468,6 @@ pub struct CodeUnitListResponse {
     pub units: Vec<CodeUnitResponse>,
     pub total: usize,
     pub limit: usize,
-    pub offset: usize,
 }
 
 // ============================================================================

@@ -142,48 +142,23 @@ async fn list_files(
             .then_with(|| b.id.cmp(&a.id))
     });
 
-    // Apply pagination (cursor-based or legacy offset-based)
+    // Apply cursor-based pagination
     let total = files.len();
-    let paginated_files = if params.cursor.is_some() {
-        // Cursor-based pagination
-        let mut result = files.into_iter().take(params.limit + 1).collect::<Vec<_>>();
-        let has_more = result.len() > params.limit;
-        if has_more {
-            result.pop();
-        }
-        result
-    } else if let Some(offset) = params.offset {
-        // Legacy offset-based pagination
-        files.into_iter().skip(offset).take(params.limit).collect()
-    } else {
-        // Default: take first page
-        let mut result = files.into_iter().take(params.limit + 1).collect::<Vec<_>>();
-        let has_more = result.len() > params.limit;
-        if has_more {
-            result.pop();
-        }
-        result
-    };
+    let mut result = files.into_iter().take(params.limit + 1).collect::<Vec<_>>();
+    let has_more = result.len() > params.limit;
+    if has_more {
+        result.pop();
+    }
+    let paginated_files = result;
 
-    // Check if there are more results
-    let has_more = if params.cursor.is_some() || params.offset.is_none() {
-        total > params.limit
-    } else {
-        total > params.offset.unwrap_or(0) + params.limit
-    };
-
-    // Generate next cursor if cursor-based pagination is used
-    let next_cursor = if params.cursor.is_some() || params.offset.is_none() {
-        if has_more && !paginated_files.is_empty() {
-            let last = paginated_files.last().unwrap();
-            generate_next_cursor(
-                last.id.clone(),
-                last.created_at,
-                cursor_data.map(|c| c.offset + params.limit).unwrap_or(params.limit),
-            )
-        } else {
-            None
-        }
+    // Generate next cursor
+    let next_cursor = if has_more && !paginated_files.is_empty() {
+        let last = paginated_files.last().unwrap();
+        generate_next_cursor(
+            last.id.clone(),
+            last.created_at,
+            cursor_data.map(|c| c.offset + params.limit).unwrap_or(params.limit),
+        )
     } else {
         None
     };
@@ -198,33 +173,28 @@ async fn list_files(
 
     let duration = start.elapsed().as_millis() as u64;
 
-    // Build response with pagination if using cursor-based
-    if params.cursor.is_some() || params.offset.is_none() {
-        let pagination = build_pagination_info(
-            paginated_files.len(),
-            params.limit,
-            Some(total),
-            next_cursor.clone(),
-        );
+    // Build response with cursor-based pagination
+    let pagination = build_pagination_info(
+        paginated_files.len(),
+        params.limit,
+        Some(total),
+        next_cursor.clone(),
+    );
 
-        let link_builder = LinkBuilder::new(format!("/api/v1/workspaces/{}/files", workspace_id));
-        let links = link_builder.build_list_links(
-            params.cursor.as_deref(),
-            next_cursor.as_deref(),
-            params.limit,
-        );
+    let link_builder = LinkBuilder::new(format!("/api/v1/workspaces/{}/files", workspace_id));
+    let links = link_builder.build_list_links(
+        params.cursor.as_deref(),
+        next_cursor.as_deref(),
+        params.limit,
+    );
 
-        Ok(Json(ApiResponse::success_with_pagination(
-            paginated_files,
-            request_id,
-            duration,
-            pagination,
-            links,
-        )))
-    } else {
-        // Legacy response without pagination metadata
-        Ok(Json(ApiResponse::success(paginated_files, request_id, duration)))
-    }
+    Ok(Json(ApiResponse::success_with_pagination(
+        paginated_files,
+        request_id,
+        duration,
+        pagination,
+        links,
+    )))
 }
 
 /// GET /api/v1/files/{file_id} - Get file details

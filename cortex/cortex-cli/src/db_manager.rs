@@ -562,6 +562,16 @@ impl DatabaseManager {
             bail!("Qdrant binary not found at: {}", qdrant_path.display());
         }
 
+        // Set data directory
+        let data_dir = std::path::PathBuf::from(&home).join(".cortex").join("data").join("qdrant");
+        std::fs::create_dir_all(&data_dir)?;
+
+        // Set up log files
+        let log_dir = std::path::PathBuf::from(&home).join(".cortex").join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        let stdout_log = std::fs::File::create(log_dir.join("qdrant.stdout.log"))?;
+        let stderr_log = std::fs::File::create(log_dir.join("qdrant.stderr.log"))?;
+
         // Start Qdrant process in background
         let mut cmd = Command::new(&qdrant_path);
 
@@ -570,18 +580,27 @@ impl DatabaseManager {
         if let Some(grpc_port) = self.qdrant_config.grpc_port {
             cmd.env("QDRANT__SERVICE__GRPC_PORT", grpc_port.to_string());
         }
-
-        // Set data directory
-        let data_dir = std::path::PathBuf::from(&home).join(".cortex").join("data").join("qdrant");
-        std::fs::create_dir_all(&data_dir)?;
         cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir.to_str().unwrap());
 
-        // Start in background
-        cmd.stdout(std::process::Stdio::null());
-        cmd.stderr(std::process::Stdio::null());
+        // Set PATH to include cargo/rust tools and system utilities
+        // This is critical for Qdrant to find dependencies
+        let cargo_bin = std::path::PathBuf::from(&home).join(".cargo").join("bin");
+        let existing_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = if existing_path.is_empty() {
+            format!("{}:/usr/local/bin:/usr/bin:/bin", cargo_bin.display())
+        } else {
+            format!("{}:{}:/usr/local/bin:/usr/bin:/bin", cargo_bin.display(), existing_path)
+        };
+        cmd.env("PATH", new_path);
+
+        // Redirect logs to files for debugging
+        cmd.stdout(std::process::Stdio::from(stdout_log));
+        cmd.stderr(std::process::Stdio::from(stderr_log));
+
         cmd.spawn().context("Failed to spawn Qdrant process")?;
 
         output::success("Qdrant native binary started");
+        output::info(format!("Logs: {}", log_dir.display()));
         Ok(())
     }
 

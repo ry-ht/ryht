@@ -22,6 +22,7 @@ use tracing::{info, warn};
 /// Provides all Cortex functionality through the MCP protocol
 pub struct CortexMcpServer {
     server: mcp_sdk::McpServer,
+    storage: Arc<ConnectionManager>,
 }
 
 impl CortexMcpServer {
@@ -47,20 +48,20 @@ impl CortexMcpServer {
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
 
         // Build server with all tools
-        let server = Self::build_server(storage, vfs).await?;
+        let server = Self::build_server(storage.clone(), vfs).await?;
 
         info!("Cortex MCP Server initialized successfully");
 
-        Ok(Self { server })
+        Ok(Self { server, storage })
     }
 
     /// Creates a new server with custom configuration
     pub async fn with_config(config: GlobalConfig) -> Result<Self> {
         let storage = Self::create_storage(&config).await?;
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
-        let server = Self::build_server(storage, vfs).await?;
+        let server = Self::build_server(storage.clone(), vfs).await?;
 
-        Ok(Self { server })
+        Ok(Self { server, storage })
     }
 
     /// Creates storage connection manager from configuration
@@ -367,12 +368,13 @@ impl CortexMcpServer {
             }
         }
 
-        // IMPROVED: Cleanup resources on shutdown
+        // Cleanup resources on shutdown
         info!("Performing cleanup before shutdown");
-        // Note: In a real implementation, we would call storage.shutdown().await
-        // However, the server doesn't currently store a reference to the storage manager
-        // This is tracked as a TODO for future improvement
-        // TODO: Store Arc<ConnectionManager> in CortexMcpServer and call shutdown here
+        if let Err(e) = self.storage.shutdown().await {
+            warn!("Error during storage shutdown: {}", e);
+        } else {
+            info!("Storage shutdown successfully");
+        }
 
         Ok(())
     }
@@ -446,8 +448,8 @@ impl CortexMcpServerBuilder {
     pub async fn build(self) -> Result<CortexMcpServer> {
         if let Some(storage) = self.storage {
             let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
-            let server = CortexMcpServer::build_server(storage, vfs).await?;
-            Ok(CortexMcpServer { server })
+            let server = CortexMcpServer::build_server(storage.clone(), vfs).await?;
+            Ok(CortexMcpServer { server, storage })
         } else if let Some(config) = self.config {
             CortexMcpServer::with_config(config).await
         } else {

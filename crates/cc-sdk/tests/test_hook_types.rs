@@ -296,7 +296,6 @@ fn test_round_trip_serialization() {
         continue_: Some(false),
         suppress_output: Some(true),
         stop_reason: Some("Blocked".to_string()),
-        decision: Some("block".to_string()),
         system_message: Some("Operation blocked".to_string()),
         reason: Some("Security policy".to_string()),
         hook_specific_output: Some(HookSpecificOutput::UserPromptSubmit(
@@ -317,6 +316,5 @@ fn test_round_trip_serialization() {
     assert_eq!(deserialized.continue_, Some(false));
     assert_eq!(deserialized.suppress_output, Some(true));
     assert_eq!(deserialized.stop_reason, Some("Blocked".to_string()));
-    assert_eq!(deserialized.decision, Some("block".to_string()));
     assert!(deserialized.hook_specific_output.is_some());
 }

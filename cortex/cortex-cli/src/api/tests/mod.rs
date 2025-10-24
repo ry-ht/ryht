@@ -72,7 +72,7 @@ mod types_tests {
         assert_eq!(request.file_type, Some("file".to_string()));
         assert_eq!(request.language, Some("rust".to_string()));
         assert_eq!(request.limit, 10);
-        assert_eq!(request.offset, Some(5));
+        assert!(request.cursor.is_some());
     }
 
     #[test]
@@ -84,7 +84,7 @@ mod types_tests {
         assert_eq!(request.file_type, None);
         assert_eq!(request.language, None);
         assert_eq!(request.limit, 20); // Default value from default_file_limit()
-        assert_eq!(request.offset, None);
+        assert!(request.cursor.is_none());
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod types_tests {
         assert_eq!(request.workspace_id, Some("ws-789".to_string()));
         assert_eq!(request.search_type, Some("semantic".to_string()));
         assert_eq!(request.limit, Some(20));
-        assert_eq!(request.offset, Some(0));
+        assert!(request.cursor.is_none());
     }
 
     #[test]

@@ -204,10 +204,7 @@ pub struct SyncHookJSONOutput {
     #[serde(rename = "stopReason", skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
 
-    // Decision fields
-    /// Set to "block" to indicate blocking behavior
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub decision: Option<String>, // "block" or "approve" (deprecated)
+    // Decision fields - use hook_specific_output instead
     /// Warning message displayed to the user
     #[serde(rename = "systemMessage", skip_serializing_if = "Option::is_none")]
     pub system_message: Option<String>,
@@ -599,7 +596,6 @@ mod tests {
         assert!(output.continue_.is_none());
         assert!(output.suppress_output.is_none());
         assert!(output.stop_reason.is_none());
-        assert!(output.decision.is_none());
         assert!(output.system_message.is_none());
         assert!(output.reason.is_none());
         assert!(output.hook_specific_output.is_none());
@@ -621,16 +617,25 @@ mod tests {
     fn test_create_sync_hook_output_with_block() {
         let output = SyncHookJSONOutput {
             continue_: Some(false),
-            decision: Some("block".to_string()),
             system_message: Some("Tool blocked".to_string()),
             reason: Some("Security policy".to_string()),
+            hook_specific_output: Some(HookSpecificOutput::PreToolUse(
+                PreToolUseOutput {
+                    permission_decision: Some(PermissionDecision::Block),
+                }
+            )),
             ..Default::default()
         };
 
         assert_eq!(output.continue_.unwrap(), false);
-        assert_eq!(output.decision.as_ref().unwrap(), "block");
         assert_eq!(output.system_message.as_ref().unwrap(), "Tool blocked");
         assert_eq!(output.reason.as_ref().unwrap(), "Security policy");
+        assert!(matches!(
+            output.hook_specific_output,
+            Some(HookSpecificOutput::PreToolUse(PreToolUseOutput {
+                permission_decision: Some(PermissionDecision::Block)
+            }))
+        ));
     }
 
     #[test]
