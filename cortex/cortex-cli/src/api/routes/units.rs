@@ -1,6 +1,7 @@
 //! Code Units API routes
 
 use crate::api::types::*;
+use crate::services::CodeUnitService;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -8,9 +9,6 @@ use axum::{
     routing::{get, put},
     Json, Router,
 };
-use cortex_core::types::CodeUnit;
-use cortex_storage::ConnectionManager;
-use cortex_vfs::VirtualFileSystem;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info};
@@ -19,8 +17,7 @@ use uuid::Uuid;
 /// Context for code unit routes
 #[derive(Clone)]
 pub struct CodeUnitContext {
-    pub storage: Arc<ConnectionManager>,
-    pub vfs: Arc<VirtualFileSystem>,
+    pub service: Arc<CodeUnitService>,
 }
 
 /// Create code unit routes
@@ -69,97 +66,69 @@ async fn list_code_units_impl(
     workspace_id: &str,
     params: CodeUnitListRequest,
 ) -> anyhow::Result<CodeUnitListResponse> {
-    let pooled = context.storage.acquire().await?;
-    let conn = pooled.connection();
+    // Parse workspace UUID
+    let workspace_uuid = Uuid::parse_str(workspace_id)
+        .map_err(|e| anyhow::anyhow!("Invalid workspace ID: {}", e))?;
 
-    // Build query filters
     let limit = params.limit.min(1000);
 
-    let mut query = format!(
-        "SELECT * FROM code_unit WHERE file_path CONTAINS '{}'",
-        workspace_id
-    );
+    // Call service to list code units
+    let units = context
+        .service
+        .list_code_units(
+            workspace_uuid,
+            params.unit_type.clone(),
+            params.language.clone(),
+            params.visibility.clone(),
+            params.min_complexity.map(|c| c as i32),
+            limit,
+        )
+        .await?;
 
-    // Apply filters
-    if let Some(unit_type) = &params.unit_type {
-        query.push_str(&format!(" AND unit_type = '{}'", unit_type));
-    }
-    if let Some(visibility) = &params.visibility {
-        query.push_str(&format!(" AND visibility = '{}'", visibility));
-    }
-    if let Some(language) = &params.language {
-        query.push_str(&format!(" AND language = '{}'", language));
-    }
-    if let Some(min_complexity) = params.min_complexity {
-        query.push_str(&format!(
-            " AND complexity.cyclomatic >= {}",
-            min_complexity
-        ));
-    }
-    if let Some(max_complexity) = params.max_complexity {
-        query.push_str(&format!(
-            " AND complexity.cyclomatic <= {}",
-            max_complexity
-        ));
-    }
-    if let Some(has_tests) = params.has_tests {
-        query.push_str(&format!(" AND has_tests = {}", has_tests));
-    }
-    if let Some(has_docs) = params.has_docs {
-        query.push_str(&format!(" AND has_documentation = {}", has_docs));
-    }
+    // Get total count with filters
+    let filters = crate::services::code_units::CodeUnitFilters {
+        unit_type: params.unit_type,
+        language: params.language,
+        visibility: params.visibility,
+        has_tests: params.has_tests.unwrap_or(false),
+        has_documentation: params.has_docs.unwrap_or(false),
+        limit: None,
+    };
 
-    query.push_str(&format!(" LIMIT {}", limit));
+    let total = context.service.count_units(workspace_uuid, filters).await?;
 
-    // Execute query
-    let mut result = conn.query(&query).await?;
-    let units: Vec<CodeUnit> = result.take(0)?;
-
-    // Get total count
-    let count_query = format!(
-        "SELECT count() FROM code_unit WHERE file_path CONTAINS '{}' GROUP ALL",
-        workspace_id
-    );
-    let mut count_result = conn.query(&count_query).await?;
-    let total: usize = count_result
-        .take::<Option<usize>>(0)?
-        .unwrap_or(units.len());
-
-    // Convert to response format
+    // Convert service types to API response types
     let unit_responses: Vec<CodeUnitResponse> = units
         .into_iter()
-        .map(|unit| {
-            let complexity_score = unit.complexity_score();
-            CodeUnitResponse {
-                id: unit.id.to_string(),
-                unit_type: format!("{:?}", unit.unit_type).to_lowercase(),
-                name: unit.name,
-                qualified_name: unit.qualified_name,
-                display_name: unit.display_name,
-                file_path: unit.file_path,
-                language: format!("{:?}", unit.language).to_lowercase(),
-                start_line: unit.start_line,
-                end_line: unit.end_line,
-                start_column: unit.start_column,
-                end_column: unit.end_column,
-                signature: unit.signature,
-                body: unit.body,
-                docstring: unit.docstring,
-                visibility: format!("{:?}", unit.visibility).to_lowercase(),
-                is_async: unit.is_async,
-                is_exported: unit.is_exported,
-                complexity: ComplexityResponse {
-                    cyclomatic: unit.complexity.cyclomatic,
-                    cognitive: unit.complexity.cognitive,
-                    nesting: unit.complexity.nesting,
-                    lines: unit.complexity.lines,
-                    score: complexity_score,
-                },
-                has_tests: unit.has_tests,
-                has_documentation: unit.has_documentation,
-                created_at: unit.created_at,
-                updated_at: unit.updated_at,
-            }
+        .map(|unit| CodeUnitResponse {
+            id: unit.id,
+            unit_type: unit.unit_type,
+            name: unit.name,
+            qualified_name: unit.qualified_name,
+            display_name: unit.display_name,
+            file_path: unit.file_path,
+            language: unit.language,
+            start_line: unit.start_line,
+            end_line: unit.end_line,
+            start_column: unit.start_column,
+            end_column: unit.end_column,
+            signature: unit.signature,
+            body: unit.body,
+            docstring: unit.docstring,
+            visibility: unit.visibility,
+            is_async: unit.is_async,
+            is_exported: unit.is_exported,
+            complexity: ComplexityResponse {
+                cyclomatic: unit.complexity.cyclomatic,
+                cognitive: unit.complexity.cognitive,
+                nesting: unit.complexity.nesting,
+                lines: unit.complexity.lines,
+                score: unit.complexity.score,
+            },
+            has_tests: unit.has_tests,
+            has_documentation: unit.has_documentation,
+            created_at: unit.created_at,
+            updated_at: unit.updated_at,
         })
         .collect();
 
@@ -203,29 +172,18 @@ async fn get_code_unit_impl(
     context: &CodeUnitContext,
     unit_id: &str,
 ) -> anyhow::Result<CodeUnitResponse> {
-    let pooled = context.storage.acquire().await?;
-    let conn = pooled.connection();
+    // Call service to get code unit
+    let unit = context.service.get_code_unit(unit_id).await?;
 
-    // Query for the specific code unit
-    let query = format!("SELECT * FROM code_unit WHERE id = '{}'", unit_id);
-    let mut result = conn.query(&query).await?;
-    let units: Vec<CodeUnit> = result.take(0)?;
-
-    let unit = units
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Code unit not found"))?;
-
-    let complexity_score = unit.complexity_score();
-
+    // Convert service type to API response type
     Ok(CodeUnitResponse {
-        id: unit.id.to_string(),
-        unit_type: format!("{:?}", unit.unit_type).to_lowercase(),
+        id: unit.id,
+        unit_type: unit.unit_type,
         name: unit.name,
         qualified_name: unit.qualified_name,
         display_name: unit.display_name,
         file_path: unit.file_path,
-        language: format!("{:?}", unit.language).to_lowercase(),
+        language: unit.language,
         start_line: unit.start_line,
         end_line: unit.end_line,
         start_column: unit.start_column,
@@ -233,7 +191,7 @@ async fn get_code_unit_impl(
         signature: unit.signature,
         body: unit.body,
         docstring: unit.docstring,
-        visibility: format!("{:?}", unit.visibility).to_lowercase(),
+        visibility: unit.visibility,
         is_async: unit.is_async,
         is_exported: unit.is_exported,
         complexity: ComplexityResponse {
@@ -241,7 +199,7 @@ async fn get_code_unit_impl(
             cognitive: unit.complexity.cognitive,
             nesting: unit.complexity.nesting,
             lines: unit.complexity.lines,
-            score: complexity_score,
+            score: unit.complexity.score,
         },
         has_tests: unit.has_tests,
         has_documentation: unit.has_documentation,
@@ -285,71 +243,26 @@ async fn update_code_unit_impl(
     unit_id: &str,
     update: UpdateCodeUnitRequest,
 ) -> anyhow::Result<CodeUnitResponse> {
-    let pooled = context.storage.acquire().await?;
-    let conn = pooled.connection();
-
-    // First, get the existing unit
-    let query = format!("SELECT * FROM code_unit WHERE id = '{}'", unit_id);
-    let mut result = conn.query(&query).await?;
-    let units: Vec<CodeUnit> = result.take(0)?;
-
-    let mut unit = units
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Code unit not found"))?;
-
-    // Check version if provided
-    if let Some(expected_version) = update.expected_version {
-        if unit.version != expected_version {
-            return Err(anyhow::anyhow!(
-                "Version mismatch: expected {}, found {}",
-                expected_version,
-                unit.version
-            ));
-        }
-    }
-
-    // Update fields
-    if let Some(body) = update.body {
-        unit.body = Some(body);
-    }
-    if let Some(docstring) = update.docstring {
-        unit.docstring = Some(docstring);
-        unit.has_documentation = true;
-    }
-
-    // Increment version and update timestamp
-    unit.version += 1;
-    unit.updated_at = chrono::Utc::now();
-
-    // Clone values we need for the response before moving unit
-    let version = unit.version;
-    let updated_at = unit.updated_at;
-    let has_documentation = unit.has_documentation;
-    let complexity_score = unit.complexity_score();
-
-    // Save to database
-    let update_query = format!(
-        "UPDATE code_unit:{} SET body = $body, docstring = $docstring, version = $version, updated_at = $updated_at, has_documentation = $has_documentation",
-        unit_id
-    );
-
-    conn.query(&update_query)
-        .bind(("body", unit.body.clone()))
-        .bind(("docstring", unit.docstring.clone()))
-        .bind(("version", version))
-        .bind(("updated_at", updated_at))
-        .bind(("has_documentation", has_documentation))
+    // Call service to update code unit
+    let unit = context
+        .service
+        .update_code_unit(
+            unit_id,
+            update.body,
+            update.docstring,
+            update.expected_version,
+        )
         .await?;
 
+    // Convert service type to API response type
     Ok(CodeUnitResponse {
-        id: unit.id.to_string(),
-        unit_type: format!("{:?}", unit.unit_type).to_lowercase(),
+        id: unit.id,
+        unit_type: unit.unit_type,
         name: unit.name,
         qualified_name: unit.qualified_name,
         display_name: unit.display_name,
         file_path: unit.file_path,
-        language: format!("{:?}", unit.language).to_lowercase(),
+        language: unit.language,
         start_line: unit.start_line,
         end_line: unit.end_line,
         start_column: unit.start_column,
@@ -357,7 +270,7 @@ async fn update_code_unit_impl(
         signature: unit.signature,
         body: unit.body,
         docstring: unit.docstring,
-        visibility: format!("{:?}", unit.visibility).to_lowercase(),
+        visibility: unit.visibility,
         is_async: unit.is_async,
         is_exported: unit.is_exported,
         complexity: ComplexityResponse {
@@ -365,7 +278,7 @@ async fn update_code_unit_impl(
             cognitive: unit.complexity.cognitive,
             nesting: unit.complexity.nesting,
             lines: unit.complexity.lines,
-            score: complexity_score,
+            score: unit.complexity.score,
         },
         has_tests: unit.has_tests,
         has_documentation: unit.has_documentation,

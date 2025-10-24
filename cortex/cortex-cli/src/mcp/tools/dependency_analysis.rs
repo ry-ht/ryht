@@ -18,20 +18,29 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, warn, info};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::mcp::graph_algorithms::{
     Graph, find_shortest_path, find_all_paths, find_cycles, topological_layers,
     find_reachable, find_roots, find_leaves, find_hubs,
 };
 
+// Import the unified service layer
+use crate::services::DependencyService;
+
 #[derive(Clone)]
 pub struct DependencyAnalysisContext {
     storage: Arc<ConnectionManager>,
+    dependency_service: Arc<DependencyService>,
 }
 
 impl DependencyAnalysisContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        Self { storage }
+        let dependency_service = Arc::new(DependencyService::new(storage.clone()));
+        Self {
+            storage,
+            dependency_service,
+        }
     }
 
     /// Build graph from database dependencies

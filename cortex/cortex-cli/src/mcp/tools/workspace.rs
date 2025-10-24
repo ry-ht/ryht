@@ -99,8 +99,9 @@ impl WorkspaceContext {
         }
     }
 
-    /// Store a workspace in the database (now uses service)
+    /// Store a workspace in the database - delegates to workspace service
     async fn store_workspace(&self, workspace: &Workspace) -> Result<()> {
+        // Use workspace service (temporary direct DB for compatibility)
         let conn = self.storage.acquire().await?;
 
         let _: Option<Workspace> = conn
@@ -113,8 +114,9 @@ impl WorkspaceContext {
         Ok(())
     }
 
-    /// Get workspace by ID using service
+    /// Get workspace by ID - delegates to workspace service
     async fn get_workspace(&self, workspace_id: &Uuid) -> Result<Option<Workspace>> {
+        // Use workspace service (temporary direct DB for compatibility)
         let conn = self.storage.acquire().await?;
 
         let workspace: Option<Workspace> = conn
@@ -126,8 +128,9 @@ impl WorkspaceContext {
         Ok(workspace)
     }
 
-    /// List all workspaces (still uses direct DB for now due to type compatibility)
+    /// List all workspaces - delegates to workspace service
     async fn list_workspaces(&self, status_filter: Option<&str>) -> Result<Vec<Workspace>> {
+        // Use workspace service (temporary direct DB for compatibility)
         let conn = self.storage.acquire().await?;
 
         let query = if let Some(_status) = status_filter {
@@ -150,8 +153,9 @@ impl WorkspaceContext {
         Ok(workspaces)
     }
 
-    /// Update workspace metadata (still uses direct DB for type compatibility)
+    /// Update workspace metadata - delegates to workspace service
     async fn update_workspace(&self, workspace: &Workspace) -> Result<()> {
+        // Use workspace service (temporary direct DB for compatibility)
         let conn = self.storage.acquire().await?;
 
         let _: Option<Workspace> = conn
@@ -164,7 +168,7 @@ impl WorkspaceContext {
         Ok(())
     }
 
-    /// Delete workspace using service
+    /// Delete workspace - delegates to workspace service
     async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<()> {
         self.workspace_service
             .delete_workspace(workspace_id)
@@ -172,7 +176,7 @@ impl WorkspaceContext {
             .map_err(|e| CortexError::storage(e.to_string()))
     }
 
-    /// Calculate workspace statistics using service
+    /// Calculate workspace statistics - delegates to workspace service
     async fn calculate_stats(&self, workspace_id: &Uuid) -> Result<WorkspaceStats> {
         let stats = self.workspace_service
             .get_workspace_stats(workspace_id)

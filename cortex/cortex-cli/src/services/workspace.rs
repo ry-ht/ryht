@@ -189,6 +189,56 @@ impl WorkspaceService {
         Ok(())
     }
 
+    /// Detect project type from path
+    pub fn detect_project_type(path: &std::path::Path) -> WorkspaceType {
+        // Check for various project indicators
+        if path.join("Cargo.toml").exists() {
+            return WorkspaceType::Code;
+        }
+        if path.join("package.json").exists() {
+            return WorkspaceType::Code;
+        }
+        if path.join("pom.xml").exists() || path.join("build.gradle").exists() {
+            return WorkspaceType::Code;
+        }
+        if path.join("pyproject.toml").exists() || path.join("setup.py").exists() {
+            return WorkspaceType::Code;
+        }
+        if path.join("go.mod").exists() {
+            return WorkspaceType::Code;
+        }
+
+        // Check for documentation-heavy projects
+        if path.join("README.md").exists() && path.join("docs").is_dir() {
+            // Count source files vs markdown files
+            let mut src_count = 0;
+            let mut doc_count = 0;
+
+            if let Ok(entries) = std::fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    if let Some(ext) = entry.path().extension() {
+                        match ext.to_str() {
+                            Some("rs") | Some("js") | Some("ts") | Some("py") | Some("java") | Some("go") => {
+                                src_count += 1;
+                            }
+                            Some("md") | Some("rst") | Some("txt") => {
+                                doc_count += 1;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            if doc_count > src_count * 2 {
+                return WorkspaceType::Documentation;
+            }
+        }
+
+        // Default to mixed if we can't determine
+        WorkspaceType::Mixed
+    }
+
     /// Get workspace statistics
     pub async fn get_workspace_stats(&self, workspace_id: &Uuid) -> Result<WorkspaceStats> {
         debug!("Calculating stats for workspace: {}", workspace_id);
@@ -281,6 +331,60 @@ impl WorkspaceService {
             languages,
         })
     }
+
+    /// Sync workspace with changes
+    pub async fn sync_workspace(&self, workspace_id: &Uuid, changes: Vec<FileChange>) -> Result<SyncResult> {
+        info!("Syncing workspace {} with {} changes", workspace_id, changes.len());
+
+        let mut files_created = 0;
+        let mut files_updated = 0;
+        let mut files_deleted = 0;
+        let mut errors = Vec::new();
+
+        for change in changes {
+            let result = match change.change_type.as_str() {
+                "created" => {
+                    self.vfs.write_file(
+                        workspace_id,
+                        &cortex_vfs::VirtualPath::new(&change.path)?,
+                        change.content.as_deref().unwrap_or("").as_bytes(),
+                    ).await
+                    .map(|_| { files_created += 1; })
+                }
+                "modified" => {
+                    self.vfs.write_file(
+                        workspace_id,
+                        &cortex_vfs::VirtualPath::new(&change.path)?,
+                        change.content.as_deref().unwrap_or("").as_bytes(),
+                    ).await
+                    .map(|_| { files_updated += 1; })
+                }
+                "deleted" => {
+                    self.vfs.delete(
+                        workspace_id,
+                        &cortex_vfs::VirtualPath::new(&change.path)?,
+                        false,
+                    ).await
+                    .map(|_| { files_deleted += 1; })
+                }
+                _ => {
+                    errors.push(format!("Unknown change type: {}", change.change_type));
+                    Ok(())
+                }
+            };
+
+            if let Err(e) = result {
+                errors.push(format!("Failed to sync {}: {}", change.path, e));
+            }
+        }
+
+        Ok(SyncResult {
+            files_created,
+            files_updated,
+            files_deleted,
+            errors,
+        })
+    }
 }
 
 // =============================================================================
@@ -344,6 +448,21 @@ pub struct WorkspaceStats {
     pub total_units: usize,
     pub total_bytes: u64,
     pub languages: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FileChange {
+    pub path: String,
+    pub change_type: String, // "created", "modified", "deleted"
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncResult {
+    pub files_created: usize,
+    pub files_updated: usize,
+    pub files_deleted: usize,
+    pub errors: Vec<String>,
 }
 
 #[cfg(test)]

@@ -8,8 +8,12 @@ pub mod workspace;
 pub mod vfs;
 pub mod search;
 pub mod memory;
+pub mod code_units;
+pub mod dependencies;
 
 pub use workspace::WorkspaceService;
 pub use vfs::VfsService;
 pub use search::SearchService;
 pub use memory::MemoryService;
+pub use code_units::CodeUnitService;
+pub use dependencies::DependencyService;

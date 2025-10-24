@@ -1007,17 +1007,42 @@ impl Tool for VfsGetTreeTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed("workspace_id is required".to_string()))?;
 
-        let path = VirtualPath::new(&input.path)
-            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid path: {}", e)))?;
+        debug!("Getting tree for: {} in workspace {}", input.path, workspace_id);
 
-        debug!("Getting tree for: {} in workspace {}", path, workspace_id);
+        // Use VFS service to get tree
+        let service_tree = self.ctx.vfs_service
+            .get_tree(&workspace_id, &input.path, input.max_depth)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get tree: {}", e)))?;
 
-        // Get root node
-        let root_node = self.ctx.vfs.metadata(&workspace_id, &path).await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get root node: {}", e)))?;
+        // Convert service tree to MCP response format
+        fn convert_tree(service_tree: crate::services::vfs::DirectoryTree, include_files: bool) -> TreeNode {
+            TreeNode {
+                name: service_tree.name,
+                path: service_tree.path,
+                node_type: service_tree.node_type,
+                size_bytes: service_tree.size_bytes,
+                children: service_tree.children.map(|children| {
+                    children.into_iter()
+                        .filter(|child| include_files || child.node_type != "file")
+                        .map(|child| convert_tree(child, include_files))
+                        .collect()
+                }),
+            }
+        }
 
-        let mut total_nodes = 0;
-        let tree = self.build_tree_node(&workspace_id, &root_node, 0, input.max_depth, input.include_files, &mut total_nodes).await?;
+        fn count_nodes(tree: &TreeNode) -> usize {
+            let mut count = 1;
+            if let Some(ref children) = tree.children {
+                for child in children {
+                    count += count_nodes(child);
+                }
+            }
+            count
+        }
+
+        let tree = convert_tree(service_tree, input.include_files);
+        let total_nodes = count_nodes(&tree);
 
         let output = GetTreeOutput {
             root: tree,
@@ -1025,65 +1050,6 @@ impl Tool for VfsGetTreeTool {
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
-    }
-}
-
-impl VfsGetTreeTool {
-    fn build_tree_node<'a>(
-        &'a self,
-        workspace_id: &'a Uuid,
-        vnode: &'a cortex_vfs::VNode,
-        current_depth: usize,
-        max_depth: usize,
-        include_files: bool,
-        total_nodes: &'a mut usize,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<TreeNode, ToolError>> + Send + 'a>> {
-        Box::pin(async move {
-            *total_nodes += 1;
-
-            let mut tree_node = TreeNode {
-                name: vnode.path.file_name().unwrap_or("/").to_string(),
-                path: vnode.path.to_string(),
-                node_type: match vnode.node_type {
-                    NodeType::File => "file",
-                    NodeType::Directory => "directory",
-                    NodeType::SymLink => "symlink",
-                    NodeType::Document => "document",
-                }.to_string(),
-                size_bytes: if vnode.is_file() { Some(vnode.size_bytes as u64) } else { None },
-                children: None,
-            };
-
-            // If it's a directory and we haven't reached max depth, get children
-            if vnode.is_directory() && current_depth < max_depth {
-                let children_nodes = self.ctx.vfs.list_directory(workspace_id, &vnode.path, false).await
-                    .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list directory: {}", e)))?;
-
-                let mut children = Vec::new();
-                for child in children_nodes {
-                    // Filter files if requested
-                    if !include_files && child.is_file() {
-                        continue;
-                    }
-
-                    let child_tree = self.build_tree_node(
-                        workspace_id,
-                        &child,
-                        current_depth + 1,
-                        max_depth,
-                        include_files,
-                        total_nodes,
-                    ).await?;
-                    children.push(child_tree);
-                }
-
-                if !children.is_empty() {
-                    tree_node.children = Some(children);
-                }
-            }
-
-            Ok(tree_node)
-        })
     }
 }
 

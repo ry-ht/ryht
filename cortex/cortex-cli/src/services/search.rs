@@ -296,6 +296,33 @@ impl SearchService {
 
         Ok(references)
     }
+
+    /// Create a snippet from content with intelligent truncation
+    pub fn create_snippet(content: &str, max_len: usize) -> String {
+        if content.len() <= max_len {
+            return content.to_string();
+        }
+
+        // Try to break at a word boundary
+        let mut end = max_len;
+
+        // Look backwards for a good break point (space, newline, punctuation)
+        while end > max_len / 2 {
+            if let Some(c) = content.chars().nth(end) {
+                if c.is_whitespace() || c == ',' || c == ';' || c == '.' {
+                    break;
+                }
+            }
+            end -= 1;
+        }
+
+        // If we didn't find a good break point, just use max_len
+        if end <= max_len / 2 {
+            end = max_len;
+        }
+
+        format!("{}...", &content[..end].trim_end())
+    }
 }
 
 // =============================================================================

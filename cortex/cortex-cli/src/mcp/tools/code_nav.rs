@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 
+// Import the unified service layer
+use crate::services::CodeUnitService;
+
 // =============================================================================
 // Shared Context
 // =============================================================================
@@ -21,11 +24,16 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct CodeNavContext {
     storage: Arc<ConnectionManager>,
+    code_unit_service: Arc<CodeUnitService>,
 }
 
 impl CodeNavContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        Self { storage }
+        let code_unit_service = Arc::new(CodeUnitService::new(storage.clone()));
+        Self {
+            storage,
+            code_unit_service,
+        }
     }
 
     fn get_cognitive_manager(&self) -> CognitiveManager {

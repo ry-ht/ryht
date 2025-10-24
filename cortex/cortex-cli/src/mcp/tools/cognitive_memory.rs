@@ -96,7 +96,65 @@ pub struct EpisodeSummary {
     similarity: f32,
 }
 
-impl_memory_tool!(MemoryFindSimilarEpisodesTool, "cortex.memory.find_similar_episodes", "Find similar past development episodes", FindSimilarEpisodesInput, FindSimilarEpisodesOutput);
+// Find Similar Episodes Tool (maps to recall_episodes)
+pub struct MemoryFindSimilarEpisodesTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryFindSimilarEpisodesTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryFindSimilarEpisodesTool {
+    fn name(&self) -> &str {
+        "cortex.memory.find_similar_episodes"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Find similar past development episodes")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(FindSimilarEpisodesInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: FindSimilarEpisodesInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.find_similar_episodes executed");
+
+        // Call memory service to recall episodes
+        let episodes = self.ctx.memory_service.recall_episodes(
+            crate::services::memory::RecallEpisodesRequest {
+                query: input.query,
+                episode_type: input.outcome_filter,
+                limit: Some(input.limit as usize),
+                min_importance: Some(input.min_similarity as f64),
+            }
+        ).await
+        .map_err(|e| ToolError::ExecutionFailed(format!("Failed to recall episodes: {}", e)))?;
+
+        let episode_summaries: Vec<EpisodeSummary> = episodes.into_iter().map(|ep| {
+            EpisodeSummary {
+                episode_id: ep.id,
+                task_description: ep.task_description,
+                outcome: ep.outcome,
+                similarity: ep.importance as f32,
+            }
+        }).collect();
+
+        let output = FindSimilarEpisodesOutput {
+            total_count: episode_summaries.len() as i32,
+            episodes: episode_summaries,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]
@@ -116,7 +174,56 @@ pub struct RecordEpisodeOutput {
     timestamp: String,
 }
 
-impl_memory_tool!(MemoryRecordEpisodeTool, "cortex.memory.record_episode", "Record a development episode", RecordEpisodeInput, RecordEpisodeOutput);
+// Store Episode Tool (maps to store_episode)
+pub struct MemoryRecordEpisodeTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryRecordEpisodeTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryRecordEpisodeTool {
+    fn name(&self) -> &str {
+        "cortex.memory.record_episode"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Record a development episode")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(RecordEpisodeInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: RecordEpisodeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.record_episode executed");
+
+        // Call memory service to store episode
+        let episode = self.ctx.memory_service.store_episode(
+            crate::services::memory::StoreEpisodeRequest {
+                task_description: input.task_description,
+                episode_type: "development".to_string(),
+                outcome: input.outcome,
+                importance: Some(0.7),
+            }
+        ).await
+        .map_err(|e| ToolError::ExecutionFailed(format!("Failed to store episode: {}", e)))?;
+
+        let output = RecordEpisodeOutput {
+            episode_id: episode.id,
+            timestamp: episode.created_at.to_rfc3339(),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]
@@ -135,7 +242,54 @@ pub struct GetEpisodeOutput {
     changes: Vec<String>,
 }
 
-impl_memory_tool!(MemoryGetEpisodeTool, "cortex.memory.get_episode", "Retrieve episode details", GetEpisodeInput, GetEpisodeOutput);
+// Get Episode Tool (maps to get_episode)
+pub struct MemoryGetEpisodeTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryGetEpisodeTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryGetEpisodeTool {
+    fn name(&self) -> &str {
+        "cortex.memory.get_episode"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Retrieve episode details")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(GetEpisodeInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: GetEpisodeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.get_episode executed");
+
+        // Call memory service to get episode
+        let episode = self.ctx.memory_service.get_episode(&input.episode_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get episode: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed(format!("Episode {} not found", input.episode_id)))?;
+
+        let output = GetEpisodeOutput {
+            episode_id: episode.id,
+            task_description: episode.task_description,
+            solution_summary: episode.outcome.clone(),
+            outcome: episode.outcome,
+            changes: vec![], // Changes tracking is not yet implemented
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]
@@ -160,7 +314,65 @@ pub struct Pattern {
     description: String,
 }
 
-impl_memory_tool!(MemoryExtractPatternsTool, "cortex.memory.extract_patterns", "Extract patterns from episodes", ExtractPatternsInput, ExtractPatternsOutput);
+// Extract Patterns Tool (maps to get_patterns)
+pub struct MemoryExtractPatternsTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryExtractPatternsTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryExtractPatternsTool {
+    fn name(&self) -> &str {
+        "cortex.memory.extract_patterns"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Extract patterns from episodes")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(ExtractPatternsInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: ExtractPatternsInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.extract_patterns executed");
+
+        // Call memory service to get patterns
+        let patterns = self.ctx.memory_service.get_patterns(
+            crate::services::memory::PatternFilters {
+                pattern_type: input.pattern_types.and_then(|types| types.first().cloned()),
+                min_confidence: Some(0.5),
+                limit: Some(50),
+            }
+        ).await
+        .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get patterns: {}", e)))?;
+
+        let pattern_list: Vec<Pattern> = patterns.into_iter()
+            .filter(|p| p.occurrences >= input.min_frequency as usize)
+            .map(|p| Pattern {
+                pattern_id: p.id,
+                pattern_type: p.pattern_type,
+                frequency: p.occurrences as i32,
+                description: p.description,
+            })
+            .collect();
+
+        let output = ExtractPatternsOutput {
+            total_count: pattern_list.len() as i32,
+            patterns: pattern_list,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]
@@ -243,7 +455,50 @@ pub struct ConsolidateOutput {
     archived_count: i32,
 }
 
-impl_memory_tool!(MemoryConsolidateTool, "cortex.memory.consolidate", "Consolidate and optimize memory", ConsolidateInput, ConsolidateOutput);
+// Consolidate Tool (maps to consolidate)
+pub struct MemoryConsolidateTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryConsolidateTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryConsolidateTool {
+    fn name(&self) -> &str {
+        "cortex.memory.consolidate"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Consolidate and optimize memory")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(ConsolidateInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let _input: ConsolidateInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.consolidate executed");
+
+        // Call memory service to consolidate
+        let result = self.ctx.memory_service.consolidate()
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to consolidate: {}", e)))?;
+
+        let output = ConsolidateOutput {
+            merged_count: result.duplicates_merged as i32,
+            archived_count: result.memories_decayed as i32,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]
@@ -305,7 +560,78 @@ pub struct Recommendation {
     confidence: f32,
 }
 
-impl_memory_tool!(MemoryGetRecommendationsTool, "cortex.memory.get_recommendations", "Get recommendations based on context", GetRecommendationsInput, GetRecommendationsOutput);
+// Get Recommendations Tool (maps to get_context)
+pub struct MemoryGetRecommendationsTool {
+    ctx: CognitiveMemoryContext,
+}
+
+impl MemoryGetRecommendationsTool {
+    pub fn new(ctx: CognitiveMemoryContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for MemoryGetRecommendationsTool {
+    fn name(&self) -> &str {
+        "cortex.memory.get_recommendations"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get recommendations based on context")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(GetRecommendationsInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: GetRecommendationsInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("cortex.memory.get_recommendations executed");
+
+        // Extract description from context
+        let description = input.context.get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Get recommendations")
+            .to_string();
+
+        // Call memory service to get context
+        let context = self.ctx.memory_service.get_context(
+            crate::services::memory::GetContextRequest {
+                description,
+            }
+        ).await
+        .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get context: {}", e)))?;
+
+        // Convert episodes and patterns to recommendations
+        let mut recommendations = Vec::new();
+
+        for episode in context.relevant_episodes.iter().take(input.limit as usize / 2) {
+            recommendations.push(Recommendation {
+                recommendation_type: "episode".to_string(),
+                description: format!("Similar task: {} (outcome: {})", episode.task_description, episode.outcome),
+                confidence: episode.importance as f32,
+            });
+        }
+
+        for pattern in context.relevant_patterns.iter().take(input.limit as usize / 2) {
+            recommendations.push(Recommendation {
+                recommendation_type: "pattern".to_string(),
+                description: format!("{}: {}", pattern.pattern_name, pattern.description),
+                confidence: pattern.confidence as f32,
+            });
+        }
+
+        let output = GetRecommendationsOutput {
+            total_count: recommendations.len() as i32,
+            recommendations,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[allow(dead_code)]

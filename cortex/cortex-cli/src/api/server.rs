@@ -17,7 +17,10 @@ use super::routes::{
     workspaces::WorkspaceContext,
 };
 use super::websocket::WsManager;
-use crate::services::{MemoryService, SearchService, VfsService, WorkspaceService};
+use crate::services::{
+    CodeUnitService, DependencyService, MemoryService, SearchService, VfsService,
+    WorkspaceService,
+};
 use anyhow::{Context, Result};
 use axum::{middleware, Router};
 use cortex_core::config::GlobalConfig;
@@ -255,6 +258,10 @@ impl RestApiServer {
             self.memory.clone(),
         ));
 
+        let code_unit_service = Arc::new(CodeUnitService::new(self.storage.clone()));
+
+        let dependency_service = Arc::new(DependencyService::new(self.storage.clone()));
+
         // Create contexts for different route groups
         let workspace_context = WorkspaceContext {
             workspace_service: workspace_service.clone(),
@@ -278,12 +285,11 @@ impl RestApiServer {
         };
 
         let code_unit_context = CodeUnitContext {
-            storage: self.storage.clone(),
-            vfs: self.vfs.clone(),
+            service: code_unit_service.clone(),
         };
 
         let dependency_context = DependencyContext {
-            storage: self.storage.clone(),
+            service: dependency_service.clone(),
         };
 
         let build_context = BuildContext::new(self.storage.clone());
