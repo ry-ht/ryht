@@ -62,6 +62,10 @@ pub enum CortexError {
     #[error("Deadlock detected: {0}")]
     Deadlock(String),
 
+    /// Semantic search errors
+    #[error("Semantic error: {0}")]
+    Semantic(String),
+
     /// Generic internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -133,6 +137,11 @@ impl CortexError {
     /// Create a new deadlock error
     pub fn deadlock(msg: impl Into<String>) -> Self {
         Self::Deadlock(msg.into())
+    }
+
+    /// Create a new semantic error
+    pub fn semantic(msg: impl Into<String>) -> Self {
+        Self::Semantic(msg.into())
     }
 
     /// Create a new internal error

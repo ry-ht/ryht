@@ -83,3 +83,10 @@ impl From<qdrant_client::QdrantError> for SemanticError {
         SemanticError::Qdrant(err.to_string())
     }
 }
+
+// Implement From<SemanticError> for CortexError
+impl From<SemanticError> for cortex_core::CortexError {
+    fn from(err: SemanticError) -> Self {
+        cortex_core::CortexError::Semantic(err.to_string())
+    }
+}

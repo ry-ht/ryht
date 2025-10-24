@@ -556,7 +556,7 @@ async fn invariant_memory_complexity_metrics_positive() {
     let id = cognitive.remember_unit(&unit).await.unwrap();
 
     // Retrieve and verify via semantic system
-    let stored_opt = cognitive.semantic().get_semantic_unit(id).await.unwrap();
+    let stored_opt = cognitive.semantic().get_unit(id).await.unwrap();
     assert!(stored_opt.is_some(), "Unit not found");
 
     let stored = stored_opt.unwrap();

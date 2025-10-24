@@ -31,8 +31,11 @@ use cortex_parser::{RustParser, CodeParser};
 use cortex_semantic::prelude::*;
 use cortex_semantic::{
     SearchFilter, EntityType, SemanticConfig, VectorStoreBackend,
-    QdrantConfig, QuantizationType, SimilarityMetric, MockProvider,
+    QdrantConfig, QuantizationType, MockProvider,
 };
+use cortex_semantic::types::SimilarityMetric;
+// Use cortex_core Result for consistency
+use cortex_core::Result;
 use cortex_storage::connection_pool::{
     ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig,
 };
