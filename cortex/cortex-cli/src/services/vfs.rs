@@ -95,6 +95,68 @@ impl VfsService {
         Ok(FileDetails::from_vnode(vnode))
     }
 
+    /// Get file/directory metadata by ID
+    pub async fn get_file_by_id(&self, id: &Uuid) -> Result<FileDetails> {
+        debug!("Getting file by ID: {}", id);
+
+        let vnode = self.vfs.get_vnode_by_id(id).await?
+            .ok_or_else(|| anyhow::anyhow!("File not found with ID: {}", id))?;
+
+        Ok(FileDetails::from_vnode(vnode))
+    }
+
+    /// Read file content by ID
+    pub async fn read_file_by_id(&self, id: &Uuid) -> Result<Vec<u8>> {
+        debug!("Reading file by ID: {}", id);
+
+        let vnode = self.vfs.get_vnode_by_id(id).await?
+            .ok_or_else(|| anyhow::anyhow!("File not found with ID: {}", id))?;
+
+        // Ensure it's a file
+        if vnode.node_type != NodeType::File && vnode.node_type != NodeType::Document {
+            anyhow::bail!("ID {} is not a file", id);
+        }
+
+        // Read content using workspace_id and path
+        let content = self.vfs.read_file(&vnode.workspace_id, &vnode.path).await?;
+
+        Ok(content)
+    }
+
+    /// Update file content by ID
+    pub async fn update_file_by_id(&self, id: &Uuid, content: &[u8]) -> Result<FileDetails> {
+        info!("Updating file by ID: {}", id);
+
+        let vnode = self.vfs.get_vnode_by_id(id).await?
+            .ok_or_else(|| anyhow::anyhow!("File not found with ID: {}", id))?;
+
+        // Ensure it's a file
+        if vnode.node_type != NodeType::File && vnode.node_type != NodeType::Document {
+            anyhow::bail!("ID {} is not a file", id);
+        }
+
+        // Update content using workspace_id and path
+        self.vfs.write_file(&vnode.workspace_id, &vnode.path, content).await?;
+
+        // Get updated metadata
+        let updated_vnode = self.vfs.metadata(&vnode.workspace_id, &vnode.path).await?;
+
+        Ok(FileDetails::from_vnode(updated_vnode))
+    }
+
+    /// Delete file/directory by ID
+    pub async fn delete_by_id(&self, id: &Uuid, recursive: bool) -> Result<()> {
+        info!("Deleting by ID: {} (recursive: {})", id, recursive);
+
+        let vnode = self.vfs.get_vnode_by_id(id).await?
+            .ok_or_else(|| anyhow::anyhow!("File not found with ID: {}", id))?;
+
+        // Delete using workspace_id and path
+        self.vfs.delete(&vnode.workspace_id, &vnode.path, recursive).await?;
+
+        Ok(())
+    }
+
     /// Check if path exists
     pub async fn exists(&self, workspace_id: &Uuid, path: &str) -> Result<bool> {
         let vpath = VirtualPath::new(path)?;

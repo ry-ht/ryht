@@ -204,8 +204,7 @@ create_collection() {
     "max_segment_size": 200000,
     "memmap_threshold": 50000,
     "indexing_threshold": 20000,
-    "flush_interval_sec": 5,
-    "max_optimization_threads": 16
+    "flush_interval_sec": 5
   },
   "wal_config": {
     "wal_capacity_mb": 32,

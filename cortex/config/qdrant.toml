@@ -45,7 +45,6 @@ max_segment_size = 50000
 memmap_threshold = 10000
 indexing_threshold = 5000
 flush_interval_sec = 5
-max_optimization_threads = 4
 
 # WAL configuration
 [development.wal]
@@ -105,7 +104,6 @@ max_segment_size = 200000         # 200k vectors per segment
 memmap_threshold = 50000          # Use mmap for large segments
 indexing_threshold = 20000        # Batch 20k vectors before indexing
 flush_interval_sec = 5            # Flush WAL every 5 seconds
-max_optimization_threads = 16     # Max threads for optimization
 
 # WAL configuration
 [production.wal]
@@ -177,7 +175,6 @@ max_segment_size = 10000
 memmap_threshold = 5000
 indexing_threshold = 1000
 flush_interval_sec = 1
-max_optimization_threads = 2
 
 # WAL configuration
 [test.wal]
@@ -236,7 +233,6 @@ max_segment_size = 150000
 memmap_threshold = 40000
 indexing_threshold = 15000
 flush_interval_sec = 5
-max_optimization_threads = 12
 
 # WAL configuration
 [staging.wal]

@@ -195,16 +195,53 @@ async fn get_file(
     let file_uuid = uuid::Uuid::parse_str(&file_id)
         .map_err(|_| ApiError::BadRequest("Invalid file ID".to_string()))?;
 
-    // Note: VfsService works with paths, not IDs. We'd need to query the DB to get the path from ID.
-    // For now, this is a limitation. In a full implementation, we'd either:
-    // 1. Add a get_by_id method to VfsService
-    // 2. Keep a small amount of DB logic here for ID->path resolution
-    // Let's add a TODO and keep the minimal DB access for ID resolution
+    // Get file metadata by ID
+    let file = ctx.vfs_service
+        .get_file_by_id(&file_uuid)
+        .await
+        .map_err(|e| ApiError::NotFound(e.to_string()))?;
 
-    // TODO: Consider adding get_file_by_id to VfsService
-    return Err(ApiError::Internal(
-        "File access by ID requires path resolution - use workspace file listing instead".to_string()
-    ));
+    // Read file content if it's a file (not a directory)
+    let content = if file.node_type == "file" || file.node_type == "document" {
+        match ctx.vfs_service.read_file_by_id(&file_uuid).await {
+            Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    // Convert to API response format
+    let file_response = FileResponse {
+        id: file.id,
+        name: file.name,
+        path: file.path.clone(),
+        file_type: file.node_type,
+        size: file.size_bytes,
+        language: file.language,
+        content,
+        created_at: file.created_at,
+        updated_at: file.updated_at,
+        // Session-specific fields (not applicable for VFS routes)
+        modified_in_session: None,
+        change_type: None,
+        session_version: None,
+        base_version: None,
+        encoding: None,
+        line_count: None,
+        hash: None,
+        metadata: None,
+    };
+
+    tracing::info!(
+        file_id = %file_id,
+        path = %file.path,
+        "Retrieved file by ID"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
 /// POST /api/v1/workspaces/{workspace_id}/files - Create file
@@ -268,33 +305,83 @@ async fn create_file(
 
 /// PUT /api/v1/files/{file_id} - Update file
 async fn update_file(
-    State(_ctx): State<VfsContext>,
+    State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
-    Json(_payload): Json<UpdateFileRequest>,
+    Json(payload): Json<UpdateFileRequest>,
 ) -> ApiResult<Json<ApiResponse<FileResponse>>> {
-    let _file_uuid = uuid::Uuid::parse_str(&file_id)
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    // Parse file ID
+    let file_uuid = uuid::Uuid::parse_str(&file_id)
         .map_err(|_| ApiError::BadRequest("Invalid file ID".to_string()))?;
 
-    // TODO: File update by ID requires path resolution
-    // Consider adding workspace_id + path based update endpoint instead
-    return Err(ApiError::Internal(
-        "File update by ID requires path resolution - use workspace-based file operations instead".to_string()
-    ));
+    // Update file content by ID
+    let file = ctx.vfs_service
+        .update_file_by_id(&file_uuid, payload.content.as_bytes())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Convert to API response format
+    let file_response = FileResponse {
+        id: file.id,
+        name: file.name,
+        path: file.path.clone(),
+        file_type: file.node_type,
+        size: file.size_bytes,
+        language: file.language,
+        content: Some(payload.content),
+        created_at: file.created_at,
+        updated_at: file.updated_at,
+        // Session-specific fields (not applicable for VFS routes)
+        modified_in_session: None,
+        change_type: None,
+        session_version: None,
+        base_version: None,
+        encoding: Some(payload.encoding),
+        line_count: None,
+        hash: None,
+        metadata: None,
+    };
+
+    tracing::info!(
+        file_id = %file_id,
+        path = %file.path,
+        size = file.size_bytes,
+        "Updated file by ID"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(file_response, request_id, duration)))
 }
 
 /// DELETE /api/v1/files/{file_id} - Delete file
 async fn delete_file(
-    State(_ctx): State<VfsContext>,
+    State(ctx): State<VfsContext>,
     Path(file_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<()>>> {
-    let _file_uuid = uuid::Uuid::parse_str(&file_id)
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    // Parse file ID
+    let file_uuid = uuid::Uuid::parse_str(&file_id)
         .map_err(|_| ApiError::BadRequest("Invalid file ID".to_string()))?;
 
-    // TODO: File deletion by ID requires path resolution
-    // Consider adding workspace_id + path based delete endpoint instead
-    return Err(ApiError::Internal(
-        "File deletion by ID requires path resolution - use workspace-based file operations instead".to_string()
-    ));
+    // Delete file by ID (non-recursive by default for individual files)
+    ctx.vfs_service
+        .delete_by_id(&file_uuid, false)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::info!(
+        file_id = %file_id,
+        "Deleted file by ID"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success((), request_id, duration)))
 }
 
 /// GET /api/v1/workspaces/{workspace_id}/tree - Get directory tree

@@ -21,6 +21,7 @@ use qdrant_client::qdrant::{
     FieldType, DeletePointsBuilder, PointsIdsList, UpsertPointsBuilder,
     VectorsOutput, PointId, SearchParams,
     ProductQuantization, CompressionRatio,
+    Filter, Condition, FieldCondition, Match, match_value::MatchValue,
 };
 use qdrant_client::Qdrant;
 use serde_json::json;
@@ -496,6 +497,71 @@ impl QdrantVectorStore {
     pub fn metrics(&self) -> &QdrantMetrics {
         &self.metrics
     }
+
+    /// Convert SearchFilter to Qdrant Filter.
+    fn build_qdrant_filter(&self, filter: &SearchFilter) -> Option<Filter> {
+        let mut conditions: Vec<Condition> = Vec::new();
+
+        // Filter by entity_type
+        if let Some(entity_type) = &filter.entity_type {
+            conditions.push(Condition::Field(FieldCondition {
+                key: "entity_type".to_string(),
+                r#match: Some(Match {
+                    match_value: Some(MatchValue::Keyword(entity_type.clone())),
+                }),
+                ..Default::default()
+            }));
+        }
+
+        // Filter by workspace_id
+        if let Some(workspace_id) = &filter.workspace_id {
+            conditions.push(Condition::Field(FieldCondition {
+                key: "workspace_id".to_string(),
+                r#match: Some(Match {
+                    match_value: Some(MatchValue::Keyword(workspace_id.clone())),
+                }),
+                ..Default::default()
+            }));
+        }
+
+        // Filter by metadata fields
+        for (key, value) in &filter.metadata_filters {
+            // Convert serde_json::Value to appropriate MatchValue
+            let match_value = match value {
+                serde_json::Value::String(s) => Some(MatchValue::Keyword(s.clone())),
+                serde_json::Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        Some(MatchValue::Integer(i))
+                    } else {
+                        // Skip floating point values for exact matching
+                        continue;
+                    }
+                }
+                serde_json::Value::Bool(b) => Some(MatchValue::Boolean(*b)),
+                _ => continue, // Skip arrays, objects, and null
+            };
+
+            if let Some(mv) = match_value {
+                conditions.push(Condition::Field(FieldCondition {
+                    key: key.clone(),
+                    r#match: Some(Match {
+                        match_value: Some(mv),
+                    }),
+                    ..Default::default()
+                }));
+            }
+        }
+
+        // Only create filter if we have conditions
+        if conditions.is_empty() {
+            None
+        } else {
+            Some(Filter {
+                must: conditions,
+                ..Default::default()
+            })
+        }
+    }
 }
 
 #[async_trait]
@@ -637,7 +703,7 @@ impl VectorIndex for QdrantVectorStore {
         &self,
         query: &[f32],
         k: usize,
-        _filter: Option<SearchFilter>,
+        filter: Option<SearchFilter>,
         params: Option<SearchParams>,
     ) -> Result<Vec<SearchResult>> {
         if query.len() != self.dimension {
@@ -647,7 +713,7 @@ impl VectorIndex for QdrantVectorStore {
             });
         }
 
-        debug!("Searching for {} nearest neighbors", k);
+        debug!("Searching for {} nearest neighbors with filter: {:?}", k, filter);
 
         let start = std::time::Instant::now();
 
@@ -659,6 +725,13 @@ impl VectorIndex for QdrantVectorStore {
         let mut search_builder = SearchPointsBuilder::new(&self.collection_name, query.to_vec(), k as u64)
             .with_payload(true)
             .with_vectors(true);
+
+        // Add filter if provided
+        if let Some(search_filter) = filter {
+            if let Some(qdrant_filter) = self.build_qdrant_filter(&search_filter) {
+                search_builder = search_builder.filter(qdrant_filter);
+            }
+        }
 
         // Add search params if provided
         if let Some(params) = params {
@@ -985,7 +1058,7 @@ impl VectorIndex for MockVectorStore {
         &self,
         query: &[f32],
         k: usize,
-        _filter: Option<SearchFilter>,
+        filter: Option<SearchFilter>,
         _params: Option<SearchParams>,
     ) -> Result<Vec<SearchResult>> {
         if query.len() != self.dimension {
@@ -999,17 +1072,70 @@ impl VectorIndex for MockVectorStore {
         let mut results: Vec<_> = self
             .vectors
             .iter()
-            .map(|entry| {
+            .filter_map(|entry| {
                 let doc_id = entry.key().clone();
                 let (vector, payload) = entry.value();
+
+                // Apply filter if provided
+                if let Some(ref search_filter) = filter {
+                    // Filter by entity_type
+                    if let Some(entity_type) = &search_filter.entity_type {
+                        if let Some(payload_entity_type) = payload.get("entity_type") {
+                            if let Some(payload_str) = payload_entity_type.as_str() {
+                                if payload_str != entity_type {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    // Filter by workspace_id
+                    if let Some(workspace_id) = &search_filter.workspace_id {
+                        if let Some(payload_workspace_id) = payload.get("workspace_id") {
+                            if let Some(payload_str) = payload_workspace_id.as_str() {
+                                if payload_str != workspace_id {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    // Filter by metadata
+                    for (key, filter_value) in &search_filter.metadata_filters {
+                        if let Some(payload_value) = payload.get(key) {
+                            // Compare values based on type
+                            let matches = match (filter_value, payload_value) {
+                                (serde_json::Value::String(fv), serde_json::Value::String(pv)) => fv == pv,
+                                (serde_json::Value::Number(fv), serde_json::Value::Number(pv)) => fv == pv,
+                                (serde_json::Value::Bool(fv), serde_json::Value::Bool(pv)) => fv == pv,
+                                _ => false,
+                            };
+
+                            if !matches {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+                }
+
                 let score = self.similarity_metric.calculate(query, vector);
 
-                SearchResult {
+                Some(SearchResult {
                     doc_id,
                     score,
                     vector: Some(vector.clone()),
                     payload: payload.clone(),
-                }
+                })
             })
             .collect();
 
@@ -1345,5 +1471,226 @@ mod tests {
         assert_eq!(stats.metric, SimilarityMetric::Cosine);
         assert_eq!(stats.indexed_vectors, 2);
         assert_eq!(stats.collection_status, "Green");
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_entity_type_filter() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors with different entity types
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+        let vec3 = create_test_vector(128, 3);
+
+        let mut payload1 = HashMap::new();
+        payload1.insert("entity_type".to_string(), json!("document"));
+
+        let mut payload2 = HashMap::new();
+        payload2.insert("entity_type".to_string(), json!("code"));
+
+        let mut payload3 = HashMap::new();
+        payload3.insert("entity_type".to_string(), json!("document"));
+
+        store.insert_with_payload("doc1".to_string(), vec1.clone(), payload1).await.unwrap();
+        store.insert_with_payload("doc2".to_string(), vec2.clone(), payload2).await.unwrap();
+        store.insert_with_payload("doc3".to_string(), vec3.clone(), payload3).await.unwrap();
+
+        // Search with entity_type filter
+        let filter = SearchFilter {
+            entity_type: Some("document".to_string()),
+            ..Default::default()
+        };
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should only return documents, not code
+        assert_eq!(results.len(), 2);
+        for result in &results {
+            assert_eq!(result.payload.get("entity_type").unwrap(), "document");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_workspace_id_filter() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors with different workspace IDs
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+        let vec3 = create_test_vector(128, 3);
+
+        let mut payload1 = HashMap::new();
+        payload1.insert("workspace_id".to_string(), json!("workspace1"));
+
+        let mut payload2 = HashMap::new();
+        payload2.insert("workspace_id".to_string(), json!("workspace2"));
+
+        let mut payload3 = HashMap::new();
+        payload3.insert("workspace_id".to_string(), json!("workspace1"));
+
+        store.insert_with_payload("doc1".to_string(), vec1.clone(), payload1).await.unwrap();
+        store.insert_with_payload("doc2".to_string(), vec2.clone(), payload2).await.unwrap();
+        store.insert_with_payload("doc3".to_string(), vec3.clone(), payload3).await.unwrap();
+
+        // Search with workspace_id filter
+        let filter = SearchFilter {
+            workspace_id: Some("workspace1".to_string()),
+            ..Default::default()
+        };
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should only return workspace1 documents
+        assert_eq!(results.len(), 2);
+        for result in &results {
+            assert_eq!(result.payload.get("workspace_id").unwrap(), "workspace1");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_metadata_filter() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors with different metadata
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+        let vec3 = create_test_vector(128, 3);
+
+        let mut payload1 = HashMap::new();
+        payload1.insert("language".to_string(), json!("rust"));
+        payload1.insert("version".to_string(), json!(1));
+
+        let mut payload2 = HashMap::new();
+        payload2.insert("language".to_string(), json!("python"));
+        payload2.insert("version".to_string(), json!(2));
+
+        let mut payload3 = HashMap::new();
+        payload3.insert("language".to_string(), json!("rust"));
+        payload3.insert("version".to_string(), json!(2));
+
+        store.insert_with_payload("doc1".to_string(), vec1.clone(), payload1).await.unwrap();
+        store.insert_with_payload("doc2".to_string(), vec2.clone(), payload2).await.unwrap();
+        store.insert_with_payload("doc3".to_string(), vec3.clone(), payload3).await.unwrap();
+
+        // Search with metadata filter (language=rust)
+        let mut metadata_filters = HashMap::new();
+        metadata_filters.insert("language".to_string(), json!("rust"));
+
+        let filter = SearchFilter {
+            metadata_filters,
+            ..Default::default()
+        };
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should only return rust documents
+        assert_eq!(results.len(), 2);
+        for result in &results {
+            assert_eq!(result.payload.get("language").unwrap(), "rust");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_combined_filters() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors with various attributes
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+        let vec3 = create_test_vector(128, 3);
+        let vec4 = create_test_vector(128, 4);
+
+        let mut payload1 = HashMap::new();
+        payload1.insert("entity_type".to_string(), json!("code"));
+        payload1.insert("workspace_id".to_string(), json!("workspace1"));
+        payload1.insert("language".to_string(), json!("rust"));
+
+        let mut payload2 = HashMap::new();
+        payload2.insert("entity_type".to_string(), json!("code"));
+        payload2.insert("workspace_id".to_string(), json!("workspace2"));
+        payload2.insert("language".to_string(), json!("rust"));
+
+        let mut payload3 = HashMap::new();
+        payload3.insert("entity_type".to_string(), json!("document"));
+        payload3.insert("workspace_id".to_string(), json!("workspace1"));
+        payload3.insert("language".to_string(), json!("rust"));
+
+        let mut payload4 = HashMap::new();
+        payload4.insert("entity_type".to_string(), json!("code"));
+        payload4.insert("workspace_id".to_string(), json!("workspace1"));
+        payload4.insert("language".to_string(), json!("python"));
+
+        store.insert_with_payload("doc1".to_string(), vec1.clone(), payload1).await.unwrap();
+        store.insert_with_payload("doc2".to_string(), vec2.clone(), payload2).await.unwrap();
+        store.insert_with_payload("doc3".to_string(), vec3.clone(), payload3).await.unwrap();
+        store.insert_with_payload("doc4".to_string(), vec4.clone(), payload4).await.unwrap();
+
+        // Search with combined filters (entity_type=code, workspace_id=workspace1, language=rust)
+        let mut metadata_filters = HashMap::new();
+        metadata_filters.insert("language".to_string(), json!("rust"));
+
+        let filter = SearchFilter {
+            entity_type: Some("code".to_string()),
+            workspace_id: Some("workspace1".to_string()),
+            metadata_filters,
+        };
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should only return doc1 (code + workspace1 + rust)
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].doc_id, "doc1");
+        assert_eq!(results[0].payload.get("entity_type").unwrap(), "code");
+        assert_eq!(results[0].payload.get("workspace_id").unwrap(), "workspace1");
+        assert_eq!(results[0].payload.get("language").unwrap(), "rust");
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_no_matching_filters() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+
+        let mut payload1 = HashMap::new();
+        payload1.insert("entity_type".to_string(), json!("document"));
+
+        let mut payload2 = HashMap::new();
+        payload2.insert("entity_type".to_string(), json!("code"));
+
+        store.insert_with_payload("doc1".to_string(), vec1.clone(), payload1).await.unwrap();
+        store.insert_with_payload("doc2".to_string(), vec2.clone(), payload2).await.unwrap();
+
+        // Search with non-matching filter
+        let filter = SearchFilter {
+            entity_type: Some("episode".to_string()),
+            ..Default::default()
+        };
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should return no results
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_mock_search_with_empty_filter() {
+        let store = MockVectorStore::new(128, SimilarityMetric::Cosine);
+
+        // Insert vectors
+        let vec1 = create_test_vector(128, 1);
+        let vec2 = create_test_vector(128, 2);
+
+        store.insert("doc1".to_string(), vec1.clone()).await.unwrap();
+        store.insert("doc2".to_string(), vec2.clone()).await.unwrap();
+
+        // Search with empty filter (should return all results)
+        let filter = SearchFilter::default();
+
+        let results = store.search_with_options(&vec1, 10, Some(filter), None).await.unwrap();
+
+        // Should return all documents
+        assert_eq!(results.len(), 2);
     }
 }

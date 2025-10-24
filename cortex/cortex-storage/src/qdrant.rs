@@ -134,8 +134,6 @@ pub struct OptimizerConfig {
     pub indexing_threshold: u64,
     /// Flush interval
     pub flush_interval_sec: u64,
-    /// Maximum optimization threads
-    pub max_optimization_threads: u64,
 }
 
 impl Default for OptimizerConfig {
@@ -148,7 +146,6 @@ impl Default for OptimizerConfig {
             memmap_threshold: 50000,
             indexing_threshold: 20000,
             flush_interval_sec: 5,
-            max_optimization_threads: 16,
         }
     }
 }
@@ -245,7 +242,6 @@ impl QdrantClient {
                         memmap_threshold: Some(config.optimizer_config.memmap_threshold),
                         indexing_threshold: Some(config.optimizer_config.indexing_threshold),
                         flush_interval_sec: Some(config.optimizer_config.flush_interval_sec),
-                        deprecated_max_optimization_threads: Some(config.optimizer_config.max_optimization_threads),
                         ..Default::default()
                     })
             )
@@ -347,6 +343,202 @@ impl QdrantClient {
             .into_iter()
             .map(|s| s.name)
             .collect())
+    }
+
+    /// Restore from snapshot file
+    ///
+    /// This uploads a snapshot file to Qdrant and recovers the collection from it.
+    /// The snapshot data will overwrite any existing collection data.
+    /// If the collection doesn't exist, it will be created from the snapshot.
+    ///
+    /// # Arguments
+    /// * `snapshot_path` - Path to the snapshot file to restore
+    /// * `collection_name` - Optional target collection name. If None, uses the collection name from the snapshot
+    /// * `priority` - Whether to prioritize snapshot data over existing replica data (default: true)
+    ///
+    /// # Returns
+    /// * `Ok(true)` - Restoration successful
+    /// * `Err` - Restoration failed
+    pub async fn restore_snapshot(
+        &self,
+        snapshot_path: &std::path::Path,
+        collection_name: Option<&str>,
+        priority: Option<bool>,
+    ) -> Result<bool> {
+        use std::fs::File;
+        use std::io::Read;
+
+        info!("Restoring snapshot from: {:?}", snapshot_path);
+
+        // Validate snapshot file exists and is readable
+        if !snapshot_path.exists() {
+            anyhow::bail!("Snapshot file does not exist: {:?}", snapshot_path);
+        }
+
+        if !snapshot_path.is_file() {
+            anyhow::bail!("Snapshot path is not a file: {:?}", snapshot_path);
+        }
+
+        // Read the snapshot file
+        let mut file = File::open(snapshot_path)
+            .context(format!("Failed to open snapshot file: {:?}", snapshot_path))?;
+
+        let mut snapshot_data = Vec::new();
+        file.read_to_end(&mut snapshot_data)
+            .context(format!("Failed to read snapshot file: {:?}", snapshot_path))?;
+
+        if snapshot_data.is_empty() {
+            anyhow::bail!("Snapshot file is empty: {:?}", snapshot_path);
+        }
+
+        info!("Snapshot file size: {} bytes", snapshot_data.len());
+
+        // Extract collection name from snapshot filename if not provided
+        // Snapshot filenames typically follow pattern: {collection_name}-{timestamp}.snapshot
+        let target_collection = if let Some(name) = collection_name {
+            name.to_string()
+        } else {
+            // Try to extract collection name from filename
+            snapshot_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| s.split('-').next())
+                .map(|s| s.to_string())
+                .ok_or_else(|| anyhow::anyhow!("Could not extract collection name from snapshot filename. Please provide collection_name parameter."))?
+        };
+
+        info!("Restoring to collection: {}", target_collection);
+
+        // Build the HTTP endpoint URL
+        // Use the HTTP port from config, not the gRPC port
+        let base_url = format!(
+            "{}://{}:{}",
+            if self.config.use_https { "https" } else { "http" },
+            self.config.host,
+            self.config.port
+        );
+
+        // Set priority parameter (default to "snapshot" which means snapshot data takes precedence)
+        let priority_param = if priority.unwrap_or(true) {
+            "snapshot"
+        } else {
+            "replica"
+        };
+
+        let upload_url = format!(
+            "{}/collections/{}/snapshots/upload?priority={}",
+            base_url, target_collection, priority_param
+        );
+
+        info!("Uploading snapshot to: {}", upload_url);
+
+        // Create multipart form with the snapshot file
+        let snapshot_filename = snapshot_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("snapshot.snapshot");
+
+        let part = reqwest::multipart::Part::bytes(snapshot_data)
+            .file_name(snapshot_filename.to_string())
+            .mime_str("application/octet-stream")
+            .context("Failed to create multipart form part")?;
+
+        let form = reqwest::multipart::Form::new().part("snapshot", part);
+
+        // Build HTTP client
+        let mut client_builder = reqwest::Client::builder()
+            .timeout(self.config.request_timeout);
+
+        // Add API key if configured
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(ref api_key) = self.config.api_key {
+            headers.insert(
+                "api-key",
+                reqwest::header::HeaderValue::from_str(api_key)
+                    .context("Invalid API key format")?,
+            );
+        }
+
+        let http_client = client_builder
+            .default_headers(headers)
+            .build()
+            .context("Failed to build HTTP client")?;
+
+        // Upload the snapshot
+        info!("Uploading snapshot file...");
+        let response = http_client
+            .post(&upload_url)
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to upload snapshot")?;
+
+        let status = response.status();
+        let response_text = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            anyhow::bail!(
+                "Snapshot upload failed with status {}: {}",
+                status,
+                response_text
+            );
+        }
+
+        info!("Snapshot uploaded successfully");
+
+        // Parse response to check result
+        if let Ok(result) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            debug!("Upload response: {:?}", result);
+
+            // Check if result indicates success
+            if let Some(result_obj) = result.get("result") {
+                if let Some(success) = result_obj.as_bool() {
+                    if !success {
+                        anyhow::bail!("Snapshot restore reported failure in response");
+                    }
+                }
+            }
+        }
+
+        // Verify the collection was created/updated
+        info!("Verifying collection after restore...");
+        let collection_info = self.collection_info(&target_collection).await
+            .context("Failed to verify collection after restore")?;
+
+        info!(
+            "Collection '{}' restored successfully. Points: {}, Vectors: {}",
+            target_collection,
+            collection_info.points_count.unwrap_or(0),
+            collection_info.vectors_count.unwrap_or(0)
+        );
+
+        Ok(true)
+    }
+
+    /// Scroll through points in a collection (for pagination)
+    pub async fn scroll_points(
+        &self,
+        collection_name: &str,
+        limit: u32,
+        offset: Option<qdrant_client::qdrant::PointId>,
+        with_payload: bool,
+        with_vectors: bool,
+    ) -> Result<qdrant_client::qdrant::ScrollResponse> {
+        use qdrant_client::qdrant::ScrollPointsBuilder;
+
+        let mut scroll_builder = ScrollPointsBuilder::new(collection_name)
+            .limit(limit)
+            .with_payload(with_payload)
+            .with_vectors(with_vectors);
+
+        if let Some(offset_id) = offset {
+            scroll_builder = scroll_builder.offset(offset_id);
+        }
+
+        self.client
+            .scroll(scroll_builder)
+            .await
+            .context("Failed to scroll points")
     }
 }
 

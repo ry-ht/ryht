@@ -259,6 +259,38 @@ impl VirtualFileSystem {
             .ok_or_else(|| CortexError::not_found("Path", path.to_string()))
     }
 
+    /// Get a vnode by its ID.
+    pub async fn get_vnode_by_id(&self, id: &Uuid) -> Result<Option<VNode>> {
+        // Check vnode cache first
+        if let Some(vnode) = self.vnode_cache.lock().get(id).cloned() {
+            return Ok(Some(vnode));
+        }
+
+        // Query database
+        let query = "SELECT * FROM vnode WHERE id = $id AND status != 'deleted' LIMIT 1";
+
+        let conn = self.storage.acquire().await?;
+        let mut response = conn.connection()
+            .query(query)
+            .bind(("id", id.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let result: Option<VNode> = response.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        if let Some(ref vnode) = result {
+            // Cache the result
+            self.vnode_cache.lock().put(vnode.id, vnode.clone());
+
+            // Also cache the path mapping for future lookups
+            let cache_key = (vnode.workspace_id, vnode.path.to_string());
+            self.path_cache.lock().put(cache_key, vnode.id);
+        }
+
+        Ok(result)
+    }
+
     // ============================================================================
     // VNode Management
     // ============================================================================
