@@ -18,16 +18,20 @@
 //! - cortex.code.override_method
 
 use async_trait::async_trait;
+use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter as CoreParameter, Complexity};
+use cortex_memory::CognitiveManager;
 use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
 use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
-use tracing::debug;
+use tracing::{debug, warn};
 use uuid::Uuid;
 use anyhow::Result as AnyhowResult;
 
@@ -255,6 +259,11 @@ impl CodeManipulationContext {
         }
 
         unit
+    }
+
+    /// Get CognitiveManager for semantic operations
+    fn get_cognitive_manager(&self) -> CognitiveManager {
+        CognitiveManager::new(self.storage.clone())
     }
 }
 
@@ -1279,6 +1288,282 @@ impl CodeChangeSignatureTool {
     pub fn new(ctx: CodeManipulationContext) -> Self {
         Self { ctx }
     }
+
+    /// Update all call sites of the function with the new signature
+    async fn update_call_sites(
+        &self,
+        workspace_id: &Uuid,
+        unit: &CodeUnit,
+        old_signature: &str,
+        new_signature: &str,
+        language: ParserLanguage,
+    ) -> AnyhowResult<i32> {
+        debug!("Updating call sites for function '{}'", unit.name);
+
+        // Parse old and new signatures to understand parameter changes
+        let old_params = self.extract_parameters_from_signature(old_signature);
+        let new_params = self.extract_parameters_from_signature(new_signature);
+
+        // Use semantic memory to find all references to this function
+        let manager = self.ctx.get_cognitive_manager();
+        let semantic = manager.semantic();
+
+        // Convert unit_id string to CortexId
+        let unit_id = CortexId::from_str(&unit.id.to_string())
+            .map_err(|e| anyhow::anyhow!("Invalid unit_id: {}", e))?;
+
+        // Find all units that reference this function
+        let reference_ids = semantic.find_references(unit_id).await?;
+
+        if reference_ids.is_empty() {
+            debug!("No references found for function '{}'", unit.name);
+            return Ok(0);
+        }
+
+        debug!("Found {} potential calling units", reference_ids.len());
+
+        // Group references by file to batch updates
+        let mut files_to_update: HashMap<String, Vec<CodeUnit>> = HashMap::new();
+
+        for ref_id in reference_ids {
+            if let Some(ref_unit) = semantic.get_unit(ref_id).await? {
+                files_to_update
+                    .entry(ref_unit.file_path.clone())
+                    .or_insert_with(Vec::new)
+                    .push(ref_unit);
+            }
+        }
+
+        debug!("Need to update {} files", files_to_update.len());
+
+        let mut total_updated = 0;
+
+        // Process each file that contains references
+        for (file_path, _caller_units) in files_to_update.iter() {
+            match self.update_calls_in_file(
+                workspace_id,
+                file_path,
+                &unit.name,
+                &old_params,
+                &new_params,
+                language,
+            ).await {
+                Ok(count) => {
+                    debug!("Updated {} call sites in {}", count, file_path);
+                    total_updated += count;
+                }
+                Err(e) => {
+                    warn!("Failed to update call sites in {}: {}", file_path, e);
+                    // Continue with other files
+                }
+            }
+        }
+
+        Ok(total_updated)
+    }
+
+    /// Update call sites within a single file
+    async fn update_calls_in_file(
+        &self,
+        workspace_id: &Uuid,
+        file_path: &str,
+        function_name: &str,
+        old_params: &[String],
+        new_params: &[String],
+        language: ParserLanguage,
+    ) -> AnyhowResult<i32> {
+        // Parse the file
+        let (_, content, _) = self.ctx.parse_file(workspace_id, file_path).await?;
+
+        // Create AST editor
+        let tree_sitter_lang = match language {
+            ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        };
+
+        let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)?;
+
+        // Find all call expressions
+        let call_query = "(call_expression) @call";
+        let calls = editor.query(call_query)?;
+
+        let mut edits_to_apply = Vec::new();
+        let mut sites_updated = 0;
+
+        // Track which call sites we've already processed to avoid duplicates
+        let mut processed_ranges = HashSet::new();
+
+        for call_node in calls {
+            let call_text = editor.node_text(&call_node);
+
+            // Check if this is a call to our function
+            if !call_text.contains(function_name) {
+                continue;
+            }
+
+            // Get the function being called to verify it's the right one
+            if let Some(function_node) = call_node.child_by_field_name("function") {
+                let func_name = editor.node_text(&function_node);
+
+                // Match function name (handle qualified names like module::function)
+                if !func_name.ends_with(function_name) && func_name != function_name {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            // Avoid processing the same call site twice
+            let range_key = format!("{}:{}", call_node.start_byte(), call_node.end_byte());
+            if processed_ranges.contains(&range_key) {
+                continue;
+            }
+            processed_ranges.insert(range_key);
+
+            // Extract current arguments
+            let current_args = self.extract_call_arguments(&call_node, editor.get_source());
+
+            // Build new argument list based on parameter mapping
+            let new_args = self.map_arguments(old_params, new_params, &current_args);
+
+            // If arguments changed, create an edit
+            if new_args != current_args {
+                if let Some(args_node) = call_node.child_by_field_name("arguments") {
+                    // Build the new arguments string
+                    let new_args_str = if new_args.is_empty() {
+                        "()".to_string()
+                    } else {
+                        format!("({})", new_args.join(", "))
+                    };
+
+                    let range = cortex_parser::Range::from_node(&args_node);
+                    edits_to_apply.push(cortex_parser::Edit::replace(range, new_args_str));
+                    sites_updated += 1;
+                }
+            }
+        }
+
+        // Apply all edits if any were made
+        if !edits_to_apply.is_empty() {
+            editor.edits.extend(edits_to_apply);
+            editor.apply_edits()?;
+
+            // Save the modified file
+            self.ctx.save_file(workspace_id, file_path, editor.get_source()).await?;
+        }
+
+        Ok(sites_updated)
+    }
+
+    /// Extract parameters from a function signature
+    fn extract_parameters_from_signature(&self, signature: &str) -> Vec<String> {
+        let mut params = Vec::new();
+
+        // Find parameter list between parentheses
+        if let Some(start) = signature.find('(') {
+            if let Some(end) = signature[start..].find(')') {
+                let params_str = &signature[start + 1..start + end];
+
+                if !params_str.trim().is_empty() {
+                    // Split by comma, but be aware of nested generics/types
+                    let mut depth = 0;
+                    let mut current_param = String::new();
+
+                    for ch in params_str.chars() {
+                        match ch {
+                            '<' | '(' | '[' => {
+                                depth += 1;
+                                current_param.push(ch);
+                            }
+                            '>' | ')' | ']' => {
+                                depth -= 1;
+                                current_param.push(ch);
+                            }
+                            ',' if depth == 0 => {
+                                if !current_param.trim().is_empty() {
+                                    // Extract just the parameter name (before colon for Rust, or the whole thing for JS/TS)
+                                    let param_name = self.extract_param_name(&current_param);
+                                    params.push(param_name);
+                                }
+                                current_param.clear();
+                            }
+                            _ => {
+                                current_param.push(ch);
+                            }
+                        }
+                    }
+
+                    // Don't forget the last parameter
+                    if !current_param.trim().is_empty() {
+                        let param_name = self.extract_param_name(&current_param);
+                        params.push(param_name);
+                    }
+                }
+            }
+        }
+
+        params
+    }
+
+    /// Extract parameter name from parameter declaration
+    fn extract_param_name(&self, param_decl: &str) -> String {
+        let trimmed = param_decl.trim();
+
+        // For Rust: "name: Type" -> "name"
+        if let Some(colon_pos) = trimmed.find(':') {
+            trimmed[..colon_pos].trim().to_string()
+        } else {
+            // For JavaScript/TypeScript without type annotations
+            trimmed.to_string()
+        }
+    }
+
+    /// Map old arguments to new argument positions based on parameter changes
+    fn map_arguments(&self, old_params: &[String], new_params: &[String], current_args: &[String]) -> Vec<String> {
+        let mut new_args = Vec::new();
+
+        // Create a mapping of parameter names to their values
+        let mut arg_map: HashMap<String, String> = HashMap::new();
+        for (i, param) in old_params.iter().enumerate() {
+            if i < current_args.len() {
+                arg_map.insert(param.clone(), current_args[i].clone());
+            }
+        }
+
+        // Build new argument list based on new parameter order
+        for new_param in new_params {
+            if let Some(value) = arg_map.get(new_param) {
+                // Parameter exists in old signature, use its value
+                new_args.push(value.clone());
+            } else {
+                // New parameter - use a default value
+                // For now, use a placeholder that will cause a compilation error,
+                // alerting the user to fix it manually
+                new_args.push("/* TODO: provide value */".to_string());
+            }
+        }
+
+        new_args
+    }
+
+    /// Extract arguments from a call expression node
+    fn extract_call_arguments(&self, call_node: &tree_sitter::Node, source: &str) -> Vec<String> {
+        let mut args = Vec::new();
+
+        // Find the arguments node
+        if let Some(args_node) = call_node.child_by_field_name("arguments") {
+            let mut cursor = args_node.walk();
+            for child in args_node.children(&mut cursor) {
+                // Skip delimiters
+                if child.kind() != "(" && child.kind() != ")" && child.kind() != "," {
+                    args.push(source[child.byte_range()].trim().to_string());
+                }
+            }
+        }
+
+        args
+    }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -1377,9 +1662,16 @@ impl Tool for CodeChangeSignatureTool {
         // Update callers if requested
         let mut callers_updated = 0;
         if input.update_callers {
-            // TODO: Find and update all call sites
-            // This would require dependency graph analysis
-            callers_updated = 0;
+            callers_updated = self.update_call_sites(
+                &workspace_id,
+                &unit,
+                &old_signature,
+                &input.new_signature,
+                language,
+            ).await.unwrap_or_else(|e| {
+                warn!("Failed to update some call sites: {}", e);
+                0
+            });
         }
 
         // Update code unit metadata

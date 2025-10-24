@@ -8,7 +8,7 @@ use cortex_memory::CognitiveManager;
 use cortex_storage::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Memory service for cognitive memory operations
 #[derive(Clone)]
@@ -33,6 +33,23 @@ impl MemoryService {
         // In a real implementation, this would use the cognitive manager
         // to store the episode with proper encoding and relationships
         let episode_id = uuid::Uuid::new_v4().to_string();
+        let created_at = Utc::now();
+
+        // Store file changes if provided explicitly
+        if let Some(changes) = request.file_changes {
+            self.store_episode_changes(&episode_id, changes).await?;
+        }
+        // Or capture from session if session_id is provided
+        else if let Some(ref session_id) = request.session_id {
+            match self.capture_session_changes(&episode_id, session_id).await {
+                Ok(changes) => {
+                    info!("Captured {} file changes from session {}", changes.len(), session_id);
+                }
+                Err(e) => {
+                    warn!("Failed to capture session changes: {}. Episode will be stored without change tracking.", e);
+                }
+            }
+        }
 
         Ok(EpisodeDetails {
             id: episode_id,
@@ -40,8 +57,144 @@ impl MemoryService {
             episode_type: request.episode_type,
             outcome: request.outcome,
             importance: request.importance.unwrap_or(0.5),
-            created_at: Utc::now(),
+            created_at,
         })
+    }
+
+    /// Store file changes for an episode
+    async fn store_episode_changes(
+        &self,
+        episode_id: &str,
+        changes: Vec<FileChangeRecord>,
+    ) -> Result<()> {
+        debug!("Storing {} file changes for episode {}", changes.len(), episode_id);
+
+        let conn = self.storage.acquire().await?;
+
+        for change in changes {
+            let change_record = serde_json::json!({
+                "episode_id": episode_id,
+                "file_path": change.file_path,
+                "change_type": change.change_type,
+                "size_bytes": change.size_bytes,
+                "lines_added": change.lines_added,
+                "lines_removed": change.lines_removed,
+                "content_hash_before": change.content_hash_before,
+                "content_hash_after": change.content_hash_after,
+                "created_at": Utc::now(),
+            });
+
+            conn.connection()
+                .query("CREATE episode_changes CONTENT $change")
+                .bind(("change", change_record))
+                .await?;
+        }
+
+        debug!("Successfully stored file changes for episode {}", episode_id);
+        Ok(())
+    }
+
+    /// Get file changes for an episode
+    pub async fn get_episode_changes(&self, episode_id: &str) -> Result<Vec<FileChangeRecord>> {
+        debug!("Retrieving file changes for episode {}", episode_id);
+
+        let conn = self.storage.acquire().await?;
+
+        let query = "SELECT
+            file_path,
+            change_type,
+            size_bytes,
+            lines_added,
+            lines_removed,
+            content_hash_before,
+            content_hash_after
+            FROM episode_changes
+            WHERE episode_id = $episode_id
+            ORDER BY created_at ASC";
+
+        let mut response = conn
+            .connection()
+            .query(query)
+            .bind(("episode_id", episode_id.to_string()))
+            .await?;
+
+        let changes_raw: Vec<serde_json::Value> = response.take(0)?;
+
+        let changes: Vec<FileChangeRecord> = changes_raw
+            .into_iter()
+            .filter_map(|change| {
+                Some(FileChangeRecord {
+                    file_path: change.get("file_path")?.as_str()?.to_string(),
+                    change_type: change.get("change_type")?.as_str()?.to_string(),
+                    size_bytes: change.get("size_bytes").and_then(|v| v.as_i64()).map(|v| v as i32),
+                    lines_added: change.get("lines_added").and_then(|v| v.as_i64()).map(|v| v as i32),
+                    lines_removed: change.get("lines_removed").and_then(|v| v.as_i64()).map(|v| v as i32),
+                    content_hash_before: change.get("content_hash_before").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    content_hash_after: change.get("content_hash_after").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                })
+            })
+            .collect();
+
+        debug!("Retrieved {} file changes for episode {}", changes.len(), episode_id);
+        Ok(changes)
+    }
+
+    /// Capture file changes from a session and store them for an episode
+    pub async fn capture_session_changes(
+        &self,
+        episode_id: &str,
+        session_id: &str,
+    ) -> Result<Vec<FileChangeRecord>> {
+        debug!("Capturing file changes from session {} for episode {}", session_id, episode_id);
+
+        let conn = self.storage.acquire().await?;
+
+        // Query session file modifications
+        let query = "SELECT
+            file_path,
+            change_type,
+            size_bytes,
+            content_hash,
+            version,
+            base_version
+            FROM session_file_modifications
+            WHERE session_id = $session_id
+            ORDER BY created_at ASC";
+
+        let mut response = conn
+            .connection()
+            .query(query)
+            .bind(("session_id", session_id.to_string()))
+            .await?;
+
+        let mods_raw: Vec<serde_json::Value> = response.take(0)?;
+
+        let changes: Vec<FileChangeRecord> = mods_raw
+            .into_iter()
+            .filter_map(|mod_data| {
+                let file_path = mod_data.get("file_path")?.as_str()?.to_string();
+                let change_type = mod_data.get("change_type")?.as_str()?.to_string();
+                let size_bytes = mod_data.get("size_bytes").and_then(|v| v.as_i64()).map(|v| v as i32);
+
+                Some(FileChangeRecord {
+                    file_path,
+                    change_type,
+                    size_bytes,
+                    lines_added: None, // Could be calculated from diff
+                    lines_removed: None, // Could be calculated from diff
+                    content_hash_before: None,
+                    content_hash_after: mod_data.get("content_hash").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                })
+            })
+            .collect();
+
+        // Store these changes for the episode
+        if !changes.is_empty() {
+            self.store_episode_changes(episode_id, changes.clone()).await?;
+        }
+
+        debug!("Captured {} file changes from session {}", changes.len(), session_id);
+        Ok(changes)
     }
 
     /// Recall similar episodes
@@ -305,6 +458,19 @@ pub struct StoreEpisodeRequest {
     pub episode_type: String,
     pub outcome: String,
     pub importance: Option<f64>,
+    pub file_changes: Option<Vec<FileChangeRecord>>,
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileChangeRecord {
+    pub file_path: String,
+    pub change_type: String,
+    pub size_bytes: Option<i32>,
+    pub lines_added: Option<i32>,
+    pub lines_removed: Option<i32>,
+    pub content_hash_before: Option<String>,
+    pub content_hash_after: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

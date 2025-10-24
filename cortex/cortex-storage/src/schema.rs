@@ -10,6 +10,7 @@ DEFINE TABLE embeddings SCHEMAFULL;
 DEFINE TABLE symbols SCHEMAFULL;
 DEFINE TABLE relations SCHEMAFULL;
 DEFINE TABLE episodes SCHEMAFULL;
+DEFINE TABLE episode_changes SCHEMAFULL;
 DEFINE TABLE agent_sessions SCHEMAFULL;
 
 -- Projects table
@@ -92,6 +93,20 @@ DEFINE INDEX episodes_session ON episodes FIELDS session_id;
 DEFINE INDEX episodes_importance ON episodes FIELDS importance;
 DEFINE INDEX episodes_created_at ON episodes FIELDS created_at;
 DEFINE INDEX episodes_outcome ON episodes FIELDS outcome;
+
+-- Episode changes table (tracks file modifications during episodes)
+DEFINE FIELD episode_id ON episode_changes TYPE string;
+DEFINE FIELD file_path ON episode_changes TYPE string;
+DEFINE FIELD change_type ON episode_changes TYPE string;
+DEFINE FIELD size_bytes ON episode_changes TYPE option<int>;
+DEFINE FIELD lines_added ON episode_changes TYPE option<int>;
+DEFINE FIELD lines_removed ON episode_changes TYPE option<int>;
+DEFINE FIELD content_hash_before ON episode_changes TYPE option<string>;
+DEFINE FIELD content_hash_after ON episode_changes TYPE option<string>;
+DEFINE FIELD created_at ON episode_changes TYPE datetime;
+
+DEFINE INDEX episode_changes_episode_idx ON episode_changes FIELDS episode_id;
+DEFINE INDEX episode_changes_file_idx ON episode_changes FIELDS file_path;
 
 -- Agent sessions table
 DEFINE FIELD id ON agent_sessions TYPE string;
