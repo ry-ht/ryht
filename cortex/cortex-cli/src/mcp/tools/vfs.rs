@@ -939,6 +939,33 @@ impl VfsGetTreeTool {
     pub fn new(ctx: VfsContext) -> Self {
         Self { ctx }
     }
+
+    /// Convert service tree to MCP response format
+    fn convert_service_tree(service_tree: crate::services::vfs::DirectoryTree, include_files: bool) -> TreeNode {
+        TreeNode {
+            name: service_tree.name,
+            path: service_tree.path,
+            node_type: service_tree.node_type,
+            size_bytes: service_tree.size_bytes,
+            children: service_tree.children.map(|children| {
+                children.into_iter()
+                    .filter(|child| include_files || child.node_type != "file")
+                    .map(|child| Self::convert_service_tree(child, include_files))
+                    .collect()
+            }),
+        }
+    }
+
+    /// Count nodes in a tree
+    fn count_nodes(tree: &TreeNode) -> usize {
+        let mut count = 1;
+        if let Some(ref children) = tree.children {
+            for child in children {
+                count += Self::count_nodes(child);
+            }
+        }
+        count
+    }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -1016,33 +1043,8 @@ impl Tool for VfsGetTreeTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get tree: {}", e)))?;
 
         // Convert service tree to MCP response format
-        fn convert_tree(service_tree: crate::services::vfs::DirectoryTree, include_files: bool) -> TreeNode {
-            TreeNode {
-                name: service_tree.name,
-                path: service_tree.path,
-                node_type: service_tree.node_type,
-                size_bytes: service_tree.size_bytes,
-                children: service_tree.children.map(|children| {
-                    children.into_iter()
-                        .filter(|child| include_files || child.node_type != "file")
-                        .map(|child| convert_tree(child, include_files))
-                        .collect()
-                }),
-            }
-        }
-
-        fn count_nodes(tree: &TreeNode) -> usize {
-            let mut count = 1;
-            if let Some(ref children) = tree.children {
-                for child in children {
-                    count += count_nodes(child);
-                }
-            }
-            count
-        }
-
-        let tree = convert_tree(service_tree, input.include_files);
-        let total_nodes = count_nodes(&tree);
+        let tree = Self::convert_service_tree(service_tree, input.include_files);
+        let total_nodes = Self::count_nodes(&tree);
 
         let output = GetTreeOutput {
             root: tree,

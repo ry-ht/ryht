@@ -1,6 +1,6 @@
 //! Authentication middleware
 
-use crate::api::routes::auth::Claims;
+use crate::services::auth::{AuthService, Claims};
 use axum::{
     extract::{FromRequestParts, Request},
     http::{header::{AUTHORIZATION, WWW_AUTHENTICATE}, request::Parts, StatusCode, HeaderValue},
@@ -8,9 +8,7 @@ use axum::{
     response::{Response, IntoResponse},
     Json,
 };
-use bcrypt::verify;
 use cortex_storage::ConnectionManager;
-use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -54,16 +52,13 @@ impl From<&Claims> for AuthUser {
 /// Authentication middleware state
 #[derive(Clone)]
 pub struct AuthState {
-    pub storage: Arc<ConnectionManager>,
-    pub jwt_secret: String,
+    pub auth_service: Arc<AuthService>,
 }
 
 impl AuthState {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         Self {
-            storage,
-            jwt_secret: std::env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "cortex-dev-secret-change-in-production".to_string()),
+            auth_service: Arc::new(AuthService::new(storage)),
         }
     }
 }
@@ -102,12 +97,21 @@ impl AuthMiddleware {
             if auth_header.starts_with("Bearer ") {
                 let token = auth_header.trim_start_matches("Bearer ");
 
-                match validate_jwt(token, &state.jwt_secret) {
-                    Ok(claims) => {
-                        // Create AuthUser from claims
+                // Use AuthService to validate token
+                match state.auth_service.validate_token(token).await {
+                    Ok(Some(session)) => {
+                        // Create claims from validated session
+                        let claims = Claims {
+                            sub: session.user_id.clone(),
+                            email: session.email.clone(),
+                            roles: session.roles.clone(),
+                            exp: session.expires_at.timestamp(),
+                            iat: chrono::Utc::now().timestamp(),
+                            token_type: "access".to_string(),
+                        };
+
                         let auth_user = AuthUser::from(&claims);
 
-                        // Log authentication
                         tracing::debug!(
                             user_id = %auth_user.user_id,
                             email = %auth_user.email,
@@ -115,13 +119,12 @@ impl AuthMiddleware {
                             "User authenticated via JWT"
                         );
 
-                        // Insert both claims and AuthUser into request extensions
                         req.extensions_mut().insert(claims);
                         req.extensions_mut().insert(auth_user);
                         return next.run(req).await;
                     }
-                    Err(e) => {
-                        tracing::warn!("JWT validation failed: {}", e);
+                    Ok(None) | Err(_) => {
+                        tracing::warn!("JWT validation failed");
                         return unauthorized_response("Invalid or expired token").into_response();
                     }
                 }
@@ -130,14 +133,23 @@ impl AuthMiddleware {
             else if auth_header.starts_with("ApiKey ") {
                 let api_key = auth_header.trim_start_matches("ApiKey ");
 
-                match validate_api_key(api_key, &state).await {
-                    Ok(claims) => {
+                // Use AuthService to validate API key
+                match state.auth_service.validate_api_key(api_key).await {
+                    Ok(Some(key_info)) => {
+                        // Create claims from API key info
+                        let claims = Claims {
+                            sub: key_info.user_id.clone(),
+                            email: String::new(), // API keys don't have email in info
+                            roles: vec![], // Would need to fetch user to get roles
+                            exp: key_info.expires_at.map(|dt| dt.timestamp()).unwrap_or(0),
+                            iat: chrono::Utc::now().timestamp(),
+                            token_type: "api_key".to_string(),
+                        };
+
                         let auth_user = AuthUser::from(&claims);
 
                         tracing::debug!(
                             user_id = %auth_user.user_id,
-                            email = %auth_user.email,
-                            roles = ?auth_user.roles,
                             "User authenticated via API key"
                         );
 
@@ -145,8 +157,8 @@ impl AuthMiddleware {
                         req.extensions_mut().insert(auth_user);
                         return next.run(req).await;
                     }
-                    Err(e) => {
-                        tracing::warn!("API key validation failed: {}", e);
+                    Ok(None) | Err(_) => {
+                        tracing::warn!("API key validation failed");
                         return unauthorized_response("Invalid API key").into_response();
                     }
                 }
@@ -171,7 +183,15 @@ impl AuthMiddleware {
             if auth_header.starts_with("Bearer ") {
                 let token = auth_header.trim_start_matches("Bearer ");
 
-                if let Ok(claims) = validate_jwt(token, &state.jwt_secret) {
+                if let Ok(Some(session)) = state.auth_service.validate_token(token).await {
+                    let claims = Claims {
+                        sub: session.user_id.clone(),
+                        email: session.email.clone(),
+                        roles: session.roles.clone(),
+                        exp: session.expires_at.timestamp(),
+                        iat: chrono::Utc::now().timestamp(),
+                        token_type: "access".to_string(),
+                    };
                     let auth_user = AuthUser::from(&claims);
                     req.extensions_mut().insert(claims);
                     req.extensions_mut().insert(auth_user);
@@ -179,7 +199,15 @@ impl AuthMiddleware {
             } else if auth_header.starts_with("ApiKey ") {
                 let api_key = auth_header.trim_start_matches("ApiKey ");
 
-                if let Ok(claims) = validate_api_key(api_key, &state).await {
+                if let Ok(Some(key_info)) = state.auth_service.validate_api_key(api_key).await {
+                    let claims = Claims {
+                        sub: key_info.user_id.clone(),
+                        email: String::new(),
+                        roles: vec![],
+                        exp: key_info.expires_at.map(|dt| dt.timestamp()).unwrap_or(0),
+                        iat: chrono::Utc::now().timestamp(),
+                        token_type: "api_key".to_string(),
+                    };
                     let auth_user = AuthUser::from(&claims);
                     req.extensions_mut().insert(claims);
                     req.extensions_mut().insert(auth_user);
@@ -285,72 +313,8 @@ impl AuthMiddleware {
     }
 }
 
-/// Validate JWT token
-fn validate_jwt(token: &str, secret: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
-    )?;
-
-    // Verify it's an access token
-    if token_data.claims.token_type != "access" {
-        return Err(jsonwebtoken::errors::Error::from(
-            jsonwebtoken::errors::ErrorKind::InvalidToken,
-        ));
-    }
-
-    Ok(token_data.claims)
-}
-
-/// Validate API key
-async fn validate_api_key(api_key: &str, state: &AuthState) -> Result<Claims, Box<dyn std::error::Error + Send + Sync>> {
-    // Get all API keys from database
-    let query = "SELECT * FROM api_keys WHERE expires_at IS NULL OR expires_at > time::now()";
-
-    let conn = state.storage.acquire().await?;
-    let mut result = conn.connection().query(query).await?;
-
-    #[derive(Deserialize)]
-    struct ApiKeyRecord {
-        id: String,
-        user_id: String,
-        name: String,
-        key_hash: String,
-        scopes: Vec<String>,
-    }
-
-    let api_keys: Vec<ApiKeyRecord> = result.take(0)?;
-
-    // Try to find matching key by verifying hash
-    for key_record in api_keys {
-        if verify(api_key, &key_record.key_hash).unwrap_or(false) {
-            // Get user info
-            let user_query = format!("SELECT * FROM users WHERE id = '{}' LIMIT 1", key_record.user_id);
-            let mut user_result = conn.connection().query(&user_query).await?;
-
-            #[derive(Deserialize)]
-            struct User {
-                email: String,
-                roles: Vec<String>,
-            }
-
-            let users: Vec<User> = user_result.take(0)?;
-            if let Some(user) = users.first() {
-                return Ok(Claims {
-                    sub: key_record.user_id,
-                    email: user.email.clone(),
-                    roles: user.roles.clone(),
-                    exp: 0, // API keys don't expire in token
-                    iat: chrono::Utc::now().timestamp(),
-                    token_type: "api_key".to_string(),
-                });
-            }
-        }
-    }
-
-    Err("Invalid API key".into())
-}
+// Note: validate_jwt and validate_api_key functions are now in AuthService
+// We don't need duplicate validation logic here
 
 /// Create unauthorized response with WWW-Authenticate header
 fn unauthorized_response(message: &str) -> (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>) {

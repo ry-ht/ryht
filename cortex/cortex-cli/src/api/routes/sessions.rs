@@ -4,6 +4,7 @@ use crate::api::{
     error::{ApiError, ApiResult},
     types::{ApiResponse, CreateSessionRequest, FileDiff, FileListResponse, FileResponse, FileWriteResponse, SessionResponse, UpdateFileRequest},
 };
+use crate::services::sessions::{SessionService, ChangeType};
 use axum::{
     extract::{Path, Query, State},
     routing::{delete, get, post, put},
@@ -23,6 +24,7 @@ use uuid::Uuid;
 pub struct SessionContext {
     pub storage: Arc<ConnectionManager>,
     pub vfs: Arc<VirtualFileSystem>,
+    pub session_service: Arc<SessionService>,
 }
 
 /// Session database model
@@ -150,35 +152,15 @@ async fn create_session(
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Create session
-    let session_id = Uuid::new_v4();
-    let now = chrono::Utc::now();
-
     let workspace_id = payload.workspace_id.as_ref()
         .map(|id| Uuid::parse_str(id))
         .transpose()
-        .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
+        .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?
+        .ok_or_else(|| ApiError::BadRequest("workspace_id is required".to_string()))?;
 
-    let session = Session {
-        id: session_id,
-        name: payload.name.clone(),
-        agent_type: payload.agent_type.clone(),
-        workspace_id,
-        status: SessionStatus::Active,
-        created_at: now,
-        updated_at: now,
-    };
-
-    // Save to database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let session_json = serde_json::to_value(&session)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let _: Option<serde_json::Value> = conn.connection()
-        .create(("session", session_id.to_string()))
-        .content(session_json)
+    // Use SessionService to create session
+    let session = ctx.session_service
+        .create_session(workspace_id, payload.name.clone(), payload.agent_type.clone(), None)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -192,7 +174,7 @@ async fn create_session(
     };
 
     tracing::info!(
-        session_id = %session_id,
+        session_id = %session.id,
         name = %payload.name,
         agent_type = %payload.agent_type,
         "Created session"
@@ -319,8 +301,9 @@ async fn list_session_files(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Get all modifications for this session
-    let session_modifications = get_session_modifications(&ctx, &session_id).await?;
-    let mut modifications_map: HashMap<String, &SessionFileModification> = HashMap::new();
+    let session_modifications = ctx.session_service.get_file_modifications(&session_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let mut modifications_map: HashMap<String, &crate::services::sessions::FileModification> = HashMap::new();
 
     for modification in &session_modifications {
         // Keep only the latest modification per file
@@ -486,7 +469,8 @@ async fn read_session_file(
 
     // Check if this file has been modified in this session
     let file_path_str = vnode.path.to_string();
-    let modification = get_file_modification(&ctx, &session_id, &file_path_str).await?;
+    let modification = ctx.session_service.get_file_modification(&session_id, &file_path_str).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let modified_in_session = modification.is_some();
     let session_version = modification.as_ref().map(|m| m.version);
@@ -613,7 +597,8 @@ async fn write_session_file(
     let is_new_file = existing_file.is_none();
 
     // Get current session modification if any
-    let current_modification = get_file_modification(&ctx, &session_id, &file_path).await?;
+    let current_modification = ctx.session_service.get_file_modification(&session_id, &file_path).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     let current_version = current_modification.as_ref().map(|m| m.version);
 
     // If expected_version is specified, validate it
@@ -721,18 +706,18 @@ async fn write_session_file(
         current_modification.as_ref().and_then(|m| m.base_version).or(Some(0))
     };
 
-    // Record this modification in the session
-    let change_type = if is_new_file { "created" } else { "modified" };
-    let modification = record_file_modification(
-        &ctx,
+    // Record this modification in the session using SessionService
+    let change_type_enum = if is_new_file { ChangeType::Created } else { ChangeType::Modified };
+    let modification = ctx.session_service.track_file_modification(
         &session_id,
-        &file_path,
-        &vnode.id.to_string(),
-        change_type,
-        &hash,
+        file_path.clone(),
+        vnode.id.to_string(),
+        change_type_enum,
+        hash.clone(),
         vnode.size_bytes as u64,
         base_version,
-    ).await?;
+    ).await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let session_version = modification.version;
     let previous_version = current_version;
@@ -768,24 +753,9 @@ async fn write_session_file(
 // Session Merge and Locks
 // ============================================================================
 
-/// Lock database model
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Lock {
-    pub id: Uuid,
-    pub entity_type: String,
-    pub entity_id: String,
-    pub lock_type: LockType,
-    pub owner: String,
-    pub acquired_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum LockType {
-    Exclusive,
-    Shared,
-}
+// Note: Lock and LockType are now in SessionService
+// Import from service instead of duplicating
+use crate::services::sessions::{Lock, LockType};
 
 /// Lock response
 #[derive(Debug, Serialize)]
@@ -929,109 +899,6 @@ async fn list_locks(
 // ============================================================================
 // Session Modification Tracking Helper Functions
 // ============================================================================
-
-/// Session file modification record
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SessionFileModification {
-    id: String,
-    session_id: String,
-    file_path: String,
-    file_id: String,
-    change_type: String,
-    version: u64,
-    base_version: Option<u64>,
-    content_hash: String,
-    size_bytes: u64,
-    created_at: DateTime<Utc>,
-}
-
-/// Get the latest modification record for a file in a session
-async fn get_file_modification(
-    ctx: &SessionContext,
-    session_id: &str,
-    file_path: &str,
-) -> Result<Option<SessionFileModification>, ApiError> {
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let query = format!(
-        "SELECT * FROM session_file_modifications WHERE session_id = '{}' AND file_path = '{}' ORDER BY version DESC LIMIT 1",
-        session_id, file_path
-    );
-
-    let mut result = conn.connection().query(&query)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let modifications: Vec<SessionFileModification> = result.take(0)
-        .unwrap_or_default();
-
-    Ok(modifications.into_iter().next())
-}
-
-/// Record a file modification in a session
-async fn record_file_modification(
-    ctx: &SessionContext,
-    session_id: &str,
-    file_path: &str,
-    file_id: &str,
-    change_type: &str,
-    content_hash: &str,
-    size_bytes: u64,
-    base_version: Option<u64>,
-) -> Result<SessionFileModification, ApiError> {
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Get previous version number for this file in this session
-    let previous_mod = get_file_modification(ctx, session_id, file_path).await?;
-    let version = previous_mod.as_ref().map(|m| m.version + 1).unwrap_or(1);
-
-    let modification_id = Uuid::new_v4().to_string();
-    let modification = SessionFileModification {
-        id: modification_id.clone(),
-        session_id: session_id.to_string(),
-        file_path: file_path.to_string(),
-        file_id: file_id.to_string(),
-        change_type: change_type.to_string(),
-        version,
-        base_version,
-        content_hash: content_hash.to_string(),
-        size_bytes,
-        created_at: Utc::now(),
-    };
-
-    let modification_json = serde_json::to_value(&modification)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let _: Option<serde_json::Value> = conn.connection()
-        .create(("session_file_modifications", modification_id))
-        .content(modification_json)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    Ok(modification)
-}
-
-/// Get all modified files in a session
-async fn get_session_modifications(
-    ctx: &SessionContext,
-    session_id: &str,
-) -> Result<Vec<SessionFileModification>, ApiError> {
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let query = format!(
-        "SELECT * FROM session_file_modifications WHERE session_id = '{}' ORDER BY created_at DESC",
-        session_id
-    );
-
-    let mut result = conn.connection().query(&query)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let modifications: Vec<SessionFileModification> = result.take(0)
-        .unwrap_or_default();
-
-    Ok(modifications)
-}
+// Note: All file modification tracking is now handled by SessionService
+// The functions get_file_modification, record_file_modification, and
+// get_session_modifications have been moved to SessionService

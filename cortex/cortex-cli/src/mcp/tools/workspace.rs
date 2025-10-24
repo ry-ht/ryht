@@ -99,74 +99,9 @@ impl WorkspaceContext {
         }
     }
 
-    /// Store a workspace in the database - delegates to workspace service
-    async fn store_workspace(&self, workspace: &Workspace) -> Result<()> {
-        // Use workspace service (temporary direct DB for compatibility)
-        let conn = self.storage.acquire().await?;
-
-        let _: Option<Workspace> = conn
-            .connection()
-            .create(("workspace", workspace.id.to_string()))
-            .content(workspace.clone())
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(())
-    }
-
-    /// Get workspace by ID - delegates to workspace service
-    async fn get_workspace(&self, workspace_id: &Uuid) -> Result<Option<Workspace>> {
-        // Use workspace service (temporary direct DB for compatibility)
-        let conn = self.storage.acquire().await?;
-
-        let workspace: Option<Workspace> = conn
-            .connection()
-            .select(("workspace", workspace_id.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(workspace)
-    }
-
-    /// List all workspaces - delegates to workspace service
-    async fn list_workspaces(&self, status_filter: Option<&str>) -> Result<Vec<Workspace>> {
-        // Use workspace service (temporary direct DB for compatibility)
-        let conn = self.storage.acquire().await?;
-
-        let query = if let Some(_status) = status_filter {
-            // For now, ignore status filter since Workspace doesn't have a status field
-            "SELECT * FROM workspace"
-        } else {
-            "SELECT * FROM workspace"
-        };
-
-        let mut response = conn
-            .connection()
-            .query(query)
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let workspaces: Vec<Workspace> = response
-            .take(0)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(workspaces)
-    }
-
-    /// Update workspace metadata - delegates to workspace service
-    async fn update_workspace(&self, workspace: &Workspace) -> Result<()> {
-        // Use workspace service (temporary direct DB for compatibility)
-        let conn = self.storage.acquire().await?;
-
-        let _: Option<Workspace> = conn
-            .connection()
-            .update(("workspace", workspace.id.to_string()))
-            .content(workspace.clone())
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(())
-    }
+    // Note: Workspace CRUD operations now use WorkspaceService
+    // Methods store_workspace, get_workspace, list_workspaces, and update_workspace
+    // have been replaced with direct calls to workspace_service
 
     /// Delete workspace - delegates to workspace service
     async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<()> {
@@ -320,8 +255,8 @@ impl Tool for WorkspaceCreateTool {
 
         let workspace_id = workspace.id;
 
-        // Store workspace in database
-        self.ctx.store_workspace(&workspace).await
+        // Store workspace in database using workspace service
+        self.ctx.workspace_service.create_workspace(workspace).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to store workspace: {}", e)))?;
 
         let mut files_imported = 0;
@@ -471,7 +406,7 @@ impl Tool for WorkspaceGetTool {
 
         debug!("Getting workspace: {}", workspace_id);
 
-        let workspace = self.ctx.get_workspace(&workspace_id).await
+        let workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
@@ -564,7 +499,7 @@ impl Tool for WorkspaceListTool {
 
         debug!("Listing workspaces (limit: {})", input.limit);
 
-        let workspaces = self.ctx.list_workspaces(input.status.as_deref()).await
+        let workspaces = self.ctx.workspace_service.list_workspaces().await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list workspaces: {}", e)))?;
 
         let mut summaries = Vec::new();
@@ -644,7 +579,7 @@ impl Tool for WorkspaceActivateTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
 
         // Verify workspace exists
-        let workspace = self.ctx.get_workspace(&workspace_id).await
+        let workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
@@ -1098,7 +1033,7 @@ impl Tool for WorkspaceArchiveTool {
         let workspace_id = Uuid::parse_str(&input.workspace_id)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
 
-        let mut workspace = self.ctx.get_workspace(&workspace_id).await
+        let mut workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
@@ -1114,7 +1049,7 @@ impl Tool for WorkspaceArchiveTool {
             info!("Archive reason: {}", reason);
         }
 
-        self.ctx.update_workspace(&workspace).await
+        self.ctx.workspace_service.update_workspace(workspace.clone()).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to update workspace: {}", e)))?;
 
         let output = ArchiveOutput {
@@ -1186,7 +1121,7 @@ impl Tool for WorkspaceDeleteTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
 
         // Verify workspace exists
-        let workspace = self.ctx.get_workspace(&workspace_id).await
+        let workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 

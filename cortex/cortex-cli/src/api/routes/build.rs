@@ -1,6 +1,7 @@
 //! Build and CI/CD API routes
 
 use crate::api::types::*;
+use crate::services::build::{BuildService, BuildConfig, TestConfig};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -10,56 +11,24 @@ use axum::{
 };
 use chrono::Utc;
 use cortex_storage::ConnectionManager;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-/// Build job status
-#[derive(Debug, Clone)]
-struct BuildJob {
-    id: String,
-    workspace_id: String,
-    build_type: String,
-    status: String,
-    progress: f64,
-    current_step: Option<String>,
-    started_at: chrono::DateTime<Utc>,
-    completed_at: Option<chrono::DateTime<Utc>>,
-    artifacts: Vec<BuildArtifact>,
-}
-
-/// Test run status
-#[derive(Debug, Clone)]
-struct TestRun {
-    id: String,
-    workspace_id: String,
-    status: String,
-    started_at: chrono::DateTime<Utc>,
-    completed_at: Option<chrono::DateTime<Utc>>,
-    total_tests: usize,
-    passed: usize,
-    failed: usize,
-    skipped: usize,
-    failures: Vec<TestFailure>,
-}
+// Note: BuildJob and TestRun are now in BuildService
+// We don't need duplicate definitions here
 
 /// Context for build routes
 #[derive(Clone)]
 pub struct BuildContext {
-    pub storage: Arc<ConnectionManager>,
-    pub build_jobs: Arc<RwLock<HashMap<String, BuildJob>>>,
-    pub test_runs: Arc<RwLock<HashMap<String, TestRun>>>,
+    pub build_service: Arc<BuildService>,
 }
 
 impl BuildContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         Self {
-            storage,
-            build_jobs: Arc::new(RwLock::new(HashMap::new())),
-            test_runs: Arc::new(RwLock::new(HashMap::new())),
+            build_service: Arc::new(BuildService::new(storage)),
         }
     }
 }
@@ -108,103 +77,27 @@ async fn trigger_build_impl(
     context: &BuildContext,
     request: BuildRequest,
 ) -> anyhow::Result<BuildResponse> {
-    let job_id = Uuid::new_v4().to_string();
-    let started_at = Utc::now();
+    let workspace_uuid = Uuid::parse_str(&request.workspace_id)?;
 
-    // Create build job
-    let job = BuildJob {
-        id: job_id.clone(),
-        workspace_id: request.workspace_id.clone(),
+    let build_config = BuildConfig {
         build_type: request.build_type.clone(),
-        status: "queued".to_string(),
-        progress: 0.0,
-        current_step: Some("Initializing build".to_string()),
-        started_at,
-        completed_at: None,
-        artifacts: vec![],
+        target: None,
+        features: None,
     };
 
-    // Store the job
-    {
-        let mut jobs = context.build_jobs.write().await;
-        jobs.insert(job_id.clone(), job.clone());
-    }
-
-    // Spawn background task to run the build
-    let context_clone = context.clone();
-    let job_id_clone = job_id.clone();
-    tokio::spawn(async move {
-        if let Err(e) = execute_build(&context_clone, &job_id_clone).await {
-            error!(job_id = %job_id_clone, error = %e, "Build failed");
-
-            // Update job status to failed
-            let mut jobs = context_clone.build_jobs.write().await;
-            if let Some(job) = jobs.get_mut(&job_id_clone) {
-                job.status = "failed".to_string();
-                job.completed_at = Some(Utc::now());
-            }
-        }
-    });
+    // Use BuildService to trigger build
+    let job = context.build_service.trigger_build(workspace_uuid, build_config).await?;
 
     Ok(BuildResponse {
-        job_id,
+        job_id: job.id.clone(),
         workspace_id: request.workspace_id,
         build_type: request.build_type,
-        status: "queued".to_string(),
-        started_at,
+        status: format!("{:?}", job.status).to_lowercase(),
+        started_at: job.started_at,
     })
 }
 
-/// Background build execution
-async fn execute_build(context: &BuildContext, job_id: &str) -> anyhow::Result<()> {
-    // Simulate build steps
-    let steps = vec![
-        ("Preparing workspace", 0.1),
-        ("Running cargo check", 0.3),
-        ("Compiling project", 0.6),
-        ("Running tests", 0.8),
-        ("Creating artifacts", 0.9),
-        ("Finalizing", 1.0),
-    ];
-
-    for (step, progress) in steps {
-        // Update job status
-        {
-            let mut jobs = context.build_jobs.write().await;
-            if let Some(job) = jobs.get_mut(job_id) {
-                job.status = "running".to_string();
-                job.progress = progress;
-                job.current_step = Some(step.to_string());
-            }
-        }
-
-        // Simulate work
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    }
-
-    // Mark as completed
-    {
-        let mut jobs = context.build_jobs.write().await;
-        if let Some(job) = jobs.get_mut(job_id) {
-            job.status = "completed".to_string();
-            job.progress = 1.0;
-            job.completed_at = Some(Utc::now());
-            job.current_step = Some("Build completed successfully".to_string());
-
-            // Add mock artifacts
-            job.artifacts = vec![
-                BuildArtifact {
-                    name: "cortex-cli".to_string(),
-                    artifact_type: "binary".to_string(),
-                    size_bytes: 15_234_567,
-                    url: format!("/artifacts/{}/cortex-cli", job_id),
-                },
-            ];
-        }
-    }
-
-    Ok(())
-}
+// Note: execute_build is now in BuildService - no need for duplicate implementation
 
 /// GET /api/v1/build/{id}/status - Get build status
 async fn get_build_status(
@@ -239,24 +132,19 @@ async fn get_build_status_impl(
     context: &BuildContext,
     job_id: &str,
 ) -> anyhow::Result<BuildStatusResponse> {
-    let jobs = context.build_jobs.read().await;
-    let job = jobs
-        .get(job_id)
+    // Use BuildService to get build status
+    let job = context.build_service.get_build(job_id).await?
         .ok_or_else(|| anyhow::anyhow!("Build job not found"))?;
-
-    let duration_seconds = job.completed_at.map(|completed| {
-        (completed - job.started_at).num_seconds() as u64
-    });
 
     Ok(BuildStatusResponse {
         job_id: job.id.clone(),
-        status: job.status.clone(),
+        status: format!("{:?}", job.status).to_lowercase(),
         progress: job.progress,
         current_step: job.current_step.clone(),
         logs_url: Some(format!("/api/v1/build/{}/logs", job_id)),
         started_at: job.started_at,
         completed_at: job.completed_at,
-        duration_seconds,
+        duration_seconds: job.duration_seconds,
         artifacts: job.artifacts.clone(),
     })
 }
@@ -294,97 +182,26 @@ async fn run_tests_impl(
     context: &BuildContext,
     request: TestRunRequest,
 ) -> anyhow::Result<TestRunResponse> {
-    let run_id = Uuid::new_v4().to_string();
-    let started_at = Utc::now();
+    let workspace_uuid = Uuid::parse_str(&request.workspace_id)?;
 
-    // Create test run
-    let test_run = TestRun {
-        id: run_id.clone(),
-        workspace_id: request.workspace_id.clone(),
-        status: "running".to_string(),
-        started_at,
-        completed_at: None,
-        total_tests: 0,
-        passed: 0,
-        failed: 0,
-        skipped: 0,
-        failures: vec![],
+    let test_config = TestConfig {
+        test_pattern: None,
+        test_type: None,
+        coverage: Some(false),
     };
 
-    // Store the test run
-    {
-        let mut runs = context.test_runs.write().await;
-        runs.insert(run_id.clone(), test_run);
-    }
-
-    // Spawn background task to run tests
-    let context_clone = context.clone();
-    let run_id_clone = run_id.clone();
-    tokio::spawn(async move {
-        if let Err(e) = execute_tests(&context_clone, &run_id_clone).await {
-            error!(run_id = %run_id_clone, error = %e, "Test execution failed");
-
-            let mut runs = context_clone.test_runs.write().await;
-            if let Some(run) = runs.get_mut(&run_id_clone) {
-                run.status = "failed".to_string();
-                run.completed_at = Some(Utc::now());
-            }
-        }
-    });
+    // Use BuildService to run tests
+    let test_run = context.build_service.run_tests(workspace_uuid, test_config).await?;
 
     Ok(TestRunResponse {
-        run_id,
+        run_id: test_run.id.clone(),
         workspace_id: request.workspace_id,
-        status: "running".to_string(),
-        started_at,
+        status: format!("{:?}", test_run.status).to_lowercase(),
+        started_at: test_run.started_at,
     })
 }
 
-/// Background test execution
-async fn execute_tests(context: &BuildContext, run_id: &str) -> anyhow::Result<()> {
-    // Simulate test execution
-    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
-    // Update with mock results
-    {
-        let mut runs = context.test_runs.write().await;
-        if let Some(run) = runs.get_mut(run_id) {
-            run.status = "completed".to_string();
-            run.completed_at = Some(Utc::now());
-            run.total_tests = 150;
-            run.passed = 145;
-            run.failed = 3;
-            run.skipped = 2;
-
-            // Add mock failures
-            run.failures = vec![
-                TestFailure {
-                    test_name: "test_api_endpoint".to_string(),
-                    error_message: "Expected 200, got 404".to_string(),
-                    stack_trace: Some("at api_tests.rs:42".to_string()),
-                    file_path: Some("tests/api_tests.rs".to_string()),
-                    line_number: Some(42),
-                },
-                TestFailure {
-                    test_name: "test_database_connection".to_string(),
-                    error_message: "Connection timeout".to_string(),
-                    stack_trace: Some("at db_tests.rs:15".to_string()),
-                    file_path: Some("tests/db_tests.rs".to_string()),
-                    line_number: Some(15),
-                },
-                TestFailure {
-                    test_name: "test_parsing_edge_case".to_string(),
-                    error_message: "Assertion failed: expected true, got false".to_string(),
-                    stack_trace: Some("at parser_tests.rs:88".to_string()),
-                    file_path: Some("tests/parser_tests.rs".to_string()),
-                    line_number: Some(88),
-                },
-            ];
-        }
-    }
-
-    Ok(())
-}
+// Note: execute_tests is now in BuildService - no need for duplicate implementation
 
 /// GET /api/v1/test/{id}/results - Get test results
 async fn get_test_results(
@@ -419,49 +236,22 @@ async fn get_test_results_impl(
     context: &BuildContext,
     run_id: &str,
 ) -> anyhow::Result<TestResultsResponse> {
-    let runs = context.test_runs.read().await;
-    let run = runs
-        .get(run_id)
+    // Use BuildService to get test results
+    let results = context.build_service.get_test_results(run_id).await?
         .ok_or_else(|| anyhow::anyhow!("Test run not found"))?;
 
-    let duration_seconds = run.completed_at.map_or(0.0, |completed| {
-        (completed - run.started_at).num_milliseconds() as f64 / 1000.0
-    });
-
-    // Mock coverage data
-    let coverage = if run.status == "completed" {
-        Some(CoverageReport {
-            lines_covered: 1250,
-            lines_total: 1500,
-            percentage: 83.3,
-            by_file: vec![
-                FileCoverage {
-                    file_path: "src/main.rs".to_string(),
-                    lines_covered: 150,
-                    lines_total: 180,
-                    percentage: 83.3,
-                },
-                FileCoverage {
-                    file_path: "src/lib.rs".to_string(),
-                    lines_covered: 200,
-                    lines_total: 220,
-                    percentage: 90.9,
-                },
-            ],
-        })
-    } else {
-        None
-    };
+    // Get coverage if available
+    let coverage = context.build_service.get_test_coverage(run_id).await.ok();
 
     Ok(TestResultsResponse {
-        run_id: run.id.clone(),
-        status: run.status.clone(),
-        total_tests: run.total_tests,
-        passed: run.passed,
-        failed: run.failed,
-        skipped: run.skipped,
-        duration_seconds,
+        run_id: results.run_id,
+        status: format!("{:?}", results.status).to_lowercase(),
+        total_tests: results.total_tests,
+        passed: results.passed,
+        failed: results.failed,
+        skipped: results.skipped,
+        duration_seconds: results.duration_seconds,
         coverage,
-        failures: run.failures.clone(),
+        failures: results.failures,
     })
 }
