@@ -4,6 +4,7 @@ use crate::types::*;
 use crate::CognitiveManager;
 use cortex_core::error::Result;
 use cortex_core::id::CortexId;
+use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Visibility};
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -186,7 +187,7 @@ impl CrossMemoryQuery {
             {
                 // Convert CodeUnit to SemanticUnit
                 let semantic_units: Vec<_> = code_units.iter()
-                    .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                    .map(|cu| convert_code_to_semantic_unit(cu))
                     .collect();
                 related.extend(semantic_units);
             }
@@ -234,7 +235,7 @@ impl CrossMemoryQuery {
             })?;
 
         // Convert to SemanticUnit
-        let unit = self.cognitive_manager.semantic().convert_code_to_semantic_unit(&code_unit);
+        let unit = convert_code_to_semantic_unit(&code_unit);
 
         // Get dependencies
         let dependencies = self
@@ -259,7 +260,7 @@ impl CrossMemoryQuery {
 
         // Convert to SemanticUnits
         let file_units: Vec<_> = code_file_units.iter()
-            .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+            .map(|cu| convert_code_to_semantic_unit(cu))
             .collect();
 
         Ok(UnitContext {
@@ -295,7 +296,7 @@ impl CrossMemoryQuery {
                 .await?;
             // Convert to SemanticUnits
             let complex_units: Vec<_> = complex_code_units.iter()
-                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .map(|cu| convert_code_to_semantic_unit(cu))
                 .collect();
             results.code_units = complex_units;
         }
@@ -309,7 +310,7 @@ impl CrossMemoryQuery {
                 .await?;
             // Convert to SemanticUnits
             let untested: Vec<_> = untested_code_units.iter()
-                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .map(|cu| convert_code_to_semantic_unit(cu))
                 .collect();
             results.code_units.extend(untested);
         }
@@ -323,7 +324,7 @@ impl CrossMemoryQuery {
                 .await?;
             // Convert to SemanticUnits
             let undocumented: Vec<_> = undocumented_code_units.iter()
-                .map(|cu| self.cognitive_manager.semantic().convert_code_to_semantic_unit(cu))
+                .map(|cu| convert_code_to_semantic_unit(cu))
                 .collect();
             results.code_units.extend(undocumented);
         }
@@ -441,5 +442,87 @@ mod tests {
 
         assert!(result.combined_score() > 0.0);
         assert!(result.combined_score() <= 1.0);
+    }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/// Convert CodeUnit to SemanticUnit for backward compatibility
+fn convert_code_to_semantic_unit(unit: &CodeUnit) -> SemanticUnit {
+    SemanticUnit {
+        id: unit.id,
+        unit_type: convert_core_unit_type(unit.unit_type),
+        name: unit.name.clone(),
+        qualified_name: unit.qualified_name.clone(),
+        display_name: unit.display_name.clone(),
+        file_path: unit.file_path.clone(),
+        start_line: unit.start_line as u32,
+        start_column: unit.start_column as u32,
+        end_line: unit.end_line as u32,
+        end_column: unit.end_column as u32,
+        signature: unit.signature.clone(),
+        body: unit.body.clone().unwrap_or_default(),
+        docstring: unit.docstring.clone(),
+        visibility: convert_core_visibility(unit.visibility),
+        modifiers: unit.modifiers.clone(),
+        parameters: unit.parameters.iter().map(|p| p.name.clone()).collect(),
+        return_type: unit.return_type.clone(),
+        summary: unit.summary.clone().unwrap_or_default(),
+        purpose: unit.purpose.clone().unwrap_or_default(),
+        complexity: ComplexityMetrics {
+            cyclomatic: unit.complexity.cyclomatic,
+            cognitive: unit.complexity.cognitive,
+            nesting: unit.complexity.nesting,
+            lines: unit.complexity.lines,
+        },
+        test_coverage: unit.test_coverage.map(|c| c as f32),
+        has_tests: unit.has_tests,
+        has_documentation: unit.has_documentation,
+        embedding: unit.embedding.clone(),
+        created_at: unit.created_at,
+        updated_at: unit.updated_at,
+    }
+}
+
+fn convert_core_unit_type(unit_type: CoreCodeUnitType) -> CodeUnitType {
+    match unit_type {
+        CoreCodeUnitType::Function => CodeUnitType::Function,
+        CoreCodeUnitType::Method => CodeUnitType::Method,
+        CoreCodeUnitType::AsyncFunction => CodeUnitType::AsyncFunction,
+        CoreCodeUnitType::Generator => CodeUnitType::Generator,
+        CoreCodeUnitType::Lambda => CodeUnitType::Lambda,
+        CoreCodeUnitType::Class => CodeUnitType::Class,
+        CoreCodeUnitType::Struct => CodeUnitType::Struct,
+        CoreCodeUnitType::Enum => CodeUnitType::Enum,
+        CoreCodeUnitType::Union => CodeUnitType::Union,
+        CoreCodeUnitType::Interface => CodeUnitType::Interface,
+        CoreCodeUnitType::Trait => CodeUnitType::Trait,
+        CoreCodeUnitType::TypeAlias => CodeUnitType::TypeAlias,
+        CoreCodeUnitType::Typedef => CodeUnitType::Typedef,
+        CoreCodeUnitType::Const => CodeUnitType::Const,
+        CoreCodeUnitType::Static => CodeUnitType::Static,
+        CoreCodeUnitType::Variable => CodeUnitType::Variable,
+        CoreCodeUnitType::Module => CodeUnitType::Module,
+        CoreCodeUnitType::Namespace => CodeUnitType::Namespace,
+        CoreCodeUnitType::Package => CodeUnitType::Package,
+        CoreCodeUnitType::ImplBlock => CodeUnitType::ImplBlock,
+        CoreCodeUnitType::Decorator => CodeUnitType::Decorator,
+        CoreCodeUnitType::Macro => CodeUnitType::Macro,
+        CoreCodeUnitType::Template => CodeUnitType::Template,
+        CoreCodeUnitType::Test => CodeUnitType::Test,
+        CoreCodeUnitType::Benchmark => CodeUnitType::Benchmark,
+        CoreCodeUnitType::Example => CodeUnitType::Example,
+    }
+}
+
+fn convert_core_visibility(visibility: Visibility) -> String {
+    match visibility {
+        Visibility::Public => "public".to_string(),
+        Visibility::Private => "private".to_string(),
+        Visibility::Protected => "protected".to_string(),
+        Visibility::Internal => "internal".to_string(),
+        Visibility::Package => "package".to_string(),
     }
 }

@@ -401,7 +401,7 @@ mod tests {
         let collection_config = CollectionConfig {
             name: "test_collection".to_string(),
             vector_size: 384,
-            distance: Distance::Cosine,
+            distance: DistanceMetric::Cosine,
             hnsw_config: HnswConfig::default(),
             optimizer_config: OptimizerConfig::default(),
         };

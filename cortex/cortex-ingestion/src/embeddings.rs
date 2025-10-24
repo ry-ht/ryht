@@ -80,9 +80,14 @@ impl EmbeddingService {
 
     /// Generate embedding for a single text
     pub async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        // Truncate if too long
+        // Truncate if too long, respecting UTF-8 character boundaries
         let truncated = if text.len() > self.config.max_text_length {
-            &text[..self.config.max_text_length]
+            // Find the last valid UTF-8 character boundary before max_text_length
+            text.char_indices()
+                .take_while(|(idx, _)| *idx < self.config.max_text_length)
+                .last()
+                .map(|(idx, ch)| &text[..idx + ch.len_utf8()])
+                .unwrap_or("")
         } else {
             text
         };
@@ -98,12 +103,18 @@ impl EmbeddingService {
 
         // Process in batches
         for chunk in texts.chunks(self.config.batch_size) {
-            // Truncate texts in batch
+            // Truncate texts in batch, respecting UTF-8 character boundaries
             let truncated: Vec<String> = chunk
                 .iter()
                 .map(|t| {
                     if t.len() > self.config.max_text_length {
-                        t[..self.config.max_text_length].to_string()
+                        // Find the last valid UTF-8 character boundary before max_text_length
+                        t.char_indices()
+                            .take_while(|(idx, _)| *idx < self.config.max_text_length)
+                            .last()
+                            .map(|(idx, ch)| &t[..idx + ch.len_utf8()])
+                            .unwrap_or("")
+                            .to_string()
                     } else {
                         t.clone()
                     }
