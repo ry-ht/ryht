@@ -18,7 +18,7 @@ use super::routes::{
 };
 use super::websocket::WsManager;
 use crate::services::{
-    CodeUnitService, DependencyService, MemoryService, SearchService, VfsService,
+    CodeUnitService, DependencyService, MemoryService, SearchService, SessionService, VfsService,
     WorkspaceService,
 };
 use anyhow::{Context, Result};
@@ -271,9 +271,15 @@ impl RestApiServer {
             vfs_service: vfs_service.clone(),
         };
 
+        let session_service = Arc::new(SessionService::with_vfs(
+            self.storage.clone(),
+            self.vfs.clone(),
+        ));
+
         let session_context = SessionContext {
             storage: self.storage.clone(),
             vfs: self.vfs.clone(),
+            session_service,
         };
 
         let search_context = SearchContext {

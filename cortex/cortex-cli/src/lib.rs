@@ -13,6 +13,7 @@ pub mod api;
 pub mod server_manager;
 pub mod qdrant_commands;
 pub mod services;
+pub mod conversions;
 
 pub use commands::*;
 pub use config::*;

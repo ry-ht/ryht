@@ -340,7 +340,7 @@ async fn list_session_files(
             let modified_in_session = modification.is_some();
             let session_version = modification.map(|m| m.version);
             let base_version = modification.and_then(|m| m.base_version);
-            let change_type = modification.map(|m| m.change_type.clone());
+            let change_type = modification.map(|m| format!("{:?}", m.change_type).to_lowercase());
 
             FileResponse {
                 id: vnode.id.to_string(),
@@ -753,9 +753,9 @@ async fn write_session_file(
 // Session Merge and Locks
 // ============================================================================
 
-// Note: Lock and LockType are now in SessionService
+// Note: Lock is now in SessionService
 // Import from service instead of duplicating
-use crate::services::sessions::{Lock, LockType};
+use crate::services::sessions::Lock;
 
 /// Lock response
 #[derive(Debug, Serialize)]

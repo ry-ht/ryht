@@ -201,7 +201,7 @@ impl RateLimitMiddleware {
 /// Extract client identifier from request
 fn extract_client_id(req: &Request) -> String {
     // Try to get user ID from extensions (set by auth middleware)
-    if let Some(claims) = req.extensions().get::<crate::api::routes::auth::Claims>() {
+    if let Some(claims) = req.extensions().get::<crate::services::auth::Claims>() {
         return format!("user:{}", claims.sub);
     }
 

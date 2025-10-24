@@ -256,7 +256,14 @@ impl Tool for WorkspaceCreateTool {
         let workspace_id = workspace.id;
 
         // Store workspace in database using workspace service
-        self.ctx.workspace_service.create_workspace(workspace).await
+        use crate::services::workspace::CreateWorkspaceRequest;
+        let create_request = CreateWorkspaceRequest {
+            name: workspace.name.clone(),
+            workspace_type: format!("{:?}", workspace_type).to_lowercase(),
+            source_path: workspace.source_path.as_ref().map(|p| p.display().to_string()),
+            read_only: Some(workspace.read_only),
+        };
+        self.ctx.workspace_service.create_workspace(create_request).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to store workspace: {}", e)))?;
 
         let mut files_imported = 0;
@@ -418,11 +425,11 @@ impl Tool for WorkspaceGetTool {
         };
 
         let output = GetOutput {
-            workspace_id: workspace.id.to_string(),
+            workspace_id: workspace.id.clone(),
             name: workspace.name,
-            workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-            source_type: format!("{:?}", workspace.source_type).to_lowercase(),
-            root_path: workspace.source_path.map(|p| p.display().to_string()),
+            workspace_type: workspace.workspace_type,
+            source_type: workspace.source_type,
+            root_path: workspace.source_path,
             read_only: workspace.read_only,
             created_at: workspace.created_at.to_rfc3339(),
             updated_at: workspace.updated_at.to_rfc3339(),
@@ -499,20 +506,27 @@ impl Tool for WorkspaceListTool {
 
         debug!("Listing workspaces (limit: {})", input.limit);
 
-        let workspaces = self.ctx.workspace_service.list_workspaces().await
+        use crate::services::workspace::ListWorkspaceFilters;
+        let filters = ListWorkspaceFilters {
+            workspace_type: None,
+            limit: Some(input.limit),
+        };
+        let workspaces = self.ctx.workspace_service.list_workspaces(filters).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list workspaces: {}", e)))?;
 
         let mut summaries = Vec::new();
-        for workspace in workspaces.iter().take(input.limit) {
+        for workspace in workspaces.iter() {
             // Quick file count
-            let stats = self.ctx.calculate_stats(&workspace.id).await
+            let workspace_id = Uuid::parse_str(&workspace.id)
+                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
+            let stats = self.ctx.calculate_stats(&workspace_id).await
                 .map_err(|e| ToolError::ExecutionFailed(format!("Failed to calculate stats: {}", e)))?;
 
             summaries.push(WorkspaceSummary {
-                workspace_id: workspace.id.to_string(),
+                workspace_id: workspace.id.clone(),
                 name: workspace.name.clone(),
-                workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-                source_type: format!("{:?}", workspace.source_type).to_lowercase(),
+                workspace_type: workspace.workspace_type.clone(),
+                source_type: workspace.source_type.clone(),
                 file_count: stats.total_files,
                 created_at: workspace.created_at.to_rfc3339(),
             });
@@ -660,9 +674,34 @@ impl Tool for WorkspaceSyncTool {
         let start = std::time::Instant::now();
         info!("Syncing workspace from disk: {}", workspace_id);
 
-        let workspace = self.ctx.get_workspace(&workspace_id).await
+        let workspace_details = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
+
+        let workspace = Workspace {
+            id: Uuid::parse_str(&workspace_details.id).unwrap(),
+            name: workspace_details.name,
+            workspace_type: match workspace_details.workspace_type.as_str() {
+                "code" => WorkspaceType::Code,
+                "documentation" => WorkspaceType::Documentation,
+                "mixed" => WorkspaceType::Mixed,
+                "external" => WorkspaceType::External,
+                _ => WorkspaceType::Mixed,
+            },
+            source_type: match workspace_details.source_type.as_str() {
+                "local" => SourceType::Local,
+                "externalreadonly" => SourceType::ExternalReadOnly,
+                "fork" => SourceType::Fork,
+                _ => SourceType::Local,
+            },
+            namespace: workspace_details.namespace,
+            source_path: workspace_details.source_path.map(PathBuf::from),
+            read_only: workspace_details.read_only,
+            parent_workspace: None,
+            fork_metadata: None,
+            created_at: workspace_details.created_at,
+            updated_at: workspace_details.updated_at,
+        };
 
         let root_path = workspace.source_path
             .ok_or_else(|| ToolError::ExecutionFailed("Workspace has no source path".to_string()))?;
@@ -1033,15 +1072,11 @@ impl Tool for WorkspaceArchiveTool {
         let workspace_id = Uuid::parse_str(&input.workspace_id)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
 
-        let mut workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
+        let workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
         info!("Archiving workspace: {} ({})", workspace.name, workspace_id);
-
-        // Mark as read-only and update metadata
-        workspace.read_only = true;
-        workspace.updated_at = Utc::now();
 
         // Store archive reason in metadata if Workspace had a metadata field
         // For now, just log it
@@ -1049,7 +1084,15 @@ impl Tool for WorkspaceArchiveTool {
             info!("Archive reason: {}", reason);
         }
 
-        self.ctx.workspace_service.update_workspace(workspace.clone()).await
+        // Mark as read-only and update metadata
+        use crate::services::workspace::UpdateWorkspaceRequest;
+        let update_request = UpdateWorkspaceRequest {
+            name: None,
+            workspace_type: None,
+            read_only: Some(true),
+        };
+
+        self.ctx.workspace_service.update_workspace(&workspace_id, update_request).await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to update workspace: {}", e)))?;
 
         let output = ArchiveOutput {

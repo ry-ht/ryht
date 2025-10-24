@@ -9,8 +9,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use bcrypt::hash;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use cortex_storage::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -82,9 +81,6 @@ pub struct ApiKeyResponse {
     pub expires_at: Option<chrono::DateTime<Utc>>,
     pub created_at: chrono::DateTime<Utc>,
 }
-
-// Note: User, Session, and ApiKey types are now in the AuthService
-// We don't need duplicate definitions here
 
 /// POST /api/v1/auth/login - User login
 async fn login(
@@ -180,9 +176,7 @@ async fn logout(
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Note: Logout is currently not fully implemented with token revocation
-    // In a real implementation, you would revoke the token using AuthService
-    // For now, just return success (client-side logout)
+    // TODO: Implement token revocation using AuthService
     let response = serde_json::json!({
         "message": "Logged out successfully"
     });

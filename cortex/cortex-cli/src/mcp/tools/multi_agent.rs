@@ -10,18 +10,25 @@ use async_trait::async_trait;
 use cortex_storage::{
     locks::*, ConnectionManager, MergeEngine, MergeRequest, MergeStrategy,
 };
+use cortex_vfs::VirtualFileSystem;
 use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, warn, error};
+use uuid::Uuid;
+use chrono::Utc;
+
+// Import SessionService from the services layer
+use crate::services::sessions::{SessionService, SessionMetadata, WorkSession, SessionStatus, SessionFilters};
 
 #[derive(Clone)]
 pub struct MultiAgentContext {
     storage: Arc<ConnectionManager>,
     lock_manager: Arc<LockManager>,
     merge_engine: Arc<MergeEngine>,
+    session_service: Arc<SessionService>,
 }
 
 impl MultiAgentContext {
@@ -34,6 +41,10 @@ impl MultiAgentContext {
 
         // Create merge engine
         let merge_engine = Arc::new(MergeEngine::new(storage.clone()));
+
+        // Create session service
+        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+        let session_service = Arc::new(SessionService::with_vfs(storage.clone(), vfs));
 
         // Spawn background tasks
         let lock_manager_clone = lock_manager.clone();
@@ -50,6 +61,7 @@ impl MultiAgentContext {
             storage,
             lock_manager,
             merge_engine,
+            session_service,
         }
     }
 
@@ -117,7 +129,75 @@ pub struct SessionCreateOutput {
     expires_at: String,
 }
 
-impl_agent_tool!(SessionCreateTool, "cortex.session.create", "Create an isolated work session", SessionCreateInput, SessionCreateOutput);
+pub struct SessionCreateTool {
+    ctx: MultiAgentContext,
+}
+
+impl SessionCreateTool {
+    pub fn new(ctx: MultiAgentContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for SessionCreateTool {
+    fn name(&self) -> &str {
+        "cortex.session.create"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Create an isolated work session")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(SessionCreateInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: SessionCreateInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        debug!("Creating session for agent: {}", input.agent_id);
+
+        // Generate workspace ID (in real implementation, this should be passed or retrieved)
+        let workspace_id = Uuid::new_v4();
+
+        let mut extra = serde_json::Map::new();
+        extra.insert("isolation_level".to_string(), serde_json::json!(input.isolation_level));
+        if let Some(paths) = input.scope_paths {
+            extra.insert("scope_paths".to_string(), serde_json::json!(paths));
+        }
+        extra.insert("ttl_seconds".to_string(), serde_json::json!(input.ttl_seconds));
+        extra.insert("agent_id".to_string(), serde_json::json!(input.agent_id.clone()));
+
+        let metadata = SessionMetadata { extra };
+
+        match self.ctx.session_service.create_session(
+            workspace_id,
+            format!("Session for {}", input.agent_id),
+            input.agent_id.clone(),
+            Some(metadata),
+        ).await {
+            Ok(session) => {
+                let expires_at = session.created_at + chrono::Duration::seconds(input.ttl_seconds as i64);
+
+                let output = SessionCreateOutput {
+                    session_id: session.id.to_string(),
+                    agent_id: input.agent_id,
+                    created_at: session.created_at.to_rfc3339(),
+                    expires_at: expires_at.to_rfc3339(),
+                };
+
+                info!("Session created: {}", session.id);
+                Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+            }
+            Err(e) => {
+                error!("Failed to create session: {}", e);
+                Err(ToolError::ExecutionFailed(format!("Failed to create session: {}", e)))
+            }
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SessionUpdateInput {

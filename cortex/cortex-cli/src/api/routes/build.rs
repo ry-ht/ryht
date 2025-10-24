@@ -9,15 +9,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
 use cortex_storage::ConnectionManager;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info};
 use uuid::Uuid;
-
-// Note: BuildJob and TestRun are now in BuildService
-// We don't need duplicate definitions here
 
 /// Context for build routes
 #[derive(Clone)]
@@ -97,8 +93,6 @@ async fn trigger_build_impl(
     })
 }
 
-// Note: execute_build is now in BuildService - no need for duplicate implementation
-
 /// GET /api/v1/build/{id}/status - Get build status
 async fn get_build_status(
     State(context): State<BuildContext>,
@@ -145,7 +139,12 @@ async fn get_build_status_impl(
         started_at: job.started_at,
         completed_at: job.completed_at,
         duration_seconds: job.duration_seconds,
-        artifacts: job.artifacts.clone(),
+        artifacts: job.artifacts.into_iter().map(|a| BuildArtifact {
+            name: a.name,
+            artifact_type: a.artifact_type,
+            size_bytes: a.size_bytes,
+            url: a.url,
+        }).collect(),
     })
 }
 
@@ -201,8 +200,6 @@ async fn run_tests_impl(
     })
 }
 
-// Note: execute_tests is now in BuildService - no need for duplicate implementation
-
 /// GET /api/v1/test/{id}/results - Get test results
 async fn get_test_results(
     State(context): State<BuildContext>,
@@ -240,8 +237,18 @@ async fn get_test_results_impl(
     let results = context.build_service.get_test_results(run_id).await?
         .ok_or_else(|| anyhow::anyhow!("Test run not found"))?;
 
-    // Get coverage if available
-    let coverage = context.build_service.get_test_coverage(run_id).await.ok();
+    // Get coverage if available and convert to API type
+    let coverage = context.build_service.get_test_coverage(run_id).await.ok().map(|c| CoverageReport {
+        lines_covered: c.lines_covered,
+        lines_total: c.lines_total,
+        percentage: c.percentage,
+        by_file: c.by_file.into_iter().map(|f| FileCoverage {
+            file_path: f.file_path,
+            lines_covered: f.lines_covered,
+            lines_total: f.lines_total,
+            percentage: f.percentage,
+        }).collect(),
+    });
 
     Ok(TestResultsResponse {
         run_id: results.run_id,
@@ -252,6 +259,12 @@ async fn get_test_results_impl(
         skipped: results.skipped,
         duration_seconds: results.duration_seconds,
         coverage,
-        failures: results.failures,
+        failures: results.failures.into_iter().map(|f| TestFailure {
+            test_name: f.test_name,
+            error_message: f.error_message,
+            stack_trace: f.stack_trace,
+            file_path: f.file_path,
+            line_number: f.line_number,
+        }).collect(),
     })
 }
