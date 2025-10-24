@@ -1158,6 +1158,48 @@ pub async fn db_restart() -> Result<()> {
     }
 }
 
+// ============================================================================
+// Database Installation Detection Helpers
+// ============================================================================
+
+/// Check if SurrealDB is installed
+async fn is_surrealdb_installed() -> bool {
+    cortex_storage::SurrealDBManager::find_surreal_binary().await.is_ok()
+}
+
+/// Check if Qdrant native binary is installed
+async fn is_qdrant_binary_installed() -> bool {
+    use std::path::PathBuf;
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let qdrant_path = PathBuf::from(home).join(".cortex").join("bin").join("qdrant");
+    qdrant_path.exists()
+}
+
+/// Check if Docker is available
+async fn is_docker_available() -> bool {
+    use tokio::process::Command;
+    Command::new("docker")
+        .arg("--version")
+        .output()
+        .await
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Check if Qdrant Docker image is present
+async fn is_qdrant_docker_installed() -> bool {
+    use tokio::process::Command;
+    let output = Command::new("docker")
+        .args(&["images", "-q", "qdrant/qdrant"])
+        .output()
+        .await;
+
+    match output {
+        Ok(out) => !out.stdout.is_empty(),
+        Err(_) => false,
+    }
+}
+
 /// Check the status of both SurrealDB and Qdrant databases
 pub async fn db_status(detailed: bool) -> Result<()> {
     output::header("Database Infrastructure Status");
@@ -1184,6 +1226,14 @@ pub async fn db_status(detailed: bool) -> Result<()> {
     output::kv("URL", &status.surrealdb.url);
     output::kv("Running", if status.surrealdb.running { "Yes" } else { "No" });
     output::kv("Healthy", if status.surrealdb.healthy { "Yes" } else { "No" });
+
+    // Check installation status
+    let surreal_installed = is_surrealdb_installed().await;
+    output::kv("Installed", if surreal_installed { "Yes" } else { "No" });
+
+    if !surreal_installed {
+        output::warning("SurrealDB binary not found");
+    }
 
     if let Some(ref error) = status.surrealdb.error {
         output::error(format!("Error: {}", error));
@@ -1215,6 +1265,24 @@ pub async fn db_status(detailed: bool) -> Result<()> {
     output::kv("URL", &status.qdrant.url);
     output::kv("Running", if status.qdrant.running { "Yes" } else { "No" });
     output::kv("Healthy", if status.qdrant.healthy { "Yes" } else { "No" });
+
+    // Check installation status
+    let qdrant_binary = is_qdrant_binary_installed().await;
+    let docker_available = is_docker_available().await;
+    let qdrant_docker = is_qdrant_docker_installed().await;
+
+    if qdrant_binary {
+        output::kv("Installed", "Yes (Native Binary)");
+        output::kv("Binary Path", "~/.cortex/bin/qdrant");
+    } else if docker_available && qdrant_docker {
+        output::kv("Installed", "Yes (Docker)");
+        output::kv("Docker Image", "qdrant/qdrant");
+    } else {
+        output::kv("Installed", "No");
+        if !qdrant_binary && !qdrant_docker {
+            output::warning("Qdrant not found (neither binary nor Docker)");
+        }
+    }
 
     if let Some(ref error) = status.qdrant.error {
         output::error(format!("Error: {}", error));
@@ -1275,13 +1343,45 @@ pub async fn db_status(detailed: bool) -> Result<()> {
     // Summary and recommendations
     if !status.overall_healthy {
         output::warning("Some components are unhealthy");
+        println!();
+
         if !status.surrealdb.healthy {
-            output::info("  - Run 'cortex db install --database surrealdb' to install SurrealDB");
-            output::info("  - Or run 'cortex db start' to start with default settings");
+            let installed = is_surrealdb_installed().await;
+            if !installed {
+                output::info("SurrealDB Recommendations:");
+                output::info("  - Install: cortex db install --database surrealdb");
+                output::info("  - Then start: cortex db start");
+            } else {
+                output::info("SurrealDB Recommendations:");
+                output::info("  - Binary is installed but not running");
+                output::info("  - Start: cortex db start");
+            }
+            println!();
         }
+
         if !status.qdrant.healthy {
-            output::info("  - Ensure Docker is running");
-            output::info("  - Run 'cortex db start' to start Qdrant container");
+            let binary_installed = is_qdrant_binary_installed().await;
+            let docker_available = is_docker_available().await;
+            let docker_installed = is_qdrant_docker_installed().await;
+
+            output::info("Qdrant Recommendations:");
+
+            if binary_installed {
+                output::info("  - Native binary is installed but not running");
+                output::info("  - Start: cortex db start");
+            } else if docker_available && docker_installed {
+                output::info("  - Docker image is installed but not running");
+                output::info("  - Start: cortex db start --use-docker");
+            } else if docker_available && !docker_installed {
+                output::info("  - Docker is available but Qdrant image not pulled");
+                output::info("  - Install: cortex db install --database qdrant-docker");
+                output::info("  - Or install native: cortex db install --database qdrant");
+            } else {
+                output::info("  - Docker not available");
+                output::info("  - Install native binary: cortex db install --database qdrant");
+                output::info("  - Or install Docker and then: cortex db install --database qdrant-docker");
+            }
+            println!();
         }
     }
 
