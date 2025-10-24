@@ -1144,7 +1144,7 @@ fn detect_creational_patterns(units: &[CodeUnit], graph: &Graph) -> Vec<Detected
 
         // Factory pattern: classes with "Factory" in name and create methods
         if name.contains("Factory") && kind == "class" {
-            let dependents = graph.reverse_neighbors(&unit.id);
+            let _dependents = graph.reverse_neighbors(&unit.id);
             patterns.push(DetectedPattern {
                 pattern_id: format!("factory_{}", unit.id),
                 pattern_name: "Factory".to_string(),

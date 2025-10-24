@@ -365,7 +365,7 @@ async fn search_pattern(
          )"
     );
 
-    if let Some(ref lang) = payload.language {
+    if let Some(ref _lang) = payload.language {
         search_query.push_str(" AND language = $language");
     }
 

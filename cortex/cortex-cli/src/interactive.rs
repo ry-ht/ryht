@@ -545,7 +545,7 @@ mod tests {
 
     #[test]
     fn test_interactive_session_creation() {
-        let session = InteractiveSession::new();
+        let _session = InteractiveSession::new();
         // Just ensure it can be created
         assert!(true);
     }

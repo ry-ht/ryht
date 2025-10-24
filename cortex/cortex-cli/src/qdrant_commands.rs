@@ -1,9 +1,8 @@
 //! Qdrant command implementations for cortex-cli
 
-use crate::config::CortexConfig;
 use crate::output::{self, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
-use cortex_storage::{CollectionConfig, CollectionStats, HnswConfig, OptimizerConfig, QdrantClient, QdrantConfig};
+use cortex_storage::{CollectionConfig, HnswConfig, OptimizerConfig, QdrantClient, QdrantConfig};
 use cortex_storage::qdrant::DistanceMetric;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -322,7 +321,7 @@ pub async fn qdrant_benchmark(
         let vector: Vec<f32> = (0..dimensions).map(|_| rng.random::<f32>()).collect();
 
         let start = Instant::now();
-        let results = client.search(&collection_name, vector, 10, None).await?;
+        let _results = client.search(&collection_name, vector, 10, None).await?;
         let duration = start.elapsed();
 
         latencies.push(duration.as_millis() as f64);

@@ -677,7 +677,7 @@ impl AiSuggestRefactoringTool {
         -> Option<RefactoringSuggestion> {
         // Count nested if/else and complex boolean expressions
         let if_count = body.matches("if ").count();
-        let else_count = body.matches("else").count();
+        let _else_count = body.matches("else").count();
         let and_or_count = body.matches("&&").count() + body.matches("||").count();
 
         if if_count > 5 || and_or_count > 10 {

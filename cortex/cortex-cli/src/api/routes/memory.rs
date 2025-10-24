@@ -285,7 +285,7 @@ async fn search_episodes(
         WHERE task_description CONTAINS $query"
     );
 
-    if let Some(ref ep_type) = payload.episode_type {
+    if let Some(ref _ep_type) = payload.episode_type {
         query_str.push_str(" AND type::string(episode_type) = $episode_type");
     }
 

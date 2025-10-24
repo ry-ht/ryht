@@ -26,6 +26,3 @@ pub use mcp::{CortexMcpServer, CortexMcpServerBuilder};
 
 // Re-export REST API server types
 pub use api::{RestApiServer, ApiResponse, ApiMetadata, ApiError, ApiResult};
-
-// Re-export Qdrant commands
-pub use qdrant_commands::*;

@@ -72,7 +72,8 @@ mod types_tests {
         assert_eq!(request.file_type, Some("file".to_string()));
         assert_eq!(request.language, Some("rust".to_string()));
         assert_eq!(request.limit, 10);
-        assert!(request.cursor.is_some());
+        // cursor field was removed in pagination cleanup
+        assert!(request.cursor.is_none());
     }
 
     #[test]
@@ -226,7 +227,7 @@ mod types_tests {
         assert_eq!(request.workspace_id, Some("ws-789".to_string()));
         assert_eq!(request.search_type, Some("semantic".to_string()));
         assert_eq!(request.limit, Some(20));
-        assert!(request.cursor.is_none());
+        assert_eq!(request.offset, Some(0));
     }
 
     #[test]

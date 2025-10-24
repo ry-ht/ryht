@@ -284,7 +284,7 @@ async fn get_overview(
 
 /// GET /api/v1/dashboard/activity - Get activity feed
 async fn get_activity(
-    State(ctx): State<DashboardContext>,
+    State(_ctx): State<DashboardContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<ActivityItem>>>> {
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
@@ -302,7 +302,7 @@ async fn get_activity(
 
 /// GET /api/v1/dashboard/metrics - Get detailed metrics
 async fn get_metrics(
-    State(ctx): State<DashboardContext>,
+    State(_ctx): State<DashboardContext>,
     Query(params): Query<MetricsQuery>,
 ) -> ApiResult<Json<ApiResponse<DetailedMetrics>>> {
     let request_id = Uuid::new_v4().to_string();

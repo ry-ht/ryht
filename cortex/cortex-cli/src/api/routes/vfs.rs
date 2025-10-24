@@ -4,7 +4,7 @@ use crate::api::{
     error::{ApiError, ApiResult},
     types::{
         ApiResponse, CreateFileRequest, DirectoryTreeResponse, FileListRequest, FileResponse,
-        TreeNode, UpdateFileRequest, PaginationParams, CursorData,
+        TreeNode, UpdateFileRequest,
     },
     pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
 };

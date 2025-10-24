@@ -6,7 +6,7 @@ use crate::api::{
     types::{
         ApiResponse, CreateWorkspaceRequest, WorkspaceResponse,
         UpdateWorkspaceRequest, SyncWorkspaceRequest, SyncResponse, SyncChange,
-        PaginationParams, CursorData,
+        PaginationParams,
     },
     pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
 };
@@ -474,8 +474,8 @@ async fn sync_workspace(
 
     let mut changes = Vec::new();
     let mut files_added = 0;
-    let mut files_updated = 0;
-    let mut files_deleted = 0;
+    let files_updated = 0;
+    let files_deleted = 0;
 
     // Simulate scanning filesystem
     if source_path.exists() {

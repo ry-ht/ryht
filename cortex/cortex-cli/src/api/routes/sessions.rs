@@ -653,7 +653,7 @@ async fn write_session_file(
     }
 
     // Calculate old content for diff if file exists
-    let old_content = if let Some(ref existing) = existing_file {
+    let old_content = if let Some(ref _existing) = existing_file {
         ctx.vfs.read_file(&workspace_id, &path)
             .await
             .ok()
@@ -852,7 +852,7 @@ async fn merge_session(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let session = session.ok_or_else(||
+    let _session = session.ok_or_else(||
         ApiError::NotFound(format!("Session {} not found", session_id))
     )?;
 

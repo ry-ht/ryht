@@ -638,7 +638,7 @@ impl SecurityCheckDependenciesTool {
         let mut issues = Vec::new();
 
         // Simplified license checking
-        let problematic_licenses = vec!["GPL", "AGPL", "SSPL"];
+        let _problematic_licenses = vec!["GPL", "AGPL", "SSPL"];
 
         for (pkg_name, _) in dependencies {
             // In production, query crates.io API for license info
