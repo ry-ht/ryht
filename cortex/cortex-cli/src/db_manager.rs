@@ -14,7 +14,7 @@
 
 use crate::output;
 use anyhow::{Context, Result, bail};
-use cortex_storage::{QdrantClient, QdrantConfig, SurrealDBManager, SurrealDBConfig};
+use cortex_storage::{QdrantConfig, SurrealDBManager, SurrealDBConfig};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -469,35 +469,34 @@ impl DatabaseManager {
             DatabaseBackend::Qdrant => {
                 let url = self.qdrant_connection_url();
 
-                match QdrantClient::new(self.qdrant_config.clone()).await {
-                    Ok(client) => {
-                        match client.health().await {
-                            Ok(_health) => {
-                                Ok(ComponentStatus {
-                                    running: true,
-                                    healthy: true,
-                                    url,
-                                    error: None,
-                                    metrics: None,
-                                })
-                            }
-                            Err(e) => {
-                                Ok(ComponentStatus {
-                                    running: false,
-                                    healthy: false,
-                                    url,
-                                    error: Some(e.to_string()),
-                                    metrics: None,
-                                })
-                            }
-                        }
+                // Use HTTP health check endpoint instead of gRPC client
+                let health_url = format!("{}/health", url);
+
+                match reqwest::get(&health_url).await {
+                    Ok(response) if response.status().is_success() => {
+                        Ok(ComponentStatus {
+                            running: true,
+                            healthy: true,
+                            url,
+                            error: None,
+                            metrics: None,
+                        })
+                    }
+                    Ok(response) => {
+                        Ok(ComponentStatus {
+                            running: true,
+                            healthy: false,
+                            url,
+                            error: Some(format!("Health check failed with status: {}", response.status())),
+                            metrics: None,
+                        })
                     }
                     Err(e) => {
                         Ok(ComponentStatus {
                             running: false,
                             healthy: false,
                             url,
-                            error: Some(e.to_string()),
+                            error: Some(format!("Failed to connect: {}", e)),
                             metrics: None,
                         })
                     }
