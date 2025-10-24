@@ -546,6 +546,9 @@ mod tests {
             .await
             .unwrap();
 
+        // Wait for indexing - Qdrant needs time to index vectors
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
         // Search
         let results = engine.search("machine learning", 10).await.unwrap();
 

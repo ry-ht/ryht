@@ -18,12 +18,12 @@
 //! - Comprehensive error scenario coverage
 
 use cortex_core::prelude::*;
-use cortex_ingestion::IngestionPipeline;
+use cortex_ingestion::prelude::*;
 use cortex_memory::prelude::*;
 use cortex_memory::types::CodeUnitType;
 use cortex_semantic::prelude::*;
-use cortex_semantic::{SearchFilter, EntityType, HybridVectorStore, MigrationMode, QdrantMetrics};
-use cortex_semantic::index::{HNSWIndex, VectorIndex};
+use cortex_semantic::{SearchFilter, VectorIndex, QdrantMetrics};
+use cortex_semantic::types::EntityType;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;
 use std::collections::HashMap;
@@ -34,6 +34,9 @@ use tempfile::TempDir;
 use tokio::time::timeout;
 use tracing::{info, warn, error};
 use uuid::Uuid;
+
+// Resolve Result ambiguity - use cortex_core::error::Result throughout
+use cortex_core::error::Result;
 
 // ============================================================================
 // Test Configuration

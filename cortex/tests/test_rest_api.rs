@@ -165,7 +165,7 @@ async fn test_vfs_file_operations() {
 
     assert_eq!(metadata.path, file_path);
     assert!(metadata.is_file());
-    assert_eq!(metadata.size_bytes, new_content.len() as i64);
+    assert_eq!(metadata.size_bytes, new_content.len());
     println!("Retrieved metadata: {:?}", metadata);
 
     // List files

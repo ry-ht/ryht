@@ -20,7 +20,7 @@
 
 use anyhow::Result;
 use cortex_core::id::CortexId;
-use cortex_core::types::{CodeUnit, CodeUnitType, Language, Signature, Visibility};
+use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility};
 use cortex_semantic::config::SemanticConfig;
 use cortex_semantic::types::EntityType;
 use cortex_semantic::{SearchFilter, SemanticSearchEngine};
@@ -99,69 +99,57 @@ impl TestEnvironment {
         let mut units = Vec::new();
 
         // 1. AuthService struct
-        let auth_service = CodeUnit {
-            id: CortexId::new(),
-            name: "AuthService".to_string(),
-            qualified_name: "auth::AuthService".to_string(),
-            unit_type: CodeUnitType::Struct,
-            language: Language::Rust,
-            file_path: "src/auth/service.rs".to_string(),
-            signature: Signature::new("pub struct AuthService"),
-            visibility: Visibility::Public,
-            docstring: Some("Authentication service for user login and session management. Provides secure authentication with JWT tokens and password validation.".to_string()),
-            body: Some(r#"{
-    token_manager: TokenManager,
-    user_repo: UserRepository,
-    max_login_attempts: u32,
-}"#.to_string()),
-            start_line: 10,
-            end_line: 15,
-            complexity: None,
-            parameters: vec![],
-            return_type: None,
-            generic_parameters: vec![],
-            decorators: vec![],
-            metadata: HashMap::new(),
-        };
+        let mut auth_service = CodeUnit::new(
+    CodeUnitType::Struct,
+    "AuthService".to_string(),
+    "auth::AuthService".to_string(),
+    "src/auth/service.rs".to_string(),
+    Language::Rust,
+);
+auth_service.signature = "pub struct AuthService".to_string();
+auth_service.visibility = Visibility::Public;
+auth_service.docstring = Some("Authentication service for user login and session management. Provides secure authentication with JWT tokens and password validation.".to_string());
+auth_service.body = Some(r#"{;
+auth_service.token_manager = TokenManager;
+auth_service.user_repo = UserRepository;
+auth_service.max_login_attempts = u32;
+auth_service.start_line = 10;
+auth_service.end_line = 15;
+auth_service.complexity = cortex_core::types::Complexity::default();
+auth_service.parameters = vec![];
+auth_service.return_type = None;
+auth_service.type_parameters = vec![];
+auth_service.attributes = vec![];
+
         units.push(auth_service);
 
         // 2. authenticate function
-        let authenticate_fn = CodeUnit {
-            id: CortexId::new(),
-            name: "authenticate".to_string(),
-            qualified_name: "auth::AuthService::authenticate".to_string(),
-            unit_type: CodeUnitType::Function,
-            language: Language::Rust,
-            file_path: "src/auth/service.rs".to_string(),
-            signature: Signature::new("pub async fn authenticate(&self, credentials: Credentials) -> Result<Session>"),
-            visibility: Visibility::Public,
-            docstring: Some("Authenticate user with email and password. Returns a Session with JWT token on success. Implements rate limiting to prevent brute force attacks.".to_string()),
-            body: Some(r#"{
-    if credentials.email.is_empty() || credentials.password.is_empty() {
-        anyhow::bail!("Email and password are required");
-    }
+        let mut authenticate_fn = CodeUnit::new(
+    CodeUnitType::Function,
+    "authenticate".to_string(),
+    "auth::AuthService::authenticate".to_string(),
+    "src/auth/service.rs".to_string(),
+    Language::Rust,
+);
+authenticate_fn.signature = "pub async fn authenticate(&self, credentials: Credentials) -> Result<Session>".to_string();
+authenticate_fn.visibility = Visibility::Public;
+authenticate_fn.docstring = Some("Authenticate user with email and password. Returns a Session with JWT token on success. Implements rate limiting to prevent brute force attacks.".to_string());
+authenticate_fn.body = Some(r#"{;
+authenticate_fn.anyhow = :bail!("Invalid credentials");;
+authenticate_fn.user_id = user.id;
+authenticate_fn.token = token.clone();
+authenticate_fn.expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
-    let user = self.user_repo.find_by_email(&credentials.email).await?;
-    if !user.verify_password(&credentials.password) {
-        anyhow::bail!("Invalid credentials");
-    }
-
-    let token = self.token_manager.generate_token(&user)?;
-    let session = Session {
-        user_id: user.id,
-        token: token.clone(),
-        expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
-    };
 
     Ok(session)
 }"#.to_string()),
             start_line: 20,
             end_line: 40,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 4, cognitive: 6 }),
+            complexity: cortex_core::types::Complexity { cyclomatic: 4, cognitive: 6, nesting: 0, lines: 0, parameters: 0, returns: 0 },
             parameters: vec![],
             return_type: Some("Result<Session>".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
+            type_parameters: vec![],
+            attributes: vec![],
             metadata: HashMap::new(),
         };
         units.push(authenticate_fn);
@@ -174,7 +162,7 @@ impl TestEnvironment {
             unit_type: CodeUnitType::Function,
             language: Language::Rust,
             file_path: "src/auth/token.rs".to_string(),
-            signature: Signature::new("pub fn validate_token(&self, token: &str) -> Result<Claims>"),
+            signature: "pub fn validate_token(&self, token: &str) -> Result<Claims>".to_string(),
             visibility: Visibility::Public,
             docstring: Some("Validate a JWT token and extract user claims. Verifies signature, expiration, and returns decoded claims.".to_string()),
             body: Some(r#"{
@@ -184,72 +172,69 @@ impl TestEnvironment {
 }"#.to_string()),
             start_line: 50,
             end_line: 55,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 2, cognitive: 3 }),
+            complexity: cortex_core::types::Complexity { cyclomatic: 2, cognitive: 3, nesting: 0, lines: 0, parameters: 0, returns: 0 },
             parameters: vec![],
             return_type: Some("Result<Claims>".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
+            type_parameters: vec![],
+            attributes: vec![],
             metadata: HashMap::new(),
         };
         units.push(validate_token_fn);
 
         // 4. generate_token function
-        let generate_token_fn = CodeUnit {
-            id: CortexId::new(),
-            name: "generate_token".to_string(),
-            qualified_name: "auth::TokenManager::generate_token".to_string(),
-            unit_type: CodeUnitType::Function,
-            language: Language::Rust,
-            file_path: "src/auth/token.rs".to_string(),
-            signature: Signature::new("pub fn generate_token(&self, user: &User) -> Result<String>"),
-            visibility: Visibility::Public,
-            docstring: Some("Generate a new JWT token for authenticated user. Creates token with user claims and 24-hour expiration.".to_string()),
-            body: Some(r#"{
-    let now = chrono::Utc::now();
-    let claims = Claims {
-        user_id: user.id.clone(),
-        email: user.email.clone(),
-        exp: (now + chrono::Duration::hours(24)).timestamp() as usize,
-        iat: now.timestamp() as usize,
-    };
+        let mut generate_token_fn = CodeUnit::new(
+    CodeUnitType::Function,
+    "generate_token".to_string(),
+    "auth::TokenManager::generate_token".to_string(),
+    "src/auth/token.rs".to_string(),
+    Language::Rust,
+);
+generate_token_fn.signature = "pub fn generate_token(&self, user: &User) -> Result<String>".to_string();
+generate_token_fn.visibility = Visibility::Public;
+generate_token_fn.docstring = Some("Generate a new JWT token for authenticated user. Creates token with user claims and 24-hour expiration.".to_string());
+generate_token_fn.body = Some(r#"{;
+generate_token_fn.let now = chrono = :Utc::now();;
+generate_token_fn.user_id = user.id.clone();
+generate_token_fn.email = user.email.clone();
+generate_token_fn.exp = (now + chrono::Duration::hours(24)).timestamp() as usize;
+generate_token_fn.iat = now.timestamp() as usize;
+
 
     encode(&Header::default(), &claims, &self.encoding_key)
         .map_err(|e| anyhow::anyhow!("Failed to generate token: {}", e))
 }"#.to_string()),
             start_line: 60,
             end_line: 72,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 2, cognitive: 4 }),
+            complexity: cortex_core::types::Complexity { cyclomatic: 2, cognitive: 4, nesting: 0, lines: 0, parameters: 0, returns: 0 },
             parameters: vec![],
             return_type: Some("Result<String>".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
+            type_parameters: vec![],
+            attributes: vec![],
             metadata: HashMap::new(),
         };
         units.push(generate_token_fn);
 
         // 5. verify_password function
-        let verify_password_fn = CodeUnit {
-            id: CortexId::new(),
-            name: "verify_password".to_string(),
-            qualified_name: "models::User::verify_password".to_string(),
-            unit_type: CodeUnitType::Function,
-            language: Language::Rust,
-            file_path: "src/models/user.rs".to_string(),
-            signature: Signature::new("pub fn verify_password(&self, password: &str) -> bool"),
-            visibility: Visibility::Public,
-            docstring: Some("Verify user password against stored hash using bcrypt.".to_string()),
-            body: Some(r#"{
-    bcrypt::verify(password, &self.password_hash).unwrap_or(false)
-}"#.to_string()),
-            start_line: 80,
-            end_line: 83,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 1, cognitive: 2 }),
-            parameters: vec![],
-            return_type: Some("bool".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
-            metadata: HashMap::new(),
-        };
+        let mut verify_password_fn = CodeUnit::new(
+    CodeUnitType::Function,
+    "verify_password".to_string(),
+    "models::User::verify_password".to_string(),
+    "src/models/user.rs".to_string(),
+    Language::Rust,
+);
+verify_password_fn.signature = "pub fn verify_password(&self, password: &str) -> bool".to_string();
+verify_password_fn.visibility = Visibility::Public;
+verify_password_fn.docstring = Some("Verify user password against stored hash using bcrypt.".to_string());
+verify_password_fn.body = Some(r#"{;
+verify_password_fn.bcrypt = :verify(password, &self.password_hash).unwrap_or(false);
+verify_password_fn.start_line = 80;
+verify_password_fn.end_line = 83;
+verify_password_fn.complexity = cortex_core::types::Complexity { cyclomatic: 1, cognitive: 2, nesting: 0, lines: 0, parameters: 0, returns: 0 };
+verify_password_fn.parameters = vec![];
+verify_password_fn.return_type = Some("bool".to_string());
+verify_password_fn.type_parameters = vec![];
+verify_password_fn.attributes = vec![];
+
         units.push(verify_password_fn);
 
         Ok(units)
@@ -267,7 +252,7 @@ impl TestEnvironment {
             unit_type: CodeUnitType::Class,
             language: Language::TypeScript,
             file_path: "src/components/LoginForm.tsx".to_string(),
-            signature: Signature::new("export const LoginForm: React.FC<LoginFormProps>"),
+            signature: "export const LoginForm: React.FC<LoginFormProps>".to_string(),
             visibility: Visibility::Public,
             docstring: Some("Login form component with email/password fields and validation. Handles authentication flow and error states.".to_string()),
             body: Some(r#"{
@@ -299,37 +284,29 @@ impl TestEnvironment {
 }"#.to_string()),
             start_line: 10,
             end_line: 40,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 3, cognitive: 5 }),
+            complexity: cortex_core::types::Complexity { cyclomatic: 3, cognitive: 5, nesting: 0, lines: 0, parameters: 0, returns: 0 },
             parameters: vec![],
             return_type: Some("JSX.Element".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
+            type_parameters: vec![],
+            attributes: vec![],
             metadata: HashMap::new(),
         };
         units.push(login_form);
 
         // 2. useAuth hook
-        let use_auth_hook = CodeUnit {
-            id: CortexId::new(),
-            name: "useAuth".to_string(),
-            qualified_name: "hooks::useAuth".to_string(),
-            unit_type: CodeUnitType::Function,
-            language: Language::TypeScript,
-            file_path: "src/hooks/useAuth.ts".to_string(),
-            signature: Signature::new("export function useAuth(): AuthContext"),
-            visibility: Visibility::Public,
-            docstring: Some("Authentication hook providing login, logout, and user state management. Manages JWT tokens and API calls.".to_string()),
-            body: Some(r#"{
-    const [user, setUser] = useState<User | null>(null);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+        let mut use_auth_hook = CodeUnit::new(
+    CodeUnitType::Function,
+    "useAuth".to_string(),
+    "hooks::useAuth".to_string(),
+    "src/hooks/useAuth.ts".to_string(),
+    Language::TypeScript,
+);
+use_auth_hook.signature = "export function useAuth(): AuthContext".to_string();
+use_auth_hook.visibility = Visibility::Public;
+use_auth_hook.docstring = Some("Authentication hook providing login, logout, and user state management. Manages JWT tokens and API calls.".to_string());
+use_auth_hook.body = Some(r#"{;
+use_auth_hook.const login = async (credentials = Credentials) => {;
 
-    const login = async (credentials: Credentials) => {
-        const response = await api.post('/auth/login', credentials);
-        const { token, user } = response.data;
-        localStorage.setItem('token', token);
-        setUser(user);
-        setIsAuthenticated(true);
-    };
 
     const logout = async () => {
         await api.post('/auth/logout');
@@ -342,11 +319,11 @@ impl TestEnvironment {
 }"#.to_string()),
             start_line: 50,
             end_line: 75,
-            complexity: Some(cortex_core::types::Complexity { cyclomatic: 2, cognitive: 4 }),
+            complexity: cortex_core::types::Complexity { cyclomatic: 2, cognitive: 4, nesting: 0, lines: 0, parameters: 0, returns: 0 },
             parameters: vec![],
             return_type: Some("AuthContext".to_string()),
-            generic_parameters: vec![],
-            decorators: vec![],
+            type_parameters: vec![],
+            attributes: vec![],
             metadata: HashMap::new(),
         };
         units.push(use_auth_hook);

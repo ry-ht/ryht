@@ -51,6 +51,9 @@ use tokio::fs;
 use tracing::{info, warn, error};
 use uuid::Uuid;
 
+// Resolve Result ambiguity - use cortex_core::error::Result throughout
+use cortex_core::error::Result;
+
 // ============================================================================
 // Configuration
 // ============================================================================

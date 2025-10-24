@@ -80,7 +80,7 @@ impl CodeGenEnvironment {
         let mut parser = CodeParser::for_language(ParserLanguage::TypeScript)?;
         let parsed = parser.parse_file(path, code, ParserLanguage::TypeScript)?;
 
-        println!("  ✓ Generated {} TypeScript units", parsed.functions.len() + parsed.classes.len());
+        println!("  ✓ Generated {} TypeScript units", parsed.functions.len() + parsed.structs.len());
         Ok(())
     }
 
@@ -359,7 +359,7 @@ export interface Session {
     let mut parser = CodeParser::for_language(ParserLanguage::TypeScript)?;
     let parsed = parser.parse_file("src/types.ts", code, ParserLanguage::TypeScript)?;
 
-    assert!(parsed.interfaces.len() >= 3);
+    assert!(parsed.traits.len() >= 3);
 
     println!("  ✓ Interfaces: User, Credentials, Session");
     println!("✅ Test passed: TypeScript interfaces generated correctly");
@@ -440,7 +440,7 @@ export class AuthService {
     let mut parser = CodeParser::for_language(ParserLanguage::TypeScript)?;
     let parsed = parser.parse_file("src/auth.ts", code, ParserLanguage::TypeScript)?;
 
-    assert!(parsed.classes.len() >= 1);
+    assert!(parsed.structs.len() >= 1);
     assert!(parsed.functions.len() >= 3); // authenticate, validateSession, logout
 
     println!("  ✓ Class: AuthService");

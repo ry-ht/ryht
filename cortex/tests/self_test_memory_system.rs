@@ -26,8 +26,8 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
-use cortex_memory::types::{CodeUnitType, DevelopmentContext};
-use cortex_parser::{RustParser, CodeParser};
+use cortex_memory::types::CodeUnitType;
+use cortex_parser::CodeParser;
 use cortex_semantic::prelude::*;
 use cortex_semantic::{SemanticConfig, VectorStoreBackend};
 use cortex_storage::connection_pool::{
@@ -233,7 +233,7 @@ struct TestContext {
 }
 
 impl TestContext {
-    async fn new() -> Result<Self> {
+    async fn new() -> cortex_core::error::Result<Self> {
         let db_config = DatabaseConfig {
             connection_mode: ConnectionMode::Local {
                 endpoint: "mem://".to_string(),
@@ -264,7 +264,7 @@ impl TestContext {
 // ============================================================================
 
 #[tokio::test]
-async fn test_1_record_development_episodes() -> Result<()> {
+async fn test_1_record_development_episodes() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 1: Record Development Episodes on Cortex                   ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -397,7 +397,7 @@ async fn test_1_record_development_episodes() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_2_extract_semantic_patterns() -> Result<()> {
+async fn test_2_extract_semantic_patterns() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 2: Extract Semantic Patterns from Cortex Code              ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -489,7 +489,7 @@ async fn test_2_extract_semantic_patterns() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_3_memory_consolidation() -> Result<()> {
+async fn test_3_memory_consolidation() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 3: Memory Consolidation and Pattern Learning               ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -544,7 +544,7 @@ async fn test_3_memory_consolidation() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_4_episodic_recall() -> Result<()> {
+async fn test_4_episodic_recall() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 4: Episodic Recall - Find Similar Experiences              ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -613,7 +613,7 @@ async fn test_4_episodic_recall() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_5_working_memory() -> Result<()> {
+async fn test_5_working_memory() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 5: Working Memory - Development Context Management         ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -666,7 +666,7 @@ async fn test_5_working_memory() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_6_dream_mode() -> Result<()> {
+async fn test_6_dream_mode() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  TEST 6: Dream Mode - Insight Generation from Memories           ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");
@@ -721,7 +721,7 @@ async fn test_6_dream_mode() -> Result<()> {
 // ============================================================================
 
 #[tokio::test]
-async fn test_complete_memory_system_integration() -> Result<()> {
+async fn test_complete_memory_system_integration() -> cortex_core::error::Result<()> {
     info!("╔═══════════════════════════════════════════════════════════════════╗");
     info!("║  INTEGRATION: Complete Memory System on Cortex Development       ║");
     info!("╚═══════════════════════════════════════════════════════════════════╝");

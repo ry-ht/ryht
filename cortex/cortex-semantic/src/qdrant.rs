@@ -25,6 +25,8 @@ use qdrant_client::qdrant::{
 use qdrant_client::Qdrant;
 use serde_json::json;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -209,14 +211,32 @@ impl QdrantVectorStore {
         let max_retries = config.max_retries;
 
         loop {
-            // Create client configuration with connection pooling
-            // Use HTTP-only mode to avoid gRPC version compatibility issues
-            let mut client_config = qdrant_client::config::QdrantConfig::from_url(&config.url);
+            // Construct gRPC URL from base URL and gRPC port
+            // The Rust client uses gRPC (port 6334 by default), not REST (port 6333)
+            let grpc_url = if config.url.contains("://") {
+                // Parse URL and replace port
+                let parts: Vec<&str> = config.url.rsplitn(2, ':').collect();
+                if parts.len() == 2 {
+                    // URL has a port, replace it
+                    format!("{}:{}", parts[1], config.grpc_port)
+                } else {
+                    // URL doesn't have a port, add it
+                    format!("{}:{}", config.url, config.grpc_port)
+                }
+            } else {
+                // Fallback: assume localhost and use gRPC port directly
+                format!("http://localhost:{}", config.grpc_port)
+            };
 
-            // Force HTTP mode instead of gRPC to avoid "h2 protocol error"
+            info!("Connecting to Qdrant at {} (gRPC)", grpc_url);
+
+            // Create client configuration with connection pooling
+            let mut client_config = qdrant_client::config::QdrantConfig::from_url(&grpc_url);
+
+            // Disable version compatibility check to avoid "h2 protocol error"
             // This prevents the client from trying to check server version via gRPC
-            // Note: set_prefer_grpc was removed in newer qdrant-client versions
-            // The client now auto-detects the protocol based on the URL scheme
+            // which fails with "Unable to check client-server compatibility"
+            client_config = client_config.skip_compatibility_check();
 
             // Set API key if provided
             if let Some(api_key) = &config.api_key {
@@ -404,11 +424,25 @@ impl QdrantVectorStore {
         Ok(())
     }
 
-    /// Convert document ID to Qdrant point ID using deterministic UUID.
-    fn doc_id_to_point_id(&self, _doc_id: &DocumentId) -> PointId {
-        // Create a deterministic UUID based on document ID
-        // Since new_v5 is not available, we'll use a simple hash-based approach
-        let uuid = Uuid::new_v4(); // For now, use v4; in production, use a deterministic method
+    /// Convert document ID to Qdrant point ID deterministically.
+    fn doc_id_to_point_id(&self, doc_id: &DocumentId) -> PointId {
+        // Create a deterministic UUID from the document ID using a hash
+        // This ensures the same doc_id always maps to the same point ID
+        let mut hasher = DefaultHasher::new();
+        doc_id.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        // Convert the 64-bit hash to UUID bytes (128 bits)
+        // Use the hash for the first 8 bytes and repeat for the second 8 bytes
+        let hash_bytes = hash.to_le_bytes();
+        let uuid_bytes = [
+            hash_bytes[0], hash_bytes[1], hash_bytes[2], hash_bytes[3],
+            hash_bytes[4], hash_bytes[5], hash_bytes[6], hash_bytes[7],
+            hash_bytes[0], hash_bytes[1], hash_bytes[2], hash_bytes[3],
+            hash_bytes[4], hash_bytes[5], hash_bytes[6], hash_bytes[7],
+        ];
+
+        let uuid = Uuid::from_bytes(uuid_bytes);
         PointId::from(uuid.to_string())
     }
 
@@ -1086,8 +1120,8 @@ mod tests {
         store.insert("doc1".to_string(), vec1.clone()).await.unwrap();
         store.insert("doc2".to_string(), vec2.clone()).await.unwrap();
 
-        // Wait for indexing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait for indexing - Qdrant needs time to index vectors
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         // Search
         let results = store.search(&vec1, 2).await.unwrap();
@@ -1115,7 +1149,7 @@ mod tests {
         store.insert_batch(items).await.unwrap();
 
         // Wait for indexing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         assert_eq!(store.len().await, 3);
 
@@ -1141,7 +1175,7 @@ mod tests {
             .unwrap();
 
         // Wait for indexing
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         let results = store.search(&vec1, 1).await.unwrap();
         assert_eq!(results.len(), 1);

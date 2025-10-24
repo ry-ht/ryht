@@ -23,12 +23,12 @@
 
 use anyhow::Result;
 use cortex_core::id::CortexId;
-use cortex_core::types::{CodeUnit, CodeUnitType, Language, Signature, Visibility};
+use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility};
 use cortex_memory::types::{
     DependencyType, EpisodicMemory, EpisodeType, LearnedPattern, MemoryQuery, Priority,
     SemanticUnit,
 };
-use cortex_memory::{CognitiveManager, EpisodicMemorySystem, WorkingMemorySystem};
+use cortex_memory::CognitiveManager;
 use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig};
 use cortex_storage::ConnectionManager;
 use std::collections::HashMap;

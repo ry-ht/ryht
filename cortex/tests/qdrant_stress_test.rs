@@ -16,7 +16,7 @@ use anyhow::Result;
 use cortex_semantic::config::{QdrantConfig, QdrantHnswConfig, QuantizationType, SemanticConfig};
 use cortex_semantic::qdrant::QdrantVectorStore;
 use cortex_semantic::types::{DocumentId, SimilarityMetric, Vector};
-use cortex_semantic::index::VectorIndex;
+use cortex_semantic::VectorIndex;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
