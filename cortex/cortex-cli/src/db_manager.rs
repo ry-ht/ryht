@@ -69,6 +69,7 @@ pub struct ComponentMetrics {
 #[derive(Debug, Clone)]
 pub struct DatabaseManagerConfig {
     pub use_docker_compose: bool,
+    pub use_native_qdrant: bool,
     pub docker_compose_file: PathBuf,
     pub startup_timeout: Duration,
     pub shutdown_timeout: Duration,
@@ -80,6 +81,7 @@ impl Default for DatabaseManagerConfig {
     fn default() -> Self {
         Self {
             use_docker_compose: true,
+            use_native_qdrant: false,
             docker_compose_file: PathBuf::from("docker-compose.yml"),
             startup_timeout: Duration::from_secs(60),
             shutdown_timeout: Duration::from_secs(30),
@@ -230,47 +232,11 @@ impl DatabaseManager {
 
         output::info("Starting Qdrant...");
 
-        // Start Qdrant (assumes it's managed externally or via docker)
-        // For binary mode, we'll use docker for Qdrant as it's more common
-        let result = timeout(
-            self.config.startup_timeout,
-            Command::new("docker")
-                .arg("run")
-                .arg("-d")
-                .arg("--name")
-                .arg("cortex-qdrant")
-                .arg("-p")
-                .arg(format!("{}:6333", self.qdrant_config.port))
-                .arg("-p")
-                .arg(format!("{}:6334", self.qdrant_config.grpc_port.unwrap_or(6334)))
-                .arg("-v")
-                .arg("qdrant_storage:/qdrant/storage")
-                .arg("qdrant/qdrant:v1.12.5")
-                .output()
-        ).await;
-
-        match result {
-            Ok(Ok(output_result)) => {
-                if !output_result.status.success() {
-                    let stderr = String::from_utf8_lossy(&output_result.stderr);
-                    // Check if container already exists
-                    if !stderr.contains("already in use") {
-                        bail!("Failed to start Qdrant container: {}", stderr);
-                    }
-                    output::warning("Qdrant container already exists, attempting to start...");
-
-                    // Try to start existing container
-                    Command::new("docker")
-                        .arg("start")
-                        .arg("cortex-qdrant")
-                        .output()
-                        .await
-                        .context("Failed to start existing Qdrant container")?;
-                }
-                output::success("Qdrant container started");
-            }
-            Ok(Err(e)) => bail!("Failed to execute docker: {}", e),
-            Err(_) => bail!("Qdrant startup timed out after {:?}", self.config.startup_timeout),
+        // Check if we should use native Qdrant or Docker
+        if self.config.use_native_qdrant {
+            self.start_native_qdrant().await?;
+        } else {
+            self.start_qdrant_docker().await?;
         }
 
         // Wait for Qdrant health
@@ -383,40 +349,53 @@ impl DatabaseManager {
 
         let mut errors = Vec::new();
 
-        // Stop Qdrant first (docker container)
+        // Stop Qdrant first
         output::info("Stopping Qdrant...");
-        let result = timeout(
-            self.config.shutdown_timeout,
-            Command::new("docker")
-                .arg("stop")
-                .arg("cortex-qdrant")
-                .output()
-        ).await;
-
-        match result {
-            Ok(Ok(output_result)) => {
-                if output_result.status.success() {
-                    output::success("Qdrant stopped");
-                } else {
-                    let stderr = String::from_utf8_lossy(&output_result.stderr);
-                    if !stderr.contains("No such container") {
-                        let err = format!("Failed to stop Qdrant: {}", stderr);
-                        output::error(&err);
-                        errors.push(err);
-                    } else {
-                        output::warning("Qdrant container not found");
-                    }
+        if self.config.use_native_qdrant {
+            // Stop native Qdrant process
+            match self.stop_native_qdrant().await {
+                Ok(_) => output::success("Qdrant stopped"),
+                Err(e) => {
+                    let err = format!("Failed to stop Qdrant: {}", e);
+                    output::error(&err);
+                    errors.push(err);
                 }
             }
-            Ok(Err(e)) => {
-                let err = format!("Failed to execute docker: {}", e);
-                output::error(&err);
-                errors.push(err);
-            }
-            Err(_) => {
-                let err = format!("Qdrant shutdown timed out");
-                output::warning(&err);
-                errors.push(err);
+        } else {
+            // Stop Qdrant Docker container
+            let result = timeout(
+                self.config.shutdown_timeout,
+                Command::new("docker")
+                    .arg("stop")
+                    .arg("cortex-qdrant")
+                    .output()
+            ).await;
+
+            match result {
+                Ok(Ok(output_result)) => {
+                    if output_result.status.success() {
+                        output::success("Qdrant stopped");
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output_result.stderr);
+                        if !stderr.contains("No such container") {
+                            let err = format!("Failed to stop Qdrant: {}", stderr);
+                            output::error(&err);
+                            errors.push(err);
+                        } else {
+                            output::warning("Qdrant container not found");
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    let err = format!("Failed to execute docker: {}", e);
+                    output::error(&err);
+                    errors.push(err);
+                }
+                Err(_) => {
+                    let err = format!("Qdrant shutdown timed out");
+                    output::warning(&err);
+                    errors.push(err);
+                }
             }
         }
 
@@ -573,6 +552,108 @@ impl DatabaseManager {
         format!("http://{}", self.surrealdb_config.bind_address)
     }
 
+    /// Start native Qdrant binary
+    async fn start_native_qdrant(&self) -> Result<()> {
+        use tokio::process::Command;
+
+        let home = std::env::var("HOME").context("HOME not set")?;
+        let qdrant_path = std::path::PathBuf::from(&home).join(".cortex").join("bin").join("qdrant");
+
+        if !qdrant_path.exists() {
+            bail!("Qdrant binary not found at: {}", qdrant_path.display());
+        }
+
+        // Start Qdrant process in background
+        let mut cmd = Command::new(&qdrant_path);
+
+        // Configure ports
+        cmd.env("QDRANT__SERVICE__HTTP_PORT", self.qdrant_config.port.to_string());
+        if let Some(grpc_port) = self.qdrant_config.grpc_port {
+            cmd.env("QDRANT__SERVICE__GRPC_PORT", grpc_port.to_string());
+        }
+
+        // Set data directory
+        let data_dir = std::path::PathBuf::from(&home).join(".cortex").join("data").join("qdrant");
+        std::fs::create_dir_all(&data_dir)?;
+        cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir.to_str().unwrap());
+
+        // Start in background
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+        cmd.spawn().context("Failed to spawn Qdrant process")?;
+
+        output::success("Qdrant native binary started");
+        Ok(())
+    }
+
+    /// Start Qdrant via Docker
+    async fn start_qdrant_docker(&self) -> Result<()> {
+        use tokio::process::Command;
+
+        let result = timeout(
+            self.config.startup_timeout,
+            Command::new("docker")
+                .arg("run")
+                .arg("-d")
+                .arg("--name")
+                .arg("cortex-qdrant")
+                .arg("-p")
+                .arg(format!("{}:6333", self.qdrant_config.port))
+                .arg("-p")
+                .arg(format!("{}:6334", self.qdrant_config.grpc_port.unwrap_or(6334)))
+                .arg("-v")
+                .arg("qdrant_storage:/qdrant/storage")
+                .arg("qdrant/qdrant:v1.12.5")
+                .output()
+        ).await;
+
+        match result {
+            Ok(Ok(output_result)) => {
+                if !output_result.status.success() {
+                    let stderr = String::from_utf8_lossy(&output_result.stderr);
+                    // Container might already exist, try to start it
+                    if stderr.contains("already in use") {
+                        Command::new("docker")
+                            .args(&["start", "cortex-qdrant"])
+                            .output()
+                            .await?;
+                    } else {
+                        bail!("Failed to start Qdrant: {}", stderr);
+                    }
+                }
+                output::success("Qdrant Docker container started");
+                Ok(())
+            }
+            Ok(Err(e)) => bail!("Failed to execute docker: {}", e),
+            Err(_) => bail!("Qdrant startup timed out after {:?}", self.config.startup_timeout),
+        }
+    }
+
+    /// Stop native Qdrant binary
+    async fn stop_native_qdrant(&self) -> Result<()> {
+        use tokio::process::Command;
+
+        // Find and kill Qdrant process using pkill
+        let result = Command::new("pkill")
+            .arg("-f")
+            .arg("qdrant")
+            .output()
+            .await;
+
+        match result {
+            Ok(output_result) => {
+                // pkill returns 0 if it killed processes, 1 if no processes found
+                if output_result.status.success() || output_result.status.code() == Some(1) {
+                    Ok(())
+                } else {
+                    let stderr = String::from_utf8_lossy(&output_result.stderr);
+                    bail!("Failed to stop Qdrant process: {}", stderr);
+                }
+            }
+            Err(e) => bail!("Failed to execute pkill: {}", e),
+        }
+    }
+
     /// Get Qdrant connection URL
     fn qdrant_connection_url(&self) -> String {
         let protocol = if self.qdrant_config.use_https { "https" } else { "http" };
@@ -624,8 +705,56 @@ pub async fn create_from_global_config() -> Result<DatabaseManager> {
         request_timeout: Duration::from_secs(60),
     };
 
-    // Database manager configuration
-    let manager_config = DatabaseManagerConfig::default();
+    // Database manager configuration with auto-detection
+    let mut manager_config = DatabaseManagerConfig::default();
+
+    // Auto-detect which Qdrant mode is currently running
+    // Check if native Qdrant process is running
+    let native_running = is_native_qdrant_running().await;
+    let docker_running = is_docker_qdrant_running().await;
+
+    if native_running {
+        manager_config.use_docker_compose = false;
+        manager_config.use_native_qdrant = true;
+    } else if docker_running {
+        manager_config.use_docker_compose = false;
+        manager_config.use_native_qdrant = false;
+    }
+    // else use defaults (Docker Compose mode)
 
     DatabaseManager::new(manager_config, surrealdb_config, qdrant_config).await
+}
+
+/// Check if native Qdrant process is running
+async fn is_native_qdrant_running() -> bool {
+    use tokio::process::Command;
+
+    let result = Command::new("pgrep")
+        .arg("-f")
+        .arg("qdrant")
+        .output()
+        .await;
+
+    match result {
+        Ok(output) => output.status.success() && !output.stdout.is_empty(),
+        Err(_) => false,
+    }
+}
+
+/// Check if Docker Qdrant container is running
+async fn is_docker_qdrant_running() -> bool {
+    use tokio::process::Command;
+
+    let result = Command::new("docker")
+        .args(&["ps", "--filter", "name=cortex-qdrant", "--format", "{{.Names}}"])
+        .output()
+        .await;
+
+    match result {
+        Ok(output) => {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            output_str.contains("cortex-qdrant")
+        }
+        Err(_) => false,
+    }
 }

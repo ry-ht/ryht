@@ -1023,6 +1023,32 @@ pub async fn db_start(
     output::info("Managing both SurrealDB (metadata) and Qdrant (vectors)");
     println!();
 
+    // Auto-detect Qdrant installation mode if use_docker is false
+    let should_use_docker = if use_docker {
+        output::info("Using Docker mode (explicitly requested)");
+        true
+    } else {
+        // Check if native Qdrant binary is installed
+        let qdrant_binary_installed = is_qdrant_binary_installed().await;
+        let docker_available = is_docker_available().await;
+
+        if qdrant_binary_installed {
+            output::info("Native Qdrant binary detected at ~/.cortex/bin/qdrant");
+            output::info("Starting Qdrant in native mode");
+            false
+        } else if docker_available {
+            output::info("Native Qdrant not found, Docker is available");
+            output::info("Starting Qdrant in Docker mode");
+            true
+        } else {
+            output::error("Neither native Qdrant nor Docker are available");
+            output::info("Please install one:");
+            output::info("  - Native: cortex db install --database qdrant");
+            output::info("  - Docker: cortex db install --database qdrant-docker");
+            return Err(anyhow::anyhow!("No Qdrant installation found"));
+        }
+    };
+
     // Load base configuration
     let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
     let db_config = global_config.database();
@@ -1061,7 +1087,8 @@ pub async fn db_start(
 
     // Build database manager configuration
     let mut manager_config = crate::db_manager::DatabaseManagerConfig::default();
-    manager_config.use_docker_compose = use_docker;
+    manager_config.use_docker_compose = should_use_docker;
+    manager_config.use_native_qdrant = !should_use_docker;
 
     // Store qdrant_data for later use if needed
     if let Some(_data_dir) = qdrant_data {
