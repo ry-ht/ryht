@@ -12,6 +12,10 @@ use cortex_storage::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Raw bearer token extracted from request
+#[derive(Debug, Clone)]
+pub struct BearerToken(pub String);
+
 /// Authenticated user information stored in request extensions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthUser {
@@ -86,19 +90,35 @@ impl AuthMiddleware {
         mut req: Request,
         next: Next,
     ) -> Response {
-        // Extract authorization header
+        // Extract authorization header - clone to avoid borrowing issues
         let auth_header = req
             .headers()
             .get(AUTHORIZATION)
-            .and_then(|h| h.to_str().ok());
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
 
         if let Some(auth_header) = auth_header {
             // Try Bearer token first
             if auth_header.starts_with("Bearer ") {
-                let token = auth_header.trim_start_matches("Bearer ");
+                let token = auth_header.trim_start_matches("Bearer ").to_string();
+
+                // Check if token is blacklisted
+                match state.auth_service.is_token_blacklisted(&token).await {
+                    Ok(true) => {
+                        tracing::warn!("Token is blacklisted (revoked)");
+                        return unauthorized_response("Token has been revoked").into_response();
+                    }
+                    Err(e) => {
+                        tracing::error!("Error checking token blacklist: {}", e);
+                        // Continue with validation - fail open to prevent blacklist issues from blocking all auth
+                    }
+                    Ok(false) => {
+                        // Token not blacklisted, continue with validation
+                    }
+                }
 
                 // Use AuthService to validate token
-                match state.auth_service.validate_token(token).await {
+                match state.auth_service.validate_token(&token).await {
                     Ok(Some(session)) => {
                         // Create claims from validated session
                         let claims = Claims {
@@ -119,6 +139,8 @@ impl AuthMiddleware {
                             "User authenticated via JWT"
                         );
 
+                        // Store the raw token for logout functionality
+                        req.extensions_mut().insert(BearerToken(token));
                         req.extensions_mut().insert(claims);
                         req.extensions_mut().insert(auth_user);
                         return next.run(req).await;
@@ -177,29 +199,36 @@ impl AuthMiddleware {
         let auth_header = req
             .headers()
             .get(AUTHORIZATION)
-            .and_then(|h| h.to_str().ok());
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
 
         if let Some(auth_header) = auth_header {
             if auth_header.starts_with("Bearer ") {
-                let token = auth_header.trim_start_matches("Bearer ");
+                let token = auth_header.trim_start_matches("Bearer ").to_string();
 
-                if let Ok(Some(session)) = state.auth_service.validate_token(token).await {
-                    let claims = Claims {
-                        sub: session.user_id.clone(),
-                        email: session.email.clone(),
-                        roles: session.roles.clone(),
-                        exp: session.expires_at.timestamp(),
-                        iat: chrono::Utc::now().timestamp(),
-                        token_type: "access".to_string(),
-                    };
-                    let auth_user = AuthUser::from(&claims);
-                    req.extensions_mut().insert(claims);
-                    req.extensions_mut().insert(auth_user);
+                // Check if token is blacklisted
+                let is_blacklisted = state.auth_service.is_token_blacklisted(&token).await.unwrap_or(false);
+
+                if !is_blacklisted {
+                    if let Ok(Some(session)) = state.auth_service.validate_token(&token).await {
+                        let claims = Claims {
+                            sub: session.user_id.clone(),
+                            email: session.email.clone(),
+                            roles: session.roles.clone(),
+                            exp: session.expires_at.timestamp(),
+                            iat: chrono::Utc::now().timestamp(),
+                            token_type: "access".to_string(),
+                        };
+                        let auth_user = AuthUser::from(&claims);
+                        req.extensions_mut().insert(BearerToken(token));
+                        req.extensions_mut().insert(claims);
+                        req.extensions_mut().insert(auth_user);
+                    }
                 }
             } else if auth_header.starts_with("ApiKey ") {
-                let api_key = auth_header.trim_start_matches("ApiKey ");
+                let api_key = auth_header.trim_start_matches("ApiKey ").to_string();
 
-                if let Ok(Some(key_info)) = state.auth_service.validate_api_key(api_key).await {
+                if let Ok(Some(key_info)) = state.auth_service.validate_api_key(&api_key).await {
                     let claims = Claims {
                         sub: key_info.user_id.clone(),
                         email: String::new(),
@@ -398,6 +427,42 @@ where
         let result = parts
             .extensions
             .get::<AuthUser>()
+            .cloned()
+            .ok_or_else(|| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    [(
+                        WWW_AUTHENTICATE,
+                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                    )],
+                    Json(AuthErrorResponse {
+                        success: false,
+                        error: AuthErrorDetail {
+                            code: "UNAUTHORIZED".to_string(),
+                            message: "Missing or invalid authentication token".to_string(),
+                        },
+                    }),
+                )
+            });
+
+        async move { result }
+    }
+}
+
+/// Extractor for bearer token - extracts raw token string
+impl<S> FromRequestParts<S> for BearerToken
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
+
+    fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        let result = parts
+            .extensions
+            .get::<BearerToken>()
             .cloned()
             .ok_or_else(|| {
                 (

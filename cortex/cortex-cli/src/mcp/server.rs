@@ -118,9 +118,13 @@ impl CortexMcpServer {
 
         // Create shared contexts
         let workspace_ctx = WorkspaceContext::new(storage.clone())?;
+
+        // Get the shared active workspace reference for use by other contexts
+        let active_workspace = workspace_ctx.active_workspace_ref();
+
         let vfs_ctx = VfsContext::new(vfs.clone());
         let code_ctx = CodeNavContext::new(storage.clone());
-        let code_manip_ctx = CodeManipulationContext::new(storage.clone());
+        let code_manip_ctx = CodeManipulationContext::with_active_workspace(storage.clone(), active_workspace.clone());
         let semantic_ctx = SemanticSearchContext::new(storage.clone());
         let deps_ctx = DependencyAnalysisContext::new(storage.clone());
         let quality_ctx = CodeQualityContext::new(storage.clone());
@@ -130,7 +134,7 @@ impl CortexMcpServer {
         let mat_ctx = MaterializationContext::new(storage.clone());
         let test_ctx = TestingContext::new(storage.clone());
         let doc_ctx = DocumentationContext::new(storage.clone());
-        let build_ctx = BuildExecutionContext::new(storage.clone());
+        let build_ctx = BuildExecutionContext::with_active_workspace(storage.clone(), active_workspace.clone());
         let monitor_ctx = MonitoringContext::new(storage.clone());
         let security_ctx = SecurityAnalysisContext::new(storage.clone());
         let type_ctx = TypeAnalysisContext::new(storage.clone(), vfs.clone());

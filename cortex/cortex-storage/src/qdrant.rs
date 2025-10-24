@@ -446,7 +446,7 @@ impl QdrantClient {
         let form = reqwest::multipart::Form::new().part("snapshot", part);
 
         // Build HTTP client
-        let mut client_builder = reqwest::Client::builder()
+        let client_builder = reqwest::Client::builder()
             .timeout(self.config.request_timeout);
 
         // Add API key if configured

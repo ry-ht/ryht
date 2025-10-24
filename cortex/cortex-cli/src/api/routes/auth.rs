@@ -1,6 +1,7 @@
 //! Authentication routes
 
 use crate::api::{error::ApiError, types::ApiResponse};
+use crate::api::middleware::auth::BearerToken;
 use crate::services::auth::{AuthService, Claims};
 use axum::{
     extract::State,
@@ -168,17 +169,44 @@ async fn create_api_key(
     Ok((StatusCode::CREATED, Json(ApiResponse::success(response, request_id, duration))))
 }
 
+/// Logout request
+#[derive(Debug, Deserialize)]
+pub struct LogoutRequest {
+    /// If true, revokes all tokens for the user (logout from all devices)
+    /// If false or not provided, only revokes the current token
+    pub logout_all_devices: Option<bool>,
+}
+
 /// POST /api/v1/auth/logout - Logout and invalidate session
 async fn logout(
-    State(_ctx): State<AuthContext>,
-    _claims: Claims, // Extracted by auth middleware
+    State(ctx): State<AuthContext>,
+    claims: Claims,         // Extracted by auth middleware
+    token: BearerToken,     // Raw token extracted by auth middleware
+    Json(req): Json<LogoutRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // TODO: Implement token revocation using AuthService
+    if req.logout_all_devices.unwrap_or(false) {
+        // Logout from all devices - revoke all user tokens and sessions
+        ctx.auth_service
+            .revoke_all_user_tokens(&claims.sub)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    } else {
+        // Single device logout - only revoke the current token
+        ctx.auth_service
+            .revoke_token(&token.0)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    }
+
     let response = serde_json::json!({
-        "message": "Logged out successfully"
+        "message": if req.logout_all_devices.unwrap_or(false) {
+            "Logged out from all devices successfully"
+        } else {
+            "Logged out successfully"
+        }
     });
 
     let duration = start.elapsed().as_millis() as u64;

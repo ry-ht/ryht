@@ -16,6 +16,8 @@ use crate::services::build::{BuildService, BuildConfig, TestConfig};
 pub struct BuildExecutionContext {
     storage: Arc<ConnectionManager>,
     build_service: Arc<BuildService>,
+    /// Active workspace ID (shared with workspace tools)
+    active_workspace: Arc<std::sync::RwLock<Option<Uuid>>>,
 }
 
 impl BuildExecutionContext {
@@ -24,6 +26,29 @@ impl BuildExecutionContext {
         Self {
             storage,
             build_service,
+            active_workspace: Arc::new(std::sync::RwLock::new(None)),
+        }
+    }
+
+    /// Create a new context with a shared active workspace reference
+    pub fn with_active_workspace(storage: Arc<ConnectionManager>, active_workspace: Arc<std::sync::RwLock<Option<Uuid>>>) -> Self {
+        let build_service = Arc::new(BuildService::new(storage.clone()));
+        Self {
+            storage,
+            build_service,
+            active_workspace,
+        }
+    }
+
+    /// Get the currently active workspace ID
+    pub fn get_active_workspace(&self) -> Option<Uuid> {
+        self.active_workspace.read().ok().and_then(|guard| *guard)
+    }
+
+    /// Set the active workspace ID
+    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
+        if let Ok(mut guard) = self.active_workspace.write() {
+            *guard = workspace_id;
         }
     }
 }
@@ -215,6 +240,10 @@ pub struct TestExecuteInput {
     flush_first: bool,
     #[serde(default)]
     coverage: bool,
+    /// Workspace ID to run tests in. If not provided, uses the active workspace.
+    /// Defaults to "00000000-0000-0000-0000-000000000000" if no workspace is active.
+    #[serde(default = "default_workspace_id")]
+    workspace_id: String,
 }
 
 #[derive(Debug, Serialize, JsonSchema, Default)]
@@ -256,8 +285,20 @@ impl Tool for TestExecuteTool {
 
         debug!("Executing tests with pattern: {:?}", input.test_pattern);
 
-        // For now, use a default workspace ID (should be passed or retrieved from context)
-        let workspace_id = Uuid::new_v4(); // TODO: Get actual workspace ID from context
+        // Get workspace ID from input parameter or active workspace context
+        let workspace_id = if input.workspace_id == "00000000-0000-0000-0000-000000000000" {
+            // No workspace ID provided in input, try to get from active workspace
+            self.ctx.get_active_workspace()
+                .ok_or_else(|| ToolError::ExecutionFailed(
+                    "No active workspace set. Please activate a workspace first using cortex.workspace.activate or provide workspace_id parameter".to_string()
+                ))?
+        } else {
+            // Parse the provided workspace ID
+            Uuid::parse_str(&input.workspace_id)
+                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace_id: {}", e)))?
+        };
+
+        info!("Running tests in workspace: {}", workspace_id);
 
         let test_config = TestConfig {
             test_pattern: input.test_pattern.clone(),
@@ -376,3 +417,6 @@ fn default_debug() -> String { "debug".to_string() }
 fn default_true() -> bool { true }
 fn default_cargo() -> String { "cargo".to_string() }
 fn default_all_type() -> String { "all".to_string() }
+fn default_workspace_id() -> String {
+    "00000000-0000-0000-0000-000000000000".to_string()
+}

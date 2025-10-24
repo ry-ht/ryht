@@ -55,6 +55,22 @@ pub async fn initialize_auth_schema(storage: &Arc<ConnectionManager>) -> anyhow:
         DEFINE INDEX api_keys_user_idx ON TABLE api_keys COLUMNS user_id;
     "#;
 
+    // Define revoked_tokens table for token blacklist
+    let revoked_tokens_schema = r#"
+        DEFINE TABLE revoked_tokens SCHEMAFULL;
+
+        DEFINE FIELD id ON TABLE revoked_tokens TYPE string;
+        DEFINE FIELD token_hash ON TABLE revoked_tokens TYPE string;
+        DEFINE FIELD user_id ON TABLE revoked_tokens TYPE string;
+        DEFINE FIELD token_type ON TABLE revoked_tokens TYPE string;
+        DEFINE FIELD revoked_at ON TABLE revoked_tokens TYPE datetime DEFAULT time::now();
+        DEFINE FIELD expires_at ON TABLE revoked_tokens TYPE datetime;
+
+        DEFINE INDEX revoked_tokens_hash_idx ON TABLE revoked_tokens COLUMNS token_hash UNIQUE;
+        DEFINE INDEX revoked_tokens_user_idx ON TABLE revoked_tokens COLUMNS user_id;
+        DEFINE INDEX revoked_tokens_expires_idx ON TABLE revoked_tokens COLUMNS expires_at;
+    "#;
+
     // Define session_file_modifications table for tracking session-specific file changes
     let session_modifications_schema = r#"
         DEFINE TABLE session_file_modifications SCHEMAFULL;
@@ -83,6 +99,9 @@ pub async fn initialize_auth_schema(storage: &Arc<ConnectionManager>) -> anyhow:
 
     conn.connection().query(api_keys_schema).await?;
     info!("Created api_keys table schema");
+
+    conn.connection().query(revoked_tokens_schema).await?;
+    info!("Created revoked_tokens table schema");
 
     conn.connection().query(session_modifications_schema).await?;
     info!("Created session_file_modifications table schema");
@@ -139,7 +158,7 @@ pub async fn create_default_admin(storage: &Arc<ConnectionManager>) -> anyhow::R
     Ok(())
 }
 
-/// Cleanup expired sessions and API keys
+/// Cleanup expired sessions, API keys, and revoked tokens
 pub async fn cleanup_expired_auth_data(storage: &Arc<ConnectionManager>) -> anyhow::Result<()> {
     info!("Cleaning up expired authentication data");
 
@@ -152,6 +171,10 @@ pub async fn cleanup_expired_auth_data(storage: &Arc<ConnectionManager>) -> anyh
     // Delete expired API keys
     let delete_keys = "DELETE FROM api_keys WHERE expires_at IS NOT NULL AND expires_at < time::now()";
     conn.connection().query(delete_keys).await?;
+
+    // Delete expired revoked tokens (cleanup blacklist)
+    let delete_revoked = "DELETE FROM revoked_tokens WHERE expires_at < time::now()";
+    conn.connection().query(delete_revoked).await?;
 
     info!("Expired authentication data cleaned up");
 

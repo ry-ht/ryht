@@ -329,6 +329,9 @@ pub async fn qdrant_migrate(
 
         let batch_count = points.len();
 
+        // Save last point id for offset before moving points
+        let last_point_id = points.last().and_then(|p| p.id.clone());
+
         // Transform points if needed
         let transformed_points: Vec<qdrant_client::qdrant::PointStruct> = points
             .into_iter()
@@ -399,8 +402,8 @@ pub async fn qdrant_migrate(
         ));
 
         // Update offset for next iteration
-        if let Some(last_point) = scroll_result.result.last() {
-            offset = last_point.id.clone();
+        if let Some(id) = last_point_id {
+            offset = Some(id);
         } else {
             break;
         }

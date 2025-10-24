@@ -21,7 +21,7 @@ use qdrant_client::qdrant::{
     FieldType, DeletePointsBuilder, PointsIdsList, UpsertPointsBuilder,
     VectorsOutput, PointId, SearchParams,
     ProductQuantization, CompressionRatio,
-    Filter, Condition, FieldCondition, Match, match_value::MatchValue,
+    Filter,
 };
 use qdrant_client::Qdrant;
 use serde_json::json;
@@ -500,55 +500,37 @@ impl QdrantVectorStore {
 
     /// Convert SearchFilter to Qdrant Filter.
     fn build_qdrant_filter(&self, filter: &SearchFilter) -> Option<Filter> {
-        let mut conditions: Vec<Condition> = Vec::new();
+        use qdrant_client::qdrant::Condition as FilterCondition;
+
+        let mut conditions: Vec<FilterCondition> = Vec::new();
 
         // Filter by entity_type
         if let Some(entity_type) = &filter.entity_type {
-            conditions.push(Condition::Field(FieldCondition {
-                key: "entity_type".to_string(),
-                r#match: Some(Match {
-                    match_value: Some(MatchValue::Keyword(entity_type.clone())),
-                }),
-                ..Default::default()
-            }));
+            conditions.push(FilterCondition::matches("entity_type", entity_type.clone()));
         }
 
         // Filter by workspace_id
         if let Some(workspace_id) = &filter.workspace_id {
-            conditions.push(Condition::Field(FieldCondition {
-                key: "workspace_id".to_string(),
-                r#match: Some(Match {
-                    match_value: Some(MatchValue::Keyword(workspace_id.clone())),
-                }),
-                ..Default::default()
-            }));
+            conditions.push(FilterCondition::matches("workspace_id", workspace_id.clone()));
         }
 
         // Filter by metadata fields
         for (key, value) in &filter.metadata_filters {
-            // Convert serde_json::Value to appropriate MatchValue
-            let match_value = match value {
-                serde_json::Value::String(s) => Some(MatchValue::Keyword(s.clone())),
+            // Convert serde_json::Value to appropriate filter condition
+            match value {
+                serde_json::Value::String(s) => {
+                    conditions.push(FilterCondition::matches(key.clone(), s.clone()));
+                }
                 serde_json::Value::Number(n) => {
                     if let Some(i) = n.as_i64() {
-                        Some(MatchValue::Integer(i))
-                    } else {
-                        // Skip floating point values for exact matching
-                        continue;
+                        conditions.push(FilterCondition::matches(key.clone(), i));
                     }
+                    // Skip floating point values for exact matching
                 }
-                serde_json::Value::Bool(b) => Some(MatchValue::Boolean(*b)),
-                _ => continue, // Skip arrays, objects, and null
-            };
-
-            if let Some(mv) = match_value {
-                conditions.push(Condition::Field(FieldCondition {
-                    key: key.clone(),
-                    r#match: Some(Match {
-                        match_value: Some(mv),
-                    }),
-                    ..Default::default()
-                }));
+                serde_json::Value::Bool(b) => {
+                    conditions.push(FilterCondition::matches(key.clone(), *b));
+                }
+                _ => {} // Skip arrays, objects, and null
             }
         }
 
@@ -556,10 +538,7 @@ impl QdrantVectorStore {
         if conditions.is_empty() {
             None
         } else {
-            Some(Filter {
-                must: conditions,
-                ..Default::default()
-            })
+            Some(Filter::must(conditions))
         }
     }
 }

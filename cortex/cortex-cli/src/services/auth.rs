@@ -9,6 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 use cortex_storage::ConnectionManager;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use sha2::{Sha256, Digest};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -355,28 +356,160 @@ impl AuthService {
         })
     }
 
-    /// Revoke a token (logout)
+    /// Revoke a token (logout) - adds token to blacklist
     pub async fn revoke_token(&self, token: &str) -> Result<()> {
         debug!("Revoking token");
 
-        // Decode token to get user ID
+        // Decode token to get claims and expiration
         let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
             &Validation::default(),
         )?;
 
-        // Delete all sessions for this user
+        let claims = &token_data.claims;
+
+        // Add token to blacklist
+        self.add_to_blacklist(token, &claims.sub, &claims.token_type, claims.exp).await?;
+
+        // If it's a refresh token, also delete the associated session
+        if claims.token_type == "refresh" {
+            let conn = self.storage.acquire().await?;
+            let query = "DELETE FROM sessions WHERE user_id = $user_id AND refresh_token = $token";
+            conn.connection()
+                .query(query)
+                .bind(("user_id", claims.sub.clone()))
+                .bind(("token", token.to_string()))
+                .await?;
+        }
+
+        info!("Token revoked for user: {} (type: {})", claims.sub, claims.token_type);
+
+        Ok(())
+    }
+
+    /// Revoke all tokens for a user (logout all devices)
+    pub async fn revoke_all_user_tokens(&self, user_id: &str) -> Result<()> {
+        info!("Revoking all tokens for user: {}", user_id);
+
         let conn = self.storage.acquire().await?;
+
+        // Get all active sessions for this user to blacklist their refresh tokens
+        let query = "SELECT * FROM sessions WHERE user_id = $user_id AND expires_at > $now";
+        let mut result = conn.connection()
+            .query(query)
+            .bind(("user_id", user_id.to_string()))
+            .bind(("now", Utc::now()))
+            .await?;
+
+        let sessions: Vec<Session> = result.take(0)?;
+
+        // Blacklist all refresh tokens from sessions
+        for session in sessions {
+            if !session.refresh_token.is_empty() {
+                // Decode to get expiration
+                if let Ok(token_data) = decode::<Claims>(
+                    &session.refresh_token,
+                    &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
+                    &Validation::default(),
+                ) {
+                    self.add_to_blacklist(
+                        &session.refresh_token,
+                        user_id,
+                        "refresh",
+                        token_data.claims.exp,
+                    ).await?;
+                }
+            }
+        }
+
+        // Delete all sessions for this user
         let query = "DELETE FROM sessions WHERE user_id = $user_id";
         conn.connection()
             .query(query)
-            .bind(("user_id", token_data.claims.sub.clone()))
+            .bind(("user_id", user_id.to_string()))
             .await?;
 
-        info!("Token revoked for user: {}", token_data.claims.sub);
+        info!("All tokens revoked for user: {}", user_id);
 
         Ok(())
+    }
+
+    /// Add a token to the blacklist
+    async fn add_to_blacklist(
+        &self,
+        token: &str,
+        user_id: &str,
+        token_type: &str,
+        exp_timestamp: i64,
+    ) -> Result<()> {
+        let conn = self.storage.acquire().await?;
+
+        // Create SHA-256 hash of the token
+        let token_hash = self.hash_token(token);
+
+        let expires_at = DateTime::from_timestamp(exp_timestamp, 0)
+            .ok_or_else(|| anyhow!("Invalid expiration timestamp"))?;
+
+        let blacklist_id = Uuid::new_v4().to_string();
+        let revoked_token = RevokedToken {
+            id: blacklist_id.clone(),
+            token_hash: token_hash.clone(),
+            user_id: user_id.to_string(),
+            token_type: token_type.to_string(),
+            revoked_at: Utc::now(),
+            expires_at,
+        };
+
+        let token_json = serde_json::to_value(&revoked_token)?;
+
+        // Insert into blacklist (ignore if already exists due to unique index)
+        let result = conn.connection()
+            .create::<Option<RevokedToken>>(("revoked_tokens", blacklist_id))
+            .content(token_json)
+            .await;
+
+        match result {
+            Ok(_) => {
+                debug!("Token added to blacklist: {} (type: {})", token_hash, token_type);
+                Ok(())
+            },
+            Err(e) => {
+                // If it's a duplicate error, that's fine - token is already blacklisted
+                if e.to_string().contains("already exists") || e.to_string().contains("unique") {
+                    debug!("Token already in blacklist: {}", token_hash);
+                    Ok(())
+                } else {
+                    Err(anyhow!("Failed to add token to blacklist: {}", e))
+                }
+            }
+        }
+    }
+
+    /// Check if a token is blacklisted
+    pub async fn is_token_blacklisted(&self, token: &str) -> Result<bool> {
+        let conn = self.storage.acquire().await?;
+
+        let token_hash = self.hash_token(token);
+
+        // Check if token hash exists in blacklist and hasn't expired
+        let query = "SELECT * FROM revoked_tokens WHERE token_hash = $hash AND expires_at > $now LIMIT 1";
+        let mut result = conn.connection()
+            .query(query)
+            .bind(("hash", token_hash))
+            .bind(("now", Utc::now()))
+            .await?;
+
+        let tokens: Vec<RevokedToken> = result.take(0)?;
+
+        Ok(!tokens.is_empty())
+    }
+
+    /// Hash a token using SHA-256 for storage in blacklist
+    fn hash_token(&self, token: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(token.as_bytes());
+        format!("{:x}", hasher.finalize())
     }
 
     /// Clean up expired sessions
@@ -395,6 +528,25 @@ impl AuthService {
         let _: Vec<Session> = result.take(0).unwrap_or_default();
 
         info!("Expired sessions cleaned up");
+
+        Ok(0)
+    }
+
+    /// Clean up expired revoked tokens from blacklist
+    pub async fn cleanup_expired_revoked_tokens(&self) -> Result<usize> {
+        debug!("Cleaning up expired revoked tokens");
+
+        let conn = self.storage.acquire().await?;
+        let query = "DELETE FROM revoked_tokens WHERE expires_at < $now";
+        let mut result = conn.connection()
+            .query(query)
+            .bind(("now", Utc::now()))
+            .await?;
+
+        // SurrealDB doesn't return count for DELETE, so we'll return 0
+        let _: Vec<RevokedToken> = result.take(0).unwrap_or_default();
+
+        info!("Expired revoked tokens cleaned up");
 
         Ok(0)
     }
@@ -722,6 +874,17 @@ impl ApiKeyInfo {
             last_used: record.last_used,
         }
     }
+}
+
+/// Revoked token database model (for token blacklist)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RevokedToken {
+    pub id: String,
+    pub token_hash: String,
+    pub user_id: String,
+    pub token_type: String,
+    pub revoked_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[cfg(test)]

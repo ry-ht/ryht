@@ -254,6 +254,10 @@ pub struct ONNXProvider {
     #[allow(dead_code)]  // Keep environment alive for the session
     environment: Option<Arc<ort::Environment>>,
     use_mock: bool,
+    /// Maximum batch size for inference (prevents OOM errors)
+    max_batch_size: usize,
+    /// Maximum sequence length supported by the model
+    max_seq_length: usize,
 }
 
 impl ONNXProvider {
@@ -290,6 +294,13 @@ impl ONNXProvider {
             tokenizer,
             environment,
             use_mock,
+            // Optimal batch size balancing memory and throughput
+            // For 384-dim models: ~32 provides good balance
+            // For 768-dim models: ~16-24 is better
+            // For 1536+ dim: ~8-16 recommended
+            max_batch_size: if config.dimension <= 384 { 32 } else if config.dimension <= 768 { 24 } else { 16 },
+            // Most sentence transformer models use 512 max sequence length
+            max_seq_length: 512,
         })
     }
 
@@ -354,6 +365,23 @@ impl ONNXProvider {
     }
 
     fn generate_embedding_real(&self, text: &str) -> Result<Vector> {
+        // Use batch inference with single text for consistency
+        let result = self.generate_embeddings_batch_real(&[text])?;
+        Ok(result.into_iter().next().unwrap())
+    }
+
+    /// Generate embeddings for a batch of texts using true batch inference.
+    ///
+    /// This method:
+    /// 1. Tokenizes all texts together with padding to max length
+    /// 2. Executes a single ONNX inference call with batched inputs
+    /// 3. Extracts individual embeddings from batched output
+    /// 4. Normalizes each embedding
+    fn generate_embeddings_batch_real(&self, texts: &[&str]) -> Result<Vec<Vector>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
         // Validate that we have session and tokenizer
         let session = self.session.as_ref().ok_or_else(|| {
             SemanticError::Provider("ONNX session not initialized".to_string())
@@ -363,32 +391,64 @@ impl ONNXProvider {
             SemanticError::Provider("Tokenizer not initialized".to_string())
         })?;
 
-        // Tokenize input text
-        let encoding = tokenizer.encode(text, true)
-            .map_err(|e| SemanticError::Provider(format!("Tokenization failed: {}", e)))?;
+        let batch_size = texts.len();
 
-        let token_ids = encoding.get_ids();
-        let attention_mask = encoding.get_attention_mask();
+        // Tokenize all texts with padding and truncation
+        // Use encode_batch for true batch tokenization
+        let encodings = tokenizer
+            .encode_batch(texts.to_vec(), true)
+            .map_err(|e| SemanticError::Provider(format!("Batch tokenization failed: {}", e)))?;
 
-        // Convert to i64 for ONNX input
-        let input_ids: Vec<i64> = token_ids.iter().map(|&id| id as i64).collect();
-        let attention_mask_i64: Vec<i64> = attention_mask.iter().map(|&m| m as i64).collect();
+        // Find the maximum sequence length in this batch
+        let max_len = encodings
+            .iter()
+            .map(|e| e.get_ids().len())
+            .max()
+            .unwrap_or(0);
 
-        let seq_len = input_ids.len();
+        // Clamp to model's maximum sequence length
+        let max_len = max_len.min(self.max_seq_length);
+
+        // Build batched input tensors with padding
+        let mut batch_input_ids = Vec::with_capacity(batch_size * max_len);
+        let mut batch_attention_mask = Vec::with_capacity(batch_size * max_len);
+
+        for encoding in &encodings {
+            let token_ids = encoding.get_ids();
+            let attention_mask = encoding.get_attention_mask();
+
+            // Truncate if needed
+            let seq_len = token_ids.len().min(max_len);
+
+            // Add tokens (truncated)
+            for i in 0..seq_len {
+                batch_input_ids.push(token_ids[i] as i64);
+                batch_attention_mask.push(attention_mask[i] as i64);
+            }
+
+            // Pad to max_len
+            for _ in seq_len..max_len {
+                batch_input_ids.push(0); // 0 is typically the padding token
+                batch_attention_mask.push(0); // 0 means "don't attend"
+            }
+        }
 
         // Get allocator for creating ONNX values
         let session_guard = session.read();
         let allocator_ptr = session_guard.allocator();
 
-        // Create ndarray 0.15 arrays (compatible with ort 1.16)
-        // Note: ort uses ndarray 0.15, so we need to use its version
+        // Create batched ndarray tensors
         use ndarray::{Array, CowArray, IxDyn};
 
-        let input_ids_array = Array::from_shape_vec(IxDyn(&[1, seq_len]), input_ids)
-            .map_err(|e| SemanticError::Provider(format!("Failed to create input tensor: {}", e)))?;
+        let input_ids_array = Array::from_shape_vec(
+            IxDyn(&[batch_size, max_len]),
+            batch_input_ids
+        ).map_err(|e| SemanticError::Provider(format!("Failed to create batched input tensor: {}", e)))?;
 
-        let attention_mask_array = Array::from_shape_vec(IxDyn(&[1, seq_len]), attention_mask_i64)
-            .map_err(|e| SemanticError::Provider(format!("Failed to create attention mask tensor: {}", e)))?;
+        let attention_mask_array = Array::from_shape_vec(
+            IxDyn(&[batch_size, max_len]),
+            batch_attention_mask
+        ).map_err(|e| SemanticError::Provider(format!("Failed to create batched attention mask tensor: {}", e)))?;
 
         // Convert to CowArrays for ort
         let input_ids_cow: CowArray<i64, IxDyn> = CowArray::from(input_ids_array);
@@ -397,59 +457,76 @@ impl ONNXProvider {
         let input_ids_value = ort::Value::from_array(allocator_ptr, &input_ids_cow)?;
         let attention_mask_value = ort::Value::from_array(allocator_ptr, &attention_mask_cow)?;
 
-        // Run inference using ort 1.16 API
-        // Session::run takes a Vec<Value>
+        // Run batched inference - single ONNX call for all texts
         let outputs = session_guard.run(vec![input_ids_value, attention_mask_value])?;
 
-        // Extract embeddings from output
-        // For sentence transformers, we typically get output with shape [batch_size, seq_len, hidden_size]
-        // We need to pool it to get [batch_size, hidden_size]
+        // Extract embeddings from batched output
         let output_tensor = &outputs[0];
-
-        // Try to extract as f32 tensor using ort 1.16 API
-        let embeddings_raw = output_tensor
-            .try_extract::<f32>()?;
-
+        let embeddings_raw = output_tensor.try_extract::<f32>()?;
         let embeddings_view = embeddings_raw.view();
         let shape = embeddings_view.shape();
 
-        // Handle different output shapes and convert to Vec<f32>
-        let embedding = if shape.len() == 3 {
+        debug!(
+            "Batch inference completed: batch_size={}, output_shape={:?}",
+            batch_size, shape
+        );
+
+        // Extract and normalize individual embeddings from batch
+        let mut results = Vec::with_capacity(batch_size);
+
+        use ndarray::Axis;
+
+        if shape.len() == 3 {
             // Shape: [batch_size, seq_len, hidden_size]
-            // Use mean pooling over sequence dimension
-            use ndarray::Axis;
-            let batch_embeddings = embeddings_view.index_axis(Axis(0), 0); // Get first batch
-            let pooled = batch_embeddings
-                .mean_axis(Axis(0))
-                .ok_or_else(|| SemanticError::Provider("Failed to pool embeddings".to_string()))?;
-            pooled.into_raw_vec()
+            // Need to pool over sequence dimension for each batch item
+            for i in 0..batch_size {
+                let batch_item = embeddings_view.index_axis(Axis(0), i);
+
+                // Mean pooling over sequence dimension
+                let pooled = batch_item
+                    .mean_axis(Axis(0))
+                    .ok_or_else(|| SemanticError::Provider("Failed to pool embeddings".to_string()))?;
+
+                let embedding: Vec<f32> = pooled.into_raw_vec();
+
+                // L2 normalize
+                let normalized = Self::normalize_embedding(embedding);
+                results.push(normalized);
+            }
         } else if shape.len() == 2 {
             // Shape: [batch_size, hidden_size] - already pooled
-            use ndarray::Axis;
-            let batch_view = embeddings_view.index_axis(Axis(0), 0);
-            batch_view.iter().copied().collect()
+            for i in 0..batch_size {
+                let batch_item = embeddings_view.index_axis(Axis(0), i);
+                let embedding: Vec<f32> = batch_item.iter().copied().collect();
+
+                // L2 normalize
+                let normalized = Self::normalize_embedding(embedding);
+                results.push(normalized);
+            }
         } else {
             return Err(SemanticError::Provider(format!(
-                "Unexpected output shape: {:?}",
+                "Unexpected batched output shape: {:?}",
                 shape
             )));
-        };
+        }
 
-        // Normalize the embedding (L2 normalization)
+        debug!(
+            "Generated {} embeddings with dimension {} via batch inference",
+            results.len(),
+            results.first().map(|v| v.len()).unwrap_or(0)
+        );
+
+        Ok(results)
+    }
+
+    /// Normalize an embedding vector using L2 normalization.
+    fn normalize_embedding(embedding: Vec<f32>) -> Vec<f32> {
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let normalized_embedding: Vec<f32> = if norm > 1e-12 {
+        if norm > 1e-12 {
             embedding.iter().map(|x| x / norm).collect()
         } else {
             embedding
-        };
-
-        debug!(
-            "Generated embedding with dimension {} for text: '{}'",
-            normalized_embedding.len(),
-            text.chars().take(50).collect::<String>()
-        );
-
-        Ok(normalized_embedding)
+        }
     }
 
     fn generate_mock_embedding(&self, text: &str) -> Vector {
@@ -486,18 +563,37 @@ impl EmbeddingProvider for ONNXProvider {
     }
 
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vector>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
         if self.use_mock {
             // Mock batch processing
             Ok(texts.iter().map(|text| self.generate_mock_embedding(text)).collect())
         } else {
-            // Real ONNX batch processing
-            // For simplicity, process sequentially for now
-            // In production, implement true batch inference
-            let mut embeddings = Vec::with_capacity(texts.len());
-            for text in texts {
-                embeddings.push(self.generate_embedding_real(text)?);
+            // Real ONNX batch processing with automatic batch splitting
+            debug!("Processing {} texts with batch inference", texts.len());
+
+            let mut all_embeddings = Vec::with_capacity(texts.len());
+
+            // Split into optimal-sized batches to prevent OOM errors
+            for chunk in texts.chunks(self.max_batch_size) {
+                // Convert String slice to &str slice for batch processing
+                let text_refs: Vec<&str> = chunk.iter().map(|s| s.as_str()).collect();
+
+                // Execute true batch inference for this chunk
+                let chunk_embeddings = self.generate_embeddings_batch_real(&text_refs)?;
+
+                all_embeddings.extend(chunk_embeddings);
             }
-            Ok(embeddings)
+
+            debug!(
+                "Batch inference completed: {} texts processed in {} batches",
+                texts.len(),
+                (texts.len() + self.max_batch_size - 1) / self.max_batch_size
+            );
+
+            Ok(all_embeddings)
         }
     }
 

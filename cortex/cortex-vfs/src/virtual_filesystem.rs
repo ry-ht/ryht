@@ -9,7 +9,7 @@ use lru::LruCache;
 use parking_lot::Mutex;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, warn, error};
 use uuid::Uuid;
 
 /// Virtual Filesystem providing path-agnostic file operations.
@@ -540,17 +540,103 @@ impl VirtualFileSystem {
     // ============================================================================
 
     /// Reparse a file and update its code units in semantic memory.
-    /// This is a convenience method that can be called after file modifications.
+    ///
+    /// This method:
+    /// 1. Reads the file content from VFS
+    /// 2. Detects the language from file extension
+    /// 3. Parses the file using cortex-parser
+    /// 4. Extracts code units (functions, structs, enums, traits, methods)
+    /// 5. Stores/updates code units in semantic memory
+    /// 6. Updates VNode metadata with the count of extracted units
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace_id` - The workspace containing the file
+    /// * `path` - Virtual path to the file to reparse
+    /// * `ingestion_pipeline` - The ingestion pipeline instance for code analysis
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of code units extracted and stored, or an error if:
+    /// - The file doesn't exist
+    /// - The file is not a parseable code file
+    /// - Parsing fails
+    /// - Storage operations fail
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use cortex_vfs::{VirtualFileSystem, VirtualPath};
+    /// # use cortex_vfs::ingestion::FileIngestionPipeline;
+    /// # use cortex_storage::ConnectionManager;
+    /// # use cortex_parser::CodeParser;
+    /// # use cortex_memory::SemanticMemorySystem;
+    /// # use std::sync::Arc;
+    /// # async fn example() -> cortex_core::error::Result<()> {
+    /// let storage = Arc::new(ConnectionManager::default());
+    /// let vfs = VirtualFileSystem::new(storage.clone());
+    /// let parser = Arc::new(tokio::sync::Mutex::new(CodeParser::new()?));
+    /// let memory = Arc::new(SemanticMemorySystem::new(storage));
+    /// let pipeline = Arc::new(FileIngestionPipeline::new(parser, Arc::new(vfs.clone()), memory));
+    ///
+    /// let workspace_id = uuid::Uuid::new_v4();
+    /// let path = VirtualPath::new("src/main.rs")?;
+    ///
+    /// let units_count = vfs.reparse_file(&workspace_id, &path, &pipeline).await?;
+    /// println!("Extracted {} code units", units_count);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn reparse_file(
         &self,
-        _workspace_id: &Uuid,
+        workspace_id: &Uuid,
         path: &VirtualPath,
+        ingestion_pipeline: &crate::ingestion::FileIngestionPipeline,
     ) -> Result<usize> {
-        // This method would require an ingestion pipeline instance
-        // For now, we return Ok(0) as a placeholder
-        // In practice, this would be called from the ingestion pipeline
-        debug!("Reparse requested for {} (not yet implemented)", path);
-        Ok(0)
+        debug!("Reparse requested for {} in workspace {}", path, workspace_id);
+
+        // Verify file exists
+        let vnode = self.get_vnode(workspace_id, path).await?
+            .ok_or_else(|| CortexError::not_found("File", path.to_string()))?;
+
+        if !vnode.is_file() {
+            return Err(CortexError::invalid_input(
+                format!("Path is not a file: {}", path)
+            ));
+        }
+
+        // Check if file is a code file that can be parsed
+        if vnode.language.is_none() || matches!(vnode.language, Some(crate::types::Language::Unknown)) {
+            debug!("Skipping reparse for non-code file: {}", path);
+            return Ok(0);
+        }
+
+        // Delegate to ingestion pipeline for parsing and storage
+        match ingestion_pipeline.ingest_file(workspace_id, path).await {
+            Ok(result) => {
+                if !result.errors.is_empty() {
+                    warn!(
+                        "Reparse completed with {} errors for {}: {:?}",
+                        result.errors.len(),
+                        path,
+                        result.errors
+                    );
+                }
+
+                debug!(
+                    "Successfully reparsed {} in {}ms: {} units extracted",
+                    path,
+                    result.duration_ms,
+                    result.units_stored
+                );
+
+                Ok(result.units_stored)
+            }
+            Err(e) => {
+                error!("Failed to reparse file {}: {}", path, e);
+                Err(e)
+            }
+        }
     }
 
     /// Get the number of code units extracted from a file.

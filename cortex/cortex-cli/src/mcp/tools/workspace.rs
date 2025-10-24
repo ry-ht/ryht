@@ -99,6 +99,11 @@ impl WorkspaceContext {
         }
     }
 
+    /// Get a reference to the active workspace Arc for sharing with other contexts
+    pub fn active_workspace_ref(&self) -> Arc<RwLock<Option<Uuid>>> {
+        self.active_workspace.clone()
+    }
+
     // Note: Workspace CRUD operations now use WorkspaceService
     // Methods store_workspace, get_workspace, list_workspaces, and update_workspace
     // have been replaced with direct calls to workspace_service

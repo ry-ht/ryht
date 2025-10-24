@@ -45,8 +45,8 @@ qdrant-client = { version = "1.15.0", features = ["serde"] }
 # Process management
 dirs = "6.0.0"
 
-# HTTP client for health checks
-reqwest = { version = "0.12.24", features = ["json"] }
+# HTTP client for health checks and snapshot upload
+reqwest = { version = "0.12.24", features = ["json", "multipart"] }
 md5 = "0.8.0"
 
 # Unix-specific dependencies

@@ -76,12 +76,16 @@ md5 = "0.8.0"
 jsonwebtoken = { version = "10.1.0", default-features = false, features = ["rust_crypto"] }
 bcrypt = "0.17.1"
 base64 = "0.22.1"
+sha2 = "0.10"
 
 # Tree-sitter parsers
 tree-sitter = "0.25.10"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-javascript = "0.25.0"
+
+# Qdrant client (for migration commands)
+qdrant-client = { version = "1.15.0", features = ["serde"] }
 
 # Process management
 reqwest = { version = "0.12.24", features = ["json"] }
