@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod api;
 pub mod server_manager;
 pub mod qdrant_commands;
+pub mod services;
 
 pub use commands::*;
 pub use config::*;
@@ -26,3 +27,6 @@ pub use mcp::{CortexMcpServer, CortexMcpServerBuilder};
 
 // Re-export REST API server types
 pub use api::{RestApiServer, ApiResponse, ApiMetadata, ApiError, ApiResult};
+
+// Re-export service layer types
+pub use services::{WorkspaceService, VfsService, SearchService, MemoryService};

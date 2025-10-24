@@ -17,6 +17,7 @@ use super::routes::{
     workspaces::WorkspaceContext,
 };
 use super::websocket::WsManager;
+use crate::services::{MemoryService, SearchService, VfsService, WorkspaceService};
 use anyhow::{Context, Result};
 use axum::{middleware, Router};
 use cortex_core::config::GlobalConfig;
@@ -239,15 +240,28 @@ impl RestApiServer {
         // Create authentication state for middleware
         let auth_state = super::middleware::AuthState::new(self.storage.clone());
 
+        // Initialize unified services
+        let workspace_service = Arc::new(WorkspaceService::new(
+            self.storage.clone(),
+            self.vfs.clone(),
+        ));
+
+        let vfs_service = Arc::new(VfsService::new(self.vfs.clone()));
+
+        let search_service = Arc::new(SearchService::new(self.storage.clone()));
+
+        let memory_service = Arc::new(MemoryService::new(
+            self.storage.clone(),
+            self.memory.clone(),
+        ));
+
         // Create contexts for different route groups
         let workspace_context = WorkspaceContext {
-            vfs: self.vfs.clone(),
-            storage: self.storage.clone(),
+            workspace_service: workspace_service.clone(),
         };
 
         let vfs_context = VfsContext {
-            vfs: self.vfs.clone(),
-            storage: self.storage.clone(),
+            vfs_service: vfs_service.clone(),
         };
 
         let session_context = SessionContext {
@@ -256,13 +270,11 @@ impl RestApiServer {
         };
 
         let search_context = SearchContext {
-            storage: self.storage.clone(),
-            memory: self.memory.clone(),
+            search_service: search_service.clone(),
         };
 
         let memory_context = MemoryContext {
-            storage: self.storage.clone(),
-            memory: self.memory.clone(),
+            memory_service: memory_service.clone(),
         };
 
         let code_unit_context = CodeUnitContext {

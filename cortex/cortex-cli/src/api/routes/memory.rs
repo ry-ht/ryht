@@ -7,21 +7,19 @@ use crate::api::{
         EpisodeSearchRequest, LearnedPattern,
     },
 };
+use crate::services::MemoryService;
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
-use cortex_memory::CognitiveManager;
-use cortex_storage::ConnectionManager;
 use std::sync::Arc;
 use std::time::Instant;
 
 /// Memory context
 #[derive(Clone)]
 pub struct MemoryContext {
-    pub storage: Arc<ConnectionManager>,
-    pub memory: Arc<CognitiveManager>,
+    pub memory_service: Arc<MemoryService>,
 }
 
 /// Create memory routes
@@ -42,54 +40,28 @@ async fn list_episodes(
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Query episodes from database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+    // Use MemoryService to recall recent episodes
+    let service_request = crate::services::memory::RecallEpisodesRequest {
+        query: String::new(), // Empty query to get all
+        episode_type: None,
+        limit: Some(100),
+        min_importance: None,
+    };
 
-    let query = "SELECT
-        cortex_id,
-        type::string(episode_type) as episode_type,
-        task_description,
-        created_at,
-        duration_seconds,
-        type::string(outcome) as outcome,
-        success_metrics
-        FROM episode
-        ORDER BY created_at DESC
-        LIMIT 100";
-
-    let mut response = conn.connection()
-        .query(query)
+    let service_episodes = ctx.memory_service
+        .recall_episodes(service_request)
         .await
         .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
 
-    let episodes_raw: Vec<serde_json::Value> = response.take(0)
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    // Convert to API response format
-    let episodes: Vec<MemoryEpisode> = episodes_raw
+    // Convert service episodes to API episodes
+    let episodes: Vec<MemoryEpisode> = service_episodes
         .into_iter()
-        .filter_map(|ep| {
-            // Calculate importance based on success metrics
-            let importance = if let Some(metrics) = ep.get("success_metrics") {
-                if let Some(obj) = metrics.as_object() {
-                    obj.values()
-                        .filter_map(|v| v.as_f64())
-                        .sum::<f64>() / obj.len().max(1) as f64
-                } else {
-                    0.5
-                }
-            } else {
-                0.5
-            };
-
-            Some(MemoryEpisode {
-                id: ep.get("cortex_id")?.as_str()?.to_string(),
-                content: ep.get("task_description")?.as_str()?.to_string(),
-                episode_type: ep.get("episode_type")?.as_str()?.to_string(),
-                importance,
-                created_at: serde_json::from_value(ep.get("created_at")?.clone()).ok()?,
-            })
+        .map(|ep| MemoryEpisode {
+            id: ep.id,
+            content: ep.task_description,
+            episode_type: ep.episode_type,
+            importance: ep.importance,
+            created_at: ep.created_at,
         })
         .collect();
 
@@ -108,92 +80,20 @@ async fn get_episode(
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Query specific episode from database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    let query = "SELECT
-        cortex_id,
-        type::string(episode_type) as episode_type,
-        task_description,
-        created_at,
-        duration_seconds,
-        type::string(outcome) as outcome,
-        success_metrics,
-        solution_summary,
-        errors_encountered,
-        lessons_learned
-        FROM episode
-        WHERE cortex_id = $episode_id
-        LIMIT 1";
-
-    let mut response = conn.connection()
-        .query(query)
-        .bind(("episode_id", episode_id.clone()))
+    // Use MemoryService to get episode
+    let service_episode = ctx.memory_service
+        .get_episode(&episode_id)
         .await
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    let episodes_raw: Vec<serde_json::Value> = response.take(0)
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    let episode_json = episodes_raw.into_iter().next()
+        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?
         .ok_or_else(|| crate::api::error::ApiError::NotFound(format!("Episode {} not found", episode_id)))?;
 
-    // Calculate importance
-    let importance = if let Some(metrics) = episode_json.get("success_metrics") {
-        if let Some(obj) = metrics.as_object() {
-            obj.values()
-                .filter_map(|v| v.as_f64())
-                .sum::<f64>() / obj.len().max(1) as f64
-        } else {
-            0.5
-        }
-    } else {
-        0.5
-    };
-
-    // Build detailed content from multiple fields
-    let mut content_parts = vec![
-        episode_json.get("task_description")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-    ];
-
-    if let Some(summary) = episode_json.get("solution_summary").and_then(|v| v.as_str()) {
-        if !summary.is_empty() {
-            content_parts.push(format!("Solution: {}", summary));
-        }
-    }
-
-    if let Some(lessons) = episode_json.get("lessons_learned").and_then(|v| v.as_array()) {
-        if !lessons.is_empty() {
-            let lessons_str: Vec<String> = lessons
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
-            if !lessons_str.is_empty() {
-                content_parts.push(format!("Lessons: {}", lessons_str.join(", ")));
-            }
-        }
-    }
-
+    // Convert service episode to API episode
     let episode = MemoryEpisode {
-        id: episode_json.get("cortex_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or(&episode_id)
-            .to_string(),
-        content: content_parts.join("\n\n"),
-        episode_type: episode_json.get("episode_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("task")
-            .to_string(),
-        importance,
-        created_at: serde_json::from_value(
-            episode_json.get("created_at")
-                .cloned()
-                .unwrap_or(serde_json::json!(chrono::Utc::now()))
-        ).unwrap_or_else(|_| chrono::Utc::now()),
+        id: service_episode.id,
+        content: service_episode.task_description,
+        episode_type: service_episode.episode_type,
+        importance: service_episode.importance,
+        created_at: service_episode.created_at,
     };
 
     tracing::debug!(episode_id = %episode_id, "Retrieved episode details");
@@ -216,8 +116,9 @@ async fn consolidate_memory(
         "Starting memory consolidation"
     );
 
-    // Run memory consolidation using the cognitive manager
-    let consolidation_result = ctx.memory.consolidate()
+    // Use MemoryService to consolidate memory
+    let consolidation_result = ctx.memory_service
+        .consolidate()
         .await
         .map_err(|e| crate::api::error::ApiError::Internal(format!("Consolidation failed: {}", e)))?;
 
@@ -263,79 +164,28 @@ async fn search_episodes(
         "Searching for similar episodes"
     );
 
-    // In a real implementation, this would:
-    // 1. Generate embedding for the query
-    // 2. Search semantic memory using vector similarity
-    // 3. Return ranked results by similarity score
+    // Use MemoryService to recall episodes
+    let service_request = crate::services::memory::RecallEpisodesRequest {
+        query: payload.query.clone(),
+        episode_type: payload.episode_type.clone(),
+        limit: Some(limit),
+        min_importance: Some(min_importance),
+    };
 
-    // For now, we'll do a text-based search
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    let mut query_str = String::from(
-        "SELECT
-            cortex_id,
-            type::string(episode_type) as episode_type,
-            task_description,
-            created_at,
-            duration_seconds,
-            type::string(outcome) as outcome,
-            success_metrics
-        FROM episode
-        WHERE task_description CONTAINS $query"
-    );
-
-    if let Some(ref _ep_type) = payload.episode_type {
-        query_str.push_str(" AND type::string(episode_type) = $episode_type");
-    }
-
-    query_str.push_str(" ORDER BY created_at DESC LIMIT $limit");
-
-    let mut query = conn.connection()
-        .query(&query_str)
-        .bind(("query", payload.query.clone()))
-        .bind(("limit", limit));
-
-    if let Some(ref ep_type) = payload.episode_type {
-        query = query.bind(("episode_type", ep_type.clone()));
-    }
-
-    let mut response = query
+    let service_episodes = ctx.memory_service
+        .recall_episodes(service_request)
         .await
         .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
 
-    let episodes_raw: Vec<serde_json::Value> = response.take(0)
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    // Convert to API response format and filter by importance
-    let episodes: Vec<MemoryEpisode> = episodes_raw
+    // Convert service episodes to API episodes
+    let episodes: Vec<MemoryEpisode> = service_episodes
         .into_iter()
-        .filter_map(|ep| {
-            // Calculate importance based on success metrics
-            let importance = if let Some(metrics) = ep.get("success_metrics") {
-                if let Some(obj) = metrics.as_object() {
-                    obj.values()
-                        .filter_map(|v| v.as_f64())
-                        .sum::<f64>() / obj.len().max(1) as f64
-                } else {
-                    0.5
-                }
-            } else {
-                0.5
-            };
-
-            // Filter by minimum importance
-            if importance < min_importance {
-                return None;
-            }
-
-            Some(MemoryEpisode {
-                id: ep.get("cortex_id")?.as_str()?.to_string(),
-                content: ep.get("task_description")?.as_str()?.to_string(),
-                episode_type: ep.get("episode_type")?.as_str()?.to_string(),
-                importance,
-                created_at: serde_json::from_value(ep.get("created_at")?.clone()).ok()?,
-            })
+        .map(|ep| MemoryEpisode {
+            id: ep.id,
+            content: ep.task_description,
+            episode_type: ep.episode_type,
+            importance: ep.importance,
+            created_at: ep.created_at,
         })
         .collect();
 
@@ -359,59 +209,31 @@ async fn get_patterns(
 
     tracing::debug!("Fetching learned patterns from memory");
 
-    // Query learned patterns from database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
+    // Use MemoryService to get patterns
+    let filters = crate::services::memory::PatternFilters {
+        pattern_type: None,
+        min_confidence: None,
+        limit: Some(100),
+    };
 
-    let query = "SELECT
-        id,
-        pattern_name,
-        description,
-        type::string(pattern_type) as pattern_type,
-        occurrences,
-        confidence,
-        created_at,
-        last_seen,
-        examples
-        FROM learned_pattern
-        ORDER BY confidence DESC, occurrences DESC
-        LIMIT 100";
-
-    let mut response = conn.connection()
-        .query(query)
+    let service_patterns = ctx.memory_service
+        .get_patterns(filters)
         .await
         .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
 
-    let patterns_raw: Vec<serde_json::Value> = response.take(0)
-        .map_err(|e| crate::api::error::ApiError::Internal(e.to_string()))?;
-
-    // Convert to API response format
-    let patterns: Vec<LearnedPattern> = patterns_raw
+    // Convert service patterns to API patterns
+    let patterns: Vec<LearnedPattern> = service_patterns
         .into_iter()
-        .filter_map(|p| {
-            let examples = if let Some(examples_val) = p.get("examples") {
-                if let Some(arr) = examples_val.as_array() {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            } else {
-                Vec::new()
-            };
-
-            Some(LearnedPattern {
-                id: p.get("id")?.as_str()?.to_string(),
-                pattern_name: p.get("pattern_name")?.as_str()?.to_string(),
-                description: p.get("description")?.as_str().unwrap_or("").to_string(),
-                pattern_type: p.get("pattern_type")?.as_str()?.to_string(),
-                occurrences: p.get("occurrences")?.as_u64()? as usize,
-                confidence: p.get("confidence")?.as_f64()?,
-                created_at: serde_json::from_value(p.get("created_at")?.clone()).ok()?,
-                last_seen: serde_json::from_value(p.get("last_seen")?.clone()).ok()?,
-                examples,
-            })
+        .map(|p| LearnedPattern {
+            id: p.id,
+            pattern_name: p.pattern_name,
+            description: p.description,
+            pattern_type: p.pattern_type,
+            occurrences: p.occurrences,
+            confidence: p.confidence,
+            created_at: p.created_at,
+            last_seen: p.last_seen,
+            examples: Vec::new(), // Service type doesn't include examples yet
         })
         .collect();
 

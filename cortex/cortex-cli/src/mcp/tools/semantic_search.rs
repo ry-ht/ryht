@@ -28,6 +28,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
+// Import search service
+use crate::services::SearchService;
+use crate::services::search::SearchCodeRequest;
+
 // =============================================================================
 // Shared Context
 // =============================================================================
@@ -38,6 +42,7 @@ pub struct SemanticSearchContext {
     storage: Arc<ConnectionManager>,
     semantic_memory: Arc<SemanticMemorySystem>,
     search_engine: Arc<RwLock<SemanticSearchEngine>>,
+    search_service: Arc<SearchService>,
 }
 
 impl SemanticSearchContext {
@@ -60,10 +65,14 @@ impl SemanticSearchContext {
             })
         ));
 
+        // Create search service
+        let search_service = Arc::new(SearchService::new(storage.clone()));
+
         Self {
             storage,
             semantic_memory,
             search_engine,
+            search_service,
         }
     }
 
@@ -164,41 +173,30 @@ impl Tool for SearchCodeTool {
         info!("Semantic code search: '{}'", input.query);
         let start = std::time::Instant::now();
 
-        // Create search filter
-        let mut filter = SearchFilter::default();
-        filter.entity_type = Some(EntityType::Code);
-        filter.min_score = Some(input.min_similarity);
+        // Use search service
+        let request = SearchCodeRequest {
+            query: input.query.clone(),
+            limit: input.limit,
+            min_similarity: input.min_similarity,
+            language: input.language.clone(),
+        };
 
-        if let Some(lang) = &input.language {
-            filter.metadata_filters.insert("language".to_string(), lang.clone());
-        }
-
-        // Perform semantic search
-        let engine = self.ctx.search_engine.read().await;
-        let search_results = engine
-            .search_with_filter(&input.query, input.limit, filter)
+        let service_results = self.ctx.search_service
+            .search_code(request)
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Search failed: {}", e)))?;
 
-        // Convert results
-        let results: Vec<CodeSearchResult> = search_results
+        // Convert service results to MCP output format
+        let results: Vec<CodeSearchResult> = service_results
             .into_iter()
-            .map(|r| {
-                let snippet = if r.content.len() > 200 {
-                    format!("{}...", &r.content[..200])
-                } else {
-                    r.content.clone()
-                };
-
-                CodeSearchResult {
-                    unit_id: r.id.clone(),
-                    name: r.metadata.get("name").cloned().unwrap_or_else(|| r.id.clone()),
-                    file_path: r.metadata.get("file_path").cloned().unwrap_or_default(),
-                    signature: r.metadata.get("signature").cloned(),
-                    similarity_score: r.score,
-                    snippet,
-                    language: r.metadata.get("language").cloned().unwrap_or_else(|| "unknown".to_string()),
-                }
+            .map(|r| CodeSearchResult {
+                unit_id: r.id.clone(),
+                name: r.title.clone(),
+                file_path: r.file_path.clone().unwrap_or_default(),
+                signature: None,
+                similarity_score: r.score,
+                snippet: r.content.clone(),
+                language: r.language.clone().unwrap_or_else(|| "unknown".to_string()),
             })
             .collect();
 

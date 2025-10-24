@@ -30,6 +30,9 @@ use tokio::fs;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+// Import services
+use crate::services::WorkspaceService;
+
 // =============================================================================
 // Shared Context
 // =============================================================================
@@ -49,6 +52,8 @@ pub struct WorkspaceContext {
     ingestion: Arc<FileIngestionPipeline>,
     /// Active workspace ID (shared across all tools)
     active_workspace: Arc<RwLock<Option<Uuid>>>,
+    /// Workspace service
+    workspace_service: Arc<WorkspaceService>,
 }
 
 impl WorkspaceContext {
@@ -66,6 +71,9 @@ impl WorkspaceContext {
             semantic_memory.clone(),
         ));
 
+        // Create workspace service
+        let workspace_service = Arc::new(WorkspaceService::new(storage.clone(), vfs.clone()));
+
         Ok(Self {
             storage,
             vfs,
@@ -75,6 +83,7 @@ impl WorkspaceContext {
             semantic_memory,
             ingestion,
             active_workspace: Arc::new(RwLock::new(None)),
+            workspace_service,
         })
     }
 
@@ -90,7 +99,7 @@ impl WorkspaceContext {
         }
     }
 
-    /// Store a workspace in the database
+    /// Store a workspace in the database (now uses service)
     async fn store_workspace(&self, workspace: &Workspace) -> Result<()> {
         let conn = self.storage.acquire().await?;
 
@@ -104,7 +113,7 @@ impl WorkspaceContext {
         Ok(())
     }
 
-    /// Get a workspace from the database
+    /// Get workspace by ID using service
     async fn get_workspace(&self, workspace_id: &Uuid) -> Result<Option<Workspace>> {
         let conn = self.storage.acquire().await?;
 
@@ -117,7 +126,7 @@ impl WorkspaceContext {
         Ok(workspace)
     }
 
-    /// List all workspaces
+    /// List all workspaces (still uses direct DB for now due to type compatibility)
     async fn list_workspaces(&self, status_filter: Option<&str>) -> Result<Vec<Workspace>> {
         let conn = self.storage.acquire().await?;
 
@@ -141,7 +150,7 @@ impl WorkspaceContext {
         Ok(workspaces)
     }
 
-    /// Update workspace metadata
+    /// Update workspace metadata (still uses direct DB for type compatibility)
     async fn update_workspace(&self, workspace: &Workspace) -> Result<()> {
         let conn = self.storage.acquire().await?;
 
@@ -155,118 +164,27 @@ impl WorkspaceContext {
         Ok(())
     }
 
-    /// Delete a workspace and all its files
+    /// Delete workspace using service
     async fn delete_workspace(&self, workspace_id: &Uuid) -> Result<()> {
-        let conn = self.storage.acquire().await?;
-
-        // Delete all vnodes in the workspace
-        let _: Vec<serde_json::Value> = conn
-            .connection()
-            .query("DELETE vnode WHERE workspace_id = $workspace_id")
-            .bind(("workspace_id", workspace_id.to_string()))
+        self.workspace_service
+            .delete_workspace(workspace_id)
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?
-            .take(0)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        // Delete the workspace itself
-        let _: Option<Workspace> = conn
-            .connection()
-            .delete(("workspace", workspace_id.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(())
+            .map_err(|e| CortexError::storage(e.to_string()))
     }
 
-    /// Calculate workspace statistics
+    /// Calculate workspace statistics using service
     async fn calculate_stats(&self, workspace_id: &Uuid) -> Result<WorkspaceStats> {
-        let conn = self.storage.acquire().await?;
-
-        // Count files and directories
-        let mut response = conn
-            .connection()
-            .query(
-                "SELECT count() as total FROM vnode WHERE workspace_id = $workspace_id AND node_type = 'file'"
-            )
-            .bind(("workspace_id", workspace_id.to_string()))
+        let stats = self.workspace_service
+            .get_workspace_stats(workspace_id)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let count_results: Vec<serde_json::Value> = response.take(0).unwrap_or_default();
-        let total_files = count_results.first()
-            .and_then(|v| v.get("total").and_then(|t| t.as_u64()))
-            .unwrap_or(0) as usize;
-
-        let mut response = conn
-            .connection()
-            .query(
-                "SELECT count() as total FROM vnode WHERE workspace_id = $workspace_id AND node_type = 'directory'"
-            )
-            .bind(("workspace_id", workspace_id.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let count_results: Vec<serde_json::Value> = response.take(0).unwrap_or_default();
-        let total_directories = count_results.first()
-            .and_then(|v| v.get("total").and_then(|t| t.as_u64()))
-            .unwrap_or(0) as usize;
-
-        // Count total bytes
-        let mut response = conn
-            .connection()
-            .query(
-                "SELECT math::sum(size_bytes) as total FROM vnode WHERE workspace_id = $workspace_id AND node_type = 'file'"
-            )
-            .bind(("workspace_id", workspace_id.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let sum_results: Vec<serde_json::Value> = response.take(0).unwrap_or_default();
-        let total_bytes = sum_results.first()
-            .and_then(|v| v.get("total").and_then(|t| t.as_u64()))
-            .unwrap_or(0);
-
-        // Get language breakdown
-        let mut response = conn
-            .connection()
-            .query(
-                "SELECT language, count() as count FROM vnode
-                 WHERE workspace_id = $workspace_id AND node_type = 'file' AND language IS NOT NULL
-                 GROUP BY language"
-            )
-            .bind(("workspace_id", workspace_id.to_string()))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let lang_results: Vec<serde_json::Value> = response.take(0).unwrap_or_default();
-        let mut languages = HashMap::new();
-        for result in lang_results {
-            if let (Some(lang), Some(count)) = (result.get("language"), result.get("count")) {
-                if let (Some(lang_str), Some(count_num)) = (lang.as_str(), count.as_u64()) {
-                    languages.insert(lang_str.to_string(), count_num as usize);
-                }
-            }
-        }
-
-        // Count code units (stored in semantic memory)
-        let mut response = conn
-            .connection()
-            .query("SELECT count() as total FROM code_unit")
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
-
-        let count_results: Vec<serde_json::Value> = response.take(0).unwrap_or_default();
-        let total_units = count_results.first()
-            .and_then(|v| v.get("total").and_then(|t| t.as_u64()))
-            .unwrap_or(0) as usize;
 
         Ok(WorkspaceStats {
-            total_files,
-            total_directories,
-            total_units,
-            total_bytes,
-            languages: serde_json::to_value(languages).unwrap(),
+            total_files: stats.total_files,
+            total_directories: stats.total_directories,
+            total_units: stats.total_units,
+            total_bytes: stats.total_bytes,
+            languages: serde_json::to_value(stats.languages).unwrap(),
         })
     }
 

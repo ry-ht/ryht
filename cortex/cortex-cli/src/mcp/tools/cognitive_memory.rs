@@ -1,13 +1,16 @@
 //! Cognitive Memory Tools (12 tools)
 
 use async_trait::async_trait;
-use cortex_memory::{EpisodicMemorySystem, ProceduralMemorySystem};
+use cortex_memory::{EpisodicMemorySystem, ProceduralMemorySystem, CognitiveManager};
 use cortex_storage::ConnectionManager;
 use mcp_sdk::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::debug;
+
+// Import memory service
+use crate::services::MemoryService;
 
 #[derive(Clone)]
 pub struct CognitiveMemoryContext {
@@ -17,13 +20,16 @@ pub struct CognitiveMemoryContext {
     episodic: Arc<EpisodicMemorySystem>,
     #[allow(dead_code)]
     procedural: Arc<ProceduralMemorySystem>,
+    memory_service: Arc<MemoryService>,
 }
 
 impl CognitiveMemoryContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
         let episodic = Arc::new(EpisodicMemorySystem::new(storage.clone()));
         let procedural = Arc::new(ProceduralMemorySystem::new(storage.clone()));
-        Self { storage, episodic, procedural }
+        let cognitive_manager = Arc::new(CognitiveManager::new(storage.clone()));
+        let memory_service = Arc::new(MemoryService::new(storage.clone(), cognitive_manager));
+        Self { storage, episodic, procedural, memory_service }
     }
 }
 

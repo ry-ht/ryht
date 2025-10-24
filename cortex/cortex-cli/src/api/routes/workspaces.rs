@@ -10,21 +10,19 @@ use crate::api::{
     },
     pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
 };
+use crate::services::{WorkspaceService, workspace::ListWorkspaceFilters};
 use axum::{
     extract::{Path, Query, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
-use cortex_storage::ConnectionManager;
-use cortex_vfs::VirtualFileSystem;
 use std::sync::Arc;
 use std::time::Instant;
 
 /// Workspace context
 #[derive(Clone)]
 pub struct WorkspaceContext {
-    pub vfs: Arc<VirtualFileSystem>,
-    pub storage: Arc<ConnectionManager>,
+    pub workspace_service: Arc<WorkspaceService>,
 }
 
 /// Create workspace routes
@@ -59,48 +57,19 @@ async fn list_workspaces(
     // Validate pagination params
     params.validate().map_err(|e| ApiError::BadRequest(e))?;
 
-    // Decode cursor if present
-    let cursor_data = if let Some(ref cursor) = params.cursor {
-        Some(decode_cursor(cursor).map_err(|e| ApiError::BadRequest(e))?)
-    } else {
-        None
+    // Use workspace service to list workspaces
+    let filters = ListWorkspaceFilters {
+        workspace_type: None,
+        limit: Some(params.limit + 1), // Fetch one extra to check if there are more
     };
 
-    // Query all workspaces from database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Build query with cursor-based pagination
-    let query = if let Some(ref cursor) = cursor_data {
-        format!(
-            "SELECT * FROM workspace WHERE created_at < $timestamp OR (created_at = $timestamp AND id < $id) ORDER BY created_at DESC, id DESC LIMIT {}",
-            params.limit + 1 // Fetch one extra to check if there are more
-        )
-    } else {
-        format!(
-            "SELECT * FROM workspace ORDER BY created_at DESC, id DESC LIMIT {}",
-            params.limit + 1
-        )
-    };
-
-    let mut response = if let Some(ref cursor) = cursor_data {
-        conn.connection()
-            .query(&query)
-            .bind(("timestamp", cursor.last_timestamp))
-            .bind(("id", cursor.last_id.clone()))
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-    } else {
-        conn.connection()
-            .query(&query)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-    };
-
-    let mut workspaces: Vec<cortex_vfs::Workspace> = response.take(0)
+    let workspaces = ctx.workspace_service
+        .list_workspaces(filters)
+        .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Check if there are more results
+    let mut workspaces = workspaces;
     let has_more = workspaces.len() > params.limit;
     if has_more {
         workspaces.pop(); // Remove the extra item
@@ -110,23 +79,24 @@ async fn list_workspaces(
     let next_cursor = if has_more && !workspaces.is_empty() {
         let last = workspaces.last().unwrap();
         generate_next_cursor(
-            last.id.to_string(),
+            last.id.clone(),
             last.created_at,
-            cursor_data.map(|c| c.offset + params.limit).unwrap_or(params.limit),
+            params.limit,
         )
     } else {
         None
     };
 
+    // Convert to API response format
     let workspace_responses: Vec<WorkspaceResponse> = workspaces
         .into_iter()
         .map(|ws| WorkspaceResponse {
-            id: ws.id.to_string(),
+            id: ws.id,
             name: ws.name,
-            workspace_type: format!("{:?}", ws.workspace_type).to_lowercase(),
-            source_type: format!("{:?}", ws.source_type).to_lowercase(),
+            workspace_type: ws.workspace_type,
+            source_type: ws.source_type,
             namespace: ws.namespace,
-            source_path: ws.source_path.map(|p| p.to_string_lossy().to_string()),
+            source_path: ws.source_path,
             read_only: ws.read_only,
             created_at: ws.created_at,
             updated_at: ws.updated_at,
@@ -173,26 +143,21 @@ async fn get_workspace(
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
         .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
 
-    // Query workspace from database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let workspace: Option<cortex_vfs::Workspace> = conn.connection()
-        .select(("workspace", workspace_uuid.to_string()))
+    // Use workspace service to get workspace
+    let workspace = ctx.workspace_service
+        .get_workspace(&workspace_uuid)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("Workspace {} not found", workspace_id)))?;
 
-    let workspace = workspace.ok_or_else(||
-        ApiError::NotFound(format!("Workspace {} not found", workspace_id))
-    )?;
-
+    // Convert to API response format
     let workspace_response = WorkspaceResponse {
-        id: workspace.id.to_string(),
+        id: workspace.id,
         name: workspace.name,
-        workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-        source_type: format!("{:?}", workspace.source_type).to_lowercase(),
+        workspace_type: workspace.workspace_type,
+        source_type: workspace.source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path.map(|p| p.to_string_lossy().to_string()),
+        source_path: workspace.source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -225,54 +190,31 @@ async fn create_workspace(
         "User creating workspace"
     );
 
-    // Parse workspace type
-    let workspace_type = match payload.workspace_type.to_lowercase().as_str() {
-        "code" => cortex_vfs::WorkspaceType::Code,
-        "documentation" => cortex_vfs::WorkspaceType::Documentation,
-        "mixed" => cortex_vfs::WorkspaceType::Mixed,
-        "external" => cortex_vfs::WorkspaceType::External,
-        _ => return Err(ApiError::BadRequest("Invalid workspace type".to_string())),
-    };
-
-    // Create workspace
-    let workspace_id = uuid::Uuid::new_v4();
-    let namespace = format!("ws_{}", workspace_id.to_string().replace('-', "_"));
-    let now = chrono::Utc::now();
-
-    let workspace = cortex_vfs::Workspace {
-        id: workspace_id,
+    // Convert API request to service request
+    let service_request = crate::services::workspace::CreateWorkspaceRequest {
         name: payload.name.clone(),
-        workspace_type,
-        source_type: cortex_vfs::SourceType::Local,
-        namespace: namespace.clone(),
-        source_path: payload.source_path.as_ref().map(|p| std::path::PathBuf::from(p)),
-        read_only: false,
-        parent_workspace: None,
-        fork_metadata: None,
-        created_at: now,
-        updated_at: now,
+        workspace_type: payload.workspace_type.clone(),
+        source_path: payload.source_path.clone(),
+        read_only: Some(false),
     };
 
-    // Save to database
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let workspace_json = serde_json::to_value(&workspace)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let _: Option<serde_json::Value> = conn.connection()
-        .create(("workspace", workspace_id.to_string()))
-        .content(workspace_json)
+    // Use workspace service to create workspace
+    let workspace = ctx.workspace_service
+        .create_workspace(service_request)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Clone workspace_id before moving workspace
+    let workspace_id = workspace.id.clone();
+
+    // Convert to API response format
     let workspace_response = WorkspaceResponse {
-        id: workspace.id.to_string(),
+        id: workspace.id,
         name: workspace.name,
-        workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-        source_type: format!("{:?}", workspace.source_type).to_lowercase(),
+        workspace_type: workspace.workspace_type,
+        source_type: workspace.source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path.map(|p| p.to_string_lossy().to_string()),
+        source_path: workspace.source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -320,21 +262,9 @@ async fn delete_workspace(
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
         .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
 
-    // Delete workspace and all associated vnodes
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Delete all vnodes in workspace
-    let delete_vnodes_query = "DELETE vnode WHERE workspace_id = $workspace_id";
-    conn.connection()
-        .query(delete_vnodes_query)
-        .bind(("workspace_id", workspace_uuid.to_string()))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Delete workspace
-    let _: Option<cortex_vfs::Workspace> = conn.connection()
-        .delete(("workspace", workspace_uuid.to_string()))
+    // Use workspace service to delete workspace
+    ctx.workspace_service
+        .delete_workspace(&workspace_uuid)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -358,57 +288,33 @@ async fn update_workspace(
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
         .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
 
-    // Get existing workspace
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Convert API request to service request
+    let service_request = crate::services::workspace::UpdateWorkspaceRequest {
+        name: payload.name.clone(),
+        workspace_type: payload.workspace_type.clone(),
+        read_only: payload.read_only,
+    };
 
-    let workspace: Option<cortex_vfs::Workspace> = conn.connection()
-        .select(("workspace", workspace_uuid.to_string()))
+    // Use workspace service to update workspace
+    let workspace = ctx.workspace_service
+        .update_workspace(&workspace_uuid, service_request)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        .map_err(|e| {
+            if e.to_string().contains("not found") {
+                ApiError::NotFound(format!("Workspace {} not found", workspace_id))
+            } else {
+                ApiError::Internal(e.to_string())
+            }
+        })?;
 
-    let mut workspace = workspace.ok_or_else(||
-        ApiError::NotFound(format!("Workspace {} not found", workspace_id))
-    )?;
-
-    // Update fields
-    if let Some(name) = payload.name {
-        workspace.name = name;
-    }
-
-    if let Some(workspace_type_str) = payload.workspace_type {
-        workspace.workspace_type = match workspace_type_str.to_lowercase().as_str() {
-            "code" => cortex_vfs::WorkspaceType::Code,
-            "documentation" => cortex_vfs::WorkspaceType::Documentation,
-            "mixed" => cortex_vfs::WorkspaceType::Mixed,
-            "external" => cortex_vfs::WorkspaceType::External,
-            _ => return Err(ApiError::BadRequest("Invalid workspace type".to_string())),
-        };
-    }
-
-    if let Some(read_only) = payload.read_only {
-        workspace.read_only = read_only;
-    }
-
-    workspace.updated_at = chrono::Utc::now();
-
-    // Save to database
-    let workspace_json = serde_json::to_value(&workspace)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let _: Option<serde_json::Value> = conn.connection()
-        .update(("workspace", workspace_uuid.to_string()))
-        .content(workspace_json)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
+    // Convert to API response format
     let workspace_response = WorkspaceResponse {
-        id: workspace.id.to_string(),
+        id: workspace.id,
         name: workspace.name,
-        workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-        source_type: format!("{:?}", workspace.source_type).to_lowercase(),
+        workspace_type: workspace.workspace_type,
+        source_type: workspace.source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path.map(|p| p.to_string_lossy().to_string()),
+        source_path: workspace.source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -437,23 +343,19 @@ async fn sync_workspace(
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)
         .map_err(|_| ApiError::BadRequest("Invalid workspace ID".to_string()))?;
 
-    // Get workspace
-    let conn = ctx.storage.acquire().await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let workspace: Option<cortex_vfs::Workspace> = conn.connection()
-        .select(("workspace", workspace_uuid.to_string()))
+    // Use workspace service to get workspace
+    let workspace = ctx.workspace_service
+        .get_workspace(&workspace_uuid)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let workspace = workspace.ok_or_else(||
-        ApiError::NotFound(format!("Workspace {} not found", workspace_id))
-    )?;
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("Workspace {} not found", workspace_id)))?;
 
     // Check if workspace has a source path
-    let source_path = workspace.source_path.ok_or_else(||
+    let source_path_str = workspace.source_path.ok_or_else(||
         ApiError::BadRequest("Workspace has no source path to sync from".to_string())
     )?;
+
+    let source_path = std::path::PathBuf::from(&source_path_str);
 
     let force = payload.force.unwrap_or(false);
     let dry_run = payload.dry_run.unwrap_or(false);

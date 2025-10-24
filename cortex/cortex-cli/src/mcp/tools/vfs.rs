@@ -23,6 +23,9 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
 
+// Import VFS service
+use crate::services::VfsService;
+
 // =============================================================================
 // Shared Context
 // =============================================================================
@@ -30,11 +33,13 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct VfsContext {
     vfs: Arc<VirtualFileSystem>,
+    vfs_service: Arc<VfsService>,
 }
 
 impl VfsContext {
     pub fn new(vfs: Arc<VirtualFileSystem>) -> Self {
-        Self { vfs }
+        let vfs_service = Arc::new(VfsService::new(vfs.clone()));
+        Self { vfs, vfs_service }
     }
 }
 
@@ -116,21 +121,26 @@ impl Tool for VfsGetNodeTool {
 
         debug!("Getting node: {} in workspace {}", path, workspace_id);
 
-        let node = self
+        // Use VFS service to get metadata
+        let details = self
             .ctx
-            .vfs
-            .metadata(&workspace_id, &path)
+            .vfs_service
+            .get_metadata(&workspace_id, input.path.as_str())
             .await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get node: {}", e)))?;
 
-        let content = if input.include_content && node.is_file() {
-            match self.ctx.vfs.read_file(&workspace_id, &path).await {
+        let content = if input.include_content && details.node_type == "file" {
+            match self.ctx.vfs_service.read_file(&workspace_id, input.path.as_str()).await {
                 Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
                 Err(_) => None,
             }
         } else {
             None
         };
+
+        // Convert service response to MCP output
+        let node = self.ctx.vfs.metadata(&workspace_id, &path).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get node: {}", e)))?;
 
         let output = GetNodeOutput {
             node_id: node.id.to_string(),
