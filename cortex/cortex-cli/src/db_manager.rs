@@ -469,8 +469,8 @@ impl DatabaseManager {
             DatabaseBackend::Qdrant => {
                 let url = self.qdrant_connection_url();
 
-                // Use HTTP health check endpoint instead of gRPC client
-                let health_url = format!("{}/health", url);
+                // Use HTTP health check endpoint (Qdrant 1.x uses /healthz)
+                let health_url = format!("{}/healthz", url);
 
                 match reqwest::get(&health_url).await {
                     Ok(response) if response.status().is_success() => {

@@ -1616,6 +1616,8 @@ fn find_qdrant_asset(release: &serde_json::Value, os: &str, arch: &str) -> Resul
 /// Download and install the Qdrant binary
 async fn download_and_install_qdrant(url: &str, version: &str) -> Result<()> {
     use std::path::PathBuf;
+    use flate2::read::GzDecoder;
+    use tar::Archive;
 
     // Create installation directory
     let home = std::env::var("HOME")
@@ -1652,25 +1654,53 @@ async fn download_and_install_qdrant(url: &str, version: &str) -> Result<()> {
 
     spinner.finish_and_clear();
 
-    // Write to temp file first
-    let temp_path = install_dir.join("qdrant.tmp");
-    std::fs::write(&temp_path, &bytes)
-        .context("Failed to write binary to disk")?;
+    output::info("Extracting archive...");
+
+    // Decompress gzip and extract tar
+    let decoder = GzDecoder::new(&bytes[..]);
+    let mut archive = Archive::new(decoder);
+
+    // Extract to temp directory
+    let temp_dir = install_dir.join("qdrant_temp");
+    std::fs::create_dir_all(&temp_dir)?;
+
+    archive.unpack(&temp_dir)
+        .context("Failed to extract archive")?;
+
+    // Find qdrant binary in extracted files
+    let mut qdrant_binary = None;
+    for entry in std::fs::read_dir(&temp_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.file_name().and_then(|n| n.to_str()) == Some("qdrant") {
+            qdrant_binary = Some(path);
+            break;
+        }
+    }
+
+    let qdrant_binary = qdrant_binary
+        .ok_or_else(|| anyhow::anyhow!("Qdrant binary not found in archive"))?;
 
     // Make executable on Unix systems
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&temp_path)?
+        let mut perms = std::fs::metadata(&qdrant_binary)?
             .permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&temp_path, perms)
+        std::fs::set_permissions(&qdrant_binary, perms)
             .context("Failed to set executable permissions")?;
     }
 
     // Move to final location
-    std::fs::rename(&temp_path, &binary_path)
+    if binary_path.exists() {
+        std::fs::remove_file(&binary_path)?;
+    }
+    std::fs::rename(&qdrant_binary, &binary_path)
         .context("Failed to install binary")?;
+
+    // Clean up temp directory
+    let _ = std::fs::remove_dir_all(&temp_dir);
 
     output::success(format!("Installed Qdrant to: {}", binary_path.display()));
     output::info(format!("Version: {}", version));
