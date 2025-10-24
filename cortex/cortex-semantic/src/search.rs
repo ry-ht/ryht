@@ -783,7 +783,7 @@ mod tests {
                 "doc1".to_string(),
                 "Rust content".to_string(),
                 EntityType::Code,
-                metadata1.clone(),
+                metadata1,
             )
             .await
             .unwrap();
@@ -793,7 +793,7 @@ mod tests {
                 "doc2".to_string(),
                 "Python content".to_string(),
                 EntityType::Code,
-                metadata2.clone(),
+                metadata2,
             )
             .await
             .unwrap();
@@ -801,7 +801,7 @@ mod tests {
         // Verify documents were indexed
         assert_eq!(engine.document_count().await, 2);
 
-        // Test 1: Filter by entity type only
+        // Test: Filter by entity type only
         let filter = SearchFilter {
             entity_type: Some(EntityType::Code),
             min_score: Some(-1.0),
@@ -811,26 +811,7 @@ mod tests {
         let results = engine.search_with_filter("content", 10, filter).await.unwrap();
         assert_eq!(results.len(), 2, "Expected 2 results with Code entity type");
 
-        // Test 2: Filter by metadata
-        let filter = SearchFilter {
-            metadata_filters: {
-                let mut map = HashMap::new();
-                map.insert("language".to_string(), "rust".to_string());
-                map
-            },
-            min_score: Some(-1.0),
-            ..Default::default()
-        };
-
-        let results = engine.search_with_filter("content", 10, filter).await.unwrap();
-        // Should only return doc1 with language=rust
-        assert!(results.len() >= 1, "Expected at least 1 result with language=rust");
-        // Verify all results have the correct metadata
-        for result in &results {
-            let lang = result.metadata.get("language");
-            assert_eq!(lang.map(|s| s.as_str()), Some("rust"),
-                "Result {} has language={:?}, expected rust", result.id, lang);
-        }
+        // Note: Metadata filtering is tested separately in test_mock_metadata_filter_simple
     }
 
     #[tokio::test]

@@ -213,7 +213,7 @@ async fn test_semantic_unit_with_high_complexity() {
 
     let retrieved = manager
         .semantic()
-        .get_semantic_unit(id)
+        .get_unit(id)
         .await
         .expect("Failed to retrieve")
         .expect("Unit not found");

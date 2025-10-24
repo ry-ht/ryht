@@ -426,7 +426,7 @@ async fn test_semantic_memory_code_units() {
     let store_latency = start.elapsed();
 
     let start = Instant::now();
-    let retrieved = manager.semantic().get_semantic_unit(id).await.unwrap();
+    let retrieved = manager.semantic().get_unit(id).await.unwrap();
     let retrieve_latency = start.elapsed();
 
     assert!(retrieved.is_some());

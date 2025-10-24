@@ -24,6 +24,92 @@ impl SemanticMemorySystem {
     }
 
     // ========================================================================
+    // Helper Methods
+    // ========================================================================
+
+    /// Build a SELECT query that properly converts enum fields to strings for JSON serialization
+    fn build_select_query(where_clause: &str, order_by: Option<&str>) -> String {
+        let order_clause = order_by.unwrap_or("");
+        format!(r#"
+            SELECT
+                cortex_id,
+                type::string(unit_type) as unit_type,
+                name,
+                qualified_name,
+                display_name,
+                file_path,
+                type::string(language) as language,
+                start_line,
+                start_column,
+                end_line,
+                end_column,
+                start_byte,
+                end_byte,
+                signature,
+                body,
+                docstring,
+                comments,
+                return_type,
+                parameters,
+                type_parameters,
+                generic_constraints,
+                throws,
+                type::string(visibility) as visibility,
+                attributes,
+                modifiers,
+                is_async,
+                is_unsafe,
+                is_const,
+                is_static,
+                is_abstract,
+                is_virtual,
+                is_override,
+                is_final,
+                is_exported,
+                is_default_export,
+                complexity,
+                test_coverage,
+                has_tests,
+                has_documentation,
+                language_specific,
+                embedding,
+                embedding_model,
+                summary,
+                purpose,
+                ast_node_type,
+                ast_metadata,
+                type::string(status) as status,
+                version,
+                created_at,
+                updated_at,
+                created_by,
+                updated_by,
+                tags,
+                metadata
+            FROM code_unit
+            {}
+            {}
+        "#, where_clause, order_clause)
+    }
+
+    /// Process query results by renaming cortex_id back to id
+    fn process_unit_results(units: Vec<serde_json::Value>) -> Result<Vec<CodeUnit>> {
+        units.into_iter()
+            .map(|mut unit_json| {
+                // Rename cortex_id back to id for deserialization
+                if let Some(obj) = unit_json.as_object_mut() {
+                    if let Some(cortex_id) = obj.remove("cortex_id") {
+                        obj.insert("id".to_string(), cortex_id);
+                    }
+                }
+
+                serde_json::from_value(unit_json)
+                    .map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))
+            })
+            .collect()
+    }
+
+    // ========================================================================
     // Code Unit Operations
     // ========================================================================
 
@@ -71,17 +157,20 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
-        // Query by id field in content, not by record ID
-        let query = "SELECT * FROM code_unit WHERE id = $id LIMIT 1";
+        // Query by cortex_id field (renamed from id during storage)
+        let query = Self::build_select_query("WHERE cortex_id = $id LIMIT 1", None);
         let mut result = conn
             .connection()
-            .query(query)
-            .bind(("id", id))
+            .query(&query)
+            .bind(("id", id.to_string()))
             .await
             .map_err(|e| CortexError::storage(format!("Query failed: {}", e)))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))?;
-        Ok(units.into_iter().next())
+        // Get raw JSON results and manually deserialize, renaming cortex_id back to id
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(format!("Failed to get results: {}", e)))?;
+
+        let mut processed = Self::process_unit_results(units)?;
+        Ok(processed.pop())
     }
 
 
@@ -140,15 +229,16 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE file_path = $path", Some("ORDER BY start_line ASC"));
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE file_path = $path ORDER BY start_line ASC")
+            .query(&query)
             .bind(("path", file_path.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(units)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
     }
 
     /// Search units by qualified name (e.g., "module::Class::method")
@@ -160,15 +250,17 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE qualified_name = $name", None);
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE qualified_name = $name")
+            .query(&query)
             .bind(("name", qualified_name.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let unit: Option<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(unit)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        let mut processed = Self::process_unit_results(units)?;
+        Ok(processed.pop())
     }
 
     /// Search units by name (e.g., "VirtualFileSystem")
@@ -180,15 +272,16 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE name = $name", None);
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE name = $name")
+            .query(&query)
             .bind(("name", name.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(units)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
     }
 
     /// Get a connection for custom queries (primarily for testing)
@@ -398,16 +491,16 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE complexity.cyclomatic > $threshold", Some("ORDER BY complexity.cyclomatic DESC"));
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE complexity.cyclomatic > $threshold ORDER BY complexity.cyclomatic DESC")
+            .query(&query)
             .bind(("threshold", complexity_threshold))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-
-        Ok(units)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
     }
 
     /// Find units without tests
@@ -419,14 +512,15 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE has_tests = false AND unit_type IN ['function', 'method', 'class']", None);
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE has_tests = false AND unit_type IN ['function', 'method', 'class']")
+            .query(&query)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(units)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
     }
 
     /// Find units without documentation
@@ -438,14 +532,15 @@ impl SemanticMemorySystem {
             .acquire()
             .await?;
 
+        let query = Self::build_select_query("WHERE has_documentation = false AND visibility = 'public'", None);
         let mut result = conn
             .connection()
-            .query("SELECT * FROM code_unit WHERE has_documentation = false AND visibility = 'public'")
+            .query(&query)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        let units: Vec<CodeUnit> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
-        Ok(units)
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
     }
 
     // ========================================================================
@@ -578,7 +673,7 @@ impl SemanticMemorySystem {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Language, Visibility, Parameter, Complexity as CoreComplexity, CodeUnitStatus};
+    use cortex_core::types::{CodeUnit, CodeUnitType as CoreCodeUnitType, Language, Visibility, Complexity as CoreComplexity, CodeUnitStatus};
     use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
     use std::time::Duration;
 

@@ -344,7 +344,7 @@ async fn test_3_semantic_memory_graph() {
         let file_path = format!("src/module_{}/handler_{}.rs", file_idx / 10, file_idx % 10);
         let unit = create_realistic_semantic_unit(i, &file_path);
         let id = unit.id;
-        semantic.store_semantic_unit(&unit).await.expect("Failed to store unit");
+        semantic.store_unit(&unit).await.expect("Failed to store unit");
         unit_ids.push(id);
 
         if (i + 1) % 5000 == 0 {
