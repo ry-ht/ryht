@@ -1,0 +1,15 @@
+{
+  "id": "episode-001",
+  "agent_id": "agent-developer-1",
+  "task_type": "code_generation",
+  "context": {
+    "language": "rust",
+    "framework": "tokio",
+    "complexity": "medium"
+  },
+  "action_taken": "Generated async function with error handling",
+  "outcome": "Successfully created implementation",
+  "success": true,
+  "learned_patterns": ["async-error-handling", "tokio-best-practices"],
+  "timestamp": "2024-01-01T00:00:00Z"
+}

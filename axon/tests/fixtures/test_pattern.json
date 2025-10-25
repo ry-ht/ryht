@@ -1,0 +1,12 @@
+{
+  "id": "pattern-async-001",
+  "name": "Async Error Handling Pattern",
+  "pattern_type": "CodePattern",
+  "context": "Rust async functions with multiple error sources",
+  "solution": "Use Result<T, E> with thiserror for error propagation",
+  "confidence": 0.95,
+  "usage_count": 42,
+  "success_rate": 0.93,
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-15T00:00:00Z"
+}
