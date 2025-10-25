@@ -8,7 +8,7 @@ use crate::api::{
         UpdateWorkspaceRequest, SyncWorkspaceRequest, SyncResponse, SyncChange,
         PaginationParams,
     },
-    pagination::{LinkBuilder, build_pagination_info, decode_cursor, generate_next_cursor},
+    pagination::{LinkBuilder, build_pagination_info, generate_next_cursor},
 };
 use crate::services::{WorkspaceService, workspace::ListWorkspaceFilters};
 use axum::{
@@ -368,49 +368,134 @@ async fn sync_workspace(
         "Syncing workspace with filesystem"
     );
 
-    // In a real implementation, we would:
-    // 1. Walk the filesystem at source_path
-    // 2. Compare with VFS entries
-    // 3. Add/update/delete as needed
-    // For now, we'll simulate the sync
-
-    let mut changes = Vec::new();
-    let mut files_added = 0;
-    let files_updated = 0;
-    let files_deleted = 0;
-
-    // Simulate scanning filesystem
-    if source_path.exists() {
-        // This is a simplified version - a real implementation would use
-        // walkdir or similar to recursively scan the directory
-        if let Ok(entries) = std::fs::read_dir(&source_path) {
-            for entry in entries.flatten() {
-                if let Ok(metadata) = entry.metadata() {
-                    if metadata.is_file() {
-                        let file_path = entry.path();
-                        let relative_path = file_path.strip_prefix(&source_path)
-                            .unwrap_or(&file_path)
-                            .to_string_lossy()
-                            .to_string();
-
-                        if !dry_run {
-                            // In a real implementation, we would add/update the file in VFS
-                            files_added += 1;
-                        }
-
-                        changes.push(SyncChange {
-                            path: relative_path,
-                            change_type: "added".to_string(),
-                            size_bytes: Some(metadata.len()),
-                        });
-                    }
-                }
-            }
-        }
-    } else {
+    // Verify source path exists
+    if !source_path.exists() {
         return Err(ApiError::BadRequest(
             format!("Source path does not exist: {}", source_path.display())
         ));
+    }
+
+    let mut changes = Vec::new();
+    let mut files_added = 0;
+    let mut files_updated = 0;
+    let mut files_deleted = 0;
+
+    // Get VFS handle from workspace service
+    let vfs = &ctx.workspace_service.vfs;
+
+    // Get all existing files in VFS for this workspace
+    let root_path = cortex_vfs::VirtualPath::root();
+    let existing_vnodes = vfs.list_directory(&workspace_uuid, &root_path, true)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Build a set of existing file paths in VFS
+    let mut vfs_files: std::collections::HashSet<String> = existing_vnodes
+        .iter()
+        .filter(|v| v.is_file())
+        .map(|v| v.path.to_string())
+        .collect();
+
+    // Walk the filesystem and compare with VFS
+    use walkdir::WalkDir;
+    let walker = WalkDir::new(&source_path)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file());
+
+    for entry in walker {
+        let file_path = entry.path();
+        let metadata = entry.metadata()
+            .map_err(|e| ApiError::Internal(format!("Failed to read metadata for {}: {}", file_path.display(), e)))?;
+
+        // Calculate relative path
+        let relative_path = file_path.strip_prefix(&source_path)
+            .unwrap_or(file_path)
+            .to_string_lossy()
+            .to_string();
+
+        // Convert to VFS path format (use forward slashes)
+        let vfs_path_str = format!("/{}", relative_path.replace('\\', "/"));
+        let vfs_path = cortex_vfs::VirtualPath::new(&vfs_path_str)
+            .map_err(|e| ApiError::Internal(format!("Invalid path {}: {}", vfs_path_str, e)))?;
+
+        // Check if file exists in VFS
+        let vnode_exists = vfs.metadata(&workspace_uuid, &vfs_path).await.is_ok();
+
+        if vnode_exists {
+            // File exists - check if it needs updating
+            if force {
+                // Force update: read content and write to VFS
+                if !dry_run {
+                    let content = std::fs::read(file_path)
+                        .map_err(|e| ApiError::Internal(format!("Failed to read file {}: {}", file_path.display(), e)))?;
+
+                    vfs.write_file(&workspace_uuid, &vfs_path, &content)
+                        .await
+                        .map_err(|e| ApiError::Internal(format!("Failed to write file to VFS: {}", e)))?;
+                }
+
+                files_updated += 1;
+                changes.push(SyncChange {
+                    path: vfs_path_str.clone(),
+                    change_type: "updated".to_string(),
+                    size_bytes: Some(metadata.len()),
+                });
+
+                tracing::debug!(path = %vfs_path_str, "Updated file in VFS");
+            }
+
+            // Mark as seen
+            vfs_files.remove(&vfs_path_str);
+        } else {
+            // File doesn't exist - add it
+            if !dry_run {
+                let content = std::fs::read(file_path)
+                    .map_err(|e| ApiError::Internal(format!("Failed to read file {}: {}", file_path.display(), e)))?;
+
+                // Create parent directories if needed
+                if let Some(parent) = vfs_path.parent() {
+                    vfs.create_directory(&workspace_uuid, &parent, true)
+                        .await
+                        .map_err(|e| ApiError::Internal(format!("Failed to create directory: {}", e)))?;
+                }
+
+                vfs.write_file(&workspace_uuid, &vfs_path, &content)
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Failed to write file to VFS: {}", e)))?;
+            }
+
+            files_added += 1;
+            changes.push(SyncChange {
+                path: vfs_path_str.clone(),
+                change_type: "added".to_string(),
+                size_bytes: Some(metadata.len()),
+            });
+
+            tracing::debug!(path = %vfs_path_str, "Added file to VFS");
+        }
+    }
+
+    // Delete files that exist in VFS but not in filesystem
+    for vfs_file_path in vfs_files {
+        let vfs_path = cortex_vfs::VirtualPath::new(&vfs_file_path)
+            .map_err(|e| ApiError::Internal(format!("Invalid VFS path {}: {}", vfs_file_path, e)))?;
+
+        if !dry_run {
+            vfs.delete(&workspace_uuid, &vfs_path, false)
+                .await
+                .map_err(|e| ApiError::Internal(format!("Failed to delete file from VFS: {}", e)))?;
+        }
+
+        files_deleted += 1;
+        changes.push(SyncChange {
+            path: vfs_file_path.clone(),
+            change_type: "deleted".to_string(),
+            size_bytes: None,
+        });
+
+        tracing::debug!(path = %vfs_file_path, "Deleted file from VFS");
     }
 
     let total_processed = files_added + files_updated + files_deleted;

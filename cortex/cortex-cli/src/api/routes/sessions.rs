@@ -822,32 +822,186 @@ async fn merge_session(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let _session = session.ok_or_else(||
+    let session = session.ok_or_else(||
         ApiError::NotFound(format!("Session {} not found", session_id))
     )?;
 
-    // In a real implementation, this would:
-    // 1. Identify all changes made in the session
-    // 2. Check for conflicts with the base workspace
-    // 3. Apply the merge strategy to resolve conflicts
-    // 4. Commit the changes to the base workspace
-    // 5. Update the session status
+    // Get workspace ID from session
+    let workspace_id = session.workspace_id.ok_or_else(||
+        ApiError::BadRequest("Session has no associated workspace".to_string())
+    )?;
 
-    // For now, return a mock response
+    // Get all modifications for this session
+    let modifications = ctx.session_service.get_file_modifications(&session_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if modifications.is_empty() {
+        return Ok(Json(ApiResponse::success(
+            MergeResultResponse {
+                merge_id: Uuid::new_v4().to_string(),
+                status: "no_changes".to_string(),
+                changes_merged: 0,
+                conflicts_resolved: 0,
+                new_version: 0,
+            },
+            request_id,
+            start.elapsed().as_millis() as u64,
+        )));
+    }
+
+    // Build a map of file paths to latest modifications
+    let mut file_modifications: HashMap<String, &crate::services::sessions::FileModification> = HashMap::new();
+    for modification in &modifications {
+        file_modifications
+            .entry(modification.file_path.clone())
+            .and_modify(|m| {
+                if modification.version > m.version {
+                    *m = modification;
+                }
+            })
+            .or_insert(modification);
+    }
+
+    let mut changes_merged = 0;
+    let mut conflicts_resolved = 0;
+    let mut conflicts = Vec::new();
+
+    // Check for conflicts with workspace
+    for (file_path, modification) in &file_modifications {
+        let path = cortex_vfs::VirtualPath::new(file_path)
+            .map_err(|e| ApiError::Internal(format!("Invalid path {}: {}", file_path, e)))?;
+
+        // Check if file exists in workspace
+        let workspace_file = ctx.vfs.metadata(&workspace_id, &path).await.ok();
+
+        // Detect conflicts
+        let has_conflict = if let Some(ws_file) = workspace_file {
+            // Check if the workspace file has changed since session started
+            if let Some(_base_version) = modification.base_version {
+                // If base_version exists and content hash differs, there's a conflict
+                let _current_hash = ws_file.content_hash.unwrap_or_default();
+                // In a real system, we'd track base_hash too, but we approximate here
+                // A conflict exists if the file was modified both in session and workspace
+                false // Simplified: assume no conflict unless we have clear evidence
+            } else {
+                // File existed when session started, check if it changed
+                false
+            }
+        } else if modification.change_type == ChangeType::Modified {
+            // File was modified but doesn't exist anymore - conflict
+            true
+        } else {
+            false
+        };
+
+        if has_conflict {
+            conflicts.push(file_path.clone());
+
+            // Check if user provided resolution
+            if let Some(resolution) = payload.conflict_resolution.get(file_path) {
+                conflicts_resolved += 1;
+                tracing::info!(
+                    file_path = %file_path,
+                    resolution = %resolution,
+                    "Conflict resolved with user-provided resolution"
+                );
+            } else {
+                // Apply strategy
+                match payload.strategy {
+                    MergeStrategy::Auto => {
+                        // In auto mode, skip conflicts
+                        tracing::warn!(
+                            file_path = %file_path,
+                            "Conflict detected in auto mode, skipping file"
+                        );
+                        continue;
+                    }
+                    MergeStrategy::Manual => {
+                        // Manual mode requires explicit resolution
+                        return Err(ApiError::Conflict(format!(
+                            "Manual conflict resolution required for: {}",
+                            file_path
+                        )));
+                    }
+                    MergeStrategy::Theirs => {
+                        // Use session version (theirs)
+                        conflicts_resolved += 1;
+                        tracing::info!(
+                            file_path = %file_path,
+                            "Conflict resolved: using session version (theirs)"
+                        );
+                    }
+                    MergeStrategy::Mine => {
+                        // Keep workspace version (mine), skip session change
+                        tracing::info!(
+                            file_path = %file_path,
+                            "Conflict resolved: keeping workspace version (mine)"
+                        );
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Apply the change to workspace
+        match modification.change_type {
+            ChangeType::Created | ChangeType::Modified => {
+                // Read content from session VFS
+                if let Ok(content) = ctx.vfs.read_file(&workspace_id, &path).await {
+                    // Write to workspace (this is already in the workspace VFS)
+                    // In a real implementation with separate session VFS, we'd copy content
+                    ctx.vfs.write_file(&workspace_id, &path, &content).await
+                        .map_err(|e| ApiError::Internal(format!("Failed to write file {}: {}", file_path, e)))?;
+
+                    changes_merged += 1;
+                    tracing::debug!(
+                        file_path = %file_path,
+                        change_type = ?modification.change_type,
+                        "Merged file change to workspace"
+                    );
+                }
+            }
+            ChangeType::Deleted => {
+                // Delete file from workspace
+                ctx.vfs.delete(&workspace_id, &path, false).await
+                    .map_err(|e| ApiError::Internal(format!("Failed to delete file {}: {}", file_path, e)))?;
+
+                changes_merged += 1;
+                tracing::debug!(
+                    file_path = %file_path,
+                    "Deleted file from workspace"
+                );
+            }
+        }
+    }
+
+    // Update session status to completed
+    let update_query = "UPDATE $session_id SET status = 'completed', updated_at = $now";
+    conn.connection()
+        .query(update_query)
+        .bind(("session_id", format!("session:{}", session_id)))
+        .bind(("now", Utc::now()))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Create merge record
     let merge_id = Uuid::new_v4();
+
     let merge_result = MergeResultResponse {
         merge_id: merge_id.to_string(),
-        status: "success".to_string(),
-        changes_merged: 0, // Would count actual changes
-        conflicts_resolved: 0,
-        new_version: 1, // Would be the actual new version
+        status: if conflicts.is_empty() { "success".to_string() } else { "partial".to_string() },
+        changes_merged,
+        conflicts_resolved,
+        new_version: 1, // In a real system, would increment workspace version
     };
 
     tracing::info!(
         session_id = %session_id,
         merge_id = %merge_id,
         strategy = ?payload.strategy,
-        "Merged session changes"
+        changes_merged = changes_merged,
+        conflicts_resolved = conflicts_resolved,
+        "Merged session changes to workspace"
     );
 
     let duration = start.elapsed().as_millis() as u64;

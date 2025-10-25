@@ -17,7 +17,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct WorkspaceService {
     storage: Arc<ConnectionManager>,
-    vfs: Arc<VirtualFileSystem>,
+    pub vfs: Arc<VirtualFileSystem>,
 }
 
 impl WorkspaceService {

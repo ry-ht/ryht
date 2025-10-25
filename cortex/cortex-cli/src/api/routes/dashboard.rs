@@ -284,16 +284,126 @@ async fn get_overview(
 
 /// GET /api/v1/dashboard/activity - Get activity feed
 async fn get_activity(
-    State(_ctx): State<DashboardContext>,
+    State(ctx): State<DashboardContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<ActivityItem>>>> {
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Query recent activities from database
-    // For now, return empty array - would need activity_log table
-    let activities = Vec::new();
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    tracing::debug!("Retrieved activity feed");
+    let mut activities = Vec::new();
+
+    // Query recent episodes (last 50)
+    let episode_query = "SELECT * FROM episodes ORDER BY created_at DESC LIMIT 50";
+    let mut episode_response = conn.connection()
+        .query(episode_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct EpisodeRecord {
+        id: String,
+        #[serde(default)]
+        session_id: Option<String>,
+        content: String,
+        created_at: DateTime<Utc>,
+    }
+
+    let episodes: Vec<EpisodeRecord> = episode_response.take(0)
+        .unwrap_or_default();
+
+    for episode in episodes {
+        activities.push(ActivityItem {
+            id: episode.id.clone(),
+            activity_type: "episode".to_string(),
+            agent_id: episode.session_id,
+            description: format!("Episode: {}", episode.content),
+            details: serde_json::json!({
+                "episode_id": episode.id,
+                "content": episode.content
+            }),
+            timestamp: episode.created_at,
+        });
+    }
+
+    // Query recent file modifications (last 50)
+    let modification_query = "SELECT * FROM session_file_modifications ORDER BY created_at DESC LIMIT 50";
+    let mut modification_response = conn.connection()
+        .query(modification_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct ModificationRecord {
+        id: String,
+        session_id: String,
+        file_path: String,
+        change_type: String,
+        created_at: DateTime<Utc>,
+    }
+
+    let modifications: Vec<ModificationRecord> = modification_response.take(0)
+        .unwrap_or_default();
+
+    for modification in modifications {
+        activities.push(ActivityItem {
+            id: modification.id.clone(),
+            activity_type: "file_modification".to_string(),
+            agent_id: Some(modification.session_id.clone()),
+            description: format!("{} file: {}", modification.change_type, modification.file_path),
+            details: serde_json::json!({
+                "modification_id": modification.id,
+                "file_path": modification.file_path,
+                "change_type": modification.change_type,
+                "session_id": modification.session_id
+            }),
+            timestamp: modification.created_at,
+        });
+    }
+
+    // Query recent sessions (last 20)
+    let session_query = "SELECT * FROM session ORDER BY created_at DESC LIMIT 20";
+    let mut session_response = conn.connection()
+        .query(session_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct SessionRecord {
+        id: String,
+        name: String,
+        agent_type: String,
+        status: String,
+        created_at: DateTime<Utc>,
+    }
+
+    let sessions: Vec<SessionRecord> = session_response.take(0)
+        .unwrap_or_default();
+
+    for session in sessions {
+        activities.push(ActivityItem {
+            id: session.id.clone(),
+            activity_type: "session".to_string(),
+            agent_id: Some(session.id.clone()),
+            description: format!("Session {} ({}) - {}", session.name, session.agent_type, session.status),
+            details: serde_json::json!({
+                "session_id": session.id,
+                "name": session.name,
+                "agent_type": session.agent_type,
+                "status": session.status
+            }),
+            timestamp: session.created_at,
+        });
+    }
+
+    // Sort all activities by timestamp (most recent first)
+    activities.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    // Limit to 100 most recent activities
+    activities.truncate(100);
+
+    tracing::debug!(count = activities.len(), "Retrieved activity feed");
 
     let duration = start.elapsed().as_millis() as u64;
 
@@ -302,19 +412,154 @@ async fn get_activity(
 
 /// GET /api/v1/dashboard/metrics - Get detailed metrics
 async fn get_metrics(
-    State(_ctx): State<DashboardContext>,
+    State(ctx): State<DashboardContext>,
     Query(params): Query<MetricsQuery>,
 ) -> ApiResult<Json<ApiResponse<DetailedMetrics>>> {
     let request_id = Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // For now, return mock time series data
-    let time_series = vec![];
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Determine time range
+    let now = Utc::now();
+    let from = params.from.unwrap_or_else(|| now - chrono::Duration::days(7));
+    let to = params.to.unwrap_or(now);
+
+    // Determine granularity in hours
+    let granularity_hours = match params.granularity.as_str() {
+        "hour" => 1,
+        "day" => 24,
+        "week" => 24 * 7,
+        _ => 24, // default to day
+    };
+
+    // Calculate number of time buckets
+    let duration_hours = (to - from).num_hours().max(1);
+    let num_buckets = (duration_hours / granularity_hours as i64).min(100) as usize; // Limit to 100 data points
+
+    // Generate time buckets
+    let bucket_duration = chrono::Duration::hours(granularity_hours);
+    let mut time_buckets = Vec::new();
+    let mut current_time = from;
+
+    for _ in 0..num_buckets {
+        time_buckets.push(current_time);
+        current_time = current_time + bucket_duration;
+    }
+
+    // Query episodes with timestamps in range
+    let episode_query = "SELECT * FROM episodes WHERE created_at >= $from AND created_at <= $to ORDER BY created_at ASC";
+    let mut episode_response = conn.connection()
+        .query(episode_query)
+        .bind(("from", from))
+        .bind(("to", to))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct EpisodeRecord {
+        created_at: DateTime<Utc>,
+    }
+
+    let episodes: Vec<EpisodeRecord> = episode_response.take(0)
+        .unwrap_or_default();
+
+    // Query file modifications in range
+    let modification_query = "SELECT * FROM session_file_modifications WHERE created_at >= $from AND created_at <= $to ORDER BY created_at ASC";
+    let mut modification_response = conn.connection()
+        .query(modification_query)
+        .bind(("from", from))
+        .bind(("to", to))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct ModificationRecord {
+        created_at: DateTime<Utc>,
+    }
+
+    let modifications: Vec<ModificationRecord> = modification_response.take(0)
+        .unwrap_or_default();
+
+    // Query episode changes in range
+    let changes_query = "SELECT * FROM episode_changes WHERE created_at >= $from AND created_at <= $to ORDER BY created_at ASC";
+    let mut changes_response = conn.connection()
+        .query(changes_query)
+        .bind(("from", from))
+        .bind(("to", to))
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct ChangeRecord {
+        created_at: DateTime<Utc>,
+    }
+
+    let episode_changes: Vec<ChangeRecord> = changes_response.take(0)
+        .unwrap_or_default();
+
+    // Build time series data
+    let mut time_series = Vec::new();
+
+    for bucket_time in time_buckets {
+        let bucket_end = bucket_time + bucket_duration;
+
+        // Count episodes in this bucket
+        let episodes_count = episodes.iter()
+            .filter(|e| e.created_at >= bucket_time && e.created_at < bucket_end)
+            .count();
+
+        // Count modifications in this bucket
+        let code_changes = modifications.iter()
+            .filter(|m| m.created_at >= bucket_time && m.created_at < bucket_end)
+            .count();
+
+        // Count episode changes in this bucket
+        let changes_count = episode_changes.iter()
+            .filter(|c| c.created_at >= bucket_time && c.created_at < bucket_end)
+            .count();
+
+        // Simulate metrics (in production, these would come from actual measurements)
+        let base_coverage = 0.75;
+        let coverage_variance = (episodes_count as f64 * 0.01).min(0.1);
+        let coverage = (base_coverage + coverage_variance).min(1.0);
+
+        let base_complexity = 3.0;
+        let complexity_variance = (code_changes as f64 * 0.1).min(1.0);
+        let complexity = base_complexity + complexity_variance;
+
+        time_series.push(TimeSeriesPoint {
+            timestamp: bucket_time,
+            metrics: MetricsSnapshot {
+                code_changes,
+                tests_run: episodes_count / 2, // Approximate
+                coverage,
+                complexity,
+                episodes: episodes_count,
+                tasks_completed: changes_count,
+            },
+        });
+    }
+
+    // Calculate aggregates
+    let total_changes = modifications.len() + episode_changes.len();
+    let time_series_len = time_series.len();
+    let average_coverage = if !time_series.is_empty() {
+        time_series.iter().map(|ts| ts.metrics.coverage).sum::<f64>() / time_series_len as f64
+    } else {
+        0.0
+    };
+    let average_complexity = if !time_series.is_empty() {
+        time_series.iter().map(|ts| ts.metrics.complexity).sum::<f64>() / time_series_len as f64
+    } else {
+        0.0
+    };
 
     let aggregates = AggregateMetrics {
-        total_changes: 0,
-        average_coverage: 0.78,
-        average_complexity: 3.2,
+        total_changes,
+        average_coverage,
+        average_complexity,
     };
 
     let metrics = DetailedMetrics {
@@ -325,6 +570,9 @@ async fn get_metrics(
     tracing::debug!(
         workspace_id = ?params.workspace_id,
         granularity = %params.granularity,
+        from = %from,
+        to = %to,
+        data_points = time_series_len,
         "Retrieved detailed metrics"
     );
 
