@@ -543,7 +543,10 @@ impl DatabaseManager {
             .output()
             .await;
 
-        Ok(result.is_ok() && result.unwrap().status.success())
+        match result {
+            Ok(output) => Ok(output.status.success()),
+            Err(_) => Ok(false),
+        }
     }
 
     /// Get SurrealDB connection URL
@@ -580,7 +583,10 @@ impl DatabaseManager {
         if let Some(grpc_port) = self.qdrant_config.grpc_port {
             cmd.env("QDRANT__SERVICE__GRPC_PORT", grpc_port.to_string());
         }
-        cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir.to_str().unwrap());
+        let data_dir_str = data_dir.to_str().ok_or_else(|| {
+            anyhow::anyhow!("Invalid UTF-8 in data directory path: {:?}", data_dir)
+        })?;
+        cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir_str);
 
         // Set PATH to include cargo/rust tools and system utilities
         // This is critical for Qdrant to find dependencies

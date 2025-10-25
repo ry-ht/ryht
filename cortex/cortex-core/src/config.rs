@@ -359,7 +359,10 @@ impl Default for IngestionConfig {
 
 impl Default for McpConfig {
     fn default() -> Self {
-        let home = dirs::home_dir().expect("Could not determine home directory");
+        let home = dirs::home_dir().unwrap_or_else(|| {
+            eprintln!("WARNING: Could not determine home directory, using /tmp as fallback");
+            std::path::PathBuf::from("/tmp")
+        });
         let ryht_dir = home.join(".ryht").join("cortex").join("mcp");
 
         Self {

@@ -564,9 +564,13 @@ pub async fn qdrant_benchmark(
     }
 
     // Calculate statistics
-    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let min = latencies.first().unwrap();
-    let max = latencies.last().unwrap();
+    if latencies.is_empty() {
+        return Err(anyhow::anyhow!("No benchmark results collected"));
+    }
+
+    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let min = latencies.first().expect("latencies cannot be empty after check");
+    let max = latencies.last().expect("latencies cannot be empty after check");
     let avg = latencies.iter().sum::<f64>() / latencies.len() as f64;
     let p50 = latencies[latencies.len() / 2];
     let p95 = latencies[latencies.len() * 95 / 100];

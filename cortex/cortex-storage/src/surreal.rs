@@ -581,7 +581,7 @@ mod tests {
     #[tokio::test]
     async fn test_project_crud() {
         let config = ConnectionConfig::memory();
-        let pool = Arc::new(ConnectionPool::new(config));
+        let pool = Arc::new(ConnectionPool::new(config).expect("Failed to create pool"));
         pool.initialize().await.unwrap();
 
         let storage = SurrealStorage::with_schema(pool).await.unwrap();

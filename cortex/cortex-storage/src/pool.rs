@@ -18,16 +18,16 @@ pub struct ConnectionPool {
 
 impl ConnectionPool {
     /// Create a new connection pool
-    pub fn new(config: ConnectionConfig) -> Self {
-        config.validate().expect("Invalid configuration");
+    pub fn new(config: ConnectionConfig) -> Result<Self> {
+        config.validate()?;
         let max_size = config.pool_size;
 
-        Self {
+        Ok(Self {
             config,
             connections: Arc::new(DashMap::new()),
             next_id: Arc::new(RwLock::new(0)),
             max_size,
-        }
+        })
     }
 
     /// Initialize the pool with connections
@@ -123,14 +123,14 @@ mod tests {
     #[tokio::test]
     async fn test_pool_creation() {
         let config = ConnectionConfig::memory().with_pool_size(5);
-        let pool = ConnectionPool::new(config);
+        let pool = ConnectionPool::new(config).expect("Failed to create pool");
         assert_eq!(pool.max_size(), 5);
     }
 
     #[tokio::test]
     async fn test_pool_initialization() {
         let config = ConnectionConfig::memory().with_pool_size(2);
-        let pool = ConnectionPool::new(config);
+        let pool = ConnectionPool::new(config).expect("Failed to create pool");
         pool.initialize().await.unwrap();
         assert_eq!(pool.size(), 2);
     }
@@ -138,7 +138,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_connection() {
         let config = ConnectionConfig::memory();
-        let pool = ConnectionPool::new(config);
+        let pool = ConnectionPool::new(config).expect("Failed to create pool");
         pool.initialize().await.unwrap();
 
         let conn = pool.get().await.unwrap();

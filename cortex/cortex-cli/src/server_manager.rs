@@ -34,9 +34,12 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        let home = dirs::home_dir().expect("Could not determine home directory");
+        let home = dirs::home_dir().unwrap_or_else(|| {
+            tracing::warn!("Could not determine home directory, using /tmp as fallback");
+            std::path::PathBuf::from("/tmp")
+        });
         let ryht_dir = home.join(".ryht").join("cortex").join("api-server");
-        
+
         Self {
             host: "127.0.0.1".to_string(),
             port: 8080,
