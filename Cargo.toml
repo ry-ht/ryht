@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "axon/src-tauri",
+    "axon",
     "crates/*",
     "cortex/cortex-core",
     "cortex/cortex-storage",
