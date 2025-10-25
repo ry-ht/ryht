@@ -841,8 +841,13 @@ async fn run() -> Result<()> {
                 testing::print_benchmark_results(&results, format)?;
             }
             TestCommands::Component { component } => {
-                output::info(format!("Testing {} component...", component));
-                output::warning("Component-specific tests not yet implemented");
+                use cortex_cli::testing;
+                let results = testing::run_component_tests(&component).await?;
+                testing::print_test_results(&results, format)?;
+
+                if results.failed > 0 {
+                    std::process::exit(1);
+                }
             }
         },
 

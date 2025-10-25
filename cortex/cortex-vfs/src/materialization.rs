@@ -473,7 +473,7 @@ impl MaterializationEngine {
     }
 
     /// Recursively copy directory.
-    fn copy_dir_recursive<'a>(&'a self, src: &'a Path, dst: &'a Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
+    fn copy_dir_recursive<'a>(&'a self, src: &'a Path, dst: &'a Path) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             fs::create_dir_all(dst).await
                 .map_err(|e| CortexError::vfs(format!("Failed to create directory: {}", e)))?;

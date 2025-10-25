@@ -12,6 +12,10 @@ DEFINE TABLE relations SCHEMAFULL;
 DEFINE TABLE episodes SCHEMAFULL;
 DEFINE TABLE episode_changes SCHEMAFULL;
 DEFINE TABLE agent_sessions SCHEMAFULL;
+DEFINE TABLE version_history SCHEMAFULL;
+DEFINE TABLE snapshots SCHEMAFULL;
+DEFINE TABLE snapshot_entries SCHEMAFULL;
+DEFINE TABLE version_tags SCHEMAFULL;
 
 -- Projects table
 DEFINE FIELD name ON projects TYPE string;
@@ -118,6 +122,60 @@ DEFINE FIELD metadata ON agent_sessions TYPE object;
 
 DEFINE INDEX agent_sessions_id ON agent_sessions FIELDS id UNIQUE;
 DEFINE INDEX agent_sessions_created_at ON agent_sessions FIELDS created_at;
+
+-- Version history table (tracks all file versions)
+DEFINE FIELD entity_id ON version_history TYPE string;
+DEFINE FIELD entity_type ON version_history TYPE string;
+DEFINE FIELD version ON version_history TYPE int;
+DEFINE FIELD content_hash ON version_history TYPE string;
+DEFINE FIELD content ON version_history TYPE option<string>;
+DEFINE FIELD size_bytes ON version_history TYPE int;
+DEFINE FIELD author ON version_history TYPE string;
+DEFINE FIELD message ON version_history TYPE string;
+DEFINE FIELD timestamp ON version_history TYPE datetime;
+DEFINE FIELD parent_version ON version_history TYPE option<int>;
+DEFINE FIELD metadata ON version_history TYPE object;
+
+DEFINE INDEX version_history_entity ON version_history FIELDS entity_id, version UNIQUE;
+DEFINE INDEX version_history_timestamp ON version_history FIELDS timestamp;
+DEFINE INDEX version_history_hash ON version_history FIELDS content_hash;
+
+-- Snapshots table (workspace snapshots)
+DEFINE FIELD name ON snapshots TYPE string;
+DEFINE FIELD description ON snapshots TYPE option<string>;
+DEFINE FIELD workspace_id ON snapshots TYPE option<string>;
+DEFINE FIELD scope_paths ON snapshots TYPE option<array>;
+DEFINE FIELD created_at ON snapshots TYPE datetime;
+DEFINE FIELD author ON snapshots TYPE string;
+DEFINE FIELD metadata ON snapshots TYPE object;
+
+DEFINE INDEX snapshots_workspace ON snapshots FIELDS workspace_id;
+DEFINE INDEX snapshots_created_at ON snapshots FIELDS created_at;
+DEFINE INDEX snapshots_name ON snapshots FIELDS name;
+
+-- Snapshot entries table (individual files in snapshots)
+DEFINE FIELD snapshot_id ON snapshot_entries TYPE string;
+DEFINE FIELD entity_id ON snapshot_entries TYPE string;
+DEFINE FIELD entity_type ON snapshot_entries TYPE string;
+DEFINE FIELD version ON snapshot_entries TYPE int;
+DEFINE FIELD content_hash ON snapshot_entries TYPE string;
+DEFINE FIELD path ON snapshot_entries TYPE string;
+DEFINE FIELD size_bytes ON snapshot_entries TYPE int;
+
+DEFINE INDEX snapshot_entries_snapshot ON snapshot_entries FIELDS snapshot_id;
+DEFINE INDEX snapshot_entries_path ON snapshot_entries FIELDS snapshot_id, path;
+
+-- Version tags table (named tags for versions)
+DEFINE FIELD tag_name ON version_tags TYPE string;
+DEFINE FIELD message ON version_tags TYPE option<string>;
+DEFINE FIELD snapshot_id ON version_tags TYPE option<string>;
+DEFINE FIELD created_at ON version_tags TYPE datetime;
+DEFINE FIELD author ON version_tags TYPE string;
+DEFINE FIELD metadata ON version_tags TYPE object;
+
+DEFINE INDEX version_tags_name ON version_tags FIELDS tag_name UNIQUE;
+DEFINE INDEX version_tags_snapshot ON version_tags FIELDS snapshot_id;
+DEFINE INDEX version_tags_created_at ON version_tags FIELDS created_at;
 "#;
 
 /// Initialize the database schema

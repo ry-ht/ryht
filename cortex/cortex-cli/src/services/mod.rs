@@ -24,5 +24,5 @@ pub use auth::AuthService;
 pub use sessions::SessionService;
 pub use build::BuildService;
 
-// #[cfg(test)]
-// mod tests; // TODO: Fix test compilation errors
+#[cfg(test)]
+mod tests;

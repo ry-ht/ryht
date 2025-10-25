@@ -296,7 +296,7 @@ impl VirtualFileSystem {
     // ============================================================================
 
     /// Get a vnode by path.
-    async fn get_vnode(
+    pub async fn get_vnode(
         &self,
         workspace_id: &Uuid,
         path: &VirtualPath,
