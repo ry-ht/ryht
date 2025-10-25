@@ -36,6 +36,7 @@ pub mod traits;
 pub mod languages;
 
 // High-level parsing modules
+pub mod ast_builder;
 pub mod ast_editor;
 pub mod comment_removal;
 pub mod concurrent;
@@ -48,6 +49,8 @@ pub mod typescript_parser;
 pub mod dependency_extractor;
 pub mod metrics;
 pub mod ops;
+pub mod preprocessor;
+pub mod spaces;
 
 // Advanced analysis modules
 pub mod analysis;
@@ -63,6 +66,7 @@ pub use traits::{Callback, LanguageInfo, ParserTrait};
 pub use languages::{RustLanguage, TypeScriptLanguage, JavaScriptLanguage, PythonLanguage};
 
 // Re-export main types
+pub use ast_builder::{build_ast, build_ast_with_config, AstConfig, AstNode, Span};
 pub use ast_editor::{AstEditor, Edit, OptimizeImportsResult, Position, Range};
 pub use comment_removal::{extract_comments, remove_comments, CommentSpan};
 pub use rust_parser::RustParser;
@@ -74,6 +78,10 @@ pub use dependency_extractor::{
 };
 pub use function::{detect_functions, FunctionSpan};
 pub use ops::{extract_ops, Ops, SpaceKind};
+pub use preprocessor::{
+    PreprocFile, PreprocResults, extract_preprocessor, build_include_graph, get_all_macros,
+};
+pub use spaces::{compute_spaces, FuncSpace, SpaceMetrics};
 
 // Re-export utility functions
 pub use utils::{
