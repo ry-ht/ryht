@@ -54,14 +54,7 @@ pub struct CodeManipulationContext {
 
 impl CodeManipulationContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
-        let code_unit_service = Arc::new(CodeUnitService::new(storage.clone()));
-        Self {
-            storage,
-            vfs,
-            code_unit_service,
-            active_workspace: Arc::new(RwLock::new(None)),
-        }
+        Self::with_active_workspace(storage, Arc::new(RwLock::new(None)))
     }
 
     /// Create a new context with a shared active workspace reference

@@ -10,11 +10,18 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use crate::services::auth::UserUpdate;
+    use crate::services::memory::StoreEpisodeRequest;
+    use crate::services::sessions::{SessionStatus, SessionUpdate, SessionFilters, LockType, ChangeType};
     use anyhow::Result;
     use chrono::Utc;
-    use cortex_storage::{connection::ConnectionConfig, ConnectionManager};
+    use cortex_storage::{
+        connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy},
+        ConnectionManager,
+    };
     use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType};
     use std::sync::Arc;
+    use std::time::Duration;
     use uuid::Uuid;
 
     // ========================================================================
@@ -23,7 +30,27 @@ mod tests {
 
     /// Create an in-memory storage manager for testing
     async fn setup_storage() -> Arc<ConnectionManager> {
-        let config = ConnectionConfig::memory();
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::InMemory,
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 1,
+                max_connections: 10,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: None,
+                max_lifetime: None,
+                retry_policy: RetryPolicy::default(),
+                warm_connections: false,
+                validate_on_checkout: true,
+                recycle_after_uses: None,
+                shutdown_grace_period: Duration::from_secs(10),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
         Arc::new(
             ConnectionManager::new(config)
                 .await
@@ -999,18 +1026,18 @@ mod tests {
         let storage = setup_storage().await;
         let cognitive_manager = Arc::new(
             cortex_memory::CognitiveManager::new(storage.clone())
-                .await
-                .expect("Failed to create cognitive manager"),
         );
         let memory_service = MemoryService::new(storage.clone(), cognitive_manager);
 
         // Store an episode
         let episode = memory_service
-            .store_episode(memory::StoreEpisodeRequest {
+            .store_episode(StoreEpisodeRequest {
                 task_description: "Implemented authentication feature".to_string(),
                 episode_type: "development".to_string(),
                 outcome: "success".to_string(),
                 importance: Some(0.8),
+                file_changes: None,
+                session_id: None,
             })
             .await?;
 
@@ -1027,8 +1054,6 @@ mod tests {
         let storage = setup_storage().await;
         let cognitive_manager = Arc::new(
             cortex_memory::CognitiveManager::new(storage.clone())
-                .await
-                .expect("Failed to create cognitive manager"),
         );
         let memory_service = MemoryService::new(storage.clone(), cognitive_manager);
 
@@ -1053,8 +1078,6 @@ mod tests {
         let storage = setup_storage().await;
         let cognitive_manager = Arc::new(
             cortex_memory::CognitiveManager::new(storage.clone())
-                .await
-                .expect("Failed to create cognitive manager"),
         );
         let memory_service = MemoryService::new(storage.clone(), cognitive_manager);
 
@@ -1077,8 +1100,6 @@ mod tests {
         let storage = setup_storage().await;
         let cognitive_manager = Arc::new(
             cortex_memory::CognitiveManager::new(storage.clone())
-                .await
-                .expect("Failed to create cognitive manager"),
         );
         let memory_service = MemoryService::new(storage.clone(), cognitive_manager);
 
@@ -1098,8 +1119,6 @@ mod tests {
         let storage = setup_storage().await;
         let cognitive_manager = Arc::new(
             cortex_memory::CognitiveManager::new(storage.clone())
-                .await
-                .expect("Failed to create cognitive manager"),
         );
         let memory_service = MemoryService::new(storage.clone(), cognitive_manager);
 

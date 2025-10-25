@@ -22,12 +22,7 @@ pub struct BuildExecutionContext {
 
 impl BuildExecutionContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        let build_service = Arc::new(BuildService::new(storage.clone()));
-        Self {
-            storage,
-            build_service,
-            active_workspace: Arc::new(std::sync::RwLock::new(None)),
-        }
+        Self::with_active_workspace(storage, Arc::new(std::sync::RwLock::new(None)))
     }
 
     /// Create a new context with a shared active workspace reference
