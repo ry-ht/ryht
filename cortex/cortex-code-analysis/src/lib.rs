@@ -63,7 +63,10 @@ pub use lang::Lang;
 pub use node::Node;
 pub use parser::Parser;
 pub use traits::{Callback, LanguageInfo, ParserTrait};
-pub use languages::{RustLanguage, TypeScriptLanguage, JavaScriptLanguage, PythonLanguage};
+pub use languages::{
+    RustLanguage, TypeScriptLanguage, JavaScriptLanguage, PythonLanguage,
+    CppLanguage, JavaLanguage, KotlinLanguage, TsxLang,
+};
 
 // Re-export main types
 pub use ast_builder::{build_ast, build_ast_with_config, AstConfig, AstNode, Span};
