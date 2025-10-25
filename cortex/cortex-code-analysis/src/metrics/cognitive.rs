@@ -2,8 +2,12 @@
 //!
 //! This metric measures the readability and understandability of code
 //! by counting structural elements that increase cognitive load.
+//!
+//! The implementation uses a HashMap-based nesting tracking system to properly
+//! account for nested constructs, function depth, and lambda/closure nesting.
 
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 use std::fmt;
 
 /// Boolean sequence tracker for cognitive complexity
@@ -195,6 +199,57 @@ impl CognitiveStats {
     pub fn eval_boolean_sequence(&mut self, bool_id: u16) {
         self.structural = self.boolean_seq.eval_based_on_prev(bool_id, self.structural);
     }
+}
+
+/// Type alias for the nesting map used in cognitive complexity calculation.
+/// Maps node ID to (conditional_nesting, function_depth, lambda_nesting).
+pub type NestingMap = HashMap<usize, (usize, usize, usize)>;
+
+/// Retrieves nesting information from the nesting map for a given node.
+///
+/// Returns the nesting tuple (conditional_nesting, function_depth, lambda_nesting)
+/// from the parent node, or (0, 0, 0) if no parent or no entry exists.
+#[inline(always)]
+pub fn get_nesting_from_map(node: &crate::node::Node, nesting_map: &NestingMap) -> (usize, usize, usize) {
+    if let Some(parent) = node.parent() {
+        nesting_map.get(&parent.id()).copied().unwrap_or((0, 0, 0))
+    } else {
+        (0, 0, 0)
+    }
+}
+
+/// Increments the structural complexity with nesting penalty.
+///
+/// The increment is: structural += nesting + 1
+#[inline(always)]
+pub fn increment_with_nesting(stats: &mut CognitiveStats, nesting: usize) {
+    stats.structural += nesting + 1;
+}
+
+/// Increments the structural complexity by one.
+#[inline(always)]
+pub fn increment_by_one(stats: &mut CognitiveStats) {
+    stats.structural += 1;
+}
+
+/// Increases nesting level and increments structural complexity with full nesting context.
+///
+/// This is the core function for handling nesting constructs. It:
+/// 1. Sets the current nesting including function depth and lambda nesting
+/// 2. Increments structural complexity with the full nesting penalty
+/// 3. Increments the conditional nesting level
+/// 4. Resets the boolean sequence tracker
+#[inline(always)]
+pub fn increase_nesting(
+    stats: &mut CognitiveStats,
+    nesting: &mut usize,
+    depth: usize,
+    lambda: usize,
+) {
+    stats.nesting = *nesting + depth + lambda;
+    stats.structural += stats.nesting + 1;
+    *nesting += 1;
+    stats.boolean_seq.reset();
 }
 
 #[cfg(test)]

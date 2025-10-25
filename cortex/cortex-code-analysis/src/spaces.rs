@@ -451,45 +451,298 @@ fn compute_node_metrics<'a>(
     compute_npa_metrics(node, metrics, code, lang);
 }
 
-/// Computes cognitive complexity for a node
+/// Computes cognitive complexity for a node using HashMap-based nesting tracking.
+///
+/// This implementation properly tracks:
+/// - Conditional/loop nesting depth
+/// - Function nesting depth (nested functions)
+/// - Lambda/closure nesting depth
+/// - Boolean operator sequences
+///
+/// The nesting information is stored per-node in the nesting_map and propagated
+/// to child nodes, allowing accurate complexity calculation.
 fn compute_cognitive_complexity(
     node: &Node,
     metrics: &mut SpaceMetrics,
-    _nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
     lang: Lang,
 ) {
-    // For cognitive complexity, we need to track nesting levels
-    // This is a simplified implementation - full implementation would need more context
-    let kind = node.kind();
-
-    // Check if this is a nesting construct
-    let is_nesting = match lang {
-        Lang::Rust => matches!(
-            kind,
-            "if_expression"
-                | "while_expression"
-                | "for_expression"
-                | "loop_expression"
-                | "match_expression"
-        ),
-        Lang::Python => matches!(kind, "if_statement" | "while_statement" | "for_statement"),
-        Lang::TypeScript | Lang::Tsx | Lang::JavaScript | Lang::Jsx => {
-            matches!(kind, "if_statement" | "while_statement" | "for_statement")
-        }
-        Lang::Cpp => matches!(
-            kind,
-            "if_statement" | "while_statement" | "for_statement" | "switch_statement"
-        ),
-        Lang::Java => matches!(
-            kind,
-            "if_statement" | "while_statement" | "for_statement" | "switch_statement"
-        ),
-        _ => false,
+    use crate::metrics::cognitive::{
+        get_nesting_from_map, increase_nesting, increment_by_one,
     };
 
-    if is_nesting {
-        metrics.cognitive.increment();
+    let kind = node.kind();
+
+    // Get nesting context from parent node
+    let (mut nesting, mut depth, mut lambda) = get_nesting_from_map(node, nesting_map);
+
+    match lang {
+        Lang::Rust => {
+            match kind {
+                "if_expression" => {
+                    // Check if this is an else-if (should not increment nesting)
+                    let is_else_if = node.parent()
+                        .map(|p| p.kind() == "else_clause")
+                        .unwrap_or(false);
+
+                    if !is_else_if {
+                        increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                    }
+                }
+                "for_expression" | "while_expression" | "loop_expression" | "match_expression" => {
+                    increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                }
+                "else_clause" => {
+                    increment_by_one(&mut metrics.cognitive);
+                }
+                "break_expression" | "continue_expression" => {
+                    // Only labeled break/continue count
+                    if node.child_by_field_name("label").is_some() {
+                        increment_by_one(&mut metrics.cognitive);
+                    }
+                }
+                "closure_expression" => {
+                    lambda += 1;
+                }
+                "function_item" => {
+                    // Reset nesting at function boundary
+                    nesting = 0;
+                    // Increase function depth if nested
+                    let mut child = *node;
+                    while let Some(parent) = child.parent() {
+                        if parent.kind() == "function_item" {
+                            depth += 1;
+                            break;
+                        }
+                        child = parent;
+                    }
+                }
+                "binary_expression" => {
+                    // Handle && and || operators
+                    if let Some(op) = node.child_by_field_name("operator") {
+                        let op_kind = op.kind();
+                        if op_kind == "&&" || op_kind == "||" {
+                            let op_id = op.kind_id();
+                            metrics.cognitive.eval_boolean_sequence(op_id);
+                        }
+                    }
+                }
+                "unary_expression" => {
+                    // Track NOT operators for boolean sequences
+                    if let Some(op) = node.child(0) {
+                        if op.kind() == "!" {
+                            metrics.cognitive.boolean_seq_not_operator(op.kind_id());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Lang::Python => {
+            match kind {
+                "if_statement" | "for_statement" | "while_statement" | "conditional_expression" => {
+                    increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                }
+                "elif_clause" => {
+                    increment_by_one(&mut metrics.cognitive);
+                    metrics.cognitive.reset_boolean_seq();
+                }
+                "else_clause" | "finally_clause" => {
+                    increment_by_one(&mut metrics.cognitive);
+                }
+                "except_clause" => {
+                    nesting += 1;
+                    metrics.cognitive.increment_with_nesting(nesting - 1);
+                }
+                "expression_statement" | "expression_list" | "tuple" => {
+                    metrics.cognitive.reset_boolean_seq();
+                }
+                "not_operator" => {
+                    metrics.cognitive.boolean_seq_not_operator(node.kind_id());
+                }
+                "boolean_operator" => {
+                    // Handle 'and' and 'or' operators
+                    for child in node.children() {
+                        let child_kind = child.kind();
+                        if child_kind == "and" || child_kind == "or" {
+                            metrics.cognitive.eval_boolean_sequence(child.kind_id());
+                        }
+                    }
+                }
+                "lambda" => {
+                    lambda += 1;
+                }
+                "function_definition" => {
+                    // Increase function depth if nested
+                    let mut child = *node;
+                    while let Some(parent) = child.parent() {
+                        if parent.kind() == "function_definition" {
+                            depth += 1;
+                            break;
+                        }
+                        child = parent;
+                    }
+                }
+                _ => {}
+            }
+        }
+        Lang::TypeScript | Lang::Tsx | Lang::JavaScript | Lang::Jsx => {
+            match kind {
+                "if_statement" => {
+                    // Check if this is an else-if
+                    let is_else_if = node.parent()
+                        .map(|p| p.kind() == "else_clause")
+                        .unwrap_or(false);
+
+                    if !is_else_if {
+                        increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                    }
+                }
+                "for_statement" | "for_in_statement" | "while_statement"
+                | "do_statement" | "switch_statement" | "catch_clause"
+                | "ternary_expression" => {
+                    increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                }
+                "else_clause" => {
+                    increment_by_one(&mut metrics.cognitive);
+                }
+                "expression_statement" => {
+                    metrics.cognitive.reset_boolean_seq();
+                }
+                "unary_expression" => {
+                    if let Some(op) = node.child(0) {
+                        if op.kind() == "!" {
+                            metrics.cognitive.boolean_seq_not_operator(op.kind_id());
+                        }
+                    }
+                }
+                "binary_expression" => {
+                    if let Some(op) = node.child_by_field_name("operator") {
+                        let op_kind = op.kind();
+                        if op_kind == "&&" || op_kind == "||" {
+                            metrics.cognitive.eval_boolean_sequence(op.kind_id());
+                        }
+                    }
+                }
+                "function_declaration" => {
+                    nesting = 0;
+                    lambda = 0;
+                    // Increase function depth if nested
+                    let mut child = *node;
+                    while let Some(parent) = child.parent() {
+                        if parent.kind() == "function_declaration" {
+                            depth += 1;
+                            break;
+                        }
+                        child = parent;
+                    }
+                }
+                "arrow_function" => {
+                    lambda += 1;
+                }
+                _ => {}
+            }
+        }
+        Lang::Cpp => {
+            match kind {
+                "if_statement" => {
+                    // Check if this is an else-if
+                    let is_else_if = node.parent()
+                        .and_then(|p| p.parent())
+                        .map(|gp| gp.kind() == "if_statement")
+                        .unwrap_or(false);
+
+                    if !is_else_if {
+                        increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                    }
+                }
+                "for_statement" | "while_statement" | "do_statement"
+                | "switch_statement" | "catch_clause" => {
+                    increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                }
+                "goto_statement" | "else" => {
+                    increment_by_one(&mut metrics.cognitive);
+                }
+                "unary_expression" => {
+                    if let Some(op) = node.child(0) {
+                        if op.kind() == "!" {
+                            metrics.cognitive.boolean_seq_not_operator(op.kind_id());
+                        }
+                    }
+                }
+                "binary_expression" => {
+                    if let Some(op) = node.child_by_field_name("operator") {
+                        let op_kind = op.kind();
+                        if op_kind == "&&" || op_kind == "||" {
+                            metrics.cognitive.eval_boolean_sequence(op.kind_id());
+                        }
+                    }
+                }
+                "lambda_expression" => {
+                    lambda += 1;
+                }
+                _ => {}
+            }
+        }
+        Lang::Java => {
+            match kind {
+                "if_statement" => {
+                    // Check if this is an else-if
+                    let is_else_if = node.parent()
+                        .map(|p| p.kind() == "else_clause")
+                        .unwrap_or(false);
+
+                    if !is_else_if {
+                        increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                    }
+                }
+                "for_statement" | "while_statement" | "do_statement"
+                | "switch_block" | "catch_clause" => {
+                    increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+                }
+                "else" => {
+                    increment_by_one(&mut metrics.cognitive);
+                }
+                "unary_expression" => {
+                    if let Some(op) = node.child(0) {
+                        if op.kind() == "!" {
+                            metrics.cognitive.boolean_seq_not_operator(op.kind_id());
+                        }
+                    }
+                }
+                "binary_expression" => {
+                    if let Some(op) = node.child_by_field_name("operator") {
+                        let op_kind = op.kind();
+                        if op_kind == "&&" || op_kind == "||" {
+                            metrics.cognitive.eval_boolean_sequence(op.kind_id());
+                        }
+                    }
+                }
+                "lambda_expression" => {
+                    lambda += 1;
+                }
+                _ => {}
+            }
+        }
+        _ => {
+            // Fallback for unsupported languages - simple nesting detection
+            let is_nesting = matches!(
+                kind,
+                "if_statement" | "if_expression"
+                | "while_statement" | "while_expression"
+                | "for_statement" | "for_expression"
+                | "loop_expression" | "match_expression"
+                | "switch_statement"
+            );
+
+            if is_nesting {
+                increase_nesting(&mut metrics.cognitive, &mut nesting, depth, lambda);
+            }
+        }
     }
+
+    // Store updated nesting information in the map
+    nesting_map.insert(node.id(), (nesting, depth, lambda));
 }
 
 /// Computes cyclomatic complexity for a node
@@ -508,10 +761,21 @@ fn compute_cyclomatic_complexity(node: &Node, metrics: &mut SpaceMetrics, lang: 
                 | "&&"
                 | "?"
         ),
-        Lang::Python => matches!(
-            kind,
-            "if_statement" | "elif_clause" | "while_statement" | "for_statement" | "or" | "and"
-        ),
+        Lang::Python => {
+            // Special handling for else clauses: only count when after for/while loops
+            if kind == "else_clause" {
+                // Check if the parent of this else clause is a for or while statement
+                // (not an if statement)
+                node.parent()
+                    .map(|parent| matches!(parent.kind(), "for_statement" | "while_statement"))
+                    .unwrap_or(false)
+            } else {
+                matches!(
+                    kind,
+                    "if_statement" | "elif_clause" | "while_statement" | "for_statement" | "or" | "and"
+                )
+            }
+        }
         Lang::TypeScript | Lang::Tsx | Lang::JavaScript | Lang::Jsx => matches!(
             kind,
             "if_statement"
@@ -955,5 +1219,110 @@ fn main() {
         let display = format!("{}", space);
         assert!(display.contains("test"));
         assert!(display.contains("function"));
+    }
+
+    #[test]
+    fn test_cognitive_complexity_with_nesting() -> Result<()> {
+        use crate::{RustLanguage, ParserTrait};
+        use std::path::Path;
+
+        // Test nested if statements with boolean operators
+        let code = r#"
+fn complex_function(x: i32, y: i32, z: i32) -> i32 {
+    if x > 0 {                      // +1
+        if y > 0 {                  // +2 (nesting = 1)
+            if z > 0 {              // +3 (nesting = 2)
+                return x + y + z;
+            }
+        }
+    }
+
+    if x > 10 && y > 10 {          // +2 (+1 if, +1 &&)
+        return x * y;
+    }
+
+    0
+}
+"#;
+        let parser = Parser::<RustLanguage>::new(code.as_bytes().to_vec(), Path::new("test.rs"))?;
+        let root = parser.get_root();
+        let spaces = compute_spaces(root, parser.get_code(), Lang::Rust, "test.rs")?;
+
+        assert_eq!(spaces.spaces.len(), 1);
+        let func = &spaces.spaces[0];
+        assert_eq!(func.name, Some("complex_function".to_string()));
+
+        // Should have cognitive complexity from nesting: 1 + 2 + 3 + 2 = 8
+        let cognitive = func.metrics.cognitive.cognitive();
+        println!("Cognitive complexity: {}", cognitive);
+        assert!(cognitive >= 8.0, "Expected cognitive complexity >= 8.0, got {}", cognitive);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cognitive_complexity_with_multiple_nesting() -> Result<()> {
+        use crate::{RustLanguage, ParserTrait};
+        use std::path::Path;
+
+        // Test multiple levels of nesting to verify HashMap tracking
+        let code = r#"
+fn with_multiple_nesting(a: i32, b: i32) {
+    if a > 0 {                      // +1
+        for i in 0..10 {            // +2 (nesting = 1)
+            while b > 0 {           // +3 (nesting = 2)
+                println!("nested");
+            }
+        }
+    }
+}
+"#;
+        let parser = Parser::<RustLanguage>::new(code.as_bytes().to_vec(), Path::new("test.rs"))?;
+        let root = parser.get_root();
+        let spaces = compute_spaces(root, parser.get_code(), Lang::Rust, "test.rs")?;
+
+        assert_eq!(spaces.spaces.len(), 1);
+        let func = &spaces.spaces[0];
+
+        // Should have: if (1) + for (2) + while (3) = 6
+        let cognitive = func.metrics.cognitive.cognitive();
+        println!("Cognitive complexity with multiple nesting: {}", cognitive);
+        assert!(cognitive >= 6.0, "Expected cognitive complexity >= 6.0, got {}", cognitive);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cognitive_complexity_boolean_sequences() -> Result<()> {
+        use crate::{RustLanguage, ParserTrait};
+        use std::path::Path;
+
+        // Test that consecutive same operators don't double-count
+        let code = r#"
+fn boolean_test(a: bool, b: bool, c: bool, d: bool) -> bool {
+    if a && b && c {               // +2 (+1 if, +1 for boolean sequence)
+        return true;
+    }
+
+    if a && b || c {               // +3 (+1 if, +1 &&, +1 ||)
+        return false;
+    }
+
+    false
+}
+"#;
+        let parser = Parser::<RustLanguage>::new(code.as_bytes().to_vec(), Path::new("test.rs"))?;
+        let root = parser.get_root();
+        let spaces = compute_spaces(root, parser.get_code(), Lang::Rust, "test.rs")?;
+
+        assert_eq!(spaces.spaces.len(), 1);
+        let func = &spaces.spaces[0];
+
+        // Should have: 2 + 3 = 5
+        let cognitive = func.metrics.cognitive.cognitive();
+        println!("Cognitive complexity with booleans: {}", cognitive);
+        assert!(cognitive >= 5.0, "Expected cognitive complexity >= 5.0, got {}", cognitive);
+
+        Ok(())
     }
 }
