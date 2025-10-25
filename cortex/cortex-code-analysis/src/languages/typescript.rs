@@ -49,15 +49,3 @@ impl LanguageInfo for TypeScriptLanguage {
     }
 }
 
-/// TSX (TypeScript with JSX) language implementation.
-pub struct TsxLanguage;
-
-impl LanguageInfo for TsxLanguage {
-    fn get_lang() -> Lang {
-        Lang::Tsx
-    }
-
-    fn get_lang_name() -> &'static str {
-        "tsx"
-    }
-}

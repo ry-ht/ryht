@@ -49,6 +49,7 @@ pub mod nargs;
 pub mod nom;
 pub mod npa;
 pub mod npm;
+pub mod strategy;
 pub mod wmc;
 
 // Re-export main types for convenience
@@ -63,6 +64,9 @@ pub use nargs::NargsStats;
 pub use nom::NomStats;
 pub use npa::NpaStats;
 pub use npm::NpmStats;
+pub use strategy::{
+    MetricsStrategy, MetricsCalculatorType, MetricsBuilder, MetricsAggregator,
+};
 pub use wmc::WmcStats;
 
 use serde::{Serialize, Deserialize};

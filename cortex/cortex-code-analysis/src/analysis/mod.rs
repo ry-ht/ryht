@@ -1,18 +1,17 @@
 //! Advanced code analysis module.
 //!
-//! This module provides traits and implementations for advanced AST node analysis,
-//! including node classification (checker) and information extraction (getter).
-//! These are production-ready implementations integrated from experimental code.
+//! This module provides a comprehensive suite of advanced code analysis tools:
 //!
-//! # Overview
+//! ## Core Analysis
+//! - [`NodeChecker`]: Node classification (comments, functions, closures, etc.)
+//! - [`NodeGetter`]: Information extraction (names, space kinds, operator types, etc.)
 //!
-//! The analysis module provides two main traits:
-//!
-//! - [`NodeChecker`]: For classifying nodes (comments, functions, closures, etc.)
-//! - [`NodeGetter`]: For extracting information (names, space kinds, operator types, etc.)
-//!
-//! Both traits support multiple programming languages through language-specific
-//! implementations.
+//! ## Advanced Features
+//! - [`find`]: High-performance AST search and navigation
+//! - [`count`]: Efficient node counting with statistics
+//! - [`alterator`]: AST transformation and mutation
+//! - [`tools`]: Utility functions for file I/O and language detection
+//! - [`cache`]: LRU caching for parsed ASTs and computed metrics
 //!
 //! # Examples
 //!
@@ -43,38 +42,52 @@
 //! # }
 //! ```
 //!
-//! ## Using NodeGetter
+//! ## Using Advanced Search
 //!
 //! ```rust
-//! use cortex_code_analysis::{TreeSitterWrapper, Lang};
-//! use cortex_code_analysis::analysis::{NodeGetter, DefaultNodeGetter, SpaceKind};
-//! use cortex_code_analysis::Node;
+//! use cortex_code_analysis::analysis::find::{AstFinder, FindConfig, NodeFilter};
+//! use cortex_code_analysis::{Parser, Lang};
 //!
 //! # fn main() -> anyhow::Result<()> {
-//! let mut parser = TreeSitterWrapper::new(tree_sitter_rust::LANGUAGE.into())?;
-//! let code = "fn add(a: i32, b: i32) -> i32 { a + b }";
-//! let tree = parser.parse(code)?;
-//! let root_node = tree.root_node();
-//! let root = Node::new(root_node);
+//! let mut parser = Parser::new(Lang::Rust)?;
+//! let source = "fn main() {} fn test() {}";
+//! parser.parse(source.as_bytes(), None)?;
 //!
-//! for node in root.children() {
-//!     let space_kind = DefaultNodeGetter::get_space_kind(&node, Lang::Rust);
-//!     if space_kind == SpaceKind::Function {
-//!         let name = DefaultNodeGetter::get_func_name(&node, code.as_bytes(), Lang::Rust);
-//!         println!("Function: {:?}", name);
-//!     }
-//! }
+//! let config = FindConfig::builder()
+//!     .add_filter(NodeFilter::Kind("function_item".to_string()))
+//!     .build();
+//!
+//! let finder = AstFinder::new(&parser);
+//! let results = finder.find(&config)?;
+//! println!("Found {} functions", results.nodes.len());
 //! # Ok(())
 //! # }
 //! ```
 
+pub mod alterator;
+pub mod cache;
 pub mod checker;
+pub mod count;
+pub mod find;
 pub mod getter;
+pub mod tools;
 pub mod types;
 
 #[cfg(test)]
 mod tests;
 
+// Re-export core types
+pub use alterator::{Alterator, TransformConfig, TransformConfigBuilder};
+pub use cache::{
+    AstCache, Cache, CacheBuilder, CacheManager, CachedAst, CachedMetrics, CachedSearch,
+    MetricsCache, SearchCache, SearchKey, SourceKey,
+};
 pub use checker::{DefaultNodeChecker, NodeChecker};
+pub use count::{
+    AstCounter, ConcurrentCounter, CountConfig, CountConfigBuilder, CountFilter, CountStats,
+};
+pub use find::{
+    AstFinder, FindConfig, FindConfigBuilder, FindResult, NodeFilter,
+};
 pub use getter::{DefaultNodeGetter, NodeGetter};
 pub use types::{HalsteadType, SpaceKind};

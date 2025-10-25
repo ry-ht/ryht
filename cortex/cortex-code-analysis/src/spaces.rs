@@ -455,7 +455,7 @@ fn compute_node_metrics<'a>(
 fn compute_cognitive_complexity(
     node: &Node,
     metrics: &mut SpaceMetrics,
-    nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
+    _nesting_map: &mut HashMap<usize, (usize, usize, usize)>,
     lang: Lang,
 ) {
     // For cognitive complexity, we need to track nesting levels

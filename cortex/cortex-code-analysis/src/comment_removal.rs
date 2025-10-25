@@ -4,11 +4,9 @@
 //! preserving line numbers and useful comments like documentation and pragmas.
 
 use anyhow::{Context, Result};
-use tree_sitter::Node as TSNode;
 
 use crate::lang::Lang;
 use crate::node::Node;
-use crate::traits::Search;
 
 /// Represents a span of text in the source code where a comment exists.
 #[derive(Debug, Clone, PartialEq, Eq)]

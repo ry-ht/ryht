@@ -4,7 +4,7 @@
 //! transformations including insertion, replacement, deletion, and refactoring
 //! operations like symbol renaming, import management, and signature changes.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::cmp::min;
 use std::collections::HashSet;
 use tree_sitter::{Language, Node, Parser, Point, Tree};

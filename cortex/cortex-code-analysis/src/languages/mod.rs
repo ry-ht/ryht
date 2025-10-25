@@ -14,10 +14,10 @@ pub mod tsx;
 
 // Re-export language parsers
 pub use rust::RustLanguage;
-pub use typescript::{TypeScriptLanguage, TsxLanguage};
+pub use typescript::TypeScriptLanguage;
 pub use javascript::JavaScriptLanguage;
 pub use python::PythonLanguage;
 pub use cpp::CppLanguage;
 pub use java::JavaLanguage;
 pub use kotlin::KotlinLanguage;
-pub use tsx::TsxLanguage as TsxLang;
+pub use tsx::TsxLanguage;

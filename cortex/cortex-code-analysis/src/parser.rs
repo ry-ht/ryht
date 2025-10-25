@@ -22,7 +22,7 @@ pub struct Parser<T: LanguageInfo> {
 
 impl<T: LanguageInfo> Parser<T> {
     /// Create a new parser and parse the given code.
-    pub fn parse(code: Vec<u8>, path: &Path) -> Result<Self> {
+    pub fn parse(code: Vec<u8>, _path: &Path) -> Result<Self> {
         let mut ts_parser = TSParser::new();
         let language = T::get_lang().get_ts_language();
 

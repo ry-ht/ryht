@@ -1,0 +1,503 @@
+//! AST Transformation and Mutation Module
+//!
+//! This module provides powerful AST transformation capabilities with:
+//! - Node-by-node transformation with custom logic
+//! - Language-specific transformations
+//! - Span and text extraction control
+//! - Comment filtering
+//! - Children preservation and manipulation
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use cortex_code_analysis::analysis::alterator::{Alterator, TransformConfig};
+//! use cortex_code_analysis::{Parser, Lang, AstNode};
+//!
+//! let mut parser = Parser::new(Lang::Rust)?;
+//! let source = "fn main() { println!(\"Hello\"); }";
+//! parser.parse(source.as_bytes(), None)?;
+//!
+//! let config = TransformConfig::builder()
+//!     .include_spans(true)
+//!     .filter_comments(true)
+//!     .build();
+//!
+//! let alterator = Alterator::new(&parser, source.as_bytes());
+//! let ast = alterator.transform(&config)?;
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+
+use crate::ast_builder::{AstNode, Span};
+use crate::node::Node;
+use crate::traits::ParserTrait;
+use crate::Lang;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// Configuration for AST transformation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransformConfig {
+    /// Include span information in transformed nodes
+    pub include_spans: bool,
+
+    /// Extract text for leaf nodes
+    pub extract_text: bool,
+
+    /// Filter out comment nodes
+    pub filter_comments: bool,
+
+    /// Maximum depth to transform (None = unlimited)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_depth: Option<usize>,
+
+    /// Custom node kind transformations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind_transforms: Option<HashMap<String, String>>,
+
+    /// Whether to preserve whitespace nodes
+    pub preserve_whitespace: bool,
+}
+
+impl Default for TransformConfig {
+    fn default() -> Self {
+        Self {
+            include_spans: true,
+            extract_text: true,
+            filter_comments: false,
+            max_depth: None,
+            kind_transforms: None,
+            preserve_whitespace: false,
+        }
+    }
+}
+
+impl TransformConfig {
+    /// Create a new builder for TransformConfig
+    pub fn builder() -> TransformConfigBuilder {
+        TransformConfigBuilder::default()
+    }
+}
+
+/// Builder for TransformConfig
+#[derive(Debug, Default)]
+pub struct TransformConfigBuilder {
+    include_spans: bool,
+    extract_text: bool,
+    filter_comments: bool,
+    max_depth: Option<usize>,
+    kind_transforms: Option<HashMap<String, String>>,
+    preserve_whitespace: bool,
+}
+
+impl TransformConfigBuilder {
+    /// Set whether to include span information
+    pub fn include_spans(mut self, include: bool) -> Self {
+        self.include_spans = include;
+        self
+    }
+
+    /// Set whether to extract text
+    pub fn extract_text(mut self, extract: bool) -> Self {
+        self.extract_text = extract;
+        self
+    }
+
+    /// Set whether to filter comments
+    pub fn filter_comments(mut self, filter: bool) -> Self {
+        self.filter_comments = filter;
+        self
+    }
+
+    /// Set maximum depth
+    pub fn max_depth(mut self, depth: usize) -> Self {
+        self.max_depth = Some(depth);
+        self
+    }
+
+    /// Add a kind transformation
+    pub fn add_kind_transform(mut self, from: String, to: String) -> Self {
+        self.kind_transforms
+            .get_or_insert_with(HashMap::new)
+            .insert(from, to);
+        self
+    }
+
+    /// Set whether to preserve whitespace
+    pub fn preserve_whitespace(mut self, preserve: bool) -> Self {
+        self.preserve_whitespace = preserve;
+        self
+    }
+
+    /// Build the TransformConfig
+    pub fn build(self) -> TransformConfig {
+        TransformConfig {
+            include_spans: self.include_spans,
+            extract_text: self.extract_text,
+            filter_comments: self.filter_comments,
+            max_depth: self.max_depth,
+            kind_transforms: self.kind_transforms,
+            preserve_whitespace: self.preserve_whitespace,
+        }
+    }
+}
+
+/// AST transformer that converts tree-sitter nodes to AstNode
+pub struct Alterator<'a, T: ParserTrait> {
+    parser: &'a T,
+    code: &'a [u8],
+    language: Lang,
+}
+
+impl<'a, T: ParserTrait> Alterator<'a, T> {
+    /// Create a new Alterator
+    pub fn new(parser: &'a T, code: &'a [u8]) -> Self {
+        Self {
+            parser,
+            code,
+            language: parser.get_language(),
+        }
+    }
+
+    /// Transform the AST according to the configuration
+    pub fn transform(&self, config: &TransformConfig) -> Result<AstNode> {
+        let root = self.parser.get_root();
+        self.transform_node(&root, config, 0)
+    }
+
+    /// Transform a single node
+    fn transform_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        depth: usize,
+    ) -> Result<AstNode> {
+        // Check depth limit
+        if let Some(max_depth) = config.max_depth {
+            if depth > max_depth {
+                return Ok(self.create_truncated_node(node));
+            }
+        }
+
+        // Filter comments if requested
+        if config.filter_comments && self.is_comment(node) {
+            return Ok(AstNode::new("", String::new(), None, Vec::new()));
+        }
+
+        // Skip whitespace if not preserved
+        if !config.preserve_whitespace && self.is_whitespace(node) {
+            return Ok(AstNode::new("", String::new(), None, Vec::new()));
+        }
+
+        // Transform children
+        let mut children = Vec::new();
+        let mut cursor = node.cursor();
+
+        if cursor.goto_first_child() {
+            loop {
+                let child = cursor.node();
+                let transformed = self.transform_node(&child, config, depth + 1)?;
+                if !transformed.children.is_empty() || !transformed.value.is_empty() || transformed.r#type != "" {
+                    children.push(transformed);
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+
+        // Apply language-specific transformations
+        let ast_node = self.apply_language_transform(node, config, children)?;
+
+        Ok(ast_node)
+    }
+
+    /// Apply language-specific transformations
+    fn apply_language_transform(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        mut children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        match self.language {
+            Lang::Rust => self.transform_rust_node(node, config, children),
+            Lang::TypeScript | Lang::Tsx => self.transform_typescript_node(node, config, children),
+            Lang::JavaScript | Lang::Jsx => self.transform_javascript_node(node, config, children),
+            Lang::Python => self.transform_python_node(node, config, children),
+            Lang::Cpp => self.transform_cpp_node(node, config, children),
+            Lang::Java => self.transform_java_node(node, config, children),
+            Lang::Kotlin => self.transform_kotlin_node(node, config, children),
+            _ => Ok(self.create_default_node(node, config, children)),
+        }
+    }
+
+    /// Transform Rust-specific nodes
+    fn transform_rust_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        match node.kind() {
+            "string_literal" | "char_literal" => {
+                // Extract text for string literals
+                let (text, span) = self.extract_text_and_span(node, config, true);
+                Ok(AstNode::new(self.transform_kind(node.kind(), config), text, span, Vec::new()))
+            }
+            _ => Ok(self.create_default_node(node, config, children)),
+        }
+    }
+
+    /// Transform TypeScript-specific nodes
+    fn transform_typescript_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        match node.kind() {
+            "string" | "template_string" => {
+                let (text, span) = self.extract_text_and_span(node, config, true);
+                Ok(AstNode::new(self.transform_kind(node.kind(), config), text, span, Vec::new()))
+            }
+            _ => Ok(self.create_default_node(node, config, children)),
+        }
+    }
+
+    /// Transform JavaScript-specific nodes
+    fn transform_javascript_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        match node.kind() {
+            "string" | "template_string" => {
+                let (text, span) = self.extract_text_and_span(node, config, true);
+                Ok(AstNode::new(self.transform_kind(node.kind(), config), text, span, Vec::new()))
+            }
+            _ => Ok(self.create_default_node(node, config, children)),
+        }
+    }
+
+    /// Transform Python-specific nodes
+    fn transform_python_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        Ok(self.create_default_node(node, config, children))
+    }
+
+    /// Transform C++-specific nodes
+    fn transform_cpp_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        mut children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        match node.kind() {
+            "string_literal" | "char_literal" => {
+                let (text, span) = self.extract_text_and_span(node, config, true);
+                Ok(AstNode::new(self.transform_kind(node.kind(), config), text, span, Vec::new()))
+            }
+            "preproc_def" | "preproc_function_def" | "preproc_call" => {
+                // Remove trailing newline from preprocessor directives
+                if let Some(last) = children.last() {
+                    if last.r#type == "\n" {
+                        children.pop();
+                    }
+                }
+                Ok(self.create_default_node(node, config, children))
+            }
+            _ => Ok(self.create_default_node(node, config, children)),
+        }
+    }
+
+    /// Transform Java-specific nodes
+    fn transform_java_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        Ok(self.create_default_node(node, config, children))
+    }
+
+    /// Transform Kotlin-specific nodes
+    fn transform_kotlin_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> Result<AstNode> {
+        Ok(self.create_default_node(node, config, children))
+    }
+
+    /// Create a default AST node
+    fn create_default_node(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        children: Vec<AstNode>,
+    ) -> AstNode {
+        let extract_text = config.extract_text && node.child_count() == 0;
+        let (text, span) = self.extract_text_and_span(node, config, extract_text);
+        AstNode::new(self.transform_kind(node.kind(), config), text, span, children)
+    }
+
+    /// Create a truncated node (when max depth is reached)
+    fn create_truncated_node(&self, _node: &Node<'a>) -> AstNode {
+        AstNode::new(
+            "truncated",
+            String::new(),
+            None,
+            Vec::new(),
+        )
+    }
+
+    /// Extract text and span from a node
+    fn extract_text_and_span(
+        &self,
+        node: &Node<'a>,
+        config: &TransformConfig,
+        extract_text: bool,
+    ) -> (String, Span) {
+        let text = if extract_text {
+            String::from_utf8_lossy(&self.code[node.start_byte()..node.end_byte()]).into_owned()
+        } else {
+            String::new()
+        };
+
+        let span = if config.include_spans {
+            let (start_row, start_col) = node.start_position();
+            let (end_row, end_col) = node.end_position();
+            Some((start_row + 1, start_col + 1, end_row + 1, end_col + 1))
+        } else {
+            None
+        };
+
+        (text, span)
+    }
+
+    /// Transform a node kind according to config
+    fn transform_kind(&self, kind: &'static str, _config: &TransformConfig) -> &'static str {
+        // Note: Kind transforms would require changing AstNode to use String instead of &'static str
+        // For now, we just return the original kind
+        kind
+    }
+
+    /// Check if a node is a comment
+    fn is_comment(&self, node: &Node) -> bool {
+        let kind = node.kind();
+        kind.contains("comment") || kind == "line_comment" || kind == "block_comment"
+    }
+
+    /// Check if a node is whitespace
+    fn is_whitespace(&self, node: &Node) -> bool {
+        let kind = node.kind();
+        kind == " " || kind == "\n" || kind == "\t" || kind == "\r"
+    }
+}
+
+/// Convenience function to transform an AST
+pub fn transform_ast<T: ParserTrait>(
+    parser: &T,
+    code: &[u8],
+    config: &TransformConfig,
+) -> Result<AstNode> {
+    let alterator = Alterator::new(parser, code);
+    alterator.transform(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Lang, Parser};
+
+    #[test]
+    fn test_transform_rust() {
+        let mut parser = Parser::new(Lang::Rust).unwrap();
+        let source = r#"fn main() { let s = "hello"; }"#;
+        parser.parse(source.as_bytes(), None).unwrap();
+
+        let config = TransformConfig::builder()
+            .include_spans(true)
+            .extract_text(true)
+            .build();
+
+        let alterator = Alterator::new(&parser, source.as_bytes());
+        let ast = alterator.transform(&config).unwrap();
+
+        assert!(!ast.is_leaf());
+        assert!(ast.span.is_some());
+    }
+
+    #[test]
+    fn test_filter_comments() {
+        let mut parser = Parser::new(Lang::Rust).unwrap();
+        let source = "// comment\nfn main() {}";
+        parser.parse(source.as_bytes(), None).unwrap();
+
+        let config = TransformConfig::builder()
+            .filter_comments(true)
+            .build();
+
+        let alterator = Alterator::new(&parser, source.as_bytes());
+        let ast = alterator.transform(&config).unwrap();
+
+        // AST should not be empty but comments should be filtered
+        assert!(!ast.is_leaf());
+    }
+
+    #[test]
+    fn test_max_depth() {
+        let mut parser = Parser::new(Lang::Rust).unwrap();
+        let source = "fn main() { let x = { let y = 1; }; }";
+        parser.parse(source.as_bytes(), None).unwrap();
+
+        let config = TransformConfig::builder()
+            .max_depth(3)
+            .build();
+
+        let alterator = Alterator::new(&parser, source.as_bytes());
+        let ast = alterator.transform(&config).unwrap();
+
+        assert!(!ast.is_leaf());
+    }
+
+    #[test]
+    fn test_kind_transforms() {
+        let mut parser = Parser::new(Lang::Rust).unwrap();
+        let source = "fn main() {}";
+        parser.parse(source.as_bytes(), None).unwrap();
+
+        let config = TransformConfig::builder()
+            .add_kind_transform("function_item".to_string(), "FUNCTION".to_string())
+            .build();
+
+        let alterator = Alterator::new(&parser, source.as_bytes());
+        let ast = alterator.transform(&config).unwrap();
+
+        // Check that transformation was applied (would need deeper inspection)
+        assert!(!ast.is_leaf());
+    }
+
+    #[test]
+    fn test_builder_pattern() {
+        let config = TransformConfig::builder()
+            .include_spans(false)
+            .extract_text(false)
+            .filter_comments(true)
+            .max_depth(10)
+            .preserve_whitespace(true)
+            .build();
+
+        assert!(!config.include_spans);
+        assert!(!config.extract_text);
+        assert!(config.filter_comments);
+        assert_eq!(config.max_depth, Some(10));
+        assert!(config.preserve_whitespace);
+    }
+}

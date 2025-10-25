@@ -1,10 +1,14 @@
-//! Cortex Parser - Tree-sitter based code parsing infrastructure.
+//! Cortex Code Analysis - Production-Ready Code Analysis Infrastructure
 //!
-//! This crate provides high-level parsing capabilities for multiple programming languages
-//! using tree-sitter. It extracts structured information about code elements including
-//! functions, structs, enums, traits, and more.
+//! A high-performance, modular code analysis framework built on tree-sitter with:
+//! - Multi-language parsing (Rust, TypeScript, JavaScript, Python, C++, Java, Kotlin)
+//! - Comprehensive metrics calculation (20+ metrics including complexity, maintainability)
+//! - Advanced AST search and transformation
+//! - Concurrent and async processing
+//! - Intelligent caching for performance
+//! - Dependency analysis and graph generation
 //!
-//! # Examples
+//! # Quick Start
 //!
 //! ```
 //! use cortex_code_analysis::{RustParser, ParsedFile};
@@ -27,35 +31,91 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Architecture
+//!
+//! ## Core Modules
+//! - [`lang`] - Language identification and configuration
+//! - [`node`] - AST node abstraction
+//! - [`parser`] - Generic parser interface
+//! - [`traits`] - Core trait definitions
+//!
+//! ## Parsing & Extraction
+//! - [`ast_builder`] - AST construction with full span information
+//! - [`ast_editor`] - AST editing and transformation
+//! - [`extractor`] - High-level code element extraction
+//! - [`function`] - Function detection and analysis
+//! - [`dependency_extractor`] - Dependency graph generation
+//!
+//! ## Metrics & Analysis
+//! - [`metrics`] - 20+ code quality metrics with strategy pattern
+//! - [`analysis`] - Advanced search, counting, and transformation
+//!
+//! ## Concurrent Processing
+//! - [`concurrent`] - Sync/async concurrent file processing
+//!
+//! ## Utilities
+//! - [`ops`] - Code space operations
+//! - [`preprocessor`] - C/C++ preprocessor analysis
+//! - [`spaces`] - Function space metrics
+//! - [`utils`] - File I/O and utility functions
+//! - [`output`] - Serialization and export
+//!
+//! # Performance Features
+//!
+//! - LRU caching for parsed ASTs and computed metrics
+//! - Stack-based iterative traversal (no recursion overhead)
+//! - Parallel metrics calculation
+//! - Async/await concurrent processing
+//! - Pre-allocated data structures
+//! - Memory-efficient operations
 
-// Core abstraction modules
+// ============================================================================
+// Core Abstractions
+// ============================================================================
+
 pub mod lang;
 pub mod node;
 pub mod parser;
 pub mod traits;
 pub mod languages;
 
-// High-level parsing modules
+// ============================================================================
+// Parsing & AST Operations
+// ============================================================================
+
 pub mod ast_builder;
 pub mod ast_editor;
 pub mod comment_removal;
-pub mod concurrent;
 pub mod extractor;
 pub mod function;
 pub mod rust_parser;
 pub mod tree_sitter_wrapper;
 pub mod types;
 pub mod typescript_parser;
+
+// ============================================================================
+// Advanced Analysis
+// ============================================================================
+
+pub mod analysis;
 pub mod dependency_extractor;
 pub mod metrics;
 pub mod ops;
 pub mod preprocessor;
 pub mod spaces;
 
-// Advanced analysis modules
-pub mod analysis;
+// ============================================================================
+// Concurrent Processing
+// ============================================================================
 
-// Utility functions
+pub mod concurrent;
+
+// ============================================================================
+// Output & Utilities
+// ============================================================================
+
+pub mod output;
 pub mod utils;
 
 // Re-export core abstractions
@@ -65,7 +125,7 @@ pub use parser::Parser;
 pub use traits::{Callback, LanguageInfo, ParserTrait};
 pub use languages::{
     RustLanguage, TypeScriptLanguage, JavaScriptLanguage, PythonLanguage,
-    CppLanguage, JavaLanguage, KotlinLanguage, TsxLang,
+    CppLanguage, JavaLanguage, KotlinLanguage, TsxLanguage as TsxLang,
 };
 
 // Re-export main types
@@ -86,12 +146,45 @@ pub use preprocessor::{
 };
 pub use spaces::{compute_spaces, FuncSpace, SpaceMetrics};
 
+// Re-export output module types
+pub use output::{
+    dump_node, dump_metrics, dump_ops, export_ast, export_metrics, export_ops,
+    DumpConfig, ExportConfig, ExportMetadata, OutputFormat, Serializable,
+};
+
 // Re-export utility functions
 pub use utils::{
     read_file_with_bom,
     guess_language_from_content,
     normalize_path,
     get_paths_dist,
+};
+
+// Re-export advanced analysis types
+pub use analysis::{
+    // Search and navigation
+    AstFinder, FindConfig, FindConfigBuilder, FindResult, NodeFilter,
+    // Counting and statistics
+    AstCounter, ConcurrentCounter, CountConfig, CountFilter, CountStats,
+    // AST transformation
+    Alterator, TransformConfig, TransformConfigBuilder,
+    // Caching
+    Cache, CacheManager, CacheBuilder, AstCache, MetricsCache, SearchCache,
+    CachedAst, CachedMetrics, CachedSearch, SourceKey, SearchKey,
+    // Node analysis
+    NodeChecker, DefaultNodeChecker, NodeGetter, DefaultNodeGetter,
+    HalsteadType,
+};
+
+// Re-export metrics strategy types
+pub use metrics::{
+    CodeMetrics,
+    MetricsStrategy, MetricsCalculatorType, MetricsBuilder, MetricsAggregator,
+};
+
+// Re-export concurrent types
+pub use concurrent::{
+    ConcurrentRunner, FilesData,
 };
 
 use anyhow::{Context, Result};
