@@ -1444,6 +1444,1271 @@ impl Rust {
     pub fn is_metavariable(&self) -> bool {
         matches!(self, Rust::Metavariable)
     }
+
+    // ==================== ADVANCED HELPER METHODS ====================
+
+    // -------------------- Macros --------------------
+
+    /// Check if this token represents a macro_rules! definition.
+    ///
+    /// Returns true for macro_rules! keyword and macro definitions.
+    #[inline]
+    pub fn is_macro_rules(&self) -> bool {
+        matches!(self, Rust::MacroRulesBANG | Rust::MacroDefinition)
+    }
+
+    /// Check if this token represents a procedural macro invocation.
+    ///
+    /// Returns true for macro invocations which include proc macros, derive macros, etc.
+    #[inline]
+    pub fn is_proc_macro(&self) -> bool {
+        matches!(self, Rust::MacroInvocation)
+    }
+
+    /// Check if this token is part of a macro pattern or token tree.
+    ///
+    /// Returns true for token patterns, token trees, and token repetitions.
+    #[inline]
+    pub fn is_macro_pattern(&self) -> bool {
+        matches!(
+            self,
+            Rust::TokenPattern
+                | Rust::TokenTreePattern
+                | Rust::TokenBindingPattern
+                | Rust::TokenRepetitionPattern
+                | Rust::TokenTree
+                | Rust::TokenTree2
+                | Rust::TokenRepetition
+        )
+    }
+
+    /// Check if this token represents a fragment specifier in macros.
+    ///
+    /// Fragment specifiers like expr, ident, ty, etc.
+    #[inline]
+    pub fn is_fragment_specifier(&self) -> bool {
+        matches!(
+            self,
+            Rust::FragmentSpecifier
+                | Rust::Expr
+                | Rust::Ident
+                | Rust::Item
+                | Rust::Pat
+                | Rust::Path
+                | Rust::Stmt
+                | Rust::Tt
+                | Rust::Ty
+                | Rust::Vis
+                | Rust::Meta
+        )
+    }
+
+    /// Check if this token is a macro rule component.
+    ///
+    /// Returns true for macro rules and their components.
+    #[inline]
+    pub fn is_macro_rule(&self) -> bool {
+        matches!(self, Rust::MacroRule)
+    }
+
+    // -------------------- Lifetimes --------------------
+
+    /// Check if this token is a lifetime annotation or parameter.
+    ///
+    /// Returns true for lifetime syntax including 'a, 'static, etc.
+    #[inline]
+    pub fn is_lifetime_annotation(&self) -> bool {
+        matches!(self, Rust::Lifetime | Rust::Lifetime2 | Rust::SQUOTE)
+    }
+
+    /// Check if this token is a for-lifetimes (HRTB) clause.
+    ///
+    /// For example: for<'a, 'b> in higher-ranked trait bounds.
+    #[inline]
+    pub fn is_for_lifetimes(&self) -> bool {
+        matches!(self, Rust::ForLifetimes)
+    }
+
+    /// Check if this token represents lifetime elision context.
+    ///
+    /// Returns true for reference types and function parameters where elision occurs.
+    #[inline]
+    pub fn is_lifetime_elision_context(&self) -> bool {
+        matches!(
+            self,
+            Rust::ReferenceType | Rust::Parameter | Rust::FunctionType
+        )
+    }
+
+    // -------------------- Trait System --------------------
+
+    /// Check if this token is a trait definition or implementation.
+    ///
+    /// Returns true for trait items and impl items.
+    #[inline]
+    pub fn is_trait_or_impl(&self) -> bool {
+        matches!(
+            self,
+            Rust::TraitItem | Rust::ImplItem | Rust::Trait | Rust::Impl
+        )
+    }
+
+    /// Check if this token represents an associated type.
+    ///
+    /// Returns true for associated types in traits and impls.
+    #[inline]
+    pub fn is_associated_type(&self) -> bool {
+        matches!(self, Rust::AssociatedType | Rust::TypeBinding)
+    }
+
+    /// Check if this token is part of a where clause.
+    ///
+    /// Returns true for where clauses and where predicates.
+    #[inline]
+    pub fn is_where_predicate(&self) -> bool {
+        matches!(self, Rust::WherePredicate | Rust::WhereClause | Rust::Where)
+    }
+
+    /// Check if this token represents trait bounds or constraints.
+    ///
+    /// Returns true for trait bounds, bounded types, and constrained type parameters.
+    #[inline]
+    pub fn is_trait_constraint(&self) -> bool {
+        matches!(
+            self,
+            Rust::TraitBounds
+                | Rust::BoundedType
+                | Rust::ConstrainedTypeParameter
+                | Rust::HigherRankedTraitBound
+        )
+    }
+
+    // -------------------- Pattern Matching --------------------
+
+    /// Check if this token represents a match arm.
+    ///
+    /// Returns true for match arms and match patterns.
+    #[inline]
+    pub fn is_match_arm(&self) -> bool {
+        matches!(self, Rust::MatchArm | Rust::MatchArm2 | Rust::MatchPattern)
+    }
+
+    /// Check if this token is an if-let or while-let pattern.
+    ///
+    /// Returns true for let conditions and let chains.
+    #[inline]
+    pub fn is_let_pattern(&self) -> bool {
+        matches!(
+            self,
+            Rust::LetCondition | Rust::LetChain | Rust::LetChain2
+        )
+    }
+
+    /// Check if this token is a struct pattern.
+    ///
+    /// Returns true for struct patterns and field patterns.
+    #[inline]
+    pub fn is_struct_pattern(&self) -> bool {
+        matches!(
+            self,
+            Rust::StructPattern
+                | Rust::TupleStructPattern
+                | Rust::FieldPattern
+                | Rust::RemainingFieldPattern
+        )
+    }
+
+    /// Check if this token is a tuple or slice pattern.
+    ///
+    /// Returns true for tuple and slice destructuring patterns.
+    #[inline]
+    pub fn is_destructuring_pattern(&self) -> bool {
+        matches!(
+            self,
+            Rust::TuplePattern | Rust::SlicePattern | Rust::StructPattern
+        )
+    }
+
+    /// Check if this token is an or-pattern.
+    ///
+    /// Returns true for or-patterns (e.g., Some(x) | None).
+    #[inline]
+    pub fn is_or_pattern(&self) -> bool {
+        matches!(self, Rust::OrPattern)
+    }
+
+    /// Check if this token is a range pattern.
+    ///
+    /// Returns true for range patterns in match arms (e.g., 1..=10).
+    #[inline]
+    pub fn is_range_pattern(&self) -> bool {
+        matches!(self, Rust::RangePattern)
+    }
+
+    /// Check if this token is a captured or ref pattern.
+    ///
+    /// Returns true for captured patterns and ref patterns.
+    #[inline]
+    pub fn is_binding_pattern(&self) -> bool {
+        matches!(
+            self,
+            Rust::CapturedPattern
+                | Rust::RefPattern
+                | Rust::MutPattern
+                | Rust::ReferencePattern
+        )
+    }
+
+    // -------------------- Ownership & Borrowing --------------------
+
+    /// Check if this token represents a move operation.
+    ///
+    /// Returns true for move keyword in closures.
+    #[inline]
+    pub fn is_move(&self) -> bool {
+        matches!(self, Rust::Move)
+    }
+
+    /// Check if this token is a borrow or reference.
+    ///
+    /// Returns true for & operator and reference expressions.
+    #[inline]
+    pub fn is_borrow(&self) -> bool {
+        matches!(
+            self,
+            Rust::AMP | Rust::ReferenceExpression | Rust::ReferenceType
+        )
+    }
+
+    /// Check if this token is a mutable borrow.
+    ///
+    /// Returns true for &mut references.
+    #[inline]
+    pub fn is_mutable_borrow(&self) -> bool {
+        matches!(
+            self,
+            Rust::MutableSpecifier | Rust::ReferenceExpression | Rust::ReferenceType
+        )
+    }
+
+    /// Check if this token represents reference-related syntax.
+    ///
+    /// Returns true for references, ref patterns, and & operator.
+    #[inline]
+    pub fn is_reference_syntax(&self) -> bool {
+        matches!(
+            self,
+            Rust::Ref
+                | Rust::AMP
+                | Rust::ReferenceType
+                | Rust::ReferenceExpression
+                | Rust::ReferencePattern
+                | Rust::RefPattern
+        )
+    }
+
+    // -------------------- Unsafe Code --------------------
+
+    /// Check if this token is an unsafe function.
+    ///
+    /// Returns true for unsafe function modifiers.
+    #[inline]
+    pub fn is_unsafe_function(&self) -> bool {
+        matches!(self, Rust::Unsafe | Rust::FunctionModifiers)
+    }
+
+    /// Check if this token is an unsafe trait or impl.
+    ///
+    /// Returns true for unsafe trait definitions and implementations.
+    #[inline]
+    pub fn is_unsafe_trait(&self) -> bool {
+        matches!(self, Rust::Unsafe | Rust::TraitItem | Rust::ImplItem)
+    }
+
+    /// Check if this token is a raw pointer.
+    ///
+    /// Returns true for raw pointer types (*const, *mut).
+    #[inline]
+    pub fn is_raw_pointer(&self) -> bool {
+        matches!(self, Rust::PointerType | Rust::Raw)
+    }
+
+    // -------------------- Async/Await --------------------
+
+    /// Check if this token is an async function.
+    ///
+    /// Returns true for async function declarations.
+    #[inline]
+    pub fn is_async_function(&self) -> bool {
+        matches!(self, Rust::Async | Rust::FunctionItem)
+    }
+
+    /// Check if this token is an await expression.
+    ///
+    /// Returns true for .await syntax.
+    #[inline]
+    pub fn is_await_expression(&self) -> bool {
+        matches!(self, Rust::AwaitExpression | Rust::Await)
+    }
+
+    /// Check if this token is an async block.
+    ///
+    /// Returns true for async { } blocks.
+    #[inline]
+    pub fn is_async_block(&self) -> bool {
+        matches!(self, Rust::AsyncBlock)
+    }
+
+    // -------------------- Generics --------------------
+
+    /// Check if this token is a type parameter.
+    ///
+    /// Returns true for type parameters in generic declarations.
+    #[inline]
+    pub fn is_type_parameter(&self) -> bool {
+        matches!(
+            self,
+            Rust::TypeParameters
+                | Rust::ConstrainedTypeParameter
+                | Rust::OptionalTypeParameter
+        )
+    }
+
+    /// Check if this token is a const generic parameter.
+    ///
+    /// Returns true for const parameters in generics.
+    #[inline]
+    pub fn is_const_generic(&self) -> bool {
+        matches!(self, Rust::ConstParameter)
+    }
+
+    /// Check if this token is a turbofish operator.
+    ///
+    /// Returns true for ::<> syntax.
+    #[inline]
+    pub fn is_turbofish(&self) -> bool {
+        matches!(
+            self,
+            Rust::GenericTypeWithTurbofish | Rust::COLONCOLON | Rust::LT2
+        )
+    }
+
+    /// Check if this token is type arguments.
+    ///
+    /// Returns true for type arguments in generic instantiations.
+    #[inline]
+    pub fn is_type_arguments(&self) -> bool {
+        matches!(self, Rust::TypeArguments | Rust::TypeBinding)
+    }
+
+    // -------------------- Attributes --------------------
+
+    /// Check if this token is a derive attribute.
+    ///
+    /// Returns true for #[derive(...)] attributes.
+    #[inline]
+    pub fn is_derive_attribute(&self) -> bool {
+        matches!(self, Rust::AttributeItem | Rust::Attribute)
+    }
+
+    /// Check if this token is a cfg attribute.
+    ///
+    /// Returns true for #[cfg(...)] conditional compilation attributes.
+    #[inline]
+    pub fn is_cfg_attribute(&self) -> bool {
+        matches!(self, Rust::AttributeItem | Rust::Attribute)
+    }
+
+    /// Check if this token is a test attribute.
+    ///
+    /// Returns true for #[test] attributes.
+    #[inline]
+    pub fn is_test_attribute(&self) -> bool {
+        matches!(self, Rust::AttributeItem)
+    }
+
+    /// Check if this token is an inner attribute.
+    ///
+    /// Returns true for #![...] inner attributes.
+    #[inline]
+    pub fn is_inner_attribute(&self) -> bool {
+        matches!(self, Rust::InnerAttributeItem)
+    }
+
+    /// Check if this token is an outer attribute.
+    ///
+    /// Returns true for #[...] outer attributes.
+    #[inline]
+    pub fn is_outer_attribute(&self) -> bool {
+        matches!(self, Rust::AttributeItem)
+    }
+
+    // -------------------- Module System --------------------
+
+    /// Check if this token is a mod declaration.
+    ///
+    /// Returns true for mod items and mod keyword.
+    #[inline]
+    pub fn is_mod_declaration(&self) -> bool {
+        matches!(self, Rust::ModItem | Rust::Mod)
+    }
+
+    /// Check if this token is a use import.
+    ///
+    /// Returns true for use declarations and clauses.
+    #[inline]
+    pub fn is_use_import(&self) -> bool {
+        matches!(
+            self,
+            Rust::UseDeclaration
+                | Rust::UseClause
+                | Rust::UseList
+                | Rust::UseAsClause
+                | Rust::UseWildcard
+        )
+    }
+
+    /// Check if this token is pub visibility.
+    ///
+    /// Returns true for pub keyword and visibility modifiers.
+    #[inline]
+    pub fn is_pub_visibility(&self) -> bool {
+        matches!(self, Rust::Pub | Rust::VisibilityModifier)
+    }
+
+    /// Check if this token is crate/super/self path.
+    ///
+    /// Returns true for crate::, super::, self:: path components.
+    #[inline]
+    pub fn is_path_segment(&self) -> bool {
+        matches!(self, Rust::Crate | Rust::Super | Rust::Zelf)
+    }
+
+    /// Check if this token is a scoped identifier.
+    ///
+    /// Returns true for scoped identifiers like std::vec::Vec.
+    #[inline]
+    pub fn is_scoped_identifier(&self) -> bool {
+        matches!(
+            self,
+            Rust::ScopedIdentifier
+                | Rust::ScopedTypeIdentifier
+                | Rust::ScopedTypeIdentifier2
+        )
+    }
+
+    /// Check if this token is a use wildcard.
+    ///
+    /// Returns true for use glob imports (use foo::*).
+    #[inline]
+    pub fn is_use_wildcard(&self) -> bool {
+        matches!(self, Rust::UseWildcard | Rust::STAR)
+    }
+
+    // -------------------- Error Handling --------------------
+
+    /// Check if this token is a Result type usage.
+    ///
+    /// Note: This checks for type identifiers that could be Result.
+    #[inline]
+    pub fn is_result_type(&self) -> bool {
+        matches!(self, Rust::TypeIdentifier | Rust::GenericType)
+    }
+
+    /// Check if this token is an Option type usage.
+    ///
+    /// Note: This checks for type identifiers that could be Option.
+    #[inline]
+    pub fn is_option_type(&self) -> bool {
+        matches!(self, Rust::TypeIdentifier | Rust::GenericType)
+    }
+
+    /// Check if this token is the ? operator.
+    ///
+    /// Returns true for the ? try operator.
+    #[inline]
+    pub fn is_question_mark_operator(&self) -> bool {
+        matches!(self, Rust::QMARK | Rust::TryExpression)
+    }
+
+    /// Check if this token is a panic macro.
+    ///
+    /// Note: Detects macro invocations that could be panic-related.
+    #[inline]
+    pub fn is_panic_macro(&self) -> bool {
+        matches!(self, Rust::MacroInvocation)
+    }
+
+    // -------------------- Closures --------------------
+
+    /// Check if this token is a closure definition.
+    ///
+    /// Returns true for closure expressions and parameters.
+    #[inline]
+    pub fn is_closure_definition(&self) -> bool {
+        matches!(self, Rust::ClosureExpression | Rust::ClosureParameters)
+    }
+
+    /// Check if this token is a closure parameter.
+    ///
+    /// Returns true for closure parameter lists.
+    #[inline]
+    pub fn is_closure_parameter(&self) -> bool {
+        matches!(self, Rust::ClosureParameters)
+    }
+
+    /// Check if this token is a move closure.
+    ///
+    /// Returns true for closures with move keyword.
+    #[inline]
+    pub fn is_move_closure(&self) -> bool {
+        matches!(self, Rust::Move | Rust::ClosureExpression)
+    }
+
+    // -------------------- Type System --------------------
+
+    /// Check if this token is a struct definition or expression.
+    ///
+    /// Returns true for struct items and struct expressions.
+    #[inline]
+    pub fn is_struct_definition(&self) -> bool {
+        matches!(
+            self,
+            Rust::StructItem
+                | Rust::StructExpression
+                | Rust::FieldDeclarationList
+                | Rust::FieldDeclaration
+        )
+    }
+
+    /// Check if this token is an enum definition or variant.
+    ///
+    /// Returns true for enum items, variants, and variant lists.
+    #[inline]
+    pub fn is_enum_definition(&self) -> bool {
+        matches!(
+            self,
+            Rust::EnumItem | Rust::EnumVariant | Rust::EnumVariantList
+        )
+    }
+
+    /// Check if this token is a type alias.
+    ///
+    /// Returns true for type items and type keyword.
+    #[inline]
+    pub fn is_type_alias_definition(&self) -> bool {
+        matches!(self, Rust::TypeItem | Rust::Type)
+    }
+
+    /// Check if this token is a union definition.
+    ///
+    /// Returns true for union items.
+    #[inline]
+    pub fn is_union_definition(&self) -> bool {
+        matches!(self, Rust::UnionItem | Rust::Union)
+    }
+
+    /// Check if this token is the never type (!).
+    ///
+    /// Returns true for the never type.
+    #[inline]
+    pub fn is_never_type_annotation(&self) -> bool {
+        matches!(self, Rust::NeverType | Rust::BANG)
+    }
+
+    /// Check if this token is a tuple type or expression.
+    ///
+    /// Returns true for tuple types and tuple expressions.
+    #[inline]
+    pub fn is_tuple(&self) -> bool {
+        matches!(
+            self,
+            Rust::TupleType | Rust::TupleExpression | Rust::TuplePattern
+        )
+    }
+
+    /// Check if this token is an array type or expression.
+    ///
+    /// Returns true for array types and array expressions.
+    #[inline]
+    pub fn is_array(&self) -> bool {
+        matches!(self, Rust::ArrayType | Rust::ArrayExpression)
+    }
+
+    /// Check if this token is a function type.
+    ///
+    /// Returns true for function type signatures (fn(...) -> ...).
+    #[inline]
+    pub fn is_function_type(&self) -> bool {
+        matches!(self, Rust::FunctionType)
+    }
+
+    // -------------------- Special Syntax --------------------
+
+    /// Check if this token uses turbofish syntax.
+    ///
+    /// Returns true for ::<> type annotations.
+    #[inline]
+    pub fn is_turbofish_syntax(&self) -> bool {
+        matches!(self, Rust::GenericTypeWithTurbofish)
+    }
+
+    /// Check if this token is dyn Trait syntax.
+    ///
+    /// Returns true for dynamic dispatch trait objects.
+    #[inline]
+    pub fn is_dyn_trait(&self) -> bool {
+        matches!(self, Rust::Dyn | Rust::DynamicType)
+    }
+
+    /// Check if this token is impl Trait syntax.
+    ///
+    /// Returns true for abstract type (impl Trait in return position).
+    #[inline]
+    pub fn is_impl_trait(&self) -> bool {
+        matches!(self, Rust::AbstractType | Rust::Impl)
+    }
+
+    /// Check if this token is a qualified type.
+    ///
+    /// Returns true for qualified types like <T as Trait>::Type.
+    #[inline]
+    pub fn is_qualified_type(&self) -> bool {
+        matches!(self, Rust::QualifiedType)
+    }
+
+    // -------------------- Memory & Special Traits --------------------
+
+    /// Check if this token is a field declaration or expression.
+    ///
+    /// Returns true for field-related constructs.
+    #[inline]
+    pub fn is_field(&self) -> bool {
+        matches!(
+            self,
+            Rust::FieldDeclaration
+                | Rust::FieldExpression
+                | Rust::FieldPattern
+                | Rust::FieldIdentifier
+                | Rust::ShorthandFieldIdentifier
+        )
+    }
+
+    /// Check if this token is a unit type or expression.
+    ///
+    /// Returns true for () unit type.
+    #[inline]
+    pub fn is_unit(&self) -> bool {
+        matches!(self, Rust::UnitType | Rust::UnitExpression)
+    }
+
+    // -------------------- Loop & Control Flow --------------------
+
+    /// Check if this token is a loop expression.
+    ///
+    /// Returns true for loop, while, and for expressions.
+    #[inline]
+    pub fn is_loop_expression(&self) -> bool {
+        matches!(
+            self,
+            Rust::LoopExpression
+                | Rust::WhileExpression
+                | Rust::ForExpression
+                | Rust::Loop
+                | Rust::While
+                | Rust::For
+        )
+    }
+
+    /// Check if this token is a break or continue statement.
+    ///
+    /// Returns true for break and continue expressions.
+    #[inline]
+    pub fn is_break_or_continue(&self) -> bool {
+        matches!(
+            self,
+            Rust::Break
+                | Rust::Continue
+                | Rust::BreakExpression
+                | Rust::ContinueExpression
+        )
+    }
+
+    /// Check if this token is a loop label.
+    ///
+    /// Returns true for loop labels ('label: loop).
+    #[inline]
+    pub fn is_loop_label(&self) -> bool {
+        matches!(self, Rust::Label)
+    }
+
+    // -------------------- Expressions --------------------
+
+    /// Check if this token is a call expression.
+    ///
+    /// Returns true for function calls.
+    #[inline]
+    pub fn is_call_expression(&self) -> bool {
+        matches!(self, Rust::CallExpression | Rust::Arguments)
+    }
+
+    /// Check if this token is a method call.
+    ///
+    /// Returns true for field expressions which can be method calls.
+    #[inline]
+    pub fn is_method_call(&self) -> bool {
+        matches!(self, Rust::FieldExpression | Rust::CallExpression)
+    }
+
+    /// Check if this token is an index expression.
+    ///
+    /// Returns true for array/slice indexing (foo[0]).
+    #[inline]
+    pub fn is_index_expression(&self) -> bool {
+        matches!(self, Rust::IndexExpression)
+    }
+
+    /// Check if this token is a struct expression.
+    ///
+    /// Returns true for struct initialization expressions.
+    #[inline]
+    pub fn is_struct_expression(&self) -> bool {
+        matches!(
+            self,
+            Rust::StructExpression
+                | Rust::FieldInitializerList
+                | Rust::FieldInitializer
+                | Rust::ShorthandFieldInitializer
+        )
+    }
+
+    /// Check if this token is a binary expression.
+    ///
+    /// Returns true for binary operations.
+    #[inline]
+    pub fn is_binary_expression(&self) -> bool {
+        matches!(self, Rust::BinaryExpression)
+    }
+
+    /// Check if this token is a unary expression.
+    ///
+    /// Returns true for unary operations.
+    #[inline]
+    pub fn is_unary_expression(&self) -> bool {
+        matches!(self, Rust::UnaryExpression)
+    }
+
+    /// Check if this token is a type cast expression.
+    ///
+    /// Returns true for as type casts.
+    #[inline]
+    pub fn is_type_cast(&self) -> bool {
+        matches!(self, Rust::TypeCastExpression | Rust::As)
+    }
+
+    // -------------------- Statements --------------------
+
+    /// Check if this token is an expression statement.
+    ///
+    /// Returns true for expression statements.
+    #[inline]
+    pub fn is_expression_statement(&self) -> bool {
+        matches!(self, Rust::ExpressionStatement)
+    }
+
+    /// Check if this token is an empty statement.
+    ///
+    /// Returns true for empty statements (semicolon only).
+    #[inline]
+    pub fn is_empty_statement(&self) -> bool {
+        matches!(self, Rust::EmptyStatement)
+    }
+
+    /// Check if this token is a let declaration.
+    ///
+    /// Returns true for let bindings.
+    #[inline]
+    pub fn is_let_declaration(&self) -> bool {
+        matches!(self, Rust::LetDeclaration)
+    }
+
+    // -------------------- Items & Declarations --------------------
+
+    /// Check if this token is a function signature.
+    ///
+    /// Returns true for function signature items (in traits).
+    #[inline]
+    pub fn is_function_signature(&self) -> bool {
+        matches!(self, Rust::FunctionSignatureItem)
+    }
+
+    /// Check if this token is a const item declaration.
+    ///
+    /// Returns true for const item definitions.
+    #[inline]
+    pub fn is_const_item(&self) -> bool {
+        matches!(self, Rust::ConstItem)
+    }
+
+    /// Check if this token is a static item declaration.
+    ///
+    /// Returns true for static item definitions.
+    #[inline]
+    pub fn is_static_item(&self) -> bool {
+        matches!(self, Rust::StaticItem)
+    }
+
+    /// Check if this token is an extern crate declaration.
+    ///
+    /// Returns true for extern crate statements.
+    #[inline]
+    pub fn is_extern_crate(&self) -> bool {
+        matches!(self, Rust::ExternCrateDeclaration)
+    }
+
+    /// Check if this token is a foreign mod item.
+    ///
+    /// Returns true for extern blocks.
+    #[inline]
+    pub fn is_foreign_mod(&self) -> bool {
+        matches!(self, Rust::ForeignModItem)
+    }
+
+    // -------------------- Parameters --------------------
+
+    /// Check if this token is a function parameter.
+    ///
+    /// Returns true for function parameters.
+    #[inline]
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(
+            self,
+            Rust::Parameter | Rust::Parameters | Rust::SelfParameter
+        )
+    }
+
+    /// Check if this token is a self parameter.
+    ///
+    /// Returns true for self/&self/&mut self parameters.
+    #[inline]
+    pub fn is_self_parameter(&self) -> bool {
+        matches!(self, Rust::SelfParameter)
+    }
+
+    /// Check if this token is a variadic parameter.
+    ///
+    /// Returns true for ... variadic parameters.
+    #[inline]
+    pub fn is_variadic_parameter(&self) -> bool {
+        matches!(self, Rust::VariadicParameter)
+    }
+
+    // -------------------- Operators & Delimiters --------------------
+
+    /// Check if this token is a comparison operator.
+    ///
+    /// Returns true for ==, !=, <, >, <=, >=.
+    #[inline]
+    pub fn is_comparison_operator(&self) -> bool {
+        matches!(
+            self,
+            Rust::EQEQ | Rust::BANGEQ | Rust::GT | Rust::LT | Rust::GTEQ | Rust::LTEQ
+        )
+    }
+
+    /// Check if this token is a logical operator.
+    ///
+    /// Returns true for && and ||.
+    #[inline]
+    pub fn is_logical_operator(&self) -> bool {
+        matches!(self, Rust::AMPAMP | Rust::PIPEPIPE)
+    }
+
+    /// Check if this token is a bitwise operator.
+    ///
+    /// Returns true for &, |, ^, <<, >>.
+    #[inline]
+    pub fn is_bitwise_operator(&self) -> bool {
+        matches!(
+            self,
+            Rust::AMP | Rust::PIPE | Rust::CARET | Rust::LTLT | Rust::GTGT
+        )
+    }
+
+    /// Check if this token is an arithmetic operator.
+    ///
+    /// Returns true for +, -, *, /, %.
+    #[inline]
+    pub fn is_arithmetic_operator(&self) -> bool {
+        matches!(
+            self,
+            Rust::PLUS | Rust::DASH | Rust::STAR | Rust::SLASH | Rust::PERCENT
+        )
+    }
+
+    /// Check if this token is a compound assignment operator.
+    ///
+    /// Returns true for +=, -=, *=, etc.
+    #[inline]
+    pub fn is_compound_assignment(&self) -> bool {
+        matches!(
+            self,
+            Rust::PLUSEQ
+                | Rust::DASHEQ
+                | Rust::STAREQ
+                | Rust::SLASHEQ
+                | Rust::PERCENTEQ
+                | Rust::CARETEQ
+                | Rust::AMPEQ
+                | Rust::PIPEEQ
+                | Rust::LTLTEQ
+                | Rust::GTGTEQ
+                | Rust::CompoundAssignmentExpr
+        )
+    }
+
+    /// Check if this token is a delimiter.
+    ///
+    /// Returns true for (, ), [, ], {, }.
+    #[inline]
+    pub fn is_delimiter(&self) -> bool {
+        matches!(
+            self,
+            Rust::LPAREN
+                | Rust::RPAREN
+                | Rust::LBRACK
+                | Rust::RBRACK
+                | Rust::LBRACE
+                | Rust::RBRACE
+        )
+    }
+
+    /// Check if this token is a path separator.
+    ///
+    /// Returns true for :: double colon.
+    #[inline]
+    pub fn is_path_separator(&self) -> bool {
+        matches!(self, Rust::COLONCOLON)
+    }
+
+    /// Check if this token is a return type arrow.
+    ///
+    /// Returns true for ->.
+    #[inline]
+    pub fn is_return_arrow(&self) -> bool {
+        matches!(self, Rust::DASHGT)
+    }
+
+    /// Check if this token is a fat arrow.
+    ///
+    /// Returns true for => in match arms.
+    #[inline]
+    pub fn is_fat_arrow(&self) -> bool {
+        matches!(self, Rust::EQGT)
+    }
+
+    // -------------------- String & Character Literals --------------------
+
+    /// Check if this token is a string literal.
+    ///
+    /// Returns true for string and raw string literals.
+    #[inline]
+    pub fn is_string_literal(&self) -> bool {
+        matches!(
+            self,
+            Rust::StringLiteral
+                | Rust::RawStringLiteral
+                | Rust::StringContent
+                | Rust::StringContent2
+        )
+    }
+
+    /// Check if this token is a raw string literal.
+    ///
+    /// Returns true for raw string literals r"..." or r#"..."#.
+    #[inline]
+    pub fn is_raw_string_literal(&self) -> bool {
+        matches!(
+            self,
+            Rust::RawStringLiteral
+                | Rust::RawStringLiteralStart
+                | Rust::RawStringLiteralEnd
+        )
+    }
+
+    /// Check if this token is a character literal.
+    ///
+    /// Returns true for 'c' character literals.
+    #[inline]
+    pub fn is_char_literal(&self) -> bool {
+        matches!(self, Rust::CharLiteral)
+    }
+
+    /// Check if this token is an escape sequence.
+    ///
+    /// Returns true for escape sequences in strings/chars.
+    #[inline]
+    pub fn is_escape_sequence(&self) -> bool {
+        matches!(self, Rust::EscapeSequence)
+    }
+
+    // -------------------- Numeric Literals --------------------
+
+    /// Check if this token is an integer literal.
+    ///
+    /// Returns true for integer literals.
+    #[inline]
+    pub fn is_integer_literal(&self) -> bool {
+        matches!(self, Rust::IntegerLiteral)
+    }
+
+    /// Check if this token is a float literal.
+    ///
+    /// Returns true for floating point literals.
+    #[inline]
+    pub fn is_float_literal(&self) -> bool {
+        matches!(self, Rust::FloatLiteral)
+    }
+
+    /// Check if this token is a numeric literal.
+    ///
+    /// Returns true for any numeric literal (integer or float).
+    #[inline]
+    pub fn is_numeric_literal(&self) -> bool {
+        matches!(self, Rust::IntegerLiteral | Rust::FloatLiteral)
+    }
+
+    // -------------------- Boolean Literals --------------------
+
+    /// Check if this token is a boolean literal.
+    ///
+    /// Returns true for true or false.
+    #[inline]
+    pub fn is_boolean_literal(&self) -> bool {
+        matches!(self, Rust::BooleanLiteral | Rust::True | Rust::False)
+    }
+
+    // -------------------- Documentation --------------------
+
+    /// Check if this token is a doc comment.
+    ///
+    /// Returns true for doc comments (/// or //!).
+    #[inline]
+    pub fn is_doc_comment(&self) -> bool {
+        matches!(
+            self,
+            Rust::DocComment
+                | Rust::OuterDocCommentMarker
+                | Rust::OuterDocCommentMarker2
+                | Rust::InnerDocCommentMarker
+                | Rust::InnerDocCommentMarker2
+                | Rust::LineDocCommentMarker
+                | Rust::BlockDocCommentMarker
+        )
+    }
+
+    /// Check if this token is an inner doc comment.
+    ///
+    /// Returns true for //! inner doc comments.
+    #[inline]
+    pub fn is_inner_doc_comment(&self) -> bool {
+        matches!(
+            self,
+            Rust::InnerDocCommentMarker | Rust::InnerDocCommentMarker2
+        )
+    }
+
+    /// Check if this token is an outer doc comment.
+    ///
+    /// Returns true for /// outer doc comments.
+    #[inline]
+    pub fn is_outer_doc_comment(&self) -> bool {
+        matches!(
+            self,
+            Rust::OuterDocCommentMarker | Rust::OuterDocCommentMarker2
+        )
+    }
+
+    /// Check if this token is a line comment.
+    ///
+    /// Returns true for // comments.
+    #[inline]
+    pub fn is_line_comment(&self) -> bool {
+        matches!(self, Rust::LineComment | Rust::SLASHSLASH)
+    }
+
+    /// Check if this token is a block comment.
+    ///
+    /// Returns true for /* */ comments.
+    #[inline]
+    pub fn is_block_comment(&self) -> bool {
+        matches!(
+            self,
+            Rust::BlockComment | Rust::SLASHSTAR | Rust::STARSLASH
+        )
+    }
+
+    // -------------------- Advanced Features --------------------
+
+    /// Check if this token is a const block.
+    ///
+    /// Returns true for const { } blocks.
+    #[inline]
+    pub fn is_const_block(&self) -> bool {
+        matches!(self, Rust::ConstBlock)
+    }
+
+    /// Check if this token is a try block.
+    ///
+    /// Returns true for try { } blocks.
+    #[inline]
+    pub fn is_try_block(&self) -> bool {
+        matches!(self, Rust::TryBlock)
+    }
+
+    /// Check if this token is a gen block.
+    ///
+    /// Returns true for gen { } generator blocks.
+    #[inline]
+    pub fn is_gen_block(&self) -> bool {
+        matches!(self, Rust::GenBlock | Rust::Gen)
+    }
+
+    /// Check if this token represents a parenthesized expression.
+    ///
+    /// Returns true for expressions wrapped in parentheses.
+    #[inline]
+    pub fn is_parenthesized_expression(&self) -> bool {
+        matches!(self, Rust::ParenthesizedExpression)
+    }
+
+    /// Check if this token is a base field initializer.
+    ///
+    /// Returns true for ..base in struct expressions.
+    #[inline]
+    pub fn is_base_field_initializer(&self) -> bool {
+        matches!(self, Rust::BaseFieldInitializer)
+    }
+
+    /// Check if this token is a shorthand field initializer.
+    ///
+    /// Returns true for shorthand field syntax (field instead of field: field).
+    #[inline]
+    pub fn is_shorthand_field_initializer(&self) -> bool {
+        matches!(self, Rust::ShorthandFieldInitializer)
+    }
+
+    /// Check if this token is a condition in if/while.
+    ///
+    /// Returns true for condition expressions.
+    #[inline]
+    pub fn is_condition(&self) -> bool {
+        matches!(self, Rust::Condition)
+    }
+
+    /// Check if this token is an else clause.
+    ///
+    /// Returns true for else branches.
+    #[inline]
+    pub fn is_else_clause(&self) -> bool {
+        matches!(self, Rust::ElseClause | Rust::Else)
+    }
+
+    /// Check if this token is a bracketed type.
+    ///
+    /// Returns true for types in brackets/parentheses.
+    #[inline]
+    pub fn is_bracketed_type(&self) -> bool {
+        matches!(self, Rust::BracketedType)
+    }
+
+    /// Check if this token is function modifiers.
+    ///
+    /// Returns true for function modifier keywords (async, const, unsafe, etc).
+    #[inline]
+    pub fn is_function_modifiers(&self) -> bool {
+        matches!(self, Rust::FunctionModifiers)
+    }
+
+    /// Check if this token is an extern modifier.
+    ///
+    /// Returns true for extern ABI specifications.
+    #[inline]
+    pub fn is_extern_modifier(&self) -> bool {
+        matches!(self, Rust::ExternModifier)
+    }
+
+    /// Check if this token represents source file root.
+    ///
+    /// Returns true for source file node.
+    #[inline]
+    pub fn is_source_file(&self) -> bool {
+        matches!(self, Rust::SourceFile)
+    }
+
+    /// Check if this token is an underscore wildcard.
+    ///
+    /// Returns true for _ wildcard pattern/expression.
+    #[inline]
+    pub fn is_underscore(&self) -> bool {
+        matches!(self, Rust::UNDERSCORE)
+    }
+
+    /// Check if this token is at pattern binding (@).
+    ///
+    /// Returns true for @ in patterns (e.g., x @ 1..=5).
+    #[inline]
+    pub fn is_at_pattern(&self) -> bool {
+        matches!(self, Rust::AT)
+    }
+
+    /// Check if this token is a dollar sign (used in macros).
+    ///
+    /// Returns true for $ in macro patterns.
+    #[inline]
+    pub fn is_dollar_sign(&self) -> bool {
+        matches!(self, Rust::DOLLAR)
+    }
+
+    /// Check if this token is a semicolon.
+    ///
+    /// Returns true for statement terminators.
+    #[inline]
+    pub fn is_semicolon(&self) -> bool {
+        matches!(self, Rust::SEMI)
+    }
+
+    /// Check if this token is a colon.
+    ///
+    /// Returns true for : in type annotations.
+    #[inline]
+    pub fn is_colon(&self) -> bool {
+        matches!(self, Rust::COLON)
+    }
+
+    /// Check if this token is a comma.
+    ///
+    /// Returns true for , separators.
+    #[inline]
+    pub fn is_comma(&self) -> bool {
+        matches!(self, Rust::COMMA)
+    }
+
+    /// Check if this token is a dot operator.
+    ///
+    /// Returns true for . field access.
+    #[inline]
+    pub fn is_dot(&self) -> bool {
+        matches!(self, Rust::DOT)
+    }
+
+    /// Check if this token is a hash symbol.
+    ///
+    /// Returns true for # in attributes.
+    #[inline]
+    pub fn is_hash(&self) -> bool {
+        matches!(self, Rust::HASH)
+    }
 }
 
 /// Rust language implementation.
@@ -1730,5 +2995,954 @@ mod tests {
         assert!(Rust::DOTDOT.is_range());
         assert!(Rust::DOTDOTEQ.is_range());
         assert!(!Rust::DOT.is_range());
+    }
+
+    // ==================== ADVANCED HELPER METHOD TESTS ====================
+
+    // -------------------- Macro Tests --------------------
+
+    #[test]
+    fn test_is_macro_rules() {
+        assert!(Rust::MacroRulesBANG.is_macro_rules());
+        assert!(Rust::MacroDefinition.is_macro_rules());
+        assert!(!Rust::MacroInvocation.is_macro_rules());
+    }
+
+    #[test]
+    fn test_is_proc_macro() {
+        assert!(Rust::MacroInvocation.is_proc_macro());
+        assert!(!Rust::MacroDefinition.is_proc_macro());
+    }
+
+    #[test]
+    fn test_is_macro_pattern() {
+        assert!(Rust::TokenPattern.is_macro_pattern());
+        assert!(Rust::TokenTreePattern.is_macro_pattern());
+        assert!(Rust::TokenTree.is_macro_pattern());
+        assert!(Rust::TokenRepetition.is_macro_pattern());
+        assert!(!Rust::Pattern.is_macro_pattern());
+    }
+
+    #[test]
+    fn test_is_fragment_specifier() {
+        assert!(Rust::FragmentSpecifier.is_fragment_specifier());
+        assert!(Rust::Expr.is_fragment_specifier());
+        assert!(Rust::Ident.is_fragment_specifier());
+        assert!(Rust::Ty.is_fragment_specifier());
+        assert!(!Rust::TypeIdentifier.is_fragment_specifier());
+    }
+
+    #[test]
+    fn test_is_macro_rule() {
+        assert!(Rust::MacroRule.is_macro_rule());
+        assert!(!Rust::MacroDefinition.is_macro_rule());
+    }
+
+    // -------------------- Lifetime Tests --------------------
+
+    #[test]
+    fn test_is_lifetime_annotation() {
+        assert!(Rust::Lifetime.is_lifetime_annotation());
+        assert!(Rust::Lifetime2.is_lifetime_annotation());
+        assert!(Rust::SQUOTE.is_lifetime_annotation());
+        assert!(!Rust::TypeParameters.is_lifetime_annotation());
+    }
+
+    #[test]
+    fn test_is_for_lifetimes() {
+        assert!(Rust::ForLifetimes.is_for_lifetimes());
+        assert!(!Rust::Lifetime.is_for_lifetimes());
+    }
+
+    #[test]
+    fn test_is_lifetime_elision_context() {
+        assert!(Rust::ReferenceType.is_lifetime_elision_context());
+        assert!(Rust::Parameter.is_lifetime_elision_context());
+        assert!(Rust::FunctionType.is_lifetime_elision_context());
+        assert!(!Rust::Lifetime.is_lifetime_elision_context());
+    }
+
+    // -------------------- Trait System Tests --------------------
+
+    #[test]
+    fn test_is_trait_or_impl() {
+        assert!(Rust::TraitItem.is_trait_or_impl());
+        assert!(Rust::ImplItem.is_trait_or_impl());
+        assert!(Rust::Trait.is_trait_or_impl());
+        assert!(Rust::Impl.is_trait_or_impl());
+        assert!(!Rust::StructItem.is_trait_or_impl());
+    }
+
+    #[test]
+    fn test_is_associated_type() {
+        assert!(Rust::AssociatedType.is_associated_type());
+        assert!(Rust::TypeBinding.is_associated_type());
+        assert!(!Rust::TypeItem.is_associated_type());
+    }
+
+    #[test]
+    fn test_is_where_predicate() {
+        assert!(Rust::WherePredicate.is_where_predicate());
+        assert!(Rust::WhereClause.is_where_predicate());
+        assert!(Rust::Where.is_where_predicate());
+        assert!(!Rust::TraitBounds.is_where_predicate());
+    }
+
+    #[test]
+    fn test_is_trait_constraint() {
+        assert!(Rust::TraitBounds.is_trait_constraint());
+        assert!(Rust::BoundedType.is_trait_constraint());
+        assert!(Rust::ConstrainedTypeParameter.is_trait_constraint());
+        assert!(Rust::HigherRankedTraitBound.is_trait_constraint());
+        assert!(!Rust::TypeParameters.is_trait_constraint());
+    }
+
+    // -------------------- Pattern Matching Tests --------------------
+
+    #[test]
+    fn test_is_match_arm() {
+        assert!(Rust::MatchArm.is_match_arm());
+        assert!(Rust::MatchArm2.is_match_arm());
+        assert!(Rust::MatchPattern.is_match_arm());
+        assert!(!Rust::Pattern.is_match_arm());
+    }
+
+    #[test]
+    fn test_is_let_pattern() {
+        assert!(Rust::LetCondition.is_let_pattern());
+        assert!(Rust::LetChain.is_let_pattern());
+        assert!(Rust::LetChain2.is_let_pattern());
+        assert!(!Rust::LetDeclaration.is_let_pattern());
+    }
+
+    #[test]
+    fn test_is_struct_pattern() {
+        assert!(Rust::StructPattern.is_struct_pattern());
+        assert!(Rust::TupleStructPattern.is_struct_pattern());
+        assert!(Rust::FieldPattern.is_struct_pattern());
+        assert!(!Rust::StructItem.is_struct_pattern());
+    }
+
+    #[test]
+    fn test_is_destructuring_pattern() {
+        assert!(Rust::TuplePattern.is_destructuring_pattern());
+        assert!(Rust::SlicePattern.is_destructuring_pattern());
+        assert!(Rust::StructPattern.is_destructuring_pattern());
+        assert!(!Rust::Pattern.is_destructuring_pattern());
+    }
+
+    #[test]
+    fn test_is_or_pattern() {
+        assert!(Rust::OrPattern.is_or_pattern());
+        assert!(!Rust::Pattern.is_or_pattern());
+    }
+
+    #[test]
+    fn test_is_range_pattern() {
+        assert!(Rust::RangePattern.is_range_pattern());
+        assert!(!Rust::RangeExpression.is_range_pattern());
+    }
+
+    #[test]
+    fn test_is_binding_pattern() {
+        assert!(Rust::CapturedPattern.is_binding_pattern());
+        assert!(Rust::RefPattern.is_binding_pattern());
+        assert!(Rust::MutPattern.is_binding_pattern());
+        assert!(Rust::ReferencePattern.is_binding_pattern());
+        assert!(!Rust::Pattern.is_binding_pattern());
+    }
+
+    // -------------------- Ownership Tests --------------------
+
+    #[test]
+    fn test_is_move() {
+        assert!(Rust::Move.is_move());
+        assert!(!Rust::Ref.is_move());
+    }
+
+    #[test]
+    fn test_is_borrow() {
+        assert!(Rust::AMP.is_borrow());
+        assert!(Rust::ReferenceExpression.is_borrow());
+        assert!(Rust::ReferenceType.is_borrow());
+        assert!(!Rust::Move.is_borrow());
+    }
+
+    #[test]
+    fn test_is_mutable_borrow() {
+        assert!(Rust::MutableSpecifier.is_mutable_borrow());
+        assert!(Rust::ReferenceExpression.is_mutable_borrow());
+        assert!(!Rust::Move.is_mutable_borrow());
+    }
+
+    #[test]
+    fn test_is_reference_syntax() {
+        assert!(Rust::Ref.is_reference_syntax());
+        assert!(Rust::AMP.is_reference_syntax());
+        assert!(Rust::ReferenceType.is_reference_syntax());
+        assert!(Rust::RefPattern.is_reference_syntax());
+        assert!(!Rust::Move.is_reference_syntax());
+    }
+
+    // -------------------- Unsafe Tests --------------------
+
+    #[test]
+    fn test_is_unsafe_function() {
+        assert!(Rust::Unsafe.is_unsafe_function());
+        assert!(Rust::FunctionModifiers.is_unsafe_function());
+        assert!(!Rust::FunctionItem.is_unsafe_function());
+    }
+
+    #[test]
+    fn test_is_unsafe_trait() {
+        assert!(Rust::Unsafe.is_unsafe_trait());
+        assert!(Rust::TraitItem.is_unsafe_trait());
+        assert!(Rust::ImplItem.is_unsafe_trait());
+        assert!(!Rust::StructItem.is_unsafe_trait());
+    }
+
+    #[test]
+    fn test_is_raw_pointer() {
+        assert!(Rust::PointerType.is_raw_pointer());
+        assert!(Rust::Raw.is_raw_pointer());
+        assert!(!Rust::ReferenceType.is_raw_pointer());
+    }
+
+    // -------------------- Async/Await Tests --------------------
+
+    #[test]
+    fn test_is_async_function() {
+        assert!(Rust::Async.is_async_function());
+        assert!(Rust::FunctionItem.is_async_function());
+        assert!(!Rust::AsyncBlock.is_async_function());
+    }
+
+    #[test]
+    fn test_is_await_expression() {
+        assert!(Rust::AwaitExpression.is_await_expression());
+        assert!(Rust::Await.is_await_expression());
+        assert!(!Rust::Async.is_await_expression());
+    }
+
+    #[test]
+    fn test_is_async_block() {
+        assert!(Rust::AsyncBlock.is_async_block());
+        assert!(!Rust::Async.is_async_block());
+    }
+
+    // -------------------- Generics Tests --------------------
+
+    #[test]
+    fn test_is_type_parameter() {
+        assert!(Rust::TypeParameters.is_type_parameter());
+        assert!(Rust::ConstrainedTypeParameter.is_type_parameter());
+        assert!(Rust::OptionalTypeParameter.is_type_parameter());
+        assert!(!Rust::ConstParameter.is_type_parameter());
+    }
+
+    #[test]
+    fn test_is_const_generic() {
+        assert!(Rust::ConstParameter.is_const_generic());
+        assert!(!Rust::TypeParameters.is_const_generic());
+    }
+
+    #[test]
+    fn test_is_turbofish() {
+        assert!(Rust::GenericTypeWithTurbofish.is_turbofish());
+        assert!(Rust::COLONCOLON.is_turbofish());
+        assert!(Rust::LT2.is_turbofish());
+        assert!(!Rust::GenericType.is_turbofish());
+    }
+
+    #[test]
+    fn test_is_type_arguments() {
+        assert!(Rust::TypeArguments.is_type_arguments());
+        assert!(Rust::TypeBinding.is_type_arguments());
+        assert!(!Rust::TypeParameters.is_type_arguments());
+    }
+
+    // -------------------- Attributes Tests --------------------
+
+    #[test]
+    fn test_is_derive_attribute() {
+        assert!(Rust::AttributeItem.is_derive_attribute());
+        assert!(Rust::Attribute.is_derive_attribute());
+        assert!(!Rust::InnerAttributeItem.is_derive_attribute());
+    }
+
+    #[test]
+    fn test_is_cfg_attribute() {
+        assert!(Rust::AttributeItem.is_cfg_attribute());
+        assert!(Rust::Attribute.is_cfg_attribute());
+        assert!(!Rust::InnerAttributeItem.is_cfg_attribute());
+    }
+
+    #[test]
+    fn test_is_test_attribute() {
+        assert!(Rust::AttributeItem.is_test_attribute());
+        assert!(!Rust::InnerAttributeItem.is_test_attribute());
+    }
+
+    #[test]
+    fn test_is_inner_attribute() {
+        assert!(Rust::InnerAttributeItem.is_inner_attribute());
+        assert!(!Rust::AttributeItem.is_inner_attribute());
+    }
+
+    #[test]
+    fn test_is_outer_attribute() {
+        assert!(Rust::AttributeItem.is_outer_attribute());
+        assert!(!Rust::InnerAttributeItem.is_outer_attribute());
+    }
+
+    // -------------------- Module System Tests --------------------
+
+    #[test]
+    fn test_is_mod_declaration() {
+        assert!(Rust::ModItem.is_mod_declaration());
+        assert!(Rust::Mod.is_mod_declaration());
+        assert!(!Rust::UseDeclaration.is_mod_declaration());
+    }
+
+    #[test]
+    fn test_is_use_import() {
+        assert!(Rust::UseDeclaration.is_use_import());
+        assert!(Rust::UseClause.is_use_import());
+        assert!(Rust::UseList.is_use_import());
+        assert!(!Rust::ModItem.is_use_import());
+    }
+
+    #[test]
+    fn test_is_pub_visibility() {
+        assert!(Rust::Pub.is_pub_visibility());
+        assert!(Rust::VisibilityModifier.is_pub_visibility());
+        assert!(!Rust::Mod.is_pub_visibility());
+    }
+
+    #[test]
+    fn test_is_path_segment() {
+        assert!(Rust::Crate.is_path_segment());
+        assert!(Rust::Super.is_path_segment());
+        assert!(Rust::Zelf.is_path_segment());
+        assert!(!Rust::Identifier.is_path_segment());
+    }
+
+    #[test]
+    fn test_is_scoped_identifier() {
+        assert!(Rust::ScopedIdentifier.is_scoped_identifier());
+        assert!(Rust::ScopedTypeIdentifier.is_scoped_identifier());
+        assert!(!Rust::Identifier.is_scoped_identifier());
+    }
+
+    #[test]
+    fn test_is_use_wildcard() {
+        assert!(Rust::UseWildcard.is_use_wildcard());
+        assert!(Rust::STAR.is_use_wildcard());
+        assert!(!Rust::UseList.is_use_wildcard());
+    }
+
+    // -------------------- Error Handling Tests --------------------
+
+    #[test]
+    fn test_is_result_type() {
+        assert!(Rust::TypeIdentifier.is_result_type());
+        assert!(Rust::GenericType.is_result_type());
+        assert!(!Rust::IntegerLiteral.is_result_type());
+    }
+
+    #[test]
+    fn test_is_option_type() {
+        assert!(Rust::TypeIdentifier.is_option_type());
+        assert!(Rust::GenericType.is_option_type());
+        assert!(!Rust::IntegerLiteral.is_option_type());
+    }
+
+    #[test]
+    fn test_is_question_mark_operator() {
+        assert!(Rust::QMARK.is_question_mark_operator());
+        assert!(Rust::TryExpression.is_question_mark_operator());
+        assert!(!Rust::Try.is_question_mark_operator());
+    }
+
+    #[test]
+    fn test_is_panic_macro() {
+        assert!(Rust::MacroInvocation.is_panic_macro());
+        assert!(!Rust::MacroDefinition.is_panic_macro());
+    }
+
+    // -------------------- Closures Tests --------------------
+
+    #[test]
+    fn test_is_closure_definition() {
+        assert!(Rust::ClosureExpression.is_closure_definition());
+        assert!(Rust::ClosureParameters.is_closure_definition());
+        assert!(!Rust::FunctionItem.is_closure_definition());
+    }
+
+    #[test]
+    fn test_is_closure_parameter() {
+        assert!(Rust::ClosureParameters.is_closure_parameter());
+        assert!(!Rust::Parameters.is_closure_parameter());
+    }
+
+    #[test]
+    fn test_is_move_closure() {
+        assert!(Rust::Move.is_move_closure());
+        assert!(Rust::ClosureExpression.is_move_closure());
+        assert!(!Rust::FunctionItem.is_move_closure());
+    }
+
+    // -------------------- Type System Tests --------------------
+
+    #[test]
+    fn test_is_struct_definition() {
+        assert!(Rust::StructItem.is_struct_definition());
+        assert!(Rust::StructExpression.is_struct_definition());
+        assert!(Rust::FieldDeclarationList.is_struct_definition());
+        assert!(!Rust::EnumItem.is_struct_definition());
+    }
+
+    #[test]
+    fn test_is_enum_definition() {
+        assert!(Rust::EnumItem.is_enum_definition());
+        assert!(Rust::EnumVariant.is_enum_definition());
+        assert!(Rust::EnumVariantList.is_enum_definition());
+        assert!(!Rust::StructItem.is_enum_definition());
+    }
+
+    #[test]
+    fn test_is_type_alias_definition() {
+        assert!(Rust::TypeItem.is_type_alias_definition());
+        assert!(Rust::Type.is_type_alias_definition());
+        assert!(!Rust::TypeIdentifier.is_type_alias_definition());
+    }
+
+    #[test]
+    fn test_is_union_definition() {
+        assert!(Rust::UnionItem.is_union_definition());
+        assert!(Rust::Union.is_union_definition());
+        assert!(!Rust::StructItem.is_union_definition());
+    }
+
+    #[test]
+    fn test_is_never_type_annotation() {
+        assert!(Rust::NeverType.is_never_type_annotation());
+        assert!(Rust::BANG.is_never_type_annotation());
+        assert!(!Rust::Type.is_never_type_annotation());
+    }
+
+    #[test]
+    fn test_is_tuple() {
+        assert!(Rust::TupleType.is_tuple());
+        assert!(Rust::TupleExpression.is_tuple());
+        assert!(Rust::TuplePattern.is_tuple());
+        assert!(!Rust::ArrayType.is_tuple());
+    }
+
+    #[test]
+    fn test_is_array() {
+        assert!(Rust::ArrayType.is_array());
+        assert!(Rust::ArrayExpression.is_array());
+        assert!(!Rust::TupleType.is_array());
+    }
+
+    #[test]
+    fn test_is_function_type() {
+        assert!(Rust::FunctionType.is_function_type());
+        assert!(!Rust::FunctionItem.is_function_type());
+    }
+
+    // -------------------- Special Syntax Tests --------------------
+
+    #[test]
+    fn test_is_turbofish_syntax() {
+        assert!(Rust::GenericTypeWithTurbofish.is_turbofish_syntax());
+        assert!(!Rust::GenericType.is_turbofish_syntax());
+    }
+
+    #[test]
+    fn test_is_dyn_trait() {
+        assert!(Rust::Dyn.is_dyn_trait());
+        assert!(Rust::DynamicType.is_dyn_trait());
+        assert!(!Rust::Trait.is_dyn_trait());
+    }
+
+    #[test]
+    fn test_is_impl_trait() {
+        assert!(Rust::AbstractType.is_impl_trait());
+        assert!(Rust::Impl.is_impl_trait());
+        assert!(!Rust::Trait.is_impl_trait());
+    }
+
+    #[test]
+    fn test_is_qualified_type() {
+        assert!(Rust::QualifiedType.is_qualified_type());
+        assert!(!Rust::Type.is_qualified_type());
+    }
+
+    // -------------------- Memory & Special Traits Tests --------------------
+
+    #[test]
+    fn test_is_field() {
+        assert!(Rust::FieldDeclaration.is_field());
+        assert!(Rust::FieldExpression.is_field());
+        assert!(Rust::FieldPattern.is_field());
+        assert!(Rust::FieldIdentifier.is_field());
+        assert!(!Rust::Identifier.is_field());
+    }
+
+    #[test]
+    fn test_is_unit() {
+        assert!(Rust::UnitType.is_unit());
+        assert!(Rust::UnitExpression.is_unit());
+        assert!(!Rust::TupleType.is_unit());
+    }
+
+    // -------------------- Loop & Control Flow Tests --------------------
+
+    #[test]
+    fn test_is_loop_expression() {
+        assert!(Rust::LoopExpression.is_loop_expression());
+        assert!(Rust::WhileExpression.is_loop_expression());
+        assert!(Rust::ForExpression.is_loop_expression());
+        assert!(Rust::Loop.is_loop_expression());
+        assert!(!Rust::IfExpression.is_loop_expression());
+    }
+
+    #[test]
+    fn test_is_break_or_continue() {
+        assert!(Rust::Break.is_break_or_continue());
+        assert!(Rust::Continue.is_break_or_continue());
+        assert!(Rust::BreakExpression.is_break_or_continue());
+        assert!(Rust::ContinueExpression.is_break_or_continue());
+        assert!(!Rust::Return.is_break_or_continue());
+    }
+
+    #[test]
+    fn test_is_loop_label() {
+        assert!(Rust::Label.is_loop_label());
+        assert!(!Rust::Lifetime.is_loop_label());
+    }
+
+    // -------------------- Expressions Tests --------------------
+
+    #[test]
+    fn test_is_call_expression() {
+        assert!(Rust::CallExpression.is_call_expression());
+        assert!(Rust::Arguments.is_call_expression());
+        assert!(!Rust::FieldExpression.is_call_expression());
+    }
+
+    #[test]
+    fn test_is_method_call() {
+        assert!(Rust::FieldExpression.is_method_call());
+        assert!(Rust::CallExpression.is_method_call());
+        assert!(!Rust::MacroInvocation.is_method_call());
+    }
+
+    #[test]
+    fn test_is_index_expression() {
+        assert!(Rust::IndexExpression.is_index_expression());
+        assert!(!Rust::ArrayExpression.is_index_expression());
+    }
+
+    #[test]
+    fn test_is_struct_expression() {
+        assert!(Rust::StructExpression.is_struct_expression());
+        assert!(Rust::FieldInitializerList.is_struct_expression());
+        assert!(Rust::FieldInitializer.is_struct_expression());
+        assert!(!Rust::StructItem.is_struct_expression());
+    }
+
+    #[test]
+    fn test_is_binary_expression() {
+        assert!(Rust::BinaryExpression.is_binary_expression());
+        assert!(!Rust::UnaryExpression.is_binary_expression());
+    }
+
+    #[test]
+    fn test_is_unary_expression() {
+        assert!(Rust::UnaryExpression.is_unary_expression());
+        assert!(!Rust::BinaryExpression.is_unary_expression());
+    }
+
+    #[test]
+    fn test_is_type_cast() {
+        assert!(Rust::TypeCastExpression.is_type_cast());
+        assert!(Rust::As.is_type_cast());
+        assert!(!Rust::Type.is_type_cast());
+    }
+
+    // -------------------- Statements Tests --------------------
+
+    #[test]
+    fn test_is_expression_statement() {
+        assert!(Rust::ExpressionStatement.is_expression_statement());
+        assert!(!Rust::EmptyStatement.is_expression_statement());
+    }
+
+    #[test]
+    fn test_is_empty_statement() {
+        assert!(Rust::EmptyStatement.is_empty_statement());
+        assert!(!Rust::ExpressionStatement.is_empty_statement());
+    }
+
+    #[test]
+    fn test_is_let_declaration() {
+        assert!(Rust::LetDeclaration.is_let_declaration());
+        assert!(!Rust::LetCondition.is_let_declaration());
+    }
+
+    // -------------------- Items & Declarations Tests --------------------
+
+    #[test]
+    fn test_is_function_signature() {
+        assert!(Rust::FunctionSignatureItem.is_function_signature());
+        assert!(!Rust::FunctionItem.is_function_signature());
+    }
+
+    #[test]
+    fn test_is_const_item() {
+        assert!(Rust::ConstItem.is_const_item());
+        assert!(!Rust::StaticItem.is_const_item());
+    }
+
+    #[test]
+    fn test_is_static_item() {
+        assert!(Rust::StaticItem.is_static_item());
+        assert!(!Rust::ConstItem.is_static_item());
+    }
+
+    #[test]
+    fn test_is_extern_crate() {
+        assert!(Rust::ExternCrateDeclaration.is_extern_crate());
+        assert!(!Rust::ForeignModItem.is_extern_crate());
+    }
+
+    #[test]
+    fn test_is_foreign_mod() {
+        assert!(Rust::ForeignModItem.is_foreign_mod());
+        assert!(!Rust::ExternCrateDeclaration.is_foreign_mod());
+    }
+
+    // -------------------- Parameters Tests --------------------
+
+    #[test]
+    fn test_is_function_parameter() {
+        assert!(Rust::Parameter.is_function_parameter());
+        assert!(Rust::Parameters.is_function_parameter());
+        assert!(Rust::SelfParameter.is_function_parameter());
+        assert!(!Rust::ClosureParameters.is_function_parameter());
+    }
+
+    #[test]
+    fn test_is_self_parameter() {
+        assert!(Rust::SelfParameter.is_self_parameter());
+        assert!(!Rust::Parameter.is_self_parameter());
+    }
+
+    #[test]
+    fn test_is_variadic_parameter() {
+        assert!(Rust::VariadicParameter.is_variadic_parameter());
+        assert!(!Rust::Parameter.is_variadic_parameter());
+    }
+
+    // -------------------- Operators & Delimiters Tests --------------------
+
+    #[test]
+    fn test_is_comparison_operator() {
+        assert!(Rust::EQEQ.is_comparison_operator());
+        assert!(Rust::BANGEQ.is_comparison_operator());
+        assert!(Rust::GT.is_comparison_operator());
+        assert!(Rust::LT.is_comparison_operator());
+        assert!(!Rust::EQ.is_comparison_operator());
+    }
+
+    #[test]
+    fn test_is_logical_operator() {
+        assert!(Rust::AMPAMP.is_logical_operator());
+        assert!(Rust::PIPEPIPE.is_logical_operator());
+        assert!(!Rust::AMP.is_logical_operator());
+    }
+
+    #[test]
+    fn test_is_bitwise_operator() {
+        assert!(Rust::AMP.is_bitwise_operator());
+        assert!(Rust::PIPE.is_bitwise_operator());
+        assert!(Rust::CARET.is_bitwise_operator());
+        assert!(Rust::LTLT.is_bitwise_operator());
+        assert!(!Rust::AMPAMP.is_bitwise_operator());
+    }
+
+    #[test]
+    fn test_is_arithmetic_operator() {
+        assert!(Rust::PLUS.is_arithmetic_operator());
+        assert!(Rust::DASH.is_arithmetic_operator());
+        assert!(Rust::STAR.is_arithmetic_operator());
+        assert!(Rust::SLASH.is_arithmetic_operator());
+        assert!(Rust::PERCENT.is_arithmetic_operator());
+        assert!(!Rust::EQ.is_arithmetic_operator());
+    }
+
+    #[test]
+    fn test_is_compound_assignment() {
+        assert!(Rust::PLUSEQ.is_compound_assignment());
+        assert!(Rust::DASHEQ.is_compound_assignment());
+        assert!(Rust::STAREQ.is_compound_assignment());
+        assert!(Rust::CompoundAssignmentExpr.is_compound_assignment());
+        assert!(!Rust::EQ.is_compound_assignment());
+    }
+
+    #[test]
+    fn test_is_delimiter() {
+        assert!(Rust::LPAREN.is_delimiter());
+        assert!(Rust::RPAREN.is_delimiter());
+        assert!(Rust::LBRACK.is_delimiter());
+        assert!(Rust::RBRACK.is_delimiter());
+        assert!(Rust::LBRACE.is_delimiter());
+        assert!(Rust::RBRACE.is_delimiter());
+        assert!(!Rust::SEMI.is_delimiter());
+    }
+
+    #[test]
+    fn test_is_path_separator() {
+        assert!(Rust::COLONCOLON.is_path_separator());
+        assert!(!Rust::COLON.is_path_separator());
+    }
+
+    #[test]
+    fn test_is_return_arrow() {
+        assert!(Rust::DASHGT.is_return_arrow());
+        assert!(!Rust::EQGT.is_return_arrow());
+    }
+
+    #[test]
+    fn test_is_fat_arrow() {
+        assert!(Rust::EQGT.is_fat_arrow());
+        assert!(!Rust::DASHGT.is_fat_arrow());
+    }
+
+    // -------------------- String & Character Literals Tests --------------------
+
+    #[test]
+    fn test_is_string_literal() {
+        assert!(Rust::StringLiteral.is_string_literal());
+        assert!(Rust::RawStringLiteral.is_string_literal());
+        assert!(Rust::StringContent.is_string_literal());
+        assert!(!Rust::CharLiteral.is_string_literal());
+    }
+
+    #[test]
+    fn test_is_raw_string_literal() {
+        assert!(Rust::RawStringLiteral.is_raw_string_literal());
+        assert!(Rust::RawStringLiteralStart.is_raw_string_literal());
+        assert!(Rust::RawStringLiteralEnd.is_raw_string_literal());
+        assert!(!Rust::StringLiteral.is_raw_string_literal());
+    }
+
+    #[test]
+    fn test_is_char_literal() {
+        assert!(Rust::CharLiteral.is_char_literal());
+        assert!(!Rust::StringLiteral.is_char_literal());
+    }
+
+    #[test]
+    fn test_is_escape_sequence() {
+        assert!(Rust::EscapeSequence.is_escape_sequence());
+        assert!(!Rust::CharLiteral.is_escape_sequence());
+    }
+
+    // -------------------- Numeric Literals Tests --------------------
+
+    #[test]
+    fn test_is_integer_literal() {
+        assert!(Rust::IntegerLiteral.is_integer_literal());
+        assert!(!Rust::FloatLiteral.is_integer_literal());
+    }
+
+    #[test]
+    fn test_is_float_literal() {
+        assert!(Rust::FloatLiteral.is_float_literal());
+        assert!(!Rust::IntegerLiteral.is_float_literal());
+    }
+
+    #[test]
+    fn test_is_numeric_literal() {
+        assert!(Rust::IntegerLiteral.is_numeric_literal());
+        assert!(Rust::FloatLiteral.is_numeric_literal());
+        assert!(!Rust::StringLiteral.is_numeric_literal());
+    }
+
+    // -------------------- Boolean Literals Tests --------------------
+
+    #[test]
+    fn test_is_boolean_literal() {
+        assert!(Rust::BooleanLiteral.is_boolean_literal());
+        assert!(Rust::True.is_boolean_literal());
+        assert!(Rust::False.is_boolean_literal());
+        assert!(!Rust::IntegerLiteral.is_boolean_literal());
+    }
+
+    // -------------------- Documentation Tests --------------------
+
+    #[test]
+    fn test_is_doc_comment() {
+        assert!(Rust::DocComment.is_doc_comment());
+        assert!(Rust::OuterDocCommentMarker.is_doc_comment());
+        assert!(Rust::InnerDocCommentMarker.is_doc_comment());
+        assert!(!Rust::LineComment.is_doc_comment());
+    }
+
+    #[test]
+    fn test_is_inner_doc_comment() {
+        assert!(Rust::InnerDocCommentMarker.is_inner_doc_comment());
+        assert!(Rust::InnerDocCommentMarker2.is_inner_doc_comment());
+        assert!(!Rust::OuterDocCommentMarker.is_inner_doc_comment());
+    }
+
+    #[test]
+    fn test_is_outer_doc_comment() {
+        assert!(Rust::OuterDocCommentMarker.is_outer_doc_comment());
+        assert!(Rust::OuterDocCommentMarker2.is_outer_doc_comment());
+        assert!(!Rust::InnerDocCommentMarker.is_outer_doc_comment());
+    }
+
+    #[test]
+    fn test_is_line_comment() {
+        assert!(Rust::LineComment.is_line_comment());
+        assert!(Rust::SLASHSLASH.is_line_comment());
+        assert!(!Rust::BlockComment.is_line_comment());
+    }
+
+    #[test]
+    fn test_is_block_comment() {
+        assert!(Rust::BlockComment.is_block_comment());
+        assert!(Rust::SLASHSTAR.is_block_comment());
+        assert!(Rust::STARSLASH.is_block_comment());
+        assert!(!Rust::LineComment.is_block_comment());
+    }
+
+    // -------------------- Advanced Features Tests --------------------
+
+    #[test]
+    fn test_is_const_block() {
+        assert!(Rust::ConstBlock.is_const_block());
+        assert!(!Rust::ConstItem.is_const_block());
+    }
+
+    #[test]
+    fn test_is_try_block() {
+        assert!(Rust::TryBlock.is_try_block());
+        assert!(!Rust::TryExpression.is_try_block());
+    }
+
+    #[test]
+    fn test_is_gen_block() {
+        assert!(Rust::GenBlock.is_gen_block());
+        assert!(Rust::Gen.is_gen_block());
+        assert!(!Rust::Block.is_gen_block());
+    }
+
+    #[test]
+    fn test_is_parenthesized_expression() {
+        assert!(Rust::ParenthesizedExpression.is_parenthesized_expression());
+        assert!(!Rust::TupleExpression.is_parenthesized_expression());
+    }
+
+    #[test]
+    fn test_is_base_field_initializer() {
+        assert!(Rust::BaseFieldInitializer.is_base_field_initializer());
+        assert!(!Rust::FieldInitializer.is_base_field_initializer());
+    }
+
+    #[test]
+    fn test_is_shorthand_field_initializer() {
+        assert!(Rust::ShorthandFieldInitializer.is_shorthand_field_initializer());
+        assert!(!Rust::FieldInitializer.is_shorthand_field_initializer());
+    }
+
+    #[test]
+    fn test_is_condition() {
+        assert!(Rust::Condition.is_condition());
+        assert!(!Rust::Expression.is_condition());
+    }
+
+    #[test]
+    fn test_is_else_clause() {
+        assert!(Rust::ElseClause.is_else_clause());
+        assert!(Rust::Else.is_else_clause());
+        assert!(!Rust::If.is_else_clause());
+    }
+
+    #[test]
+    fn test_is_bracketed_type() {
+        assert!(Rust::BracketedType.is_bracketed_type());
+        assert!(!Rust::Type.is_bracketed_type());
+    }
+
+    #[test]
+    fn test_is_function_modifiers() {
+        assert!(Rust::FunctionModifiers.is_function_modifiers());
+        assert!(!Rust::Async.is_function_modifiers());
+    }
+
+    #[test]
+    fn test_is_extern_modifier() {
+        assert!(Rust::ExternModifier.is_extern_modifier());
+        assert!(!Rust::Extern.is_extern_modifier());
+    }
+
+    #[test]
+    fn test_is_source_file() {
+        assert!(Rust::SourceFile.is_source_file());
+        assert!(!Rust::ModItem.is_source_file());
+    }
+
+    #[test]
+    fn test_is_underscore() {
+        assert!(Rust::UNDERSCORE.is_underscore());
+        assert!(!Rust::Identifier.is_underscore());
+    }
+
+    #[test]
+    fn test_is_at_pattern() {
+        assert!(Rust::AT.is_at_pattern());
+        assert!(!Rust::Pattern.is_at_pattern());
+    }
+
+    #[test]
+    fn test_is_dollar_sign() {
+        assert!(Rust::DOLLAR.is_dollar_sign());
+        assert!(!Rust::HASH.is_dollar_sign());
+    }
+
+    #[test]
+    fn test_is_semicolon() {
+        assert!(Rust::SEMI.is_semicolon());
+        assert!(!Rust::COLON.is_semicolon());
+    }
+
+    #[test]
+    fn test_is_colon() {
+        assert!(Rust::COLON.is_colon());
+        assert!(!Rust::COLONCOLON.is_colon());
+    }
+
+    #[test]
+    fn test_is_comma() {
+        assert!(Rust::COMMA.is_comma());
+        assert!(!Rust::SEMI.is_comma());
+    }
+
+    #[test]
+    fn test_is_dot() {
+        assert!(Rust::DOT.is_dot());
+        assert!(!Rust::DOTDOT.is_dot());
+    }
+
+    #[test]
+    fn test_is_hash() {
+        assert!(Rust::HASH.is_hash());
+        assert!(!Rust::DOLLAR.is_hash());
     }
 }

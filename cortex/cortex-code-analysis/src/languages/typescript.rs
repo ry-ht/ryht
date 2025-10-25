@@ -1321,6 +1321,710 @@ impl TypeScriptToken {
     pub fn is_non_null_assertion(&self) -> bool {
         matches!(self, TypeScriptToken::NonNullExpression)
     }
+
+    // ===== Advanced Pattern Matching Methods =====
+
+    /// Check if this token represents destructuring patterns.
+    ///
+    /// Includes object and array destructuring patterns.
+    #[inline]
+    pub fn is_destructuring(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::DestructuringPattern
+                | TypeScriptToken::ObjectPattern
+                | TypeScriptToken::ArrayPattern
+                | TypeScriptToken::ObjectAssignmentPattern
+        )
+    }
+
+    /// Check if this token represents spread or rest operators.
+    #[inline]
+    pub fn is_spread_or_rest(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::SpreadElement
+                | TypeScriptToken::RestPattern
+                | TypeScriptToken::RestType
+                | TypeScriptToken::DOTDOTDOT
+        )
+    }
+
+    /// Check if this token represents a computed property.
+    #[inline]
+    pub fn is_computed_property(&self) -> bool {
+        matches!(self, TypeScriptToken::ComputedPropertyName)
+    }
+
+    /// Check if this token represents a shorthand property.
+    #[inline]
+    pub fn is_shorthand_property(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::ShorthandPropertyIdentifier
+                | TypeScriptToken::ShorthandPropertyIdentifierPattern
+        )
+    }
+
+    // ===== Advanced Type System Methods =====
+
+    /// Check if this token represents a utility type.
+    ///
+    /// Includes mapped types, conditional types, and index types.
+    #[inline]
+    pub fn is_utility_type(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::MappedTypeClause
+                | TypeScriptToken::ConditionalType
+                | TypeScriptToken::IndexTypeQuery
+                | TypeScriptToken::LookupType
+                | TypeScriptToken::InferType
+        )
+    }
+
+    /// Check if this token represents a type guard or assertion.
+    #[inline]
+    pub fn is_type_guard(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::TypePredicate
+                | TypeScriptToken::TypePredicateAnnotation
+                | TypeScriptToken::Asserts
+                | TypeScriptToken::AssertsAnnotation
+                | TypeScriptToken::Is
+        )
+    }
+
+    /// Check if this token represents a tuple type or expression.
+    #[inline]
+    pub fn is_tuple(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::TupleType
+                | TypeScriptToken::TupleTypeMember
+        )
+    }
+
+    /// Check if this token represents an object type or interface body.
+    #[inline]
+    pub fn is_object_type(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::ObjectType
+                | TypeScriptToken::InterfaceBody
+                | TypeScriptToken::PropertySignature
+                | TypeScriptToken::IndexSignature
+        )
+    }
+
+    /// Check if this token represents a function type or signature.
+    #[inline]
+    pub fn is_function_type(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::FunctionType
+                | TypeScriptToken::ConstructorType
+                | TypeScriptToken::CallSignature
+                | TypeScriptToken::ConstructSignature
+        )
+    }
+
+    /// Check if this token represents a constraint or bound.
+    #[inline]
+    pub fn is_constraint(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Constraint
+                | TypeScriptToken::ExtendsClause
+                | TypeScriptToken::ExtendsTypeClause
+        )
+    }
+
+    // ===== Module System Methods =====
+
+    /// Check if this token represents an export.
+    #[inline]
+    pub fn is_export(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Export
+                | TypeScriptToken::ExportStatement
+                | TypeScriptToken::ExportClause
+                | TypeScriptToken::ExportSpecifier
+                | TypeScriptToken::NamespaceExport
+        )
+    }
+
+    /// Check if this token represents an import.
+    #[inline]
+    pub fn is_import(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Import
+                | TypeScriptToken::ImportStatement
+                | TypeScriptToken::ImportClause
+                | TypeScriptToken::ImportSpecifier
+                | TypeScriptToken::NamespaceImport
+                | TypeScriptToken::NamedImports
+                | TypeScriptToken::ImportAlias
+                | TypeScriptToken::ImportRequireClause
+        )
+    }
+
+    /// Check if this token represents a default export or import.
+    #[inline]
+    pub fn is_default(&self) -> bool {
+        matches!(self, TypeScriptToken::Default)
+    }
+
+    /// Check if this token is a from clause.
+    #[inline]
+    pub fn is_from_clause(&self) -> bool {
+        matches!(self, TypeScriptToken::From | TypeScriptToken::FromClause)
+    }
+
+    // ===== Expression Methods =====
+
+    /// Check if this token represents a template literal or string.
+    #[inline]
+    pub fn is_template_literal(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::TemplateString
+                | TypeScriptToken::TemplateSubstitution
+                | TypeScriptToken::TemplateLiteralType
+                | TypeScriptToken::BQUOTE
+                | TypeScriptToken::DOLLARLBRACE
+        )
+    }
+
+    /// Check if this token represents a regex literal.
+    #[inline]
+    pub fn is_regex(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Regex | TypeScriptToken::RegexPattern | TypeScriptToken::RegexFlags
+        )
+    }
+
+    /// Check if this token represents a meta property.
+    #[inline]
+    pub fn is_meta_property(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::MetaProperty
+                | TypeScriptToken::Target
+                | TypeScriptToken::Meta
+                | TypeScriptToken::New
+        )
+    }
+
+    /// Check if this token represents a this or super expression.
+    #[inline]
+    pub fn is_this_or_super(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::This
+                | TypeScriptToken::Super
+                | TypeScriptToken::ThisType
+        )
+    }
+
+    // ===== Control Flow Methods =====
+
+    /// Check if this token represents a try-catch-finally block.
+    #[inline]
+    pub fn is_try_catch_finally(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Try
+                | TypeScriptToken::TryStatement
+                | TypeScriptToken::Catch
+                | TypeScriptToken::CatchClause
+                | TypeScriptToken::Finally
+                | TypeScriptToken::FinallyClause
+        )
+    }
+
+    /// Check if this token represents a switch statement part.
+    #[inline]
+    pub fn is_switch(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Switch
+                | TypeScriptToken::SwitchStatement
+                | TypeScriptToken::SwitchBody
+                | TypeScriptToken::SwitchCase
+                | TypeScriptToken::SwitchDefault
+                | TypeScriptToken::Case
+        )
+    }
+
+    /// Check if this token represents a conditional expression.
+    #[inline]
+    pub fn is_conditional_expression(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::TernaryExpression | TypeScriptToken::ConditionalType
+        )
+    }
+
+    /// Check if this token represents a with statement.
+    #[inline]
+    pub fn is_with_statement(&self) -> bool {
+        matches!(self, TypeScriptToken::With | TypeScriptToken::WithStatement)
+    }
+
+    // ===== Advanced Class Methods =====
+
+    /// Check if this token represents a getter or setter.
+    #[inline]
+    pub fn is_accessor(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Get | TypeScriptToken::Set | TypeScriptToken::Accessor
+        )
+    }
+
+    /// Check if this token represents a static member.
+    #[inline]
+    pub fn is_static(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Static | TypeScriptToken::ClassStaticBlock
+        )
+    }
+
+    /// Check if this token represents a class member.
+    #[inline]
+    pub fn is_class_member(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::MethodDefinition
+                | TypeScriptToken::PublicFieldDefinition
+                | TypeScriptToken::MethodSignature
+                | TypeScriptToken::AbstractMethodSignature
+                | TypeScriptToken::ClassStaticBlock
+        )
+    }
+
+    /// Check if this token represents a parameter.
+    #[inline]
+    pub fn is_parameter(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::RequiredParameter
+                | TypeScriptToken::OptionalParameter
+                | TypeScriptToken::RequiredParameter2
+                | TypeScriptToken::OptionalParameter2
+                | TypeScriptToken::FormalParameter
+                | TypeScriptToken::ParameterName
+        )
+    }
+
+    /// Check if this token represents an optional element.
+    #[inline]
+    pub fn is_optional(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::OptionalParameter
+                | TypeScriptToken::OptionalParameter2
+                | TypeScriptToken::OptionalType
+                | TypeScriptToken::QMARK
+                | TypeScriptToken::QMARKDOT
+        )
+    }
+
+    // ===== Type Annotation Methods =====
+
+    /// Check if this token represents a type parameter or argument.
+    #[inline]
+    pub fn is_type_parameter_or_argument(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::TypeParameters
+                | TypeScriptToken::TypeParameter
+                | TypeScriptToken::TypeArguments
+        )
+    }
+
+    /// Check if this token represents a type binding or assignment.
+    #[inline]
+    pub fn is_type_binding(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::DefaultType
+                | TypeScriptToken::OmittingTypeAnnotation
+                | TypeScriptToken::AddingTypeAnnotation
+                | TypeScriptToken::OptingTypeAnnotation
+        )
+    }
+
+    /// Check if this token represents a type query.
+    #[inline]
+    pub fn is_type_query(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Typeof
+                | TypeScriptToken::TypeQuery
+                | TypeScriptToken::Keyof
+                | TypeScriptToken::IndexTypeQuery
+        )
+    }
+
+    // ===== Expression Type Methods =====
+
+    /// Check if this token represents a member access.
+    #[inline]
+    pub fn is_member_access(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::MemberExpression
+                | TypeScriptToken::MemberExpression2
+                | TypeScriptToken::MemberExpression3
+                | TypeScriptToken::MemberExpression4
+                | TypeScriptToken::DOT
+                | TypeScriptToken::QMARKDOT
+        )
+    }
+
+    /// Check if this token represents a subscript or index access.
+    #[inline]
+    pub fn is_subscript(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::SubscriptExpression
+                | TypeScriptToken::SubscriptExpression2
+                | TypeScriptToken::LBRACK
+        )
+    }
+
+    /// Check if this token represents a call expression.
+    #[inline]
+    pub fn is_call(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::CallExpression
+                | TypeScriptToken::CallExpression2
+                | TypeScriptToken::CallExpression3
+                | TypeScriptToken::CallExpression4
+                | TypeScriptToken::CallSignature
+                | TypeScriptToken::CallSignature2
+                | TypeScriptToken::NewExpression
+        )
+    }
+
+    /// Check if this token represents an instantiation expression.
+    #[inline]
+    pub fn is_instantiation(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::InstantiationExpression
+                | TypeScriptToken::InstantiationExpression2
+        )
+    }
+
+    // ===== Identifier Methods =====
+
+    /// Check if this token represents any identifier.
+    #[inline]
+    pub fn is_identifier(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Identifier
+                | TypeScriptToken::PropertyIdentifier
+                | TypeScriptToken::ShorthandPropertyIdentifier
+                | TypeScriptToken::StatementIdentifier
+                | TypeScriptToken::TypeIdentifier
+                | TypeScriptToken::NestedIdentifier
+                | TypeScriptToken::NestedTypeIdentifier
+        )
+    }
+
+    /// Check if this token represents a private member.
+    #[inline]
+    pub fn is_private_member(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Private | TypeScriptToken::PrivatePropertyIdentifier
+        )
+    }
+
+    // ===== Statement Methods =====
+
+    /// Check if this token represents a variable declaration.
+    #[inline]
+    pub fn is_variable_declaration(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Var
+                | TypeScriptToken::Let
+                | TypeScriptToken::Const
+                | TypeScriptToken::Using
+                | TypeScriptToken::VariableDeclaration
+                | TypeScriptToken::LexicalDeclaration
+                | TypeScriptToken::VariableDeclarator
+        )
+    }
+
+    /// Check if this token represents a statement.
+    #[inline]
+    pub fn is_statement(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Statement
+                | TypeScriptToken::ExpressionStatement
+                | TypeScriptToken::IfStatement
+                | TypeScriptToken::SwitchStatement
+                | TypeScriptToken::ForStatement
+                | TypeScriptToken::ForInStatement
+                | TypeScriptToken::WhileStatement
+                | TypeScriptToken::DoStatement
+                | TypeScriptToken::TryStatement
+                | TypeScriptToken::WithStatement
+                | TypeScriptToken::BreakStatement
+                | TypeScriptToken::ContinueStatement
+                | TypeScriptToken::DebuggerStatement
+                | TypeScriptToken::ReturnStatement
+                | TypeScriptToken::ThrowStatement
+                | TypeScriptToken::EmptyStatement
+                | TypeScriptToken::LabeledStatement
+        )
+    }
+
+    /// Check if this token represents a block.
+    #[inline]
+    pub fn is_block(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::StatementBlock | TypeScriptToken::ClassStaticBlock
+        )
+    }
+
+    // ===== Operator Category Methods =====
+
+    /// Check if this token represents a comparison operator.
+    #[inline]
+    pub fn is_comparison_operator(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::LT
+                | TypeScriptToken::LTEQ
+                | TypeScriptToken::GT
+                | TypeScriptToken::GTEQ
+                | TypeScriptToken::EQEQ
+                | TypeScriptToken::EQEQEQ
+                | TypeScriptToken::BANGEQ
+                | TypeScriptToken::BANGEQEQ
+                | TypeScriptToken::Instanceof
+                | TypeScriptToken::In
+        )
+    }
+
+    /// Check if this token represents a logical operator.
+    #[inline]
+    pub fn is_logical_operator(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::AMPAMP
+                | TypeScriptToken::PIPEPIPE
+                | TypeScriptToken::QMARKQMARK
+                | TypeScriptToken::BANG
+        )
+    }
+
+    /// Check if this token represents a bitwise operator.
+    #[inline]
+    pub fn is_bitwise_operator(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::AMP
+                | TypeScriptToken::PIPE
+                | TypeScriptToken::CARET
+                | TypeScriptToken::TILDE
+                | TypeScriptToken::LTLT
+                | TypeScriptToken::GTGT
+                | TypeScriptToken::GTGTGT
+        )
+    }
+
+    /// Check if this token represents an arithmetic operator.
+    #[inline]
+    pub fn is_arithmetic_operator(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::PLUS
+                | TypeScriptToken::DASH
+                | TypeScriptToken::SLASH
+                | TypeScriptToken::PERCENT
+                | TypeScriptToken::STARSTAR
+                | TypeScriptToken::STAR
+        )
+    }
+
+    /// Check if this token represents an update operator.
+    #[inline]
+    pub fn is_update_operator(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::PLUSPLUS
+                | TypeScriptToken::DASHDASH
+                | TypeScriptToken::UpdateExpression
+        )
+    }
+
+    // ===== Flow Type Methods =====
+
+    /// Check if this token represents a Flow type (for compatibility).
+    #[inline]
+    pub fn is_flow_type(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::LBRACEPIPE
+                | TypeScriptToken::PIPERBRACE
+                | TypeScriptToken::ExistentialType
+                | TypeScriptToken::FlowMaybeType
+        )
+    }
+
+    // ===== Comment and Documentation Methods =====
+
+    /// Check if this token represents a comment or documentation.
+    #[inline]
+    pub fn is_comment(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Comment | TypeScriptToken::HtmlComment
+        )
+    }
+
+    // ===== Array and Collection Methods =====
+
+    /// Check if this token represents an array.
+    #[inline]
+    pub fn is_array(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Array
+                | TypeScriptToken::ArrayType
+                | TypeScriptToken::ArrayPattern
+        )
+    }
+
+    /// Check if this token represents a sequence expression.
+    #[inline]
+    pub fn is_sequence(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::SequenceExpression | TypeScriptToken::COMMA
+        )
+    }
+
+    // ===== Special Constructs =====
+
+    /// Check if this token represents a label.
+    #[inline]
+    pub fn is_labeled(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::LabeledStatement | TypeScriptToken::StatementIdentifier
+        )
+    }
+
+    /// Check if this token represents a require statement.
+    #[inline]
+    pub fn is_require(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Require | TypeScriptToken::ImportRequireClause
+        )
+    }
+
+    /// Check if this token represents the global namespace.
+    #[inline]
+    pub fn is_global(&self) -> bool {
+        matches!(self, TypeScriptToken::Global)
+    }
+
+    /// Check if this token represents a satisfies expression.
+    #[inline]
+    pub fn is_satisfies(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Satisfies | TypeScriptToken::SatisfiesExpression
+        )
+    }
+
+    /// Check if this token represents an override modifier.
+    #[inline]
+    pub fn is_override(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Override | TypeScriptToken::OverrideModifier
+        )
+    }
+
+    /// Check if this token represents a unique symbol.
+    #[inline]
+    pub fn is_unique_symbol(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Symbol | TypeScriptToken::Uniquesymbol
+        )
+    }
+
+    /// Check if this token represents a debugger statement.
+    #[inline]
+    pub fn is_debugger(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Debugger | TypeScriptToken::DebuggerStatement
+        )
+    }
+
+    /// Check if this token represents a break or continue statement.
+    #[inline]
+    pub fn is_break_or_continue(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Break
+                | TypeScriptToken::BreakStatement
+                | TypeScriptToken::Continue
+                | TypeScriptToken::ContinueStatement
+        )
+    }
+
+    /// Check if this token represents a return or throw statement.
+    #[inline]
+    pub fn is_return_or_throw(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::Return
+                | TypeScriptToken::ReturnStatement
+                | TypeScriptToken::Throw
+                | TypeScriptToken::ThrowStatement
+        )
+    }
+
+    /// Check if this token represents an else clause.
+    #[inline]
+    pub fn is_else(&self) -> bool {
+        matches!(self, TypeScriptToken::Else | TypeScriptToken::ElseClause)
+    }
+
+    /// Check if this token represents a parenthesized expression or type.
+    #[inline]
+    pub fn is_parenthesized(&self) -> bool {
+        matches!(
+            self,
+            TypeScriptToken::ParenthesizedExpression
+                | TypeScriptToken::ParenthesizedExpression2
+                | TypeScriptToken::ParenthesizedType
+                | TypeScriptToken::LPAREN
+                | TypeScriptToken::RPAREN
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1482,5 +2186,352 @@ mod tests {
     #[test]
     fn test_non_null_assertion() {
         assert!(TypeScriptToken::NonNullExpression.is_non_null_assertion());
+    }
+
+    // ===== Advanced Feature Tests =====
+
+    #[test]
+    fn test_destructuring() {
+        assert!(TypeScriptToken::DestructuringPattern.is_destructuring());
+        assert!(TypeScriptToken::ObjectPattern.is_destructuring());
+        assert!(TypeScriptToken::ArrayPattern.is_destructuring());
+        assert!(TypeScriptToken::ObjectAssignmentPattern.is_destructuring());
+        assert!(!TypeScriptToken::Object.is_destructuring());
+    }
+
+    #[test]
+    fn test_spread_or_rest() {
+        assert!(TypeScriptToken::SpreadElement.is_spread_or_rest());
+        assert!(TypeScriptToken::RestPattern.is_spread_or_rest());
+        assert!(TypeScriptToken::RestType.is_spread_or_rest());
+        assert!(TypeScriptToken::DOTDOTDOT.is_spread_or_rest());
+        assert!(!TypeScriptToken::DOT.is_spread_or_rest());
+    }
+
+    #[test]
+    fn test_computed_property() {
+        assert!(TypeScriptToken::ComputedPropertyName.is_computed_property());
+        assert!(!TypeScriptToken::PropertyIdentifier.is_computed_property());
+    }
+
+    #[test]
+    fn test_shorthand_property() {
+        assert!(TypeScriptToken::ShorthandPropertyIdentifier.is_shorthand_property());
+        assert!(TypeScriptToken::ShorthandPropertyIdentifierPattern.is_shorthand_property());
+        assert!(!TypeScriptToken::PropertyIdentifier.is_shorthand_property());
+    }
+
+    #[test]
+    fn test_utility_type() {
+        assert!(TypeScriptToken::MappedTypeClause.is_utility_type());
+        assert!(TypeScriptToken::ConditionalType.is_utility_type());
+        assert!(TypeScriptToken::IndexTypeQuery.is_utility_type());
+        assert!(TypeScriptToken::LookupType.is_utility_type());
+        assert!(TypeScriptToken::InferType.is_utility_type());
+        assert!(!TypeScriptToken::GenericType.is_utility_type());
+    }
+
+    #[test]
+    fn test_type_guard() {
+        assert!(TypeScriptToken::TypePredicate.is_type_guard());
+        assert!(TypeScriptToken::TypePredicateAnnotation.is_type_guard());
+        assert!(TypeScriptToken::Asserts.is_type_guard());
+        assert!(TypeScriptToken::AssertsAnnotation.is_type_guard());
+        assert!(TypeScriptToken::Is.is_type_guard());
+        assert!(!TypeScriptToken::TypeAnnotation.is_type_guard());
+    }
+
+    #[test]
+    fn test_tuple() {
+        assert!(TypeScriptToken::TupleType.is_tuple());
+        assert!(TypeScriptToken::TupleTypeMember.is_tuple());
+        assert!(!TypeScriptToken::ArrayType.is_tuple());
+    }
+
+    #[test]
+    fn test_object_type() {
+        assert!(TypeScriptToken::ObjectType.is_object_type());
+        assert!(TypeScriptToken::InterfaceBody.is_object_type());
+        assert!(TypeScriptToken::PropertySignature.is_object_type());
+        assert!(TypeScriptToken::IndexSignature.is_object_type());
+        assert!(!TypeScriptToken::Object.is_object_type());
+    }
+
+    #[test]
+    fn test_function_type() {
+        assert!(TypeScriptToken::FunctionType.is_function_type());
+        assert!(TypeScriptToken::ConstructorType.is_function_type());
+        assert!(TypeScriptToken::CallSignature.is_function_type());
+        assert!(TypeScriptToken::ConstructSignature.is_function_type());
+        assert!(!TypeScriptToken::FunctionDeclaration.is_function_type());
+    }
+
+    #[test]
+    fn test_constraint() {
+        assert!(TypeScriptToken::Constraint.is_constraint());
+        assert!(TypeScriptToken::ExtendsClause.is_constraint());
+        assert!(TypeScriptToken::ExtendsTypeClause.is_constraint());
+        assert!(!TypeScriptToken::Extends.is_constraint());
+    }
+
+    #[test]
+    fn test_export() {
+        assert!(TypeScriptToken::Export.is_export());
+        assert!(TypeScriptToken::ExportStatement.is_export());
+        assert!(TypeScriptToken::ExportClause.is_export());
+        assert!(TypeScriptToken::ExportSpecifier.is_export());
+        assert!(TypeScriptToken::NamespaceExport.is_export());
+        assert!(!TypeScriptToken::Import.is_export());
+    }
+
+    #[test]
+    fn test_import() {
+        assert!(TypeScriptToken::Import.is_import());
+        assert!(TypeScriptToken::ImportStatement.is_import());
+        assert!(TypeScriptToken::ImportClause.is_import());
+        assert!(TypeScriptToken::ImportSpecifier.is_import());
+        assert!(TypeScriptToken::NamespaceImport.is_import());
+        assert!(TypeScriptToken::NamedImports.is_import());
+        assert!(TypeScriptToken::ImportAlias.is_import());
+        assert!(!TypeScriptToken::Export.is_import());
+    }
+
+    #[test]
+    fn test_template_literal() {
+        assert!(TypeScriptToken::TemplateString.is_template_literal());
+        assert!(TypeScriptToken::TemplateSubstitution.is_template_literal());
+        assert!(TypeScriptToken::TemplateLiteralType.is_template_literal());
+        assert!(TypeScriptToken::BQUOTE.is_template_literal());
+        assert!(TypeScriptToken::DOLLARLBRACE.is_template_literal());
+        assert!(!TypeScriptToken::String.is_template_literal());
+    }
+
+    #[test]
+    fn test_regex() {
+        assert!(TypeScriptToken::Regex.is_regex());
+        assert!(TypeScriptToken::RegexPattern.is_regex());
+        assert!(TypeScriptToken::RegexFlags.is_regex());
+        assert!(!TypeScriptToken::String.is_regex());
+    }
+
+    #[test]
+    fn test_meta_property() {
+        assert!(TypeScriptToken::MetaProperty.is_meta_property());
+        assert!(TypeScriptToken::Target.is_meta_property());
+        assert!(TypeScriptToken::Meta.is_meta_property());
+        assert!(TypeScriptToken::New.is_meta_property());
+        assert!(!TypeScriptToken::This.is_meta_property());
+    }
+
+    #[test]
+    fn test_this_or_super() {
+        assert!(TypeScriptToken::This.is_this_or_super());
+        assert!(TypeScriptToken::Super.is_this_or_super());
+        assert!(TypeScriptToken::ThisType.is_this_or_super());
+        assert!(!TypeScriptToken::Meta.is_this_or_super());
+    }
+
+    #[test]
+    fn test_try_catch_finally() {
+        assert!(TypeScriptToken::Try.is_try_catch_finally());
+        assert!(TypeScriptToken::TryStatement.is_try_catch_finally());
+        assert!(TypeScriptToken::Catch.is_try_catch_finally());
+        assert!(TypeScriptToken::CatchClause.is_try_catch_finally());
+        assert!(TypeScriptToken::Finally.is_try_catch_finally());
+        assert!(TypeScriptToken::FinallyClause.is_try_catch_finally());
+        assert!(!TypeScriptToken::If.is_try_catch_finally());
+    }
+
+    #[test]
+    fn test_switch() {
+        assert!(TypeScriptToken::Switch.is_switch());
+        assert!(TypeScriptToken::SwitchStatement.is_switch());
+        assert!(TypeScriptToken::SwitchBody.is_switch());
+        assert!(TypeScriptToken::SwitchCase.is_switch());
+        assert!(TypeScriptToken::SwitchDefault.is_switch());
+        assert!(TypeScriptToken::Case.is_switch());
+        assert!(!TypeScriptToken::If.is_switch());
+    }
+
+    #[test]
+    fn test_conditional_expression() {
+        assert!(TypeScriptToken::TernaryExpression.is_conditional_expression());
+        assert!(TypeScriptToken::ConditionalType.is_conditional_expression());
+        assert!(!TypeScriptToken::IfStatement.is_conditional_expression());
+    }
+
+    #[test]
+    fn test_accessor() {
+        assert!(TypeScriptToken::Get.is_accessor());
+        assert!(TypeScriptToken::Set.is_accessor());
+        assert!(TypeScriptToken::Accessor.is_accessor());
+        assert!(!TypeScriptToken::Public.is_accessor());
+    }
+
+    #[test]
+    fn test_static() {
+        assert!(TypeScriptToken::Static.is_static());
+        assert!(TypeScriptToken::ClassStaticBlock.is_static());
+        assert!(!TypeScriptToken::Public.is_static());
+    }
+
+    #[test]
+    fn test_class_member() {
+        assert!(TypeScriptToken::MethodDefinition.is_class_member());
+        assert!(TypeScriptToken::PublicFieldDefinition.is_class_member());
+        assert!(TypeScriptToken::MethodSignature.is_class_member());
+        assert!(TypeScriptToken::AbstractMethodSignature.is_class_member());
+        assert!(TypeScriptToken::ClassStaticBlock.is_class_member());
+        assert!(!TypeScriptToken::ClassDeclaration.is_class_member());
+    }
+
+    #[test]
+    fn test_parameter() {
+        assert!(TypeScriptToken::RequiredParameter.is_parameter());
+        assert!(TypeScriptToken::OptionalParameter.is_parameter());
+        assert!(TypeScriptToken::FormalParameter.is_parameter());
+        assert!(!TypeScriptToken::FormalParameters.is_parameter());
+    }
+
+    #[test]
+    fn test_optional() {
+        assert!(TypeScriptToken::OptionalParameter.is_optional());
+        assert!(TypeScriptToken::OptionalType.is_optional());
+        assert!(TypeScriptToken::QMARK.is_optional());
+        assert!(TypeScriptToken::QMARKDOT.is_optional());
+        assert!(!TypeScriptToken::RequiredParameter.is_optional());
+    }
+
+    #[test]
+    fn test_type_parameter_or_argument() {
+        assert!(TypeScriptToken::TypeParameters.is_type_parameter_or_argument());
+        assert!(TypeScriptToken::TypeParameter.is_type_parameter_or_argument());
+        assert!(TypeScriptToken::TypeArguments.is_type_parameter_or_argument());
+        assert!(!TypeScriptToken::TypeAnnotation.is_type_parameter_or_argument());
+    }
+
+    #[test]
+    fn test_type_query() {
+        assert!(TypeScriptToken::Typeof.is_type_query());
+        assert!(TypeScriptToken::TypeQuery.is_type_query());
+        assert!(TypeScriptToken::Keyof.is_type_query());
+        assert!(TypeScriptToken::IndexTypeQuery.is_type_query());
+        assert!(!TypeScriptToken::Type.is_type_query());
+    }
+
+    #[test]
+    fn test_member_access() {
+        assert!(TypeScriptToken::MemberExpression.is_member_access());
+        assert!(TypeScriptToken::DOT.is_member_access());
+        assert!(TypeScriptToken::QMARKDOT.is_member_access());
+        assert!(!TypeScriptToken::SubscriptExpression.is_member_access());
+    }
+
+    #[test]
+    fn test_subscript() {
+        assert!(TypeScriptToken::SubscriptExpression.is_subscript());
+        assert!(TypeScriptToken::LBRACK.is_subscript());
+        assert!(!TypeScriptToken::MemberExpression.is_subscript());
+    }
+
+    #[test]
+    fn test_call() {
+        assert!(TypeScriptToken::CallExpression.is_call());
+        assert!(TypeScriptToken::CallSignature.is_call());
+        assert!(TypeScriptToken::NewExpression.is_call());
+        assert!(!TypeScriptToken::MemberExpression.is_call());
+    }
+
+    #[test]
+    fn test_identifier() {
+        assert!(TypeScriptToken::Identifier.is_identifier());
+        assert!(TypeScriptToken::PropertyIdentifier.is_identifier());
+        assert!(TypeScriptToken::TypeIdentifier.is_identifier());
+        assert!(TypeScriptToken::NestedIdentifier.is_identifier());
+        assert!(!TypeScriptToken::Number.is_identifier());
+    }
+
+    #[test]
+    fn test_variable_declaration() {
+        assert!(TypeScriptToken::Var.is_variable_declaration());
+        assert!(TypeScriptToken::Let.is_variable_declaration());
+        assert!(TypeScriptToken::Const.is_variable_declaration());
+        assert!(TypeScriptToken::Using.is_variable_declaration());
+        assert!(TypeScriptToken::VariableDeclaration.is_variable_declaration());
+        assert!(!TypeScriptToken::FunctionDeclaration.is_variable_declaration());
+    }
+
+    #[test]
+    fn test_statement() {
+        assert!(TypeScriptToken::Statement.is_statement());
+        assert!(TypeScriptToken::IfStatement.is_statement());
+        assert!(TypeScriptToken::ForStatement.is_statement());
+        assert!(TypeScriptToken::ReturnStatement.is_statement());
+        assert!(!TypeScriptToken::Expression.is_statement());
+    }
+
+    #[test]
+    fn test_comparison_operator() {
+        assert!(TypeScriptToken::LT.is_comparison_operator());
+        assert!(TypeScriptToken::GT.is_comparison_operator());
+        assert!(TypeScriptToken::EQEQEQ.is_comparison_operator());
+        assert!(TypeScriptToken::Instanceof.is_comparison_operator());
+        assert!(!TypeScriptToken::PLUS.is_comparison_operator());
+    }
+
+    #[test]
+    fn test_logical_operator() {
+        assert!(TypeScriptToken::AMPAMP.is_logical_operator());
+        assert!(TypeScriptToken::PIPEPIPE.is_logical_operator());
+        assert!(TypeScriptToken::QMARKQMARK.is_logical_operator());
+        assert!(TypeScriptToken::BANG.is_logical_operator());
+        assert!(!TypeScriptToken::AMP.is_logical_operator());
+    }
+
+    #[test]
+    fn test_bitwise_operator() {
+        assert!(TypeScriptToken::AMP.is_bitwise_operator());
+        assert!(TypeScriptToken::PIPE.is_bitwise_operator());
+        assert!(TypeScriptToken::LTLT.is_bitwise_operator());
+        assert!(TypeScriptToken::GTGTGT.is_bitwise_operator());
+        assert!(!TypeScriptToken::AMPAMP.is_bitwise_operator());
+    }
+
+    #[test]
+    fn test_arithmetic_operator() {
+        assert!(TypeScriptToken::PLUS.is_arithmetic_operator());
+        assert!(TypeScriptToken::DASH.is_arithmetic_operator());
+        assert!(TypeScriptToken::STARSTAR.is_arithmetic_operator());
+        assert!(!TypeScriptToken::PLUSEQ.is_arithmetic_operator());
+    }
+
+    #[test]
+    fn test_update_operator() {
+        assert!(TypeScriptToken::PLUSPLUS.is_update_operator());
+        assert!(TypeScriptToken::DASHDASH.is_update_operator());
+        assert!(TypeScriptToken::UpdateExpression.is_update_operator());
+        assert!(!TypeScriptToken::PLUS.is_update_operator());
+    }
+
+    #[test]
+    fn test_array() {
+        assert!(TypeScriptToken::Array.is_array());
+        assert!(TypeScriptToken::ArrayType.is_array());
+        assert!(TypeScriptToken::ArrayPattern.is_array());
+        assert!(!TypeScriptToken::Object.is_array());
+    }
+
+    #[test]
+    fn test_satisfies() {
+        assert!(TypeScriptToken::Satisfies.is_satisfies());
+        assert!(TypeScriptToken::SatisfiesExpression.is_satisfies());
+        assert!(!TypeScriptToken::AsExpression.is_satisfies());
+    }
+
+    #[test]
+    fn test_override() {
+        assert!(TypeScriptToken::Override.is_override());
+        assert!(TypeScriptToken::OverrideModifier.is_override());
+        assert!(!TypeScriptToken::Public.is_override());
     }
 }
