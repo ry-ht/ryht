@@ -29,6 +29,9 @@ pub mod intelligence;
 pub mod monitoring;
 pub mod quality;
 
+// Cortex integration
+pub mod cortex_bridge;
+
 // Re-export key types from cc module for backward compatibility
 pub use cc::{
     ClaudeClient,

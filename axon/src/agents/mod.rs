@@ -36,6 +36,10 @@ pub mod developer;
 pub mod reviewer;
 pub mod tester;
 pub mod orchestrator;
+pub mod documenter;
+pub mod architect;
+pub mod researcher;
+pub mod optimizer;
 
 pub use types::*;
 pub use capabilities::*;
@@ -44,6 +48,10 @@ pub use developer::DeveloperAgent;
 pub use reviewer::ReviewerAgent;
 pub use tester::TesterAgent;
 pub use orchestrator::OrchestratorAgent;
+pub use documenter::DocumenterAgent;
+pub use architect::ArchitectAgent;
+pub use researcher::ResearcherAgent;
+pub use optimizer::OptimizerAgent;
 
 /// Core Agent trait that all agent types implement
 pub trait Agent: Send + Sync {
