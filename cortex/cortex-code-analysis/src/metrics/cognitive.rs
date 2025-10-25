@@ -6,6 +6,55 @@
 use serde::{Serialize, Deserialize};
 use std::fmt;
 
+/// Boolean sequence tracker for cognitive complexity
+///
+/// Tracks sequential boolean operators to properly calculate cognitive complexity.
+/// According to cognitive complexity rules, consecutive identical boolean operators
+/// (e.g., `a && b && c`) only count once, but changing operators (e.g., `a && b || c`)
+/// count separately.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct BoolSequence {
+    boolean_op: Option<u16>,
+}
+
+impl BoolSequence {
+    /// Resets the boolean sequence tracker
+    fn reset(&mut self) {
+        self.boolean_op = None;
+    }
+
+    /// Records a NOT operator in the sequence
+    fn not_operator(&mut self, not_id: u16) {
+        self.boolean_op = Some(not_id);
+    }
+
+    /// Evaluates the current boolean operator based on the previous one
+    ///
+    /// Returns the updated structural complexity value:
+    /// - If this is the first boolean operator in a sequence, increment by 1
+    /// - If the operator is different from the previous one, increment by 1
+    /// - If the operator is the same as the previous one, don't increment
+    fn eval_based_on_prev(&mut self, bool_id: u16, structural: usize) -> usize {
+        if let Some(prev) = self.boolean_op {
+            if prev != bool_id {
+                // The boolean operator is different from the previous one, so
+                // the counter is incremented.
+                self.boolean_op = Some(bool_id);
+                structural + 1
+            } else {
+                // The boolean operator is equal to the previous one, so
+                // the counter is not incremented.
+                structural
+            }
+        } else {
+            // Save the first boolean operator in a sequence of
+            // logical operators and increment the counter.
+            self.boolean_op = Some(bool_id);
+            structural + 1
+        }
+    }
+}
+
 /// Cognitive complexity statistics
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CognitiveStats {
@@ -15,6 +64,8 @@ pub struct CognitiveStats {
     structural_max: usize,
     nesting: usize,
     total_space_functions: usize,
+    #[serde(skip)]
+    boolean_seq: BoolSequence,
 }
 
 impl Default for CognitiveStats {
@@ -26,6 +77,7 @@ impl Default for CognitiveStats {
             structural_max: 0,
             nesting: 0,
             total_space_functions: 1,
+            boolean_seq: BoolSequence::default(),
         }
     }
 }
@@ -124,6 +176,24 @@ impl CognitiveStats {
         self.structural_min = self.structural_min.min(other.structural_min);
         self.structural_max = self.structural_max.max(other.structural_max);
         self.structural_sum += other.structural_sum;
+    }
+
+    /// Resets the boolean sequence tracker
+    pub fn reset_boolean_seq(&mut self) {
+        self.boolean_seq.reset();
+    }
+
+    /// Records a NOT operator in the boolean sequence
+    pub fn boolean_seq_not_operator(&mut self, not_id: u16) {
+        self.boolean_seq.not_operator(not_id);
+    }
+
+    /// Evaluates a boolean operator and updates structural complexity
+    ///
+    /// This method uses the BoolSequence tracker to properly handle
+    /// sequential boolean operators according to cognitive complexity rules.
+    pub fn eval_boolean_sequence(&mut self, bool_id: u16) {
+        self.structural = self.boolean_seq.eval_based_on_prev(bool_id, self.structural);
     }
 }
 

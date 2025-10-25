@@ -10,8 +10,9 @@
 //! # Examples
 //!
 //! ```no_run
-//! use cortex_code_analysis::metrics::strategy::{MetricsStrategy, MetricsCalculator};
+//! use cortex_code_analysis::metrics::strategy::{MetricsStrategy, MetricsCalculatorType};
 //! use cortex_code_analysis::{Parser, RustLanguage};
+//! use cortex_code_analysis::traits::ParserTrait;
 //! use std::path::Path;
 //!
 //! let source = "fn main() { println!(\"Hello\"); }";

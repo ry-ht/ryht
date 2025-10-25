@@ -7,6 +7,66 @@
 //!
 //! The ABC score can be represented by its components or by the magnitude:
 //! |<A,B,C>| = sqrt(A^2 + B^2 + C^2)
+//!
+//! ## Advanced Declaration Tracking
+//!
+//! This implementation includes advanced declaration tracking that distinguishes between:
+//! - Variable declarations (counted as assignments)
+//! - Constant declarations (NOT counted as assignments)
+//!
+//! ### Usage Example
+//!
+//! ```rust
+//! use cortex_code_analysis::metrics::abc::AbcStats;
+//!
+//! let mut stats = AbcStats::new();
+//!
+//! // Example 1: Variable declaration with initialization
+//! // Equivalent to: let x = 5;
+//! stats.start_var_declaration();
+//! stats.add_assignment_with_context(); // Counts as assignment
+//! stats.clear_declaration();
+//! assert_eq!(stats.assignments(), 1.0);
+//!
+//! // Example 2: Constant declaration with initialization
+//! // Equivalent to: const X = 5;
+//! let mut stats = AbcStats::new();
+//! stats.start_const_declaration();
+//! stats.add_assignment_with_context(); // Does NOT count as assignment
+//! stats.clear_declaration();
+//! assert_eq!(stats.assignments(), 0.0);
+//!
+//! // Example 3: Java final modifier (promotes var to const)
+//! // Equivalent to: final int X = 5;
+//! let mut stats = AbcStats::new();
+//! stats.start_var_declaration();
+//! stats.promote_to_const(); // Promotes to constant
+//! stats.add_assignment_with_context(); // Does NOT count as assignment
+//! stats.clear_declaration();
+//! assert_eq!(stats.assignments(), 0.0);
+//! ```
+//!
+//! ### Language-Specific Implementation Guide
+//!
+//! When implementing language-specific ABC metrics, use the declaration tracking methods:
+//!
+//! **For Java:**
+//! - Call `start_var_declaration()` on `FieldDeclaration` or `LocalVariableDeclaration`
+//! - Call `promote_to_const()` when encountering `Final` keyword
+//! - Call `add_assignment_with_context()` on assignment operators (`=`)
+//! - Call `clear_declaration()` on statement terminators (`;`)
+//!
+//! **For JavaScript/TypeScript:**
+//! - Call `start_var_declaration()` on `var` or `let` declarations
+//! - Call `start_const_declaration()` on `const` declarations
+//! - Call `add_assignment_with_context()` on initialization assignments
+//! - Call `clear_declaration()` after processing the declaration
+//!
+//! **For Rust:**
+//! - Call `start_var_declaration()` on `let mut` bindings
+//! - Call `start_const_declaration()` on `let` bindings (immutable) or `const` items
+//! - Call `add_assignment_with_context()` on initialization
+//! - Call `clear_declaration()` after the binding statement
 
 use serde::{Serialize, Deserialize};
 use std::fmt;
@@ -27,6 +87,17 @@ pub struct AbcStats {
     conditions_min: f64,
     conditions_max: f64,
     space_count: usize,
+    #[serde(skip)]
+    declaration: Vec<DeclKind>,
+}
+
+/// Declaration kind tracking for advanced assignment detection
+#[derive(Debug, Clone, PartialEq)]
+enum DeclKind {
+    /// Variable declaration
+    Var,
+    /// Constant declaration
+    Const,
 }
 
 impl Default for AbcStats {
@@ -45,6 +116,7 @@ impl Default for AbcStats {
             conditions_min: f64::MAX,
             conditions_max: 0.0,
             space_count: 1,
+            declaration: Vec::new(),
         }
     }
 }
@@ -192,6 +264,45 @@ impl AbcStats {
         self.conditions += 1.0;
     }
 
+    /// Marks the start of a variable declaration
+    pub fn start_var_declaration(&mut self) {
+        self.declaration.push(DeclKind::Var);
+    }
+
+    /// Marks the start of a constant declaration
+    pub fn start_const_declaration(&mut self) {
+        self.declaration.push(DeclKind::Const);
+    }
+
+    /// Promotes the last variable declaration to a constant declaration
+    pub fn promote_to_const(&mut self) {
+        if matches!(self.declaration.last(), Some(DeclKind::Var)) {
+            self.declaration.push(DeclKind::Const);
+        }
+    }
+
+    /// Clears declaration tracking (e.g., at end of statement)
+    pub fn clear_declaration(&mut self) {
+        self.declaration.clear();
+    }
+
+    /// Adds an assignment, respecting declaration context
+    /// Constant declarations are not counted as assignments
+    pub fn add_assignment_with_context(&mut self) {
+        match self.declaration.last() {
+            Some(DeclKind::Const) => {
+                // Constant declarations are not counted as assignments
+            }
+            Some(DeclKind::Var) => {
+                self.assignments += 1.0;
+            }
+            None => {
+                // Regular assignment outside of declaration context
+                self.assignments += 1.0;
+            }
+        }
+    }
+
     /// Computes sum and min/max
     pub fn compute_minmax(&mut self) {
         self.assignments_min = self.assignments_min.min(self.assignments);
@@ -253,5 +364,81 @@ mod tests {
         stats.branches = 4.0;
         stats.conditions = 0.0;
         assert_eq!(stats.magnitude(), 5.0); // 3-4-5 triangle
+    }
+
+    #[test]
+    fn test_declaration_tracking_var() {
+        let mut stats = AbcStats::default();
+
+        // Simulate: let x = 5;
+        stats.start_var_declaration();
+        stats.add_assignment_with_context(); // Should count as assignment
+        stats.clear_declaration();
+
+        assert_eq!(stats.assignments(), 1.0);
+    }
+
+    #[test]
+    fn test_declaration_tracking_const() {
+        let mut stats = AbcStats::default();
+
+        // Simulate: const X = 5;
+        stats.start_const_declaration();
+        stats.add_assignment_with_context(); // Should NOT count as assignment
+        stats.clear_declaration();
+
+        assert_eq!(stats.assignments(), 0.0);
+    }
+
+    #[test]
+    fn test_declaration_tracking_promote() {
+        let mut stats = AbcStats::default();
+
+        // Simulate: final int X = 5; (Java)
+        // Start as var, then promote to const
+        stats.start_var_declaration();
+        stats.promote_to_const();
+        stats.add_assignment_with_context(); // Should NOT count as assignment
+        stats.clear_declaration();
+
+        assert_eq!(stats.assignments(), 0.0);
+    }
+
+    #[test]
+    fn test_declaration_tracking_multiple_vars() {
+        let mut stats = AbcStats::default();
+
+        // Simulate: let x = 1, y = 2;
+        stats.start_var_declaration();
+        stats.add_assignment_with_context(); // x = 1
+        stats.add_assignment_with_context(); // y = 2
+        stats.clear_declaration();
+
+        assert_eq!(stats.assignments(), 2.0);
+    }
+
+    #[test]
+    fn test_declaration_tracking_regular_assignment() {
+        let mut stats = AbcStats::default();
+
+        // Regular assignment without declaration context
+        stats.add_assignment_with_context();
+
+        assert_eq!(stats.assignments(), 1.0);
+    }
+
+    #[test]
+    fn test_declaration_context_isolation() {
+        let mut stats = AbcStats::default();
+
+        // const X = 1; (should not count)
+        stats.start_const_declaration();
+        stats.add_assignment_with_context();
+        stats.clear_declaration();
+
+        // Regular assignment after declaration cleared
+        stats.add_assignment_with_context(); // Should count
+
+        assert_eq!(stats.assignments(), 1.0);
     }
 }

@@ -47,6 +47,7 @@
 //! ```rust
 //! use cortex_code_analysis::analysis::find::{AstFinder, FindConfig, NodeFilter};
 //! use cortex_code_analysis::{Parser, RustLanguage};
+//! use cortex_code_analysis::traits::ParserTrait;
 //! use std::path::Path;
 //!
 //! # fn main() -> anyhow::Result<()> {
