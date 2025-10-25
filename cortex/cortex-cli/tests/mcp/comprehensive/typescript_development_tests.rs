@@ -1479,9 +1479,8 @@ async fn test_analyze_typescript_architecture() {
     // Test unused code detection
     let unused_tool = tools::semantic_search::SearchCodeTool::new(
         tools::semantic_search::SemanticSearchContext::new(
-            harness.storage.clone(),
-            harness.semantic_memory.clone(),
-        )
+            harness.storage.clone()
+        ).await.unwrap()
     );
 
     let unused_input = json!({

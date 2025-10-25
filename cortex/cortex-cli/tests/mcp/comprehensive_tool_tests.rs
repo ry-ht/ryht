@@ -962,7 +962,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_semantic() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchSemanticTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.semantic");
@@ -972,7 +972,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_by_pattern() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchByPatternTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.by_pattern");
@@ -982,7 +982,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_by_signature() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchBySignatureTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.by_signature");
@@ -992,7 +992,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_by_complexity() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchByComplexityTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.by_complexity");
@@ -1002,7 +1002,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_similar_code() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchSimilarCodeTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.similar_code");
@@ -1012,7 +1012,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_by_annotation() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchByAnnotationTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.by_annotation");
@@ -1022,7 +1022,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_unused_code() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchUnusedCodeTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.unused_code");
@@ -1032,7 +1032,7 @@ mod semantic_search_tools {
     #[tokio::test]
     async fn test_search_duplicates() {
         let storage = create_test_storage().await;
-        let ctx = semantic_search::SemanticSearchContext::new(storage);
+        let ctx = semantic_search::SemanticSearchContext::new(storage).await.unwrap();
         let tool = semantic_search::SearchDuplicatesTool::new(ctx);
 
         assert_eq!(tool.name(), "cortex.search.duplicates");

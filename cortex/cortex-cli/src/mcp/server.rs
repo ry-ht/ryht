@@ -125,7 +125,7 @@ impl CortexMcpServer {
         let vfs_ctx = VfsContext::new(vfs.clone());
         let code_ctx = CodeNavContext::new(storage.clone());
         let code_manip_ctx = CodeManipulationContext::with_active_workspace(storage.clone(), active_workspace.clone());
-        let semantic_ctx = SemanticSearchContext::new(storage.clone());
+        let semantic_ctx = SemanticSearchContext::new(storage.clone()).await?;
         let deps_ctx = DependencyAnalysisContext::new(storage.clone());
         let quality_ctx = CodeQualityContext::new(storage.clone());
         let version_ctx = VersionControlContext::new(storage.clone());

@@ -46,7 +46,7 @@ pub struct SemanticSearchContext {
 }
 
 impl SemanticSearchContext {
-    pub fn new(storage: Arc<ConnectionManager>) -> Self {
+    pub async fn new(storage: Arc<ConnectionManager>) -> cortex_core::error::Result<Self> {
         let semantic_memory = Arc::new(SemanticMemorySystem::new(storage.clone()));
 
         // Create semantic search engine with mock provider for testing
@@ -55,25 +55,22 @@ impl SemanticSearchContext {
         config.embedding.primary_provider = "mock".to_string();
         config.embedding.fallback_providers = vec![];
 
-        // Initialize search engine (async, so we'll do it lazily)
-        let search_engine = Arc::new(RwLock::new(
-            // This will be initialized on first use
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    SemanticSearchEngine::new(config).await.expect("Failed to create search engine")
-                })
-            })
-        ));
+        // Initialize search engine properly with error handling
+        let search_engine_instance = SemanticSearchEngine::new(config)
+            .await
+            .map_err(|e| CortexError::internal(format!("Failed to create search engine: {}", e)))?;
+
+        let search_engine = Arc::new(RwLock::new(search_engine_instance));
 
         // Create search service
         let search_service = Arc::new(SearchService::new(storage.clone()));
 
-        Self {
+        Ok(Self {
             storage,
             semantic_memory,
             search_engine,
             search_service,
-        }
+        })
     }
 
     /// Index a code unit for semantic search

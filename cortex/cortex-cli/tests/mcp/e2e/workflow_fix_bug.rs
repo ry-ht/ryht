@@ -289,7 +289,7 @@ async fn test_workflow_fix_off_by_one_bug() {
     println!("\n[STEP 2] Searching for batch processing code...");
     let step_start = Instant::now();
 
-    let search_ctx = SemanticSearchContext::new(storage.clone());
+    let search_ctx = SemanticSearchContext::new(storage.clone()).await.unwrap();
     let search_tool = SemanticSearchTool::new(search_ctx);
 
     let search_result = search_tool.execute(

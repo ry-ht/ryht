@@ -31,13 +31,8 @@ impl WorkspaceService {
         info!("Creating workspace: {}", request.name);
 
         // Parse workspace type
-        let workspace_type = match request.workspace_type.to_lowercase().as_str() {
-            "code" => WorkspaceType::Code,
-            "documentation" => WorkspaceType::Documentation,
-            "mixed" => WorkspaceType::Mixed,
-            "external" => WorkspaceType::External,
-            _ => anyhow::bail!("Invalid workspace type: {}", request.workspace_type),
-        };
+        let workspace_type = WorkspaceType::parse(&request.workspace_type)
+            .map_err(|e| anyhow::anyhow!(e))?;
 
         // Create workspace entity
         let workspace_id = Uuid::new_v4();
@@ -135,13 +130,8 @@ impl WorkspaceService {
         }
 
         if let Some(workspace_type_str) = request.workspace_type {
-            workspace.workspace_type = match workspace_type_str.to_lowercase().as_str() {
-                "code" => WorkspaceType::Code,
-                "documentation" => WorkspaceType::Documentation,
-                "mixed" => WorkspaceType::Mixed,
-                "external" => WorkspaceType::External,
-                _ => anyhow::bail!("Invalid workspace type: {}", workspace_type_str),
-            };
+            workspace.workspace_type = WorkspaceType::parse(&workspace_type_str)
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
 
         if let Some(read_only) = request.read_only {

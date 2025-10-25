@@ -292,7 +292,7 @@ async fn test_workflow_add_authentication_feature() {
     println!("\n[STEP 2] Analyzing existing auth module structure...");
     let step_start = Instant::now();
 
-    let search_ctx = SemanticSearchContext::new(storage.clone());
+    let search_ctx = SemanticSearchContext::new(storage.clone()).await.unwrap();
     let search_tool = SemanticSearchTool::new(search_ctx);
 
     let search_input = json!({

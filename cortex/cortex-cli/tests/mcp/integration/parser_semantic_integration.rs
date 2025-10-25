@@ -91,7 +91,7 @@ pub fn authenticate_user(username: &str, password: &str) -> Result<AuthUser, Str
     println!("Embeddings created: {}", ingest_result.embeddings_created);
 
     // Try semantic search (with mock embeddings, this tests the flow)
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let search_tool = SemanticSearchCodeTool::new(semantic_ctx.clone());
 
     let search_result = search_tool
@@ -541,7 +541,7 @@ pub fn parse_json(input: &str) -> Result<serde_json::Value, String> {
     }
 
     // Try to find similar code units
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let similar_tool = SemanticSearchSimilarTool::new(semantic_ctx.clone());
 
     let similar_result = similar_tool

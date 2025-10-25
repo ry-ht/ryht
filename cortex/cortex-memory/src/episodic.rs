@@ -7,6 +7,7 @@ use crate::types::*;
 use chrono::{DateTime, Utc};
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
+use cortex_storage::json_utils::{prepare_for_db, restore_id_field};
 use cortex_storage::ConnectionManager;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -35,11 +36,7 @@ impl EpisodicMemorySystem {
     /// Helper method to convert SurrealDB JSON to EpisodicMemory
     fn json_to_episode(mut episode_json: serde_json::Value) -> Result<EpisodicMemory> {
         // Restore the original id field from cortex_id
-        if let Some(obj) = episode_json.as_object_mut() {
-            if let Some(cortex_id) = obj.remove("cortex_id") {
-                obj.insert("id".to_string(), cortex_id);
-            }
-        }
+        restore_id_field(&mut episode_json);
 
         serde_json::from_value(episode_json)
             .map_err(|e| CortexError::storage(format!("Failed to deserialize episode: {}", e)))
@@ -86,11 +83,7 @@ impl EpisodicMemorySystem {
             .map_err(|e| CortexError::storage(format!("Failed to serialize episode: {}", e)))?;
 
         // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
-        if let Some(obj) = episode_json.as_object_mut() {
-            if let Some(id_val) = obj.remove("id") {
-                obj.insert("cortex_id".to_string(), id_val);
-            }
-        }
+        prepare_for_db(&mut episode_json);
 
         // Create episode with the modified JSON
         let query = "CREATE episode CONTENT $data";

@@ -165,17 +165,19 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
     let name: String = session.input("Workspace name")?;
 
     // Select workspace type
+    let workspace_types = [
+        cortex_vfs::WorkspaceType::Code,
+        cortex_vfs::WorkspaceType::Documentation,
+        cortex_vfs::WorkspaceType::Mixed,
+        cortex_vfs::WorkspaceType::External,
+    ];
     let workspace_type_idx = session.select(
         "Workspace type",
         &["Code (for source code)", "Documentation", "Mixed (code + docs)", "External (readonly)"],
     )?;
-    let workspace_type = match workspace_type_idx {
-        0 => cortex_vfs::WorkspaceType::Code,
-        1 => cortex_vfs::WorkspaceType::Documentation,
-        2 => cortex_vfs::WorkspaceType::Mixed,
-        3 => cortex_vfs::WorkspaceType::External,
-        _ => cortex_vfs::WorkspaceType::Code,
-    };
+    let workspace_type = workspace_types.get(workspace_type_idx)
+        .copied()
+        .unwrap_or(cortex_vfs::WorkspaceType::Code);
 
     // Get optional description
     let description: String = session

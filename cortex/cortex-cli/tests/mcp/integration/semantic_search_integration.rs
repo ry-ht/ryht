@@ -94,7 +94,7 @@ pub fn validate_phone(phone: &str) -> bool {
     }
 
     // Test natural language queries
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let nl_search_tool = SemanticSearchByNaturalLanguageTool::new(semantic_ctx.clone());
 
     let queries = vec![
@@ -195,7 +195,7 @@ impl AuthService {
         .await;
 
     // Test hybrid search
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let hybrid_tool = SemanticHybridSearchTool::new(semantic_ctx.clone());
 
     let hybrid_result = hybrid_tool
@@ -258,7 +258,7 @@ async fn test_search_with_filters() {
     }
 
     // Search with language filter
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let search_tool = SemanticSearchCodeTool::new(semantic_ctx.clone());
 
     let filtered_result = search_tool
@@ -373,7 +373,7 @@ impl UserManager {
         .await;
 
     // Search documentation
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let doc_search_tool = SemanticSearchDocumentationTool::new(semantic_ctx.clone());
 
     let doc_queries = vec![
@@ -462,7 +462,7 @@ pub fn power(base: f64, exponent: u32) -> f64 {
         .await;
 
     // Search for similar code by example
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let example_tool = SemanticSearchByExampleTool::new(semantic_ctx.clone());
 
     let example_code = "pub fn sum(x: i32, y: i32) -> i32 { x + y }";
@@ -540,7 +540,7 @@ pub struct Data_{} {{
     let indexing_duration = start.elapsed();
 
     // Perform search
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let search_tool = SemanticSearchCodeTool::new(semantic_ctx.clone());
 
     let search_start = Instant::now();
@@ -623,7 +623,7 @@ pub fn delete_user(id: u64) -> Result<(), String> {
         .await;
 
     // Search comments
-    let semantic_ctx = harness.semantic_search_context();
+    let semantic_ctx = harness.semantic_search_context().await;
     let comment_tool = SemanticSearchCommentsTool::new(semantic_ctx.clone());
 
     let comment_result = comment_tool

@@ -425,6 +425,9 @@ impl RustParser {
             .children(&mut node.walk())
             .any(|c| c.kind() == "unsafe");
 
+        // Extract supertraits (trait bounds)
+        let supertraits = self.extract_supertraits(node, source);
+
         Ok(TraitInfo {
             name,
             qualified_name,
@@ -437,9 +440,55 @@ impl RustParser {
             docstring: extract_docstring(node, source),
             generics: extract_generics(node, source),
             where_clause: extract_where_clause(node, source),
-            supertraits: Vec::new(),
+            supertraits,
             is_unsafe,
         })
+    }
+
+    /// Extract supertraits from a trait declaration.
+    /// For example: `trait Extended: Base + Clone` -> ["Base", "Clone"]
+    fn extract_supertraits(&self, node: Node, source: &str) -> Vec<String> {
+        let mut supertraits = Vec::new();
+
+        // Look for trait_bounds field which contains the supertraits
+        if let Some(trait_bounds) = node.child_by_field_name("trait_bounds") {
+            let mut cursor = trait_bounds.walk();
+            for child in trait_bounds.children(&mut cursor) {
+                match child.kind() {
+                    "type_identifier" => {
+                        // Simple trait name like "Base" or "Clone"
+                        supertraits.push(child.text(source).to_string());
+                    }
+                    "scoped_type_identifier" => {
+                        // Qualified trait name like "std::fmt::Debug"
+                        supertraits.push(child.text(source).to_string());
+                    }
+                    "generic_type" => {
+                        // Generic trait like "Iterator<Item=T>"
+                        // Extract just the base type name
+                        if let Some(type_node) = child.child_by_field_name("type") {
+                            supertraits.push(type_node.text(source).to_string());
+                        } else {
+                            supertraits.push(child.text(source).to_string());
+                        }
+                    }
+                    "lifetime" => {
+                        // Lifetime bounds like 'static - include them
+                        supertraits.push(child.text(source).to_string());
+                    }
+                    _ => {
+                        // Handle other possible node types
+                        let text = child.text(source);
+                        // Skip operators like '+' and ':'
+                        if !text.trim().is_empty() && text != "+" && text != ":" {
+                            supertraits.push(text.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        supertraits
     }
 
     /// Extract impl block information.
@@ -610,5 +659,44 @@ fn test() {}
         assert_eq!(result.functions.len(), 1);
         let func = &result.functions[0];
         assert!(func.generics.len() >= 1); // Should have T and U
+    }
+
+    #[test]
+    fn test_parse_trait_with_supertraits() {
+        let source = r#"
+trait Base {
+    fn base_method(&self);
+}
+
+trait Extended: Base {
+    fn extended_method(&self);
+}
+
+trait MultiExtended: Base + Clone {
+    fn multi_method(&self);
+}
+"#;
+        let mut parser = RustParser::new().unwrap();
+        let result = parser.parse_file("test.rs", source).unwrap();
+
+        assert_eq!(result.traits.len(), 3);
+
+        // Base trait should have no supertraits
+        let base = &result.traits[0];
+        assert_eq!(base.name, "Base");
+        assert_eq!(base.supertraits.len(), 0);
+
+        // Extended trait should have one supertrait: Base
+        let extended = &result.traits[1];
+        assert_eq!(extended.name, "Extended");
+        assert_eq!(extended.supertraits.len(), 1);
+        assert_eq!(extended.supertraits[0], "Base");
+
+        // MultiExtended trait should have two supertraits: Base and Clone
+        let multi = &result.traits[2];
+        assert_eq!(multi.name, "MultiExtended");
+        assert_eq!(multi.supertraits.len(), 2);
+        assert!(multi.supertraits.contains(&"Base".to_string()));
+        assert!(multi.supertraits.contains(&"Clone".to_string()));
     }
 }

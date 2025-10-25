@@ -7,6 +7,7 @@ use crate::types::*;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, Visibility};
+use cortex_storage::json_utils::{prepare_for_db, restore_id_field};
 use cortex_storage::ConnectionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -97,11 +98,7 @@ impl SemanticMemorySystem {
         units.into_iter()
             .map(|mut unit_json| {
                 // Rename cortex_id back to id for deserialization
-                if let Some(obj) = unit_json.as_object_mut() {
-                    if let Some(cortex_id) = obj.remove("cortex_id") {
-                        obj.insert("id".to_string(), cortex_id);
-                    }
-                }
+                restore_id_field(&mut unit_json);
 
                 serde_json::from_value(unit_json)
                     .map_err(|e| CortexError::storage(format!("Failed to deserialize: {}", e)))
@@ -127,11 +124,7 @@ impl SemanticMemorySystem {
             .map_err(|e| CortexError::storage(format!("Failed to serialize code unit: {}", e)))?;
 
         // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
-        if let Some(obj) = unit_json.as_object_mut() {
-            if let Some(id_val) = obj.remove("id") {
-                obj.insert("cortex_id".to_string(), id_val);
-            }
-        }
+        prepare_for_db(&mut unit_json);
 
         // Create code unit with the modified JSON
         let query = "CREATE code_unit CONTENT $data";
@@ -307,11 +300,10 @@ impl SemanticMemorySystem {
             .map_err(|e| CortexError::storage(format!("Failed to serialize dependency: {}", e)))?;
 
         // Rename 'id' to 'cortex_id' to avoid SurrealDB treating it as a record ID
+        prepare_for_db(&mut dep_json);
+
+        // Add SurrealDB edge fields (in and out)
         if let Some(obj) = dep_json.as_object_mut() {
-            if let Some(id_val) = obj.remove("id") {
-                obj.insert("cortex_id".to_string(), id_val);
-            }
-            // Add SurrealDB edge fields (in and out)
             obj.insert("in".to_string(), serde_json::json!(format!("code_unit:{}", dependency.source_id)));
             obj.insert("out".to_string(), serde_json::json!(format!("code_unit:{}", dependency.target_id)));
         }

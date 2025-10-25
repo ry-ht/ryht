@@ -663,9 +663,8 @@ async fn test_semantic_search_tools() {
     let mut harness = ToolTestHarness::new().await;
 
     let ctx = tools::semantic_search::SemanticSearchContext::new(
-        harness.storage.clone(),
-        harness.semantic_memory.clone(),
-    );
+        harness.storage.clone()
+    ).await.unwrap();
 
     // Test 1: cortex.search.semantic
     {

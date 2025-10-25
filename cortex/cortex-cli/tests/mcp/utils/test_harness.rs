@@ -135,11 +135,10 @@ impl TestHarness {
     }
 
     /// Create a test context for semantic search tools
-    pub fn semantic_search_context(&self) -> cortex_cli::mcp::tools::semantic_search::SemanticSearchContext {
+    pub async fn semantic_search_context(&self) -> cortex_cli::mcp::tools::semantic_search::SemanticSearchContext {
         cortex_cli::mcp::tools::semantic_search::SemanticSearchContext::new(
-            self.storage.clone(),
-            self.semantic_memory.clone(),
-        )
+            self.storage.clone()
+        ).await.unwrap()
     }
 
     /// Create a test context for dependency analysis tools

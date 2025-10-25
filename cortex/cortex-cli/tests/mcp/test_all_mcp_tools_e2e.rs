@@ -764,7 +764,7 @@ mod e2e_workflow_tests {
         let start = Instant::now();
 
         // Step 1: Search for functions returning Result without proper error handling
-        let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone());
+        let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone()).await.unwrap();
         let search_tool = semantic_search::SearchCodeTool::new(search_ctx);
         let search_input = json!({
             "query": "Result return type",
@@ -790,7 +790,7 @@ mod e2e_workflow_tests {
         let start = Instant::now();
 
         // Step 1: Find high-complexity functions
-        let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone());
+        let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone()).await.unwrap();
         let complexity_tool = semantic_search::SearchCodeTool::new(search_ctx);
         let search_input = json!({
             "query": "high complexity functions",

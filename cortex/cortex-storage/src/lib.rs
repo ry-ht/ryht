@@ -15,6 +15,7 @@ pub mod merge;
 pub mod merge_engine;
 pub mod session_aware_storage;
 pub mod locks;
+pub mod json_utils;
 
 // Qdrant vector database client
 pub mod qdrant;
@@ -95,4 +96,7 @@ pub mod prelude {
         CollectionConfig, CollectionStats, DistanceMetric, HnswConfig, OptimizerConfig,
         QdrantClient, QdrantConfig,
     };
+
+    // JSON utilities
+    pub use crate::json_utils::{prepare_for_db, rename_id_field, restore_id_field};
 }

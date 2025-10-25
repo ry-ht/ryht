@@ -922,7 +922,7 @@ async fn test_scenario_d_semantic_search() {
 
     let mut metrics = TestMetrics::default();
     let storage = create_test_storage().await;
-    let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone());
+    let search_ctx = semantic_search::SemanticSearchContext::new(storage.clone()).await.unwrap();
 
     // Step 1: Search for functions by semantic meaning
     {

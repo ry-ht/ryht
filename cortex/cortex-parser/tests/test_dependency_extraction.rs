@@ -310,9 +310,26 @@ trait MultiExtended: Base + Clone {
         println!("  {} inherits {}", dep.from_unit, dep.to_unit);
     }
 
-    // Note: Supertrait extraction is not yet implemented in the rust_parser
-    // This test documents the expected behavior when it is implemented
-    println!("Note: Supertrait extraction requires parser enhancement");
+    // Verify that supertrait extraction works correctly
+    assert!(inherit_deps.len() >= 2, "Should extract at least 2 inheritance dependencies");
+
+    // Extended should inherit from Base
+    let extended_base = inherit_deps
+        .iter()
+        .find(|d| d.from_unit == "Extended" && d.to_unit == "Base");
+    assert!(extended_base.is_some(), "Extended should inherit from Base");
+
+    // MultiExtended should inherit from Base and Clone
+    let multi_deps: Vec<_> = inherit_deps
+        .iter()
+        .filter(|d| d.from_unit == "MultiExtended")
+        .collect();
+    assert_eq!(multi_deps.len(), 2, "MultiExtended should inherit from 2 traits");
+
+    let has_base = multi_deps.iter().any(|d| d.to_unit == "Base");
+    let has_clone = multi_deps.iter().any(|d| d.to_unit == "Clone");
+    assert!(has_base, "MultiExtended should inherit from Base");
+    assert!(has_clone, "MultiExtended should inherit from Clone");
 
     Ok(())
 }

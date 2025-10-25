@@ -337,6 +337,36 @@ pub enum WorkspaceType {
     External,
 }
 
+impl WorkspaceType {
+    /// Parse workspace type from a string.
+    ///
+    /// # Arguments
+    /// * `type_str` - String representation of workspace type (case-insensitive)
+    ///
+    /// # Returns
+    /// * `Ok(WorkspaceType)` - Parsed workspace type
+    /// * `Err(String)` - Error message if type is invalid
+    ///
+    /// # Examples
+    /// ```
+    /// use cortex_vfs::WorkspaceType;
+    ///
+    /// assert_eq!(WorkspaceType::parse("code").unwrap(), WorkspaceType::Code);
+    /// assert_eq!(WorkspaceType::parse("Code").unwrap(), WorkspaceType::Code);
+    /// assert_eq!(WorkspaceType::parse("DOCUMENTATION").unwrap(), WorkspaceType::Documentation);
+    /// assert!(WorkspaceType::parse("invalid").is_err());
+    /// ```
+    pub fn parse(type_str: &str) -> Result<Self, String> {
+        match type_str.to_lowercase().as_str() {
+            "code" => Ok(WorkspaceType::Code),
+            "documentation" => Ok(WorkspaceType::Documentation),
+            "mixed" => Ok(WorkspaceType::Mixed),
+            "external" => Ok(WorkspaceType::External),
+            _ => Err(format!("Invalid workspace type: {}", type_str)),
+        }
+    }
+}
+
 /// Source type for workspace.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -600,4 +630,40 @@ pub enum ChangeType {
     Modified,
     Deleted,
     Renamed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_workspace_type_parse_valid() {
+        assert_eq!(WorkspaceType::parse("code").unwrap(), WorkspaceType::Code);
+        assert_eq!(WorkspaceType::parse("Code").unwrap(), WorkspaceType::Code);
+        assert_eq!(WorkspaceType::parse("CODE").unwrap(), WorkspaceType::Code);
+
+        assert_eq!(WorkspaceType::parse("documentation").unwrap(), WorkspaceType::Documentation);
+        assert_eq!(WorkspaceType::parse("Documentation").unwrap(), WorkspaceType::Documentation);
+        assert_eq!(WorkspaceType::parse("DOCUMENTATION").unwrap(), WorkspaceType::Documentation);
+
+        assert_eq!(WorkspaceType::parse("mixed").unwrap(), WorkspaceType::Mixed);
+        assert_eq!(WorkspaceType::parse("Mixed").unwrap(), WorkspaceType::Mixed);
+        assert_eq!(WorkspaceType::parse("MIXED").unwrap(), WorkspaceType::Mixed);
+
+        assert_eq!(WorkspaceType::parse("external").unwrap(), WorkspaceType::External);
+        assert_eq!(WorkspaceType::parse("External").unwrap(), WorkspaceType::External);
+        assert_eq!(WorkspaceType::parse("EXTERNAL").unwrap(), WorkspaceType::External);
+    }
+
+    #[test]
+    fn test_workspace_type_parse_invalid() {
+        assert!(WorkspaceType::parse("invalid").is_err());
+        assert!(WorkspaceType::parse("").is_err());
+        assert!(WorkspaceType::parse("cod").is_err());
+        assert!(WorkspaceType::parse("docs").is_err());
+
+        let err = WorkspaceType::parse("invalid").unwrap_err();
+        assert!(err.contains("Invalid workspace type"));
+        assert!(err.contains("invalid"));
+    }
 }

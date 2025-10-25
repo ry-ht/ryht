@@ -895,6 +895,155 @@ WantedBy=multi-user.target
         }
         None
     }
+
+    /// Backup the database to a file
+    ///
+    /// Uses SurrealDB's native export command to create a backup of all data
+    /// in the database. The backup file will contain SQL statements that can
+    /// be used to restore the database.
+    ///
+    /// # Arguments
+    /// * `backup_path` - Path where the backup file should be created
+    ///
+    /// # Returns
+    /// * `Ok(())` - Backup completed successfully
+    /// * `Err(CortexError)` - Backup failed
+    #[instrument(skip(self), fields(backup_path = %backup_path.display()))]
+    pub async fn backup(&self, backup_path: PathBuf) -> Result<()> {
+        info!("Starting database backup to: {:?}", backup_path);
+
+        // Ensure the server is running
+        if !self.is_running().await {
+            return Err(CortexError::storage("Cannot backup: SurrealDB server is not running"));
+        }
+
+        // Get the binary path
+        let binary_path = self
+            .binary_path
+            .as_ref()
+            .ok_or_else(|| CortexError::storage("Binary path not set"))?;
+
+        // Ensure the backup directory exists
+        if let Some(parent) = backup_path.parent() {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| CortexError::storage(format!("Failed to create backup directory: {}", e)))?;
+        }
+
+        // Build the export command
+        // Format: surreal export --conn http://localhost:8000 --user root --pass root --ns test --db test backup.surql
+        let mut cmd = Command::new(binary_path);
+        cmd.arg("export")
+            .arg("--conn")
+            .arg(&format!("http://{}", self.config.bind_address))
+            .arg("--user")
+            .arg(&self.config.username)
+            .arg("--pass")
+            .arg(&self.config.password)
+            .arg("--ns")
+            .arg("cortex") // Default namespace
+            .arg("--db")
+            .arg("cortex") // Default database
+            .arg(&backup_path);
+
+        debug!("Executing backup command: {:?}", cmd);
+
+        // Execute the export command
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to execute export command: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!("Backup failed: {}", stderr);
+            return Err(CortexError::storage(format!("Backup failed: {}", stderr)));
+        }
+
+        // Verify the backup file was created
+        if !fs::metadata(&backup_path).await.is_ok() {
+            return Err(CortexError::storage("Backup file was not created"));
+        }
+
+        let file_size = fs::metadata(&backup_path)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        info!("Backup completed successfully: {:?} ({} bytes)", backup_path, file_size);
+
+        Ok(())
+    }
+
+    /// Restore the database from a backup file
+    ///
+    /// Uses SurrealDB's native import command to restore data from a backup file.
+    /// This will execute all SQL statements in the backup file, recreating tables
+    /// and records.
+    ///
+    /// # Arguments
+    /// * `backup_path` - Path to the backup file to restore from
+    ///
+    /// # Returns
+    /// * `Ok(())` - Restore completed successfully
+    /// * `Err(CortexError)` - Restore failed
+    #[instrument(skip(self), fields(backup_path = %backup_path.display()))]
+    pub async fn restore(&self, backup_path: PathBuf) -> Result<()> {
+        info!("Starting database restore from: {:?}", backup_path);
+
+        // Ensure the server is running
+        if !self.is_running().await {
+            return Err(CortexError::storage("Cannot restore: SurrealDB server is not running"));
+        }
+
+        // Verify the backup file exists
+        if !fs::metadata(&backup_path).await.is_ok() {
+            return Err(CortexError::storage(format!(
+                "Backup file not found: {:?}",
+                backup_path
+            )));
+        }
+
+        // Get the binary path
+        let binary_path = self
+            .binary_path
+            .as_ref()
+            .ok_or_else(|| CortexError::storage("Binary path not set"))?;
+
+        // Build the import command
+        // Format: surreal import --conn http://localhost:8000 --user root --pass root --ns test --db test backup.surql
+        let mut cmd = Command::new(binary_path);
+        cmd.arg("import")
+            .arg("--conn")
+            .arg(&format!("http://{}", self.config.bind_address))
+            .arg("--user")
+            .arg(&self.config.username)
+            .arg("--pass")
+            .arg(&self.config.password)
+            .arg("--ns")
+            .arg("cortex") // Default namespace
+            .arg("--db")
+            .arg("cortex") // Default database
+            .arg(&backup_path);
+
+        debug!("Executing restore command: {:?}", cmd);
+
+        // Execute the import command
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to execute import command: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!("Restore failed: {}", stderr);
+            return Err(CortexError::storage(format!("Restore failed: {}", stderr)));
+        }
+
+        info!("Restore completed successfully from: {:?}", backup_path);
+
+        Ok(())
+    }
 }
 
 /// Server information

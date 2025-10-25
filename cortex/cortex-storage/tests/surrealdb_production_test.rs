@@ -674,19 +674,178 @@ async fn test_9_data_integrity() {
     println!("\n✅ TEST 9 PASSED: Server recovered from ungraceful shutdown");
 }
 
-// Test 10: Backup & Recovery (Placeholder)
+// Test 10: Backup & Recovery
 #[tokio::test]
 async fn test_10_backup_and_recovery() {
     println!("\n========================================");
     println!("TEST 10: BACKUP & RECOVERY");
     println!("========================================\n");
 
-    println!("⊘ NOT IMPLEMENTED: Backup functionality");
-    println!("  This is a placeholder for future backup/recovery features");
-    println!("  Expected: Automatic backups, point-in-time recovery");
+    // Skip if SurrealDB not available
+    if ensure_surrealdb_available().await.is_err() {
+        println!("⊘ SKIPPED: SurrealDB not installed");
+        return;
+    }
 
-    // This test intentionally reports as "not implemented"
-    println!("\n⚠ TEST 10 SKIPPED: Feature not yet implemented");
+    let (config, temp) = create_production_test_config(18010);
+
+    // Use RocksDB for data persistence
+    let mut config = config;
+    config.storage_engine = "rocksdb".to_string();
+
+    // Start server
+    println!("Starting SurrealDB server with RocksDB...");
+    let mut manager = SurrealDBManager::new(config.clone())
+        .await
+        .expect("Failed to create manager");
+    manager.start().await.expect("Failed to start server");
+    sleep(Duration::from_secs(2)).await;
+    println!("✓ Server started");
+
+    // Create a SurrealDB client to write test data
+    println!("\nCreating test data...");
+    use surrealdb::engine::any::connect;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Serialize, Deserialize, Clone)]
+    struct TestRecord {
+        id: Option<String>,
+        name: String,
+        value: i32,
+    }
+
+    let db = connect(&manager.connection_url())
+        .await
+        .expect("Failed to connect to database");
+
+    db.use_ns("cortex")
+        .use_db("cortex")
+        .await
+        .expect("Failed to use namespace/database");
+
+    // Sign in with credentials
+    db.signin(surrealdb::opt::auth::Root {
+        username: &config.username,
+        password: &config.password,
+    })
+    .await
+    .expect("Failed to sign in");
+
+    // Create sample records
+    let test_records = vec![
+        TestRecord {
+            id: None,
+            name: "Record 1".to_string(),
+            value: 100,
+        },
+        TestRecord {
+            id: None,
+            name: "Record 2".to_string(),
+            value: 200,
+        },
+        TestRecord {
+            id: None,
+            name: "Record 3".to_string(),
+            value: 300,
+        },
+    ];
+
+    for record in test_records.clone() {
+        let _: Option<TestRecord> = db
+            .create("test_table")
+            .content(record)
+            .await
+            .expect("Failed to create record");
+    }
+
+    // Verify records were created
+    let records: Vec<TestRecord> = db
+        .select("test_table")
+        .await
+        .expect("Failed to query records");
+    assert_eq!(records.len(), 3, "Should have 3 records");
+    println!("✓ Created {} test records", records.len());
+
+    // Perform backup
+    println!("\nPerforming backup...");
+    let backup_path = temp.path().join("backup.surql");
+    let backup_result = manager.backup(backup_path.clone()).await;
+    assert!(
+        backup_result.is_ok(),
+        "Backup failed: {:?}",
+        backup_result.err()
+    );
+    println!("✓ Backup completed: {:?}", backup_path);
+
+    // Verify backup file exists and has content
+    let backup_size = tokio::fs::metadata(&backup_path)
+        .await
+        .expect("Backup file not found")
+        .len();
+    assert!(backup_size > 0, "Backup file is empty");
+    println!("  Backup size: {} bytes", backup_size);
+
+    // Delete all data
+    println!("\nDeleting all data...");
+    let _: Vec<TestRecord> = db
+        .delete("test_table")
+        .await
+        .expect("Failed to delete records");
+
+    // Verify data was deleted
+    let records: Vec<TestRecord> = db
+        .select("test_table")
+        .await
+        .expect("Failed to query records");
+    assert_eq!(records.len(), 0, "Should have 0 records after deletion");
+    println!("✓ All data deleted ({} records remaining)", records.len());
+
+    // Perform restore
+    println!("\nPerforming restore...");
+    let restore_result = manager.restore(backup_path.clone()).await;
+    assert!(
+        restore_result.is_ok(),
+        "Restore failed: {:?}",
+        restore_result.err()
+    );
+    println!("✓ Restore completed");
+
+    // Verify data was restored
+    println!("\nVerifying restored data...");
+    sleep(Duration::from_secs(1)).await; // Give it a moment to flush
+
+    let restored_records: Vec<TestRecord> = db
+        .select("test_table")
+        .await
+        .expect("Failed to query restored records");
+
+    assert_eq!(
+        restored_records.len(),
+        3,
+        "Should have 3 records after restore"
+    );
+    println!("✓ Restored {} records", restored_records.len());
+
+    // Verify record contents
+    let mut names: Vec<String> = restored_records.iter().map(|r| r.name.clone()).collect();
+    names.sort();
+    assert_eq!(names[0], "Record 1");
+    assert_eq!(names[1], "Record 2");
+    assert_eq!(names[2], "Record 3");
+    println!("✓ Record contents verified");
+
+    let mut values: Vec<i32> = restored_records.iter().map(|r| r.value).collect();
+    values.sort();
+    assert_eq!(values[0], 100);
+    assert_eq!(values[1], 200);
+    assert_eq!(values[2], 300);
+    println!("✓ Record values verified");
+
+    // Clean up
+    manager.stop().await.expect("Failed to stop server");
+    println!("✓ Server stopped");
+
+    println!("\n✅ TEST 10 PASSED: Backup and recovery completed successfully");
 }
 
 // Master test runner that executes all tests in sequence
@@ -728,7 +887,7 @@ async fn test_production_suite() {
     println!("  7. test_7_cli_integration");
     println!("  8. test_8_multi_agent_load");
     println!("  9. test_9_data_integrity");
-    println!("  10. test_10_backup_and_recovery (placeholder)");
+    println!("  10. test_10_backup_and_recovery");
 
     let suite_time = suite_start.elapsed();
     println!("\n╔════════════════════════════════════════════════════════════════╗");
