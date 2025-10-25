@@ -27,13 +27,20 @@ fn factorial(n: u32) -> u32 {
     }
 }
 
-// TODO: Optimize this function
+/// Optimized fibonacci using dynamic programming (iterative approach)
+/// Time complexity: O(n), Space complexity: O(1)
 fn fibonacci(n: u32) -> u32 {
     if n <= 1 {
-        n
-    } else {
-        fibonacci(n - 1) + fibonacci(n - 2)
+        return n;
     }
+
+    let (mut prev, mut curr) = (0, 1);
+    for _ in 2..=n {
+        let next = prev + curr;
+        prev = curr;
+        curr = next;
+    }
+    curr
 }
 
 /// A very long function that does many things

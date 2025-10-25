@@ -187,6 +187,16 @@ impl Default for ComplexityMetrics {
 }
 
 /// Semantic code unit information
+///
+/// **DEPRECATED:** Use `cortex_core::types::CodeUnit` instead.
+/// This type is maintained for backward compatibility only.
+/// Migration path: Use conversion functions in `cognitive.rs`:
+/// - `convert_semantic_to_code_unit()` to migrate from SemanticUnit
+/// - `convert_code_to_semantic_unit()` for temporary compatibility
+#[deprecated(
+    since = "0.2.0",
+    note = "Use cortex_core::types::CodeUnit instead. See cognitive.rs for conversion functions."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SemanticUnit {
     pub id: CortexId,
