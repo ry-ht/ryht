@@ -127,6 +127,18 @@ fn check_function_naming(name: &str, language: Language) -> Option<String> {
                 None
             }
         }
+        Language::Tsx | Language::Jsx => {
+            let camel_case_regex = Regex::new(r"^[a-z][a-zA-Z0-9]*$").unwrap();
+            if !camel_case_regex.is_match(name) {
+                Some("camelCase".to_string())
+            } else {
+                None
+            }
+        }
+        Language::Python | Language::Cpp | Language::Java | Language::Kotlin => {
+            // Not fully supported yet
+            None
+        }
     }
 }
 

@@ -339,6 +339,17 @@ impl Tool for CodeCreateUnitTool {
                 AstEditor::new(content.clone(), tree_sitter_javascript::LANGUAGE.into())
                     .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
             }
+            ParserLanguage::Tsx => {
+                AstEditor::new(content.clone(), tree_sitter_typescript::LANGUAGE_TSX.into())
+                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+            }
+            ParserLanguage::Jsx => {
+                AstEditor::new(content.clone(), tree_sitter_javascript::LANGUAGE.into())
+                    .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?
+            }
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         // Generate the new code unit
@@ -401,6 +412,14 @@ impl Tool for CodeCreateUnitTool {
             ParserLanguage::Rust => Language::Rust,
             ParserLanguage::TypeScript => Language::TypeScript,
             ParserLanguage::JavaScript => Language::JavaScript,
+            ParserLanguage::Tsx => Language::TypeScript,
+            ParserLanguage::Jsx => Language::JavaScript,
+            ParserLanguage::Python => Language::Python,
+            ParserLanguage::Cpp => Language::Cpp,
+            ParserLanguage::Java => Language::Java,
+            ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed("Kotlin not yet supported in cortex_core::Language".to_string()));
+            }
         };
 
         let new_unit = if input.unit_type == "function" {
@@ -522,6 +541,11 @@ impl Tool for CodeUpdateUnitTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
@@ -689,6 +713,11 @@ impl Tool for CodeDeleteUnitTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -812,6 +841,11 @@ impl Tool for CodeMoveUnitTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut source_editor = AstEditor::new(source_content, tree_sitter_lang)
@@ -841,6 +875,11 @@ impl Tool for CodeMoveUnitTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut target_editor = AstEditor::new(target_content.clone(), target_tree_sitter_lang)
@@ -951,6 +990,11 @@ impl Tool for CodeRenameUnitTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -1064,9 +1108,14 @@ impl Tool for CodeExtractFunctionTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
-        let _editor = AstEditor::new(content, tree_sitter_lang)
+        let _editor = AstEditor::new(content.clone(), tree_sitter_lang)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         // TODO: Implement extract_function method in AstEditor
@@ -1074,14 +1123,14 @@ impl Tool for CodeExtractFunctionTool {
         let _result = (input.start_line, input.end_line, &input.function_name);
 
         // Save modified file (currently no modification)
-        self.ctx.save_file(&workspace_id, &unit.file_path, content).await
+        self.ctx.save_file(&workspace_id, &unit.file_path, &content).await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let output = ExtractFunctionOutput {
             new_unit_id: format!("unit_{}", uuid::Uuid::new_v4()),
             function_name: input.function_name.clone(),
             parameters: vec![], // TODO: Extract from actual code
-            return_type: "()".to_string(), // TODO: Infer from actual code
+            return_type: Some("()".to_string()), // TODO: Infer from actual code
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
@@ -1181,6 +1230,11 @@ impl Tool for CodeInlineFunctionTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
@@ -1366,6 +1420,11 @@ impl CodeChangeSignatureTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(anyhow::anyhow!("Language not supported for AST editing: {:?}", language));
+            }
         };
 
         let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)?;
@@ -1614,6 +1673,11 @@ impl Tool for CodeChangeSignatureTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
@@ -1753,6 +1817,11 @@ impl Tool for CodeAddParameterTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -1914,6 +1983,11 @@ impl Tool for CodeRemoveParameterTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -2050,6 +2124,11 @@ impl Tool for CodeAddImportTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -2143,6 +2222,11 @@ impl Tool for CodeOptimizeImportsTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -2250,6 +2334,11 @@ impl Tool for CodeGenerateGetterSetterTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)
@@ -2417,6 +2506,11 @@ impl Tool for CodeImplementInterfaceTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(struct_content, tree_sitter_lang)
@@ -2561,6 +2655,11 @@ impl Tool for CodeOverrideMethodTool {
             ParserLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
             ParserLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             ParserLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            ParserLanguage::Jsx => tree_sitter_javascript::LANGUAGE.into(),
+            ParserLanguage::Python | ParserLanguage::Cpp | ParserLanguage::Java | ParserLanguage::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Language not supported for AST editing: {:?}", language)));
+            }
         };
 
         let mut editor = AstEditor::new(content, tree_sitter_lang)

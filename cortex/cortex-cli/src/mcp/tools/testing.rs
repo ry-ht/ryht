@@ -335,12 +335,20 @@ impl Tool for TestGenerateTool {
         let framework = input.framework.as_deref().unwrap_or(match language {
             Language::Rust => "cargo-test",
             Language::TypeScript | Language::JavaScript => "jest",
+            Language::Tsx | Language::Jsx => "jest",
+            Language::Python | Language::Cpp | Language::Java | Language::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Test generation not supported for language: {:?}", language)));
+            }
         });
 
         // Generate tests based on language
         let (test_code, test_cases) = match language {
             Language::Rust => self.generate_rust_test(func, framework),
             Language::TypeScript | Language::JavaScript => self.generate_typescript_test(func, framework),
+            Language::Tsx | Language::Jsx => self.generate_typescript_test(func, framework),
+            Language::Python | Language::Cpp | Language::Java | Language::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Test generation not supported for language: {:?}", language)));
+            }
         };
 
         // Estimate coverage
@@ -459,6 +467,10 @@ impl Tool for TestValidateTool {
         let (valid, errors) = match language {
             Language::Rust => self.validate_rust_test(&input.test_code),
             Language::TypeScript | Language::JavaScript => self.validate_typescript_test(&input.test_code),
+            Language::Tsx | Language::Jsx => self.validate_typescript_test(&input.test_code),
+            Language::Python | Language::Cpp | Language::Java | Language::Kotlin => {
+                return Err(ToolError::ExecutionFailed(format!("Test validation not supported for language: {:?}", language)));
+            }
         };
 
         // Estimate coverage if requested
@@ -806,6 +818,10 @@ impl TestRunInMemoryTool {
         match language {
             Language::Rust => self.analyze_rust_test(test_func),
             Language::TypeScript | Language::JavaScript => self.analyze_typescript_test(test_func),
+            Language::Tsx | Language::Jsx => self.analyze_typescript_test(test_func),
+            Language::Python | Language::Cpp | Language::Java | Language::Kotlin => {
+                Err(format!("Test analysis not supported for language: {:?}", language))
+            }
         }
     }
 
