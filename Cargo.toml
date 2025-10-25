@@ -10,7 +10,7 @@ members = [
     "cortex/cortex-ingestion",
     "cortex/cortex-memory",
     "cortex/cortex-semantic",
-    "cortex/cortex-parser",
+    "cortex/cortex-code-analysis",
     "cortex/cortex-cli",
 ]
 

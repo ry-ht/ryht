@@ -64,6 +64,10 @@ impl RustParser {
             }
             "impl_item" => {
                 let impl_info = self.extract_impl(node, source, &module_path)?;
+                // Also add the methods to the functions list for easier access
+                for method in &impl_info.methods {
+                    parsed.functions.push(method.clone());
+                }
                 parsed.impls.push(impl_info);
             }
             "mod_item" => {

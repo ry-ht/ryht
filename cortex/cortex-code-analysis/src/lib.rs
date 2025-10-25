@@ -99,6 +99,9 @@ pub mod typescript_parser;
 // ============================================================================
 
 pub mod analysis;
+pub mod c_macro;
+pub mod c_predefined_macros;
+pub mod c_specials;
 pub mod dependency_extractor;
 pub mod metrics;
 pub mod ops;
@@ -143,7 +146,11 @@ pub use function::{detect_functions, FunctionSpan};
 pub use ops::{extract_ops, Ops, SpaceKind};
 pub use preprocessor::{
     PreprocFile, PreprocResults, extract_preprocessor, build_include_graph, get_all_macros,
+    guess_file, resolve_include,
 };
+pub use c_macro::{replace_macros, prepare_file, is_predefined_macro};
+pub use c_predefined_macros::{get_all_predefined_macros, predefined_macro_count};
+pub use c_specials::{is_special_keyword, get_all_special_keywords, KeywordCategory, get_keyword_category};
 pub use spaces::{compute_spaces, FuncSpace, SpaceMetrics};
 
 // Re-export output module types

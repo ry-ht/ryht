@@ -11,11 +11,11 @@
 //!
 //! ```no_run
 //! use cortex_code_analysis::analysis::alterator::{Alterator, TransformConfig};
-//! use cortex_code_analysis::{Parser, Lang, AstNode};
+//! use cortex_code_analysis::{Parser, RustLanguage};
+//! use std::path::Path;
 //!
-//! let mut parser = Parser::new(Lang::Rust)?;
 //! let source = "fn main() { println!(\"Hello\"); }";
-//! parser.parse(source.as_bytes(), None)?;
+//! let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("example.rs"))?;
 //!
 //! let config = TransformConfig::builder()
 //!     .include_spans(true)
@@ -217,7 +217,7 @@ impl<'a, T: ParserTrait> Alterator<'a, T> {
         &self,
         node: &Node<'a>,
         config: &TransformConfig,
-        mut children: Vec<AstNode>,
+        children: Vec<AstNode>,
     ) -> Result<AstNode> {
         match self.language {
             Lang::Rust => self.transform_rust_node(node, config, children),
@@ -227,7 +227,6 @@ impl<'a, T: ParserTrait> Alterator<'a, T> {
             Lang::Cpp => self.transform_cpp_node(node, config, children),
             Lang::Java => self.transform_java_node(node, config, children),
             Lang::Kotlin => self.transform_kotlin_node(node, config, children),
-            _ => Ok(self.create_default_node(node, config, children)),
         }
     }
 
@@ -414,13 +413,13 @@ pub fn transform_ast<T: ParserTrait>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lang, Parser};
+    use crate::{Parser, RustLanguage};
+    use std::path::Path;
 
     #[test]
     fn test_transform_rust() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = r#"fn main() { let s = "hello"; }"#;
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = TransformConfig::builder()
             .include_spans(true)
@@ -436,9 +435,8 @@ mod tests {
 
     #[test]
     fn test_filter_comments() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "// comment\nfn main() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = TransformConfig::builder()
             .filter_comments(true)
@@ -453,9 +451,8 @@ mod tests {
 
     #[test]
     fn test_max_depth() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() { let x = { let y = 1; }; }";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = TransformConfig::builder()
             .max_depth(3)
@@ -469,9 +466,8 @@ mod tests {
 
     #[test]
     fn test_kind_transforms() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = TransformConfig::builder()
             .add_kind_transform("function_item".to_string(), "FUNCTION".to_string())

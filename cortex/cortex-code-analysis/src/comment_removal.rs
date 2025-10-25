@@ -306,6 +306,7 @@ pub fn extract_comments(code: &str, lang: Lang) -> Result<Vec<CommentSpan>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::Search;
 
     #[test]
     fn test_rust_remove_line_comments() {

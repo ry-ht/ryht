@@ -38,6 +38,7 @@ tracing = { workspace = true }
 
 # Utilities
 regex = { workspace = true }
+aho-corasick = "1.1.3"
 lazy_static = "1.5.0"
 once_cell = "1.21.3"
 num-traits = "0.2.19"

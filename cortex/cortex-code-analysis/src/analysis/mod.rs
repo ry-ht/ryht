@@ -46,12 +46,12 @@
 //!
 //! ```rust
 //! use cortex_code_analysis::analysis::find::{AstFinder, FindConfig, NodeFilter};
-//! use cortex_code_analysis::{Parser, Lang};
+//! use cortex_code_analysis::{Parser, RustLanguage};
+//! use std::path::Path;
 //!
 //! # fn main() -> anyhow::Result<()> {
-//! let mut parser = Parser::new(Lang::Rust)?;
 //! let source = "fn main() {} fn test() {}";
-//! parser.parse(source.as_bytes(), None)?;
+//! let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("example.rs"))?;
 //!
 //! let config = FindConfig::builder()
 //!     .add_filter(NodeFilter::Kind("function_item".to_string()))

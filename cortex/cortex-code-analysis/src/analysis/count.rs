@@ -11,12 +11,11 @@
 //!
 //! ```no_run
 //! use cortex_code_analysis::analysis::count::{AstCounter, CountConfig, CountFilter};
-//! use cortex_code_analysis::{Parser, Lang};
-//! use std::sync::{Arc, Mutex};
+//! use cortex_code_analysis::{Parser, RustLanguage};
+//! use std::path::Path;
 //!
-//! let mut parser = Parser::new(Lang::Rust)?;
 //! let source = "fn main() { println!(); }";
-//! parser.parse(source.as_bytes(), None)?;
+//! let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("example.rs"))?;
 //!
 //! // Count all function declarations
 //! let config = CountConfig::builder()
@@ -503,13 +502,13 @@ pub fn count<T: ParserTrait>(parser: &T, filters: &[CountFilter]) -> Result<(usi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lang, Parser};
+    use crate::{Parser, RustLanguage};
+    use std::path::Path;
 
     #[test]
     fn test_count_by_kind() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() {} fn test() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let counter = AstCounter::new(&parser);
         let count = counter.count_by_kind("function_item").unwrap();
@@ -519,9 +518,8 @@ mod tests {
 
     #[test]
     fn test_count_all() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() { let x = 1; }";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let counter = AstCounter::new(&parser);
         let stats = counter.count_all().unwrap();
@@ -533,9 +531,8 @@ mod tests {
 
     #[test]
     fn test_count_leaf_nodes() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let counter = AstCounter::new(&parser);
         let count = counter.count_leaf_nodes().unwrap();

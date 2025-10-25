@@ -311,6 +311,7 @@ impl crate::traits::Callback for Dump {
 mod tests {
     use super::*;
     use crate::{Parser, RustLanguage, ParserTrait};
+    use crate::OutputFormat;
     use std::path::Path;
 
     #[test]

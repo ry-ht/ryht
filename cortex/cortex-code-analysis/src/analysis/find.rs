@@ -11,12 +11,11 @@
 //!
 //! ```no_run
 //! use cortex_code_analysis::analysis::find::{AstFinder, FindConfig, NodeFilter};
-//! use cortex_code_analysis::{Parser, Lang};
-//! use std::path::PathBuf;
+//! use cortex_code_analysis::{Parser, RustLanguage};
+//! use std::path::Path;
 //!
-//! let mut parser = Parser::new(Lang::Rust)?;
 //! let source = "fn main() { println!(); }";
-//! parser.parse(source.as_bytes(), None)?;
+//! let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("example.rs"))?;
 //!
 //! // Find all function declarations
 //! let config = FindConfig::builder()
@@ -377,13 +376,13 @@ pub fn find_by_kind<'a, T: ParserTrait>(parser: &'a T, kind: &str) -> Result<Vec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lang, Parser};
+    use crate::{Parser, RustLanguage};
+    use std::path::Path;
 
     #[test]
     fn test_find_by_kind() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() {} fn test() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let finder = AstFinder::new(&parser);
         let result = finder.find_by_kind("function_item").unwrap();
@@ -394,9 +393,8 @@ mod tests {
 
     #[test]
     fn test_find_with_limit() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn a() {} fn b() {} fn c() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = FindConfig::builder()
             .add_filter(NodeFilter::Kind("function_item".to_string()))
@@ -412,9 +410,8 @@ mod tests {
 
     #[test]
     fn test_find_first() {
-        let mut parser = Parser::new(Lang::Rust).unwrap();
         let source = "fn main() {} fn test() {}";
-        parser.parse(source.as_bytes(), None).unwrap();
+        let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs")).unwrap();
 
         let config = FindConfig::builder()
             .add_filter(NodeFilter::Kind("function_item".to_string()))

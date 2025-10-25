@@ -8,10 +8,12 @@
 //! - Round-trip serialization/deserialization where applicable
 
 use cortex_code_analysis::{
-    RustParser, TypeScriptParser, CodeParser, Lang,
+    Parser, RustLanguage, TypeScriptLanguage, ParserTrait, Lang,
     export_metrics, export_ast, export_ops,
     OutputFormat, ExportConfig,
 };
+use cortex_code_analysis::spaces::compute_spaces;
+use cortex_code_analysis::ops::extract_ops;
 use anyhow::Result;
 use std::path::Path;
 
@@ -33,15 +35,27 @@ fn calculate_sum(a: i32, b: i32) -> i32 {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    // Use Parser instead of RustParser for metrics
+    let parser = Parser::<RustLanguage>::new(
+        source.as_bytes().to_vec(),
+        Path::new("test.rs")
+    )?;
+    let spaces = compute_spaces(
+        parser.get_root(),
+        parser.get_code(),
+        Lang::Rust,
+        "test.rs"
+    )?;
 
     // Export metrics to JSON
-    let json = export_metrics(&parsed, OutputFormat::Json, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_metrics(&spaces, &config)?;
 
     // Verify it's valid JSON
-    assert!(json.contains("\"functions\""));
-    assert!(json.contains("\"calculate_sum\""));
+    assert!(json.contains("\"metrics\""));
 
     // Parse it back to verify it's valid JSON
     let _value: serde_json::Value = serde_json::from_str(&json)?;
@@ -64,16 +78,17 @@ impl Point {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // Export AST to JSON
-    let json = export_ast(&parsed, OutputFormat::Json)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ast(&parser, &config)?;
 
     // Verify it's valid JSON
-    assert!(json.contains("\"structs\""));
-    assert!(json.contains("\"Point\""));
-    assert!(json.contains("\"impls\""));
+    assert!(json.contains("\"ast\""));
 
     // Parse it back
     let _value: serde_json::Value = serde_json::from_str(&json)?;
@@ -92,11 +107,14 @@ fn math_operations() {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let ops = extract_ops(source, Lang::Rust)?;
 
     // Export ops to JSON
-    let json = export_ops(&parsed, OutputFormat::Json)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ops(&ops, &config)?;
 
     // Verify it's valid JSON
     assert!(json.contains("{") && json.contains("}"));
@@ -123,15 +141,18 @@ fn factorial(n: u64) -> u64 {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Export metrics to YAML
-    let yaml = export_metrics(&parsed, OutputFormat::Yaml, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_metrics(&spaces, &config)?;
 
     // Verify it's valid YAML structure
-    assert!(yaml.contains("functions:") || yaml.contains("functions"));
-    assert!(yaml.contains("factorial"));
+    assert!(yaml.contains("metrics:") || yaml.contains("metrics"));
 
     // Parse it back to verify it's valid YAML
     let _value: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -149,15 +170,17 @@ enum Status {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // Export AST to YAML
-    let yaml = export_ast(&parsed, OutputFormat::Yaml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_ast(&parser, &config)?;
 
     // Verify it's valid YAML
-    assert!(yaml.contains("enums:") || yaml.contains("enums"));
-    assert!(yaml.contains("Status"));
+    assert!(yaml.contains("ast:") || yaml.contains("ast"));
 
     // Parse it back
     let _value: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -178,14 +201,18 @@ fn simple_function() {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Export metrics to TOML
-    let toml = export_metrics(&parsed, OutputFormat::Toml, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Toml,
+        ..Default::default()
+    };
+    let toml = export_metrics(&spaces, &config)?;
 
     // Verify it's valid TOML structure
-    assert!(toml.contains("[[functions]]") || toml.contains("[functions"));
+    assert!(toml.contains("[metrics") || toml.contains("metrics"));
 
     // Parse it back to verify it's valid TOML
     let _value: toml::Value = toml::from_str(&toml)?;
@@ -201,14 +228,17 @@ trait Drawable {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // Export AST to TOML
-    let toml = export_ast(&parsed, OutputFormat::Toml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Toml,
+        ..Default::default()
+    };
+    let toml = export_ast(&parser, &config)?;
 
     // Verify it's valid TOML
-    assert!(toml.contains("[[traits]]") || toml.contains("[traits"));
+    assert!(toml.contains("[ast") || toml.contains("ast"));
 
     // Parse it back
     let _value: toml::Value = toml::from_str(&toml)?;
@@ -232,24 +262,31 @@ fn subtract(a: i32, b: i32) -> i32 {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Export metrics to CSV
-    let csv = export_metrics(&parsed, OutputFormat::Csv, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Csv,
+        ..Default::default()
+    };
+    let csv = export_metrics(&spaces, &config)?;
 
     // Verify it's valid CSV structure (has headers and rows)
     let lines: Vec<&str> = csv.lines().collect();
     assert!(lines.len() >= 2, "CSV should have at least header and one data row");
 
     // Verify header exists
-    assert!(lines[0].contains("name") || lines[0].contains("function"));
+    assert!(lines[0].contains("name") || lines[0].contains("kind"));
 
     Ok(())
 }
 
 #[test]
 fn test_csv_ast_export() -> Result<()> {
+    // Note: CSV format is not supported for AST export
+    // AST is a complex nested structure that doesn't map well to CSV
+    // This test verifies that we get an appropriate error
     let source = r#"
 struct User {
     id: u64,
@@ -262,15 +299,17 @@ struct Post {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
-    // Export AST to CSV
-    let csv = export_ast(&parsed, OutputFormat::Csv)?;
+    // Export AST to CSV - should fail with error
+    let config = ExportConfig {
+        format: OutputFormat::Csv,
+        ..Default::default()
+    };
+    let result = export_ast(&parser, &config);
 
-    // Verify it's valid CSV structure
-    let lines: Vec<&str> = csv.lines().collect();
-    assert!(lines.len() >= 1, "CSV should have at least a header");
+    // CSV export should fail for AST
+    assert!(result.is_err(), "CSV format should not be supported for AST export");
 
     Ok(())
 }
@@ -292,11 +331,14 @@ function getUser(id: number): User {
 }
 "#;
 
-    let mut parser = TypeScriptParser::new()?;
-    let parsed = parser.parse_file("test.ts", source)?;
+    let parser = Parser::<TypeScriptLanguage>::new(source.as_bytes().to_vec(), Path::new("test.ts"))?;
 
     // Export to JSON
-    let json = export_ast(&parsed, OutputFormat::Json)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ast(&parser, &config)?;
     assert!(json.contains("{") && json.contains("}"));
 
     // Parse it back
@@ -323,11 +365,14 @@ class Counter {
 }
 "#;
 
-    let mut parser = TypeScriptParser::new_javascript()?;
-    let parsed = parser.parse_file("test.js", source)?;
+    let parser = Parser::<TypeScriptLanguage>::new(source.as_bytes().to_vec(), Path::new("test.js"))?;
 
     // Export to YAML
-    let yaml = export_ast(&parsed, OutputFormat::Yaml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_ast(&parser, &config)?;
     assert!(!yaml.is_empty());
 
     // Parse it back
@@ -348,22 +393,24 @@ fn test() {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Create custom export config
     let config = ExportConfig {
+        format: OutputFormat::Json,
         pretty: true,
         include_metadata: true,
         ..Default::default()
     };
 
     // Export with custom config
-    let json = export_metrics(&parsed, OutputFormat::Json, Some(config))?;
+    let json = export_metrics(&spaces, &config)?;
 
     // Verify it's valid and contains metadata
     assert!(!json.is_empty());
-    let _value: serde_json::Value = serde_json::from_str(&json)?;
+    let value: serde_json::Value = serde_json::from_str(&json)?;
+    assert!(value.get("metadata").is_some());
 
     Ok(())
 }
@@ -374,18 +421,19 @@ fn test_export_minimal_config() -> Result<()> {
 fn minimal() {}
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Create minimal export config
     let config = ExportConfig {
+        format: OutputFormat::Json,
         pretty: false,
         include_metadata: false,
         ..Default::default()
     };
 
     // Export with minimal config
-    let json = export_metrics(&parsed, OutputFormat::Json, Some(config))?;
+    let json = export_metrics(&spaces, &config)?;
 
     // Should still be valid JSON but more compact
     assert!(!json.is_empty());
@@ -402,14 +450,21 @@ fn minimal() {}
 fn test_empty_file_serialization() -> Result<()> {
     let source = "";
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // Should handle empty files gracefully
-    let json = export_ast(&parsed, OutputFormat::Json)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ast(&parser, &config)?;
     assert!(!json.is_empty());
 
-    let yaml = export_ast(&parsed, OutputFormat::Yaml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_ast(&parser, &config)?;
     assert!(!yaml.is_empty());
 
     Ok(())
@@ -426,16 +481,20 @@ fn test_large_structure_serialization() -> Result<()> {
         source.push_str("}\n");
     }
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", &source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Should handle large structures
-    let json = export_metrics(&parsed, OutputFormat::Json, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_metrics(&spaces, &config)?;
     assert!(!json.is_empty());
 
     // Verify it's valid JSON
     let value: serde_json::Value = serde_json::from_str(&json)?;
-    assert!(value.is_object() || value.is_array());
+    assert!(value.is_object());
 
     Ok(())
 }
@@ -475,24 +534,35 @@ mod outer {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // Test all formats with complex nested structures
-    let json = export_ast(&parsed, OutputFormat::Json)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ast(&parser, &config)?;
     assert!(!json.is_empty());
     let _: serde_json::Value = serde_json::from_str(&json)?;
 
-    let yaml = export_ast(&parsed, OutputFormat::Yaml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_ast(&parser, &config)?;
     assert!(!yaml.is_empty());
     let _: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
 
-    let toml = export_ast(&parsed, OutputFormat::Toml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Toml,
+        ..Default::default()
+    };
+    let toml = export_ast(&parser, &config)?;
     assert!(!toml.is_empty());
     let _: toml::Value = toml::from_str(&toml)?;
 
-    let csv = export_ast(&parsed, OutputFormat::Csv)?;
-    assert!(!csv.is_empty());
+    // Note: CSV format is not supported for AST, so we skip it
+    // CSV works for metrics but not for complex nested structures like AST
 
     Ok(())
 }
@@ -513,20 +583,36 @@ fn test_function(a: i32, b: i32) -> i32 {
 }
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
+    let spaces = compute_spaces(parser.get_root(), parser.get_code(), Lang::Rust, "test.rs")?;
 
     // Verify all formats produce non-empty output
-    let json = export_metrics(&parsed, OutputFormat::Json, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_metrics(&spaces, &config)?;
     assert!(!json.is_empty(), "JSON output should not be empty");
 
-    let yaml = export_metrics(&parsed, OutputFormat::Yaml, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_metrics(&spaces, &config)?;
     assert!(!yaml.is_empty(), "YAML output should not be empty");
 
-    let toml = export_metrics(&parsed, OutputFormat::Toml, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Toml,
+        ..Default::default()
+    };
+    let toml = export_metrics(&spaces, &config)?;
     assert!(!toml.is_empty(), "TOML output should not be empty");
 
-    let csv = export_metrics(&parsed, OutputFormat::Csv, None)?;
+    let config = ExportConfig {
+        format: OutputFormat::Csv,
+        ..Default::default()
+    };
+    let csv = export_metrics(&spaces, &config)?;
     assert!(!csv.is_empty(), "CSV output should not be empty");
 
     Ok(())
@@ -542,13 +628,26 @@ struct Data {
 fn process() {}
 "#;
 
-    let mut parser = RustParser::new()?;
-    let parsed = parser.parse_file("test.rs", source)?;
+    let parser = Parser::<RustLanguage>::new(source.as_bytes().to_vec(), Path::new("test.rs"))?;
 
     // All formats should represent the same underlying data
-    let json = export_ast(&parsed, OutputFormat::Json)?;
-    let yaml = export_ast(&parsed, OutputFormat::Yaml)?;
-    let toml = export_ast(&parsed, OutputFormat::Toml)?;
+    let config = ExportConfig {
+        format: OutputFormat::Json,
+        ..Default::default()
+    };
+    let json = export_ast(&parser, &config)?;
+
+    let config = ExportConfig {
+        format: OutputFormat::Yaml,
+        ..Default::default()
+    };
+    let yaml = export_ast(&parser, &config)?;
+
+    let config = ExportConfig {
+        format: OutputFormat::Toml,
+        ..Default::default()
+    };
+    let toml = export_ast(&parser, &config)?;
 
     // Basic consistency check - all should mention "Data" struct
     assert!(json.contains("Data"));

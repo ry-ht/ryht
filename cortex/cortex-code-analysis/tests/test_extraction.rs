@@ -260,7 +260,7 @@ trait Processor {
     assert!(result.imports.len() >= 1);
     assert_eq!(result.structs.len(), 1);
     assert_eq!(result.impls.len(), 1);
-    assert_eq!(result.functions.len(), 1);
+    assert_eq!(result.functions.len(), 2); // process() + Data::new()
     assert_eq!(result.traits.len(), 1);
 }
 

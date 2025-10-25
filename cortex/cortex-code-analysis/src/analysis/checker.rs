@@ -3,9 +3,33 @@
 //! This module provides the `NodeChecker` trait for analyzing AST nodes
 //! and determining their properties (e.g., is it a comment, function, closure, etc.).
 //! Language-specific implementations provide precise classification for each supported language.
+//!
+//! # Features
+//!
+//! - **Comment Detection**: Identify comments and useful comments (doc comments, coding declarations)
+//! - **Function Detection**: Detect function declarations and definitions with complex heuristics
+//! - **Closure Detection**: Identify closures, lambdas, and anonymous functions
+//! - **String Literal Detection**: Recognize string literals across all languages
+//! - **Control Flow Detection**: Identify else-if patterns and other control structures
+//! - **Primitive Type Detection**: Detect primitive type nodes
+//!
+//! # Performance
+//!
+//! - Uses `OnceLock` for lazy initialization of regex and Aho-Corasick patterns
+//! - Inline function macros for JavaScript-family language function detection
+//! - Efficient ancestor counting for complex function/closure heuristics
+
+use std::sync::OnceLock;
+
+use aho_corasick::AhoCorasick;
+use regex::bytes::Regex;
 
 use crate::node::Node;
 use crate::Lang;
+
+// Lazy-initialized pattern matchers for performance
+static AHO_CORASICK: OnceLock<AhoCorasick> = OnceLock::new();
+static RE: OnceLock<Regex> = OnceLock::new();
 
 /// Node checking trait for classifying AST nodes.
 ///
@@ -61,7 +85,7 @@ impl NodeChecker for DefaultNodeChecker {
             Lang::JavaScript | Lang::Jsx => is_javascript_comment(node),
             Lang::Java => is_java_comment(node),
             Lang::Cpp => is_cpp_comment(node),
-            Lang::Kotlin => false, // Not implemented in original
+            Lang::Kotlin => false, // Not yet implemented
         }
     }
 
@@ -226,9 +250,11 @@ fn is_rust_else_if(node: &Node) -> bool {
 }
 
 fn is_rust_primitive(id: u16) -> bool {
-    // This requires knowing the tree-sitter node type IDs
-    // We'll use kind string comparison as a fallback
-    false // Will be refined with proper language grammar integration
+    // This requires tree-sitter grammar integration
+    // For now, we check by string comparison
+    // In production, this would use: id == Rust::PrimitiveType
+    _ = id;
+    false // Placeholder - needs tree-sitter language enum integration
 }
 
 // ===== Python implementations =====
@@ -247,11 +273,13 @@ fn is_python_useful_comment(node: &Node, code: &[u8]) -> bool {
     if end > start && end <= code.len() {
         let slice = &code[start..end];
         // Check for coding declaration pattern
-        if let Ok(text) = std::str::from_utf8(slice) {
-            return text.contains("coding:") || text.contains("coding=");
-        }
+        RE.get_or_init(|| {
+            Regex::new(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)").unwrap()
+        })
+        .is_match(slice)
+    } else {
+        false
     }
-    false
 }
 
 fn is_python_func_space(node: &Node) -> bool {
@@ -305,11 +333,11 @@ fn is_typescript_func_space(node: &Node) -> bool {
 }
 
 fn is_typescript_func(node: &Node) -> bool {
-    check_if_ts_func(node)
+    check_if_js_func(node)
 }
 
 fn is_typescript_closure(node: &Node) -> bool {
-    check_if_ts_closure(node)
+    check_if_js_closure(node)
 }
 
 fn is_typescript_call(node: &Node) -> bool {
@@ -334,63 +362,9 @@ fn is_typescript_else_if(node: &Node) -> bool {
 }
 
 fn is_typescript_primitive(id: u16) -> bool {
-    // Will be refined with proper grammar integration
+    // Placeholder - would check: id == Typescript::PredefinedType
+    _ = id;
     false
-}
-
-// Helper for TypeScript/JavaScript function detection
-fn check_if_ts_func(node: &Node) -> bool {
-    match node.kind() {
-        "function_declaration" | "method_definition" => true,
-        "function_expression" => {
-            // Check if it's a function assignment
-            node.count_specific_ancestors(
-                |n| {
-                    matches!(
-                        n.kind(),
-                        "variable_declarator" | "assignment_expression" | "labeled_statement" | "pair"
-                    )
-                },
-                |n| {
-                    matches!(
-                        n.kind(),
-                        "statement_block" | "return_statement" | "new_expression" | "arguments"
-                    )
-                },
-            ) > 0
-                || node.has_sibling_kind("property_identifier")
-        }
-        "arrow_function" => {
-            node.count_specific_ancestors(
-                |n| {
-                    matches!(
-                        n.kind(),
-                        "variable_declarator" | "assignment_expression" | "labeled_statement"
-                    )
-                },
-                |n| {
-                    matches!(
-                        n.kind(),
-                        "statement_block"
-                            | "return_statement"
-                            | "new_expression"
-                            | "call_expression"
-                    )
-                },
-            ) > 0
-                || node.has_sibling_kind("property_identifier")
-        }
-        _ => false,
-    }
-}
-
-fn check_if_ts_closure(node: &Node) -> bool {
-    match node.kind() {
-        "generator_function" | "generator_function_declaration" => true,
-        "function_expression" => !check_if_ts_func(node),
-        "arrow_function" => !check_if_ts_func(node),
-        _ => false,
-    }
 }
 
 // ===== JavaScript implementations =====
@@ -415,11 +389,11 @@ fn is_javascript_func_space(node: &Node) -> bool {
 }
 
 fn is_javascript_func(node: &Node) -> bool {
-    check_if_ts_func(node)
+    check_if_js_func(node)
 }
 
 fn is_javascript_closure(node: &Node) -> bool {
-    check_if_ts_closure(node)
+    check_if_js_closure(node)
 }
 
 fn is_javascript_call(node: &Node) -> bool {
@@ -484,7 +458,9 @@ fn is_cpp_useful_comment(node: &Node, code: &[u8]) -> bool {
     let end = node.end_byte();
     if end > start && end <= code.len() {
         let slice = &code[start..end];
-        slice.windows(15).any(|w| w == b"<div rustbindgen")
+        AHO_CORASICK
+            .get_or_init(|| AhoCorasick::new(["<div rustbindgen"]).unwrap())
+            .is_match(slice)
     } else {
         false
     }
@@ -534,22 +510,105 @@ fn is_cpp_else_if(node: &Node) -> bool {
 }
 
 fn is_cpp_primitive(id: u16) -> bool {
-    // Will be refined with proper grammar integration
+    // Placeholder - would check: id == Cpp::PrimitiveType
+    _ = id;
     false
 }
 
-// Helper trait extension for Node
-trait NodeExt {
-    fn has_sibling_kind(&self, kind: &str) -> bool;
+// ===== JavaScript/TypeScript helper functions =====
+
+/// Complex heuristic to determine if a JavaScript/TypeScript node is a function.
+///
+/// This implements sophisticated logic to distinguish between:
+/// - Function declarations (always functions)
+/// - Method definitions (always functions)
+/// - Function expressions (check if assigned)
+/// - Arrow functions (check if assigned)
+///
+/// The logic checks ancestor patterns to determine if the function is:
+/// - Assigned to a variable
+/// - Part of an assignment expression
+/// - A labeled statement
+/// - An object property
+///
+/// vs. being:
+/// - Inside a statement block (closure/callback)
+/// - A return value (closure/callback)
+/// - Part of a new expression (closure/callback)
+/// - An argument (closure/callback)
+fn check_if_js_func(node: &Node) -> bool {
+    match node.kind() {
+        "function_declaration" | "method_definition" => true,
+        "function_expression" => {
+            // Check if it's a function assignment
+            node.count_specific_ancestors(
+                |n| {
+                    matches!(
+                        n.kind(),
+                        "variable_declarator" | "assignment_expression" | "labeled_statement" | "pair"
+                    )
+                },
+                |n| {
+                    matches!(
+                        n.kind(),
+                        "statement_block" | "return_statement" | "new_expression" | "arguments"
+                    )
+                },
+            ) > 0
+                || has_child_identifier(node)
+        }
+        "arrow_function" => {
+            node.count_specific_ancestors(
+                |n| {
+                    matches!(
+                        n.kind(),
+                        "variable_declarator" | "assignment_expression" | "labeled_statement"
+                    )
+                },
+                |n| {
+                    matches!(
+                        n.kind(),
+                        "statement_block"
+                            | "return_statement"
+                            | "new_expression"
+                            | "call_expression"
+                    )
+                },
+            ) > 0
+                || has_sibling_property_identifier(node)
+        }
+        _ => false,
+    }
 }
 
-impl<'a> NodeExt for Node<'a> {
-    fn has_sibling_kind(&self, kind: &str) -> bool {
-        if let Some(parent) = self.parent() {
-            parent.children().any(|child| child.kind() == kind)
-        } else {
-            false
-        }
+/// Complex heuristic to determine if a JavaScript/TypeScript node is a closure.
+///
+/// This is essentially the inverse of `check_if_js_func`:
+/// - Generator functions are always closures
+/// - Function expressions that are NOT assigned are closures
+/// - Arrow functions that are NOT assigned are closures
+fn check_if_js_closure(node: &Node) -> bool {
+    match node.kind() {
+        "generator_function" | "generator_function_declaration" => true,
+        "function_expression" => !check_if_js_func(node),
+        "arrow_function" => !check_if_js_func(node),
+        _ => false,
+    }
+}
+
+/// Check if node has an identifier child
+fn has_child_identifier(node: &Node) -> bool {
+    node.children().any(|child| child.kind() == "identifier")
+}
+
+/// Check if node has a property_identifier sibling
+fn has_sibling_property_identifier(node: &Node) -> bool {
+    if let Some(parent) = node.parent() {
+        parent
+            .children()
+            .any(|child| child.kind() == "property_identifier")
+    } else {
+        false
     }
 }
 
@@ -565,8 +624,20 @@ mod tests {
     }
 
     #[test]
-    fn test_rust_comment_detection() {
-        // These would require actual tree-sitter nodes to test properly
-        // Placeholder for integration tests
+    fn test_regex_lazy_initialization() {
+        // Test that regex is lazily initialized
+        let re = RE.get_or_init(|| {
+            Regex::new(r"^[ \t\f]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)").unwrap()
+        });
+        assert!(re.is_match(b"# coding: utf-8"));
+        assert!(re.is_match(b"# -*- coding: utf-8 -*-"));
+        assert!(!re.is_match(b"# regular comment"));
+    }
+
+    #[test]
+    fn test_aho_corasick_initialization() {
+        let ac = AHO_CORASICK.get_or_init(|| AhoCorasick::new(["<div rustbindgen"]).unwrap());
+        assert!(ac.is_match(b"<div rustbindgen>"));
+        assert!(!ac.is_match(b"regular comment"));
     }
 }

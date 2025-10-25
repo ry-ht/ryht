@@ -439,7 +439,7 @@ pub fn create_fixed_array() -> Array<i32, 5> {
 
     assert_eq!(result.structs.len(), 1);
     assert!(result.structs[0].generics.len() >= 1);
-    assert_eq!(result.functions.len(), 1);
+    assert_eq!(result.functions.len(), 3); // create_fixed_array() + new() + len()
 }
 
 #[test]
