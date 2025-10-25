@@ -2,7 +2,7 @@
 //!
 //! This module implements the 10 code navigation tools defined in the MCP spec.
 //! These tools provide semantic code navigation capabilities using REAL data
-//! from cortex-parser and semantic memory.
+//! from cortex-code-analysis and semantic memory.
 
 use async_trait::async_trait;
 use cortex_core::id::CortexId;

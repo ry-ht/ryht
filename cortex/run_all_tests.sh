@@ -336,7 +336,7 @@ declare -a UNIT_TEST_PACKAGES=(
     "cortex-memory"
     "cortex-ingestion"
     "cortex-semantic"
-    "cortex-parser"
+    "cortex-code-analysis"
     "cortex-cli"
 )
 

@@ -118,7 +118,7 @@ cargo build --test test_refactoring_scenarios
 Check that the language parser is working:
 
 ```bash
-cargo test --package cortex-parser
+cargo test --package cortex-code-analysis
 ```
 
 ## File Locations

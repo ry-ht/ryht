@@ -11,7 +11,7 @@ repository.workspace = true
 # Core
 cortex-core = { path = "../cortex-core" }
 cortex-storage = { path = "../cortex-storage" }
-cortex-parser = { path = "../cortex-parser" }
+cortex-code-analysis = { path = "../cortex-code-analysis" }
 cortex-memory = { path = "../cortex-memory" }
 
 # Async

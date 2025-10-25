@@ -4,7 +4,7 @@
 
 use cortex_core::types::Language;
 use cortex_memory::SemanticMemorySystem;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::connection_pool::{DatabaseConfig, ConnectionMode, Credentials, PoolConfig, RetryPolicy};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::ingestion::FileIngestionPipeline;

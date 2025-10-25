@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter as CoreParameter, Complexity};
 use cortex_memory::CognitiveManager;
-use cortex_parser::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile};
+use cortex_code_analysis::{AstEditor, CodeParser, Language as ParserLanguage, ParsedFile};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
 use mcp_sdk::prelude::*;
@@ -195,8 +195,8 @@ impl CodeManipulationContext {
         Ok(())
     }
 
-    /// Convert cortex_parser Parameter to cortex_core Parameter
-    fn convert_parameter(param: &cortex_parser::types::Parameter) -> CoreParameter {
+    /// Convert cortex_code_analysis Parameter to cortex_core Parameter
+    fn convert_parameter(param: &cortex_code_analysis::types::Parameter) -> CoreParameter {
         CoreParameter {
             name: param.name.clone(),
             param_type: Some(param.param_type.clone()),
@@ -207,8 +207,8 @@ impl CodeManipulationContext {
         }
     }
 
-    /// Convert cortex_parser FunctionInfo to CodeUnit
-    fn function_to_code_unit(func: &cortex_parser::types::FunctionInfo, file_path: &str, language: Language) -> CodeUnit {
+    /// Convert cortex_code_analysis FunctionInfo to CodeUnit
+    fn function_to_code_unit(func: &cortex_code_analysis::types::FunctionInfo, file_path: &str, language: Language) -> CodeUnit {
         let mut unit = CodeUnit::new(
             CodeUnitType::Function,
             func.name.clone(),
@@ -232,8 +232,8 @@ impl CodeManipulationContext {
         unit.return_type = func.return_type.clone();
         unit.parameters = func.parameters.iter().map(|p| Self::convert_parameter(p)).collect();
         unit.visibility = match func.visibility {
-            cortex_parser::types::Visibility::Public => Visibility::Public,
-            cortex_parser::types::Visibility::PublicCrate => Visibility::Internal,
+            cortex_code_analysis::types::Visibility::Public => Visibility::Public,
+            cortex_code_analysis::types::Visibility::PublicCrate => Visibility::Internal,
             _ => Visibility::Private,
         };
         unit.is_async = func.is_async;
@@ -572,11 +572,11 @@ impl Tool for CodeUpdateUnitTool {
             new_func.push_str("\n}\n");
 
             // Replace the function by line range
-            let range = cortex_parser::Range::new(
-                cortex_parser::Position::new(start_pos.row, start_pos.column),
-                cortex_parser::Position::new(end_pos.row, end_pos.column),
+            let range = cortex_code_analysis::Range::new(
+                cortex_code_analysis::Position::new(start_pos.row, start_pos.column),
+                cortex_code_analysis::Position::new(end_pos.row, end_pos.column),
             );
-            editor.edits.push(cortex_parser::Edit::replace(range, new_func));
+            editor.edits.push(cortex_code_analysis::Edit::replace(range, new_func));
 
             // Apply edits
             editor.apply_edits()
@@ -700,10 +700,10 @@ impl Tool for CodeDeleteUnitTool {
 
         let target_node_range = functions.iter()
             .find(|node| node.start_position().row == unit.start_line)
-            .map(|node| cortex_parser::Range::from_node(node));
+            .map(|node| cortex_code_analysis::Range::from_node(node));
 
         if let Some(range) = target_node_range {
-            editor.edits.push(cortex_parser::Edit::delete(range));
+            editor.edits.push(cortex_code_analysis::Edit::delete(range));
 
             editor.apply_edits()
                 .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
@@ -822,10 +822,10 @@ impl Tool for CodeMoveUnitTool {
 
         let source_node_range = functions.iter()
             .find(|n| n.start_position().row == unit.start_line)
-            .map(|node| cortex_parser::Range::from_node(node));
+            .map(|node| cortex_code_analysis::Range::from_node(node));
 
         if let Some(range) = source_node_range {
-            source_editor.edits.push(cortex_parser::Edit::delete(range));
+            source_editor.edits.push(cortex_code_analysis::Edit::delete(range));
             source_editor.apply_edits()
                 .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -1220,8 +1220,8 @@ impl Tool for CodeInlineFunctionTool {
                 }
 
                 // Create edit to replace call with inlined body
-                let range = cortex_parser::Range::from_node(&call_node);
-                edits_to_apply.push(cortex_parser::Edit::replace(
+                let range = cortex_code_analysis::Range::from_node(&call_node);
+                edits_to_apply.push(cortex_code_analysis::Edit::replace(
                     range,
                     format!("{{\n    {}\n}}", inlined_body),
                 ));
@@ -1240,8 +1240,8 @@ impl Tool for CodeInlineFunctionTool {
 
         let function_removed = if let Some(func_node) = functions.iter()
             .find(|n| n.start_position().row == function.start_line) {
-            let range = cortex_parser::Range::from_node(func_node);
-            editor.edits.push(cortex_parser::Edit::delete(range));
+            let range = cortex_code_analysis::Range::from_node(func_node);
+            editor.edits.push(cortex_code_analysis::Edit::delete(range));
             editor.apply_edits()
                 .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
             true
@@ -1430,8 +1430,8 @@ impl CodeChangeSignatureTool {
                         format!("({})", new_args.join(", "))
                     };
 
-                    let range = cortex_parser::Range::from_node(&args_node);
-                    edits_to_apply.push(cortex_parser::Edit::replace(range, new_args_str));
+                    let range = cortex_code_analysis::Range::from_node(&args_node);
+                    edits_to_apply.push(cortex_code_analysis::Edit::replace(range, new_args_str));
                     sites_updated += 1;
                 }
             }
@@ -1641,8 +1641,8 @@ impl Tool for CodeChangeSignatureTool {
 
         // Build new function with updated signature
         let new_function = format!("{} {}", input.new_signature, body);
-        let range = cortex_parser::Range::from_node(func_node);
-        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+        let range = cortex_code_analysis::Range::from_node(func_node);
+        editor.edits.push(cortex_code_analysis::Edit::replace(range, new_function));
 
         // Apply edits to update function definition
         editor.apply_edits()
@@ -1812,8 +1812,8 @@ impl Tool for CodeAddParameterTool {
 
         // Build complete function
         let new_function = format!("{} {}", new_signature, body_part);
-        let range = cortex_parser::Range::from_node(func_node);
-        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+        let range = cortex_code_analysis::Range::from_node(func_node);
+        editor.edits.push(cortex_code_analysis::Edit::replace(range, new_function));
 
         editor.apply_edits()
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
@@ -1967,8 +1967,8 @@ impl Tool for CodeRemoveParameterTool {
 
         // Build complete function
         let new_function = format!("{} {}", new_signature, body_part);
-        let range = cortex_parser::Range::from_node(func_node);
-        editor.edits.push(cortex_parser::Edit::replace(range, new_function));
+        let range = cortex_code_analysis::Range::from_node(func_node);
+        editor.edits.push(cortex_code_analysis::Edit::replace(range, new_function));
 
         editor.apply_edits()
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
@@ -2303,8 +2303,8 @@ impl Tool for CodeGenerateGetterSetterTool {
                 methods,
                 &impl_text[last_brace..]);
 
-            let range = cortex_parser::Range::from_node(impl_node);
-            editor.edits.push(cortex_parser::Edit::replace(range, new_impl));
+            let range = cortex_code_analysis::Range::from_node(impl_node);
+            editor.edits.push(cortex_code_analysis::Edit::replace(range, new_impl));
         } else {
             // Create new impl block
             let new_impl = format!("\nimpl {} {{{}\n}}\n", unit.name, methods);
@@ -2619,8 +2619,8 @@ impl Tool for CodeOverrideMethodTool {
             method_code,
             &impl_text[last_brace..]);
 
-        let range = cortex_parser::Range::from_node(impl_node);
-        editor.edits.push(cortex_parser::Edit::replace(range, new_impl));
+        let range = cortex_code_analysis::Range::from_node(impl_node);
+        editor.edits.push(cortex_code_analysis::Edit::replace(range, new_impl));
 
         editor.apply_edits()
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;

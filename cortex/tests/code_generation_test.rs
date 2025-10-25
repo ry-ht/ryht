@@ -17,7 +17,7 @@
 use anyhow::Result;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter, Complexity};
 use cortex_core::id::CortexId;
-use cortex_parser::{CodeParser, Language as ParserLanguage, AstEditor};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage, AstEditor};
 use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
@@ -85,7 +85,7 @@ impl CodeGenEnvironment {
     }
 
     /// Verify AST structure
-    fn verify_ast_structure(&self, parsed: &cortex_parser::types::ParsedFile, expected_functions: usize) -> Result<()> {
+    fn verify_ast_structure(&self, parsed: &cortex_code_analysis::types::ParsedFile, expected_functions: usize) -> Result<()> {
         assert_eq!(parsed.functions.len(), expected_functions,
             "Expected {} functions, found {}", expected_functions, parsed.functions.len());
         Ok(())

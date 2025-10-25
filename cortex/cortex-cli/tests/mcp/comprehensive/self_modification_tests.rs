@@ -75,7 +75,7 @@
 //! RUST_LOG=info cargo test --test '*' test_cortex_optimizes_itself -- --nocapture --ignored
 //! ```
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
@@ -729,7 +729,7 @@ async fn test_cortex_optimizes_itself() {
     println!("\n[Phase 1/6] Loading Cortex and analyzing performance...");
     let phase_start = Instant::now();
 
-    let _files = harness.load_cortex_crates(&["cortex-vfs", "cortex-parser"]).await
+    let _files = harness.load_cortex_crates(&["cortex-vfs", "cortex-code-analysis"]).await
         .expect("Failed to load crates");
 
     let phase_duration = phase_start.elapsed().as_millis();
@@ -1210,14 +1210,14 @@ async fn test_cortex_adds_tests_to_itself() {
     println!("\n[Phase 1/5] Measuring current test coverage...");
     let phase_start = Instant::now();
 
-    let _files = harness.load_cortex_crates(&["cortex-parser"]).await
+    let _files = harness.load_cortex_crates(&["cortex-code-analysis"]).await
         .expect("Failed to load");
 
     let test_ctx = harness.testing_context();
 
     let _coverage = test_ctx.measure_coverage(json!({
         "workspace_id": harness.workspace_id.to_string(),
-        "scope": "cortex-parser"
+        "scope": "cortex-code-analysis"
     })).await;
 
     metrics.code_coverage_before = 72.5;
@@ -1241,7 +1241,7 @@ async fn test_cortex_adds_tests_to_itself() {
     let quality_ctx = harness.code_quality_context();
 
     let _gaps = quality_ctx.find_test_gaps(json!({
-        "scope_path": "cortex-parser",
+        "scope_path": "cortex-code-analysis",
         "min_complexity": 5
     })).await;
 
@@ -1265,7 +1265,7 @@ async fn test_cortex_adds_tests_to_itself() {
 
     let _gen_result = test_ctx.generate_tests(json!({
         "workspace_id": harness.workspace_id.to_string(),
-        "target_path": "cortex-parser/src/expression.rs",
+        "target_path": "cortex-code-analysis/src/expression.rs",
         "test_types": ["unit", "edge_cases"],
         "coverage_goal": 95.0
     })).await;
@@ -1306,7 +1306,7 @@ mod tests {
 
     let _add_tests = manip_ctx.create_function(json!({
         "workspace_id": harness.workspace_id.to_string(),
-        "file_path": "cortex-parser/src/expression.rs",
+        "file_path": "cortex-code-analysis/src/expression.rs",
         "function_name": "expression_tests",
         "code": test_code,
         "insert_position": "end"
@@ -1348,7 +1348,7 @@ mod tests {
 
     let _new_coverage = test_ctx.measure_coverage(json!({
         "workspace_id": harness.workspace_id.to_string(),
-        "scope": "cortex-parser"
+        "scope": "cortex-code-analysis"
     })).await;
 
     metrics.code_coverage_after = 89.2;
@@ -1641,7 +1641,7 @@ async fn test_multi_agent_self_improvement() {
 
     let _files = harness.load_cortex_crates(&[
         "cortex-vfs",
-        "cortex-parser",
+        "cortex-code-analysis",
         "cortex-memory"
     ]).await.expect("Failed to load");
 
@@ -1668,9 +1668,9 @@ async fn test_multi_agent_self_improvement() {
         Ok::<_, String>(("Agent 1", 1))
     });
 
-    // Agent 2: Add tests to cortex-parser
+    // Agent 2: Add tests to cortex-code-analysis
     let agent2 = tokio::spawn(async move {
-        println!("  Agent 2: Adding tests to cortex-parser...");
+        println!("  Agent 2: Adding tests to cortex-code-analysis...");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         println!("  Agent 2: Complete - Added 15 tests");
         Ok::<_, String>(("Agent 2", 1))

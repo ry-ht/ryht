@@ -27,7 +27,7 @@
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
 use cortex_memory::types::CodeUnitType;
-use cortex_parser::{RustParser, CodeParser};
+use cortex_code_analysis::{RustParser, CodeParser};
 use cortex_semantic::prelude::*;
 use cortex_semantic::{
     SearchFilter, EntityType, SemanticConfig, VectorStoreBackend,
@@ -578,7 +578,7 @@ async fn test_4_filtering_operations() -> Result<()> {
     let items = vec![
         ("vfs_func", "cortex-vfs", "rust"),
         ("memory_func", "cortex-memory", "rust"),
-        ("parser_func", "cortex-parser", "rust"),
+        ("parser_func", "cortex-code-analysis", "rust"),
         ("vfs_test", "cortex-vfs", "rust"),
         ("memory_test", "cortex-memory", "rust"),
     ];

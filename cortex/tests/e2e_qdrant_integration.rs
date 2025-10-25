@@ -377,7 +377,7 @@ async fn test_1_complete_workflow_with_qdrant() -> Result<()> {
 
     for (file_path, content) in &project_files {
         if file_path.ends_with(".rs") {
-            // In a real scenario, we'd use cortex-parser here
+            // In a real scenario, we'd use cortex-code-analysis here
             // For this test, we create synthetic units
             let unit = SemanticUnit {
                 id: CortexId::new(),

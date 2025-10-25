@@ -34,7 +34,7 @@
 //! cargo test --test '*' test_scale_performance_10k_files
 //! ```
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;

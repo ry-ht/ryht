@@ -56,7 +56,7 @@ test_memory_efficiency_large_files()         // Cache effectiveness
 - ✅ Fork management (create, modify, merge)
 - ✅ Concurrent access (thread-safe operations)
 
-### Code Parser (cortex-parser)
+### Code Parser (cortex-code-analysis)
 - ✅ Rust parsing (functions, structs, traits, modules)
 - ✅ AST extraction (signatures, bodies, docs)
 - ✅ Dependency analysis (imports, calls, uses)

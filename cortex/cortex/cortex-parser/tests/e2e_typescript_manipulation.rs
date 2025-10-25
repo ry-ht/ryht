@@ -1,4 +1,4 @@
-use cortex_parser::{AstEditor, Language};
+use cortex_code_analysis::{AstEditor, Language};
 
 /// Test utilities for TypeScript code verification
 mod test_utils {

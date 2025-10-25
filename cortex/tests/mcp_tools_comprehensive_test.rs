@@ -20,7 +20,7 @@
 use anyhow::Result;
 use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility, Parameter, Complexity};
-use cortex_parser::{CodeParser, Language as ParserLanguage};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage};
 use cortex_semantic::{SemanticSearchEngine, SemanticConfig, SearchFilter};
 use cortex_semantic::types::EntityType;
 use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig};

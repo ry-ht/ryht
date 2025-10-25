@@ -37,7 +37,7 @@
 //! - AST validation: 100% success rate
 //! - Memory usage: <100MB for typical refactoring
 
-use cortex_parser::{CodeParser, Language as ParserLanguage};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage};
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,
 };

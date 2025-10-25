@@ -9,7 +9,7 @@
 
 use cortex_core::types::{CodeUnitType, Language, Visibility};
 use cortex_memory::SemanticMemorySystem;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy,
 };

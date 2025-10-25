@@ -15,7 +15,7 @@
 //! 9. Transaction integrity - ACID properties
 //! 10. Data consistency - Cross-system validation
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
@@ -206,7 +206,7 @@ async fn test_todo_implementation_completeness() {
     println!("\n[2/3] Analyzing TODO criticality...");
 
     // Check for critical TODOs in core modules
-    let critical_modules = vec!["cortex-vfs", "cortex-storage", "cortex-parser"];
+    let critical_modules = vec!["cortex-vfs", "cortex-storage", "cortex-code-analysis"];
     for module in critical_modules {
         let module_todos: Vec<_> = todos
             .items

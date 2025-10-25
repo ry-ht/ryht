@@ -24,7 +24,7 @@ use cortex_core::{
 };
 use cortex_ingestion::prelude::*;
 use cortex_memory::{SemanticMemorySystem, prelude::MemoryQuery};
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,
 };
@@ -48,7 +48,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "cortex-memory",
     "cortex-semantic",
     "cortex-ingestion",
-    "cortex-parser",
+    "cortex-code-analysis",
     "cortex-mcp",
     "cortex-cli",
 ];
@@ -383,7 +383,7 @@ async fn phase2_verify_vfs(ctx: &mut TestContext) -> Result<()> {
     let critical_files = vec![
         "cortex-core/src/types.rs",
         "cortex-vfs/src/virtual_filesystem.rs",
-        "cortex-parser/src/rust_parser.rs",
+        "cortex-code-analysis/src/rust_parser.rs",
         "cortex-memory/src/lib.rs",
         "Cargo.toml",
     ];
@@ -628,10 +628,10 @@ async fn phase5_verify_critical_files(ctx: &mut TestContext) -> Result<()> {
         &["VirtualFileSystem"],
     ).await?;
 
-    // Test: cortex-parser/src/rust_parser.rs should have RustParser
+    // Test: cortex-code-analysis/src/rust_parser.rs should have RustParser
     verify_file_has_types(
         ctx,
-        "cortex-parser/src/rust_parser.rs",
+        "cortex-code-analysis/src/rust_parser.rs",
         &["RustParser"],
     ).await?;
 

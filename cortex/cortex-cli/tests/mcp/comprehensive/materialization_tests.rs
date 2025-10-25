@@ -13,7 +13,7 @@
 //! 7. Rollback scenarios - Handle failures gracefully
 //! 8. Data integrity - Verify no corruption or data loss
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,

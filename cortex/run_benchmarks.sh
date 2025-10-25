@@ -248,7 +248,7 @@ echo "Part 4: Code Manipulation Benchmarks"
 echo "=========================================="
 echo ""
 
-run_benchmark "cortex-parser" "manipulation_performance" "Code Manipulation Performance"
+run_benchmark "cortex-code-analysis" "manipulation_performance" "Code Manipulation Performance"
 
 cat >> "${REPORT_FILE}" << 'EOF'
 ## 4. Code Manipulation Performance

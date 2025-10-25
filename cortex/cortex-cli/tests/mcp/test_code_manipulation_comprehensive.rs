@@ -149,10 +149,10 @@ fn calculate_token_saving(standard: usize, cortex: usize) -> f64 {
 }
 
 /// Validate AST correctness using tree-sitter
-/// NOTE: This is a placeholder - real validation would use cortex-parser
+/// NOTE: This is a placeholder - real validation would use cortex-code-analysis
 async fn validate_ast(_code: &str, _language: &str) -> bool {
     // For now, assume all code is valid
-    // Real implementation would use RustParser/TypeScriptParser from cortex-parser
+    // Real implementation would use RustParser/TypeScriptParser from cortex-code-analysis
     true
 }
 

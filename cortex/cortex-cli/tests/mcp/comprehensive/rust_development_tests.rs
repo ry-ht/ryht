@@ -39,7 +39,7 @@ use cortex_cli::mcp::tools::{
     advanced_testing::*,
 };
 use cortex_memory::SemanticMemorySystem;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, MaterializationEngine, SourceType,

@@ -20,7 +20,7 @@ use cortex_core::id::CortexId;
 use cortex_storage::ConnectionManager;
 use cortex_storage::connection_pool::{DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
-use cortex_parser::{CodeParser, Language as ParserLanguage};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage};
 use std::sync::Arc;
 use uuid::Uuid;
 

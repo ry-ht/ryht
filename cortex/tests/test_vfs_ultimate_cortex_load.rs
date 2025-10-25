@@ -474,7 +474,7 @@ async fn test_navigation_and_tree_walking() {
     }
 
     // Test 3: Check for specific directories
-    let common_dirs = vec!["cortex-core", "cortex-vfs", "cortex-parser", "cortex-memory"];
+    let common_dirs = vec!["cortex-core", "cortex-vfs", "cortex-code-analysis", "cortex-memory"];
     let mut found_dirs = 0;
 
     for dir_name in &common_dirs {
@@ -496,7 +496,7 @@ async fn test_navigation_and_tree_walking() {
     let deep_paths = vec![
         "cortex-vfs/src/lib.rs",
         "cortex-core/src/lib.rs",
-        "cortex-parser/src/lib.rs",
+        "cortex-code-analysis/src/lib.rs",
     ];
 
     let mut found_files = 0;

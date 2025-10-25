@@ -401,7 +401,7 @@ To add new refactoring scenarios:
 
 - [Cortex MCP Tools Documentation](../cortex-cli/src/mcp/tools/README.md)
 - [VFS Design](../cortex-vfs/README.md)
-- [Code Parser](../cortex-parser/README.md)
+- [Code Parser](../cortex-code-analysis/README.md)
 - [Real-World Development Tests](./test_real_world_development.rs)
 
 ## Contact

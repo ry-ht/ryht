@@ -19,7 +19,7 @@ use cortex_memory::{
     WorkingMemorySystem, ProceduralMemorySystem, MemoryConsolidator,
 };
 use cortex_semantic::{SemanticSearchEngine, SemanticConfig, EmbeddingProviderConfig};
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};

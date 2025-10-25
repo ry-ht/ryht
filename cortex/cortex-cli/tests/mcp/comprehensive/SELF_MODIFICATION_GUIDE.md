@@ -295,7 +295,7 @@ Each test has specific success criteria:
 
 ### 1. Real Source Code
 These tests load Cortex's **actual source code**, not mock data. They work with:
-- Real Rust files from cortex-cli, cortex-vfs, cortex-parser, etc.
+- Real Rust files from cortex-cli, cortex-vfs, cortex-code-analysis, etc.
 - Real tree-sitter AST parsing
 - Real semantic graph construction
 

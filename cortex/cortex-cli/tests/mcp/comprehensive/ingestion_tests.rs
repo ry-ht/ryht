@@ -17,7 +17,7 @@ use cortex_vfs::{
     ImportOptions,
 };
 use cortex_memory::{CognitiveManager, SemanticMemorySystem};
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "cortex-core",
     "cortex-ingestion",
     "cortex-memory",
-    "cortex-parser",
+    "cortex-code-analysis",
     "cortex-semantic",
     "cortex-storage",
     "cortex-vfs",

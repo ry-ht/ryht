@@ -32,7 +32,7 @@
 //! - Performance within acceptable bounds (<30 seconds)
 
 use cortex_ingestion::ingestion::IngestionManager;
-use cortex_parser::{CodeParser, ast_editor::{AstEditor, Edit, Position, Range}};
+use cortex_code_analysis::{CodeParser, ast_editor::{AstEditor, Edit, Position, Range}};
 use cortex_storage::ConnectionManager;
 use cortex_storage::connection::ConnectionConfig;
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FlushScope, FlushOptions};

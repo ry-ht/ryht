@@ -1,4 +1,4 @@
-use cortex_parser::{AstEditor, Language};
+use cortex_code_analysis::{AstEditor, Language};
 use std::collections::HashMap;
 
 /// Test utilities for verifying Rust code compilation

@@ -20,7 +20,7 @@
 use cortex_core::prelude::*;
 use cortex_core::types::CodeUnitType;
 use cortex_memory::prelude::*;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,
 };
@@ -453,7 +453,7 @@ async fn test_2_large_codebase_performance() {
 
             let start = Instant::now();
             let mut parser_lock = parser.lock().await;
-            let result = parser_lock.parse_file(file_path.to_string().as_str(), &content_str, cortex_parser::Language::Rust);
+            let result = parser_lock.parse_file(file_path.to_string().as_str(), &content_str, cortex_code_analysis::Language::Rust);
             drop(parser_lock);
             let latency = start.elapsed().as_millis() as u64;
 

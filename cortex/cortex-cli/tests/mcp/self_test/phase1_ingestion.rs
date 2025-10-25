@@ -23,7 +23,7 @@
 //! - Performance within acceptable bounds
 
 use cortex_ingestion::ingestion::IngestionManager;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::ConnectionManager;
 use cortex_storage::connection::ConnectionConfig;
 use cortex_vfs::VirtualFileSystem;
@@ -39,7 +39,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "cortex-core",
     "cortex-ingestion",
     "cortex-memory",
-    "cortex-parser",
+    "cortex-code-analysis",
     "cortex-semantic",
     "cortex-storage",
     "cortex-vfs",
@@ -58,7 +58,7 @@ const MAX_INGESTION_TIME_SECS: u64 = 60;
 const KNOWN_FUNCTIONS: &[&str] = &[
     "cortex_vfs::VirtualFileSystem::new",
     "cortex_storage::ConnectionManager::new",
-    "cortex_parser::CodeParser::new",
+    "cortex_code_analysis::CodeParser::new",
     "cortex_ingestion::ingestion::IngestionManager::new",
 ];
 

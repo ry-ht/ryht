@@ -1,6 +1,6 @@
 //! Integration tests for code navigation tools
 //!
-//! Tests all 10 code navigation tools with REAL data from cortex-parser and semantic memory.
+//! Tests all 10 code navigation tools with REAL data from cortex-code-analysis and semantic memory.
 
 use cortex_core::id::CortexId;
 use cortex_core::types::{

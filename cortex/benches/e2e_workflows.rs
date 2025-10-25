@@ -10,7 +10,7 @@ use cortex_vfs::{
     virtual_filesystem::VirtualFileSystem,
     path::VirtualPath,
 };
-use cortex_parser::{
+use cortex_code_analysis::{
     parser::{Parser, Language},
     ast_editor::AstEditor,
     dependency_extractor::DependencyExtractor,

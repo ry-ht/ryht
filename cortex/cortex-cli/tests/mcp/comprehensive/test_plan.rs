@@ -90,7 +90,7 @@
 // - Load cortex-memory crate
 // - Load cortex-ingestion crate
 // - Load cortex-semantic crate
-// - Load cortex-parser crate
+// - Load cortex-code-analysis crate
 // - Load cortex-cli crate
 // - Build complete dependency graph
 // - Generate all embeddings
@@ -126,7 +126,7 @@ use cortex_vfs::*;
 use cortex_memory::*;
 use cortex_ingestion::*;
 use cortex_semantic::*;
-use cortex_parser::*;
+use cortex_code_analysis::*;
 use cortex_cli::mcp::tools::*;
 
 // Test implementation will be split across multiple files:

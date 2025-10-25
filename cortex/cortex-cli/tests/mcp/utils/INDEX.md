@@ -225,7 +225,7 @@ for lang in [Rust, TypeScript, Python] {
 - `serde_json` - JSON parsing
 - `cortex-storage` - Database
 - `cortex-vfs` - Virtual filesystem
-- `cortex-parser` - Code parsing
+- `cortex-code-analysis` - Code parsing
 - `cortex-memory` - Semantic search
 - `mcp-sdk` - MCP framework
 

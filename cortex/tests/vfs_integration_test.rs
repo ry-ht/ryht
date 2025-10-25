@@ -217,9 +217,9 @@ async fn test_vfs_load_cortex_project() -> Result<()> {
 
     // Parser modules
     let parser_files = vec![
-        ("cortex-parser/src/lib.rs", "pub mod parser;\npub mod ast;"),
-        ("cortex-parser/src/parser.rs", "// Code parser\npub struct CodeParser {}"),
-        ("cortex-parser/src/ast.rs", "// AST types\npub struct ParsedFile {}"),
+        ("cortex-code-analysis/src/lib.rs", "pub mod parser;\npub mod ast;"),
+        ("cortex-code-analysis/src/parser.rs", "// Code parser\npub struct CodeParser {}"),
+        ("cortex-code-analysis/src/ast.rs", "// AST types\npub struct ParsedFile {}"),
     ];
 
     // Memory modules

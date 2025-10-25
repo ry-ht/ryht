@@ -1,7 +1,7 @@
 //! Testing & Validation Tools (10 tools)
 
 use async_trait::async_trait;
-use cortex_parser::{CodeParser, FunctionInfo, Language, ParsedFile};
+use cortex_code_analysis::{CodeParser, FunctionInfo, Language, ParsedFile};
 use cortex_storage::ConnectionManager;
 use mcp_sdk::prelude::*;
 use regex::Regex;
@@ -562,7 +562,7 @@ impl Tool for TestFindMissingTool {
                 }
 
                 // Skip private functions unless requested
-                if !input.include_private && func.visibility == cortex_parser::Visibility::Private {
+                if !input.include_private && func.visibility == cortex_code_analysis::Visibility::Private {
                     continue;
                 }
 
@@ -648,7 +648,7 @@ impl TestAnalyzeCoverageTool {
             if func.attributes.iter().any(|a| a.contains("test")) {
                 continue;
             }
-            if func.visibility == cortex_parser::Visibility::Private {
+            if func.visibility == cortex_code_analysis::Visibility::Private {
                 continue;
             }
 
@@ -1600,7 +1600,7 @@ impl ValidateStyleTool {
 
         // Check missing documentation
         for func in &file.parsed.functions {
-            if func.visibility == cortex_parser::Visibility::Public && func.docstring.is_none() {
+            if func.visibility == cortex_code_analysis::Visibility::Public && func.docstring.is_none() {
                 violations.push(StyleViolation {
                     file_path: file.path.clone(),
                     line: func.start_line as i32,

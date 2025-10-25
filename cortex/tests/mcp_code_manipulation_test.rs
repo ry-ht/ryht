@@ -27,7 +27,7 @@
 use anyhow::Result;
 use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility};
-use cortex_parser::{CodeParser, Language as ParserLanguage, ParsedFile};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage, ParsedFile};
 use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig};
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{VirtualFileSystem, VirtualPath};

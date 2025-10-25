@@ -7,8 +7,8 @@
 //! temp directory and verify all changes are syntactically valid and semantically correct.
 
 use cortex_core::prelude::*;
-use cortex_parser::ast_editor::{AstEditor, Edit, Position, Range, ExtractFunctionResult, OptimizeImportsResult};
-use cortex_parser::CodeParser;
+use cortex_code_analysis::ast_editor::{AstEditor, Edit, Position, Range, ExtractFunctionResult, OptimizeImportsResult};
+use cortex_code_analysis::CodeParser;
 use cortex_memory::SemanticMemorySystem;
 use cortex_storage::connection_pool::{ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::prelude::*;

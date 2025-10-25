@@ -65,9 +65,9 @@ const KNOWN_SYMBOLS: &[KnownSymbol] = &[
     },
     KnownSymbol {
         name: "CodeParser",
-        qualified_name: "cortex_parser::CodeParser",
+        qualified_name: "cortex_code_analysis::CodeParser",
         unit_type: "Struct",
-        file_contains: "cortex-parser/src",
+        file_contains: "cortex-code-analysis/src",
     },
     KnownSymbol {
         name: "SemanticMemorySystem",

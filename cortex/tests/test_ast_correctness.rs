@@ -64,7 +64,7 @@
 //! - JSX parsing requires full module context in tree-sitter-tsx
 //! - These are tree-sitter limitations, not bugs in our AST editor
 
-use cortex_parser::{AstEditor, Language};
+use cortex_code_analysis::{AstEditor, Language};
 use tree_sitter_rust;
 use tree_sitter_typescript;
 
@@ -396,10 +396,10 @@ fn also_keep() {
         let delete_target = functions.iter()
             .find(|f| editor.node_text(f).contains("delete_this"))
             .unwrap();
-        cortex_parser::Range::from_node(delete_target)
+        cortex_code_analysis::Range::from_node(delete_target)
     };
 
-    editor.edits.push(cortex_parser::Edit::delete(delete_range));
+    editor.edits.push(cortex_code_analysis::Edit::delete(delete_range));
     editor.apply_edits().unwrap();
     let output = editor.get_source();
 
@@ -557,10 +557,10 @@ fn process(id: i32) {
     // Manually change the signature by finding and replacing the parameters
     let functions = editor.query("(function_item) @func").unwrap();
     if !functions.is_empty() {
-        let func_range = cortex_parser::Range::from_node(&functions[0]);
+        let func_range = cortex_code_analysis::Range::from_node(&functions[0]);
         let old_text = editor.node_text(&functions[0]).to_string();
         let new_text = old_text.replace("fn process(id: i32)", "fn process(id: i32, name: String)");
-        editor.edits.push(cortex_parser::Edit::replace(func_range, new_text));
+        editor.edits.push(cortex_code_analysis::Edit::replace(func_range, new_text));
     }
 
     editor.apply_edits().unwrap();

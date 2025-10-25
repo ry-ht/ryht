@@ -1343,7 +1343,7 @@ async fn test_parser_rust() -> TestResult {
         passed: true,
         duration_ms: 150,
         message: "Parser tests available".to_string(),
-        details: Some("Run with: cargo test -p cortex-parser".to_string()),
+        details: Some("Run with: cargo test -p cortex-code-analysis".to_string()),
     }
 }
 
@@ -1353,7 +1353,7 @@ async fn test_parser_typescript() -> TestResult {
         passed: true,
         duration_ms: 150,
         message: "Parser tests available".to_string(),
-        details: Some("Run with: cargo test -p cortex-parser".to_string()),
+        details: Some("Run with: cargo test -p cortex-code-analysis".to_string()),
     }
 }
 

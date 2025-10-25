@@ -34,7 +34,7 @@
 
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
-use cortex_parser::{CodeParser, Language, RustParser, DependencyExtractor};
+use cortex_code_analysis::{CodeParser, Language, RustParser, DependencyExtractor};
 use cortex_storage::connection_pool::{
     ConnectionManager, DatabaseConfig, ConnectionMode, Credentials, PoolConfig,
 };

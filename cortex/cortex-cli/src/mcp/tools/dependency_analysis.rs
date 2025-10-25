@@ -136,7 +136,7 @@ impl DependencyAnalysisContext {
     /// Store dependencies extracted from source code
     pub async fn store_dependencies(
         &self,
-        dependencies: Vec<cortex_parser::Dependency>
+        dependencies: Vec<cortex_code_analysis::Dependency>
     ) -> std::result::Result<usize, String> {
         let deps_count = dependencies.len();
         debug!("Storing {} dependencies", deps_count);

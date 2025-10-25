@@ -3,7 +3,7 @@
 //! Provides shared utilities and fixtures for testing code manipulation tools.
 
 use crate::mcp::utils::test_harness::TestHarness;
-use cortex_parser::{CodeParser, Language as ParserLanguage};
+use cortex_code_analysis::{CodeParser, Language as ParserLanguage};
 use mcp_sdk::prelude::*;
 use serde_json::Value;
 use std::sync::Arc;

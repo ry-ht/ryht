@@ -13,7 +13,7 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use cortex_core::error::{CortexError, Result};
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::ConnectionManager;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,

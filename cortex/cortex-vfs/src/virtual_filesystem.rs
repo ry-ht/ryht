@@ -544,7 +544,7 @@ impl VirtualFileSystem {
     /// This method:
     /// 1. Reads the file content from VFS
     /// 2. Detects the language from file extension
-    /// 3. Parses the file using cortex-parser
+    /// 3. Parses the file using cortex-code-analysis
     /// 4. Extracts code units (functions, structs, enums, traits, methods)
     /// 5. Stores/updates code units in semantic memory
     /// 6. Updates VNode metadata with the count of extracted units
@@ -569,7 +569,7 @@ impl VirtualFileSystem {
     /// # use cortex_vfs::{VirtualFileSystem, VirtualPath};
     /// # use cortex_vfs::ingestion::FileIngestionPipeline;
     /// # use cortex_storage::ConnectionManager;
-    /// # use cortex_parser::CodeParser;
+    /// # use cortex_code_analysis::CodeParser;
     /// # use cortex_memory::SemanticMemorySystem;
     /// # use std::sync::Arc;
     /// # async fn example() -> cortex_core::error::Result<()> {

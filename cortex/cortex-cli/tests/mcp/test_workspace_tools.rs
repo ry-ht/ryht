@@ -10,7 +10,7 @@
 //! - Archive and delete operations
 
 use cortex_mcp::tools::workspace::*;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::ConnectionManager;
 use cortex_storage::connection::ConnectionConfig;
 use cortex_vfs::VirtualFileSystem;

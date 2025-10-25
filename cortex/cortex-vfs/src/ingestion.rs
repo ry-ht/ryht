@@ -1,6 +1,6 @@
 //! File ingestion pipeline for code parsing and semantic memory storage.
 //!
-//! This module implements the connection between the parser (cortex-parser),
+//! This module implements the connection between the parser (cortex-code-analysis),
 //! virtual filesystem (cortex-vfs), and semantic memory (cortex-memory).
 //!
 //! # Architecture
@@ -8,7 +8,7 @@
 //! The ingestion pipeline follows these steps:
 //! 1. Read file content from VFS
 //! 2. Detect language from file extension
-//! 3. Parse file with cortex-parser
+//! 3. Parse file with cortex-code-analysis
 //! 4. Convert parsed structures to CodeUnit types
 //! 5. Store code units in semantic memory
 //! 6. Update VNode metadata with units_count
@@ -18,7 +18,7 @@
 //! ```no_run
 //! use cortex_vfs::ingestion::FileIngestionPipeline;
 //! use cortex_vfs::{VirtualFileSystem, VirtualPath};
-//! use cortex_parser::CodeParser;
+//! use cortex_code_analysis::CodeParser;
 //! use cortex_memory::SemanticMemorySystem;
 //! use cortex_storage::ConnectionManager;
 //! use std::sync::Arc;
@@ -50,7 +50,7 @@ use cortex_core::types::{
     Attribute, Complexity, CodeUnitStatus,
 };
 use cortex_memory::SemanticMemorySystem;
-use cortex_parser::{CodeParser, FunctionInfo, StructInfo, EnumInfo, TraitInfo, ImplInfo};
+use cortex_code_analysis::{CodeParser, FunctionInfo, StructInfo, EnumInfo, TraitInfo, ImplInfo};
 use std::sync::Arc;
 use tracing::{debug, info, warn, error};
 use uuid::Uuid;
@@ -164,7 +164,7 @@ impl FileIngestionPipeline {
             });
         }
 
-        // Parse file with cortex-parser
+        // Parse file with cortex-code-analysis
         let parsed_file = {
             let mut parser = self.parser.lock().await;
             match parser.parse_file_auto(&file_path, &content_str) {
@@ -419,7 +419,7 @@ impl FileIngestionPipeline {
             is_virtual: false,
             is_override: false,
             is_final: false,
-            is_exported: matches!(func.visibility, cortex_parser::types::Visibility::Public),
+            is_exported: matches!(func.visibility, cortex_code_analysis::types::Visibility::Public),
             is_default_export: false,
 
             // Metrics
@@ -526,7 +526,7 @@ impl FileIngestionPipeline {
             is_virtual: false,
             is_override: false,
             is_final: false,
-            is_exported: matches!(struct_info.visibility, cortex_parser::types::Visibility::Public),
+            is_exported: matches!(struct_info.visibility, cortex_code_analysis::types::Visibility::Public),
             is_default_export: false,
 
             complexity: Complexity {
@@ -622,7 +622,7 @@ impl FileIngestionPipeline {
             is_virtual: false,
             is_override: false,
             is_final: false,
-            is_exported: matches!(enum_info.visibility, cortex_parser::types::Visibility::Public),
+            is_exported: matches!(enum_info.visibility, cortex_code_analysis::types::Visibility::Public),
             is_default_export: false,
 
             complexity: Complexity {
@@ -718,7 +718,7 @@ impl FileIngestionPipeline {
             is_virtual: false,
             is_override: false,
             is_final: false,
-            is_exported: matches!(trait_info.visibility, cortex_parser::types::Visibility::Public),
+            is_exported: matches!(trait_info.visibility, cortex_code_analysis::types::Visibility::Public),
             is_default_export: false,
 
             complexity: Complexity {
@@ -836,7 +836,7 @@ impl FileIngestionPipeline {
                 is_virtual: false,
                 is_override: false,
                 is_final: false,
-                is_exported: matches!(method.visibility, cortex_parser::types::Visibility::Public),
+                is_exported: matches!(method.visibility, cortex_code_analysis::types::Visibility::Public),
                 is_default_export: false,
 
                 complexity: Complexity {
@@ -882,13 +882,13 @@ impl FileIngestionPipeline {
     // ========================================================================
 
     /// Convert parser visibility to core visibility.
-    fn convert_visibility(vis: cortex_parser::types::Visibility) -> Visibility {
+    fn convert_visibility(vis: cortex_code_analysis::types::Visibility) -> Visibility {
         match vis {
-            cortex_parser::types::Visibility::Public => Visibility::Public,
-            cortex_parser::types::Visibility::PublicCrate => Visibility::Internal,
-            cortex_parser::types::Visibility::PublicSuper => Visibility::Protected,
-            cortex_parser::types::Visibility::PublicIn => Visibility::Package,
-            cortex_parser::types::Visibility::Private => Visibility::Private,
+            cortex_code_analysis::types::Visibility::Public => Visibility::Public,
+            cortex_code_analysis::types::Visibility::PublicCrate => Visibility::Internal,
+            cortex_code_analysis::types::Visibility::PublicSuper => Visibility::Protected,
+            cortex_code_analysis::types::Visibility::PublicIn => Visibility::Package,
+            cortex_code_analysis::types::Visibility::Private => Visibility::Private,
         }
     }
 }

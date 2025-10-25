@@ -18,7 +18,7 @@ cortex-storage = { path = "../cortex-storage" }
 cortex-vfs = { path = "../cortex-vfs" }
 cortex-ingestion = { path = "../cortex-ingestion" }
 cortex-memory = { path = "../cortex-memory" }
-cortex-parser = { path = "../cortex-parser" }
+cortex-code-analysis = { path = "../cortex-code-analysis" }
 cortex-semantic = { path = "../cortex-semantic" }
 
 # MCP SDK Framework

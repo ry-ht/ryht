@@ -16,7 +16,7 @@
 //! - Measures tool performance
 //! - Validates AI-powered features when applicable
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::ConnectionManager;
 use cortex_storage::DatabaseConfig;
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};

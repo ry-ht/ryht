@@ -30,7 +30,7 @@
 //! cargo test --test '*' test_workflow_fix_bug_in_cortex
 //! ```
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
@@ -853,7 +853,7 @@ async fn test_concurrent_multi_agent_modifications() {
 
     let _files = harness.load_cortex_subset(
         workspace_id,
-        &["cortex-vfs", "cortex-parser", "cortex-storage"]
+        &["cortex-vfs", "cortex-code-analysis", "cortex-storage"]
     ).await.expect("Failed to load crates");
 
     // Simulate 3 agents working concurrently
@@ -865,8 +865,8 @@ async fn test_concurrent_multi_agent_modifications() {
     });
 
     let agent2 = tokio::spawn(async move {
-        // Agent 2: Modify cortex-parser
-        println!("  Agent 2: Modifying cortex-parser...");
+        // Agent 2: Modify cortex-code-analysis
+        println!("  Agent 2: Modifying cortex-code-analysis...");
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         Ok::<_, String>(())
     });

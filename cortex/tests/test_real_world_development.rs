@@ -31,7 +31,7 @@ use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig,
 };
 use cortex_vfs::prelude::*;
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_semantic::SemanticSearchEngine;
 use std::collections::HashMap;
 use std::path::Path;

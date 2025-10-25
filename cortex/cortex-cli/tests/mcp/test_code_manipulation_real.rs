@@ -19,7 +19,7 @@
 //! - Measures token efficiency
 
 use cortex_mcp::tools::code_manipulation::*;
-use cortex_parser::{AstEditor, CodeParser, Language, RustParser, TypeScriptParser};
+use cortex_code_analysis::{AstEditor, CodeParser, Language, RustParser, TypeScriptParser};
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig};
 use cortex_vfs::VirtualFileSystem;
 use mcp_sdk::prelude::*;
@@ -144,7 +144,7 @@ async fn create_test_storage() -> Arc<ConnectionManager> {
     )
 }
 
-/// Verify AST is valid using cortex-parser
+/// Verify AST is valid using cortex-code-analysis
 async fn verify_ast_valid(code: &str, language: &str) -> bool {
     match language {
         "rust" => {

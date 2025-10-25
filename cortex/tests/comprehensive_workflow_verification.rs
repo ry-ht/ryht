@@ -10,7 +10,7 @@
 use cortex_core::id::CortexId;
 use cortex_core::types::{CodeUnit, CodeUnitType, Language, Visibility};
 use cortex_memory::semantic::SemanticMemorySystem;
-use cortex_parser::ast_editor::AstEditor;
+use cortex_code_analysis::ast_editor::AstEditor;
 use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy,
 };

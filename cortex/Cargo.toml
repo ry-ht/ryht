@@ -7,7 +7,7 @@ members = [
     "cortex-ingestion",
     "cortex-memory",
     "cortex-semantic",
-    "cortex-parser",
+    "cortex-code-analysis",
     "cortex-cli",
 ]
 
@@ -123,7 +123,7 @@ cortex-vfs = { path = "cortex-vfs" }
 cortex-memory = { path = "cortex-memory" }
 cortex-semantic = { path = "cortex-semantic" }
 cortex-ingestion = { path = "cortex-ingestion" }
-cortex-parser = { path = "cortex-parser" }
+cortex-code-analysis = { path = "cortex-code-analysis" }
 # cortex-mcp = { path = "cortex-mcp" } # Temporarily disabled due to compilation errors
 # cortex-cli = { path = "cortex-cli" } # Temporarily disabled
 

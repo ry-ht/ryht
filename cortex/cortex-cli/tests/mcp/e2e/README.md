@@ -288,7 +288,7 @@ async fn test_workflow_name() {
 - ✅ **Real MCP Tools**: Actual tool implementations, not mocks
 - ✅ **Real File System**: TempDir with actual files
 - ✅ **Real Database**: In-memory SurrealDB instance
-- ✅ **Real Code Parsing**: cortex-parser with tree-sitter
+- ✅ **Real Code Parsing**: cortex-code-analysis with tree-sitter
 - ✅ **Real Test Execution**: Where possible
 
 ### Realistic Projects

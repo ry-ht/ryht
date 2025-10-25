@@ -14,7 +14,7 @@
 //! 8. Multi-agent stress - 10+ concurrent agents
 //! 9. Failure recovery - System resilience
 
-use cortex_parser::CodeParser;
+use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,

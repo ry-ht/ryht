@@ -456,7 +456,7 @@ The test infrastructure integrates with:
 - **serde_json**: JSON parsing and manipulation
 - **cortex-storage**: In-memory database
 - **cortex-vfs**: Virtual filesystem
-- **cortex-parser**: Code parsing
+- **cortex-code-analysis**: Code parsing
 - **cortex-memory**: Semantic search
 - **mcp-sdk**: MCP tool framework
 

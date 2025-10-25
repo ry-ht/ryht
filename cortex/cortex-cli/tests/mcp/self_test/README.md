@@ -152,7 +152,7 @@ STARTING PHASE 1: COMPLETE CORTEX SELF-INGESTION
     - cortex-core
     - cortex-ingestion
     - cortex-memory
-    - cortex-parser
+    - cortex-code-analysis
     - cortex-semantic
     - cortex-storage
     - cortex-vfs
@@ -176,7 +176,7 @@ STARTING PHASE 1: COMPLETE CORTEX SELF-INGESTION
 [7/9] Verifying known functions are findable...
   ✓ Found: cortex_vfs::VirtualFileSystem::new
   ✓ Found: cortex_storage::ConnectionManager::new
-  ✓ Found: cortex_parser::CodeParser::new
+  ✓ Found: cortex_code_analysis::CodeParser::new
   ✓ Found: cortex_ingestion::ingestion::IngestionManager::new
 
 [8/9] Verifying language detection...
@@ -223,7 +223,7 @@ Found Crates:         8 (100.0%)
   ✓ cortex-core
   ✓ cortex-ingestion
   ✓ cortex-memory
-  ✓ cortex-parser
+  ✓ cortex-code-analysis
   ✓ cortex-semantic
   ✓ cortex-storage
   ✓ cortex-vfs

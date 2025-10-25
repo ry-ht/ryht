@@ -27,7 +27,7 @@
 use cortex_core::prelude::*;
 use cortex_memory::prelude::*;
 use cortex_memory::types::CodeUnitType;
-use cortex_parser::{CodeParser, Language, RustParser, DependencyExtractor};
+use cortex_code_analysis::{CodeParser, Language, RustParser, DependencyExtractor};
 use cortex_semantic::prelude::*;
 use cortex_semantic::{SearchFilter, EntityType, SemanticConfig, VectorStoreBackend};
 use cortex_storage::connection_pool::{

@@ -7,7 +7,7 @@
 //! 4. Run various analysis tools
 
 use cortex_core::config::GlobalConfig;
-use cortex_parser::{RustParser, DependencyExtractor};
+use cortex_code_analysis::{RustParser, DependencyExtractor};
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, PoolConnectionMode};
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -68,19 +68,19 @@ async fn test_dependency_extraction() {
 
     // Check for imports
     let import_deps: Vec<_> = dependencies.iter()
-        .filter(|d| matches!(d.dep_type, cortex_parser::DependencyType::Imports))
+        .filter(|d| matches!(d.dep_type, cortex_code_analysis::DependencyType::Imports))
         .collect();
     println!("Found {} import dependencies", import_deps.len());
 
     // Check for function calls
     let call_deps: Vec<_> = dependencies.iter()
-        .filter(|d| matches!(d.dep_type, cortex_parser::DependencyType::Calls))
+        .filter(|d| matches!(d.dep_type, cortex_code_analysis::DependencyType::Calls))
         .collect();
     println!("Found {} call dependencies", call_deps.len());
 
     // Check for type usage
     let type_deps: Vec<_> = dependencies.iter()
-        .filter(|d| matches!(d.dep_type, cortex_parser::DependencyType::UsesType))
+        .filter(|d| matches!(d.dep_type, cortex_code_analysis::DependencyType::UsesType))
         .collect();
     println!("Found {} type dependencies", type_deps.len());
 

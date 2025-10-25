@@ -1,4 +1,4 @@
-use cortex_parser::{AstEditor, Language};
+use cortex_code_analysis::{AstEditor, Language};
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
 use std::collections::HashMap;
 
