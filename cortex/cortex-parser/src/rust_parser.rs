@@ -450,10 +450,10 @@ impl RustParser {
     fn extract_supertraits(&self, node: Node, source: &str) -> Vec<String> {
         let mut supertraits = Vec::new();
 
-        // Look for trait_bounds field which contains the supertraits
-        if let Some(trait_bounds) = node.child_by_field_name("trait_bounds") {
-            let mut cursor = trait_bounds.walk();
-            for child in trait_bounds.children(&mut cursor) {
+        // Look for bounds field which contains the trait_bounds node
+        if let Some(bounds) = node.child_by_field_name("bounds") {
+            let mut cursor = bounds.walk();
+            for child in bounds.children(&mut cursor) {
                 match child.kind() {
                     "type_identifier" => {
                         // Simple trait name like "Base" or "Clone"
@@ -477,12 +477,8 @@ impl RustParser {
                         supertraits.push(child.text(source).to_string());
                     }
                     _ => {
-                        // Handle other possible node types
-                        let text = child.text(source);
                         // Skip operators like '+' and ':'
-                        if !text.trim().is_empty() && text != "+" && text != ":" {
-                            supertraits.push(text.to_string());
-                        }
+                        // These are separate nodes in the AST
                     }
                 }
             }
