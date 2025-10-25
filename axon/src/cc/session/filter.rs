@@ -29,8 +29,8 @@ use regex::Regex;
 use crate::cc::result::Result;
 use crate::cc::messages::Message;
 
-use crate::cc::discovery::{list_projects, list_sessions, load_session_history};
-use crate::cc::types::Session;
+use super::discovery::{list_projects, list_sessions, load_session_history};
+use super::types::Session;
 
 /// Sort order for sessions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -413,7 +413,7 @@ fn extract_message_content(message: &Message) -> String {
                 .content
                 .iter()
                 .filter_map(|block| {
-                    if let crate::messages::ContentBlock::Text(text_content) = block {
+                    if let crate::cc::messages::ContentBlock::Text(text_content) = block {
                         Some(text_content.text.clone())
                     } else {
                         None

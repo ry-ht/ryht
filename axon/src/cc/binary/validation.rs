@@ -22,8 +22,8 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use crate::cc::env::get_claude_version;
-use crate::cc::version::Version;
+use super::env::get_claude_version;
+use super::version::Version;
 
 /// Result of binary health check.
 ///

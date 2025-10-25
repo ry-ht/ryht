@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use crate::cc::discovery::ClaudeInstallation;
+use super::discovery::ClaudeInstallation;
 
 /// Re-export generic cache types for backward compatibility and convenience
 pub use crate::cc::cache::{CachedEntry, CacheConfig};

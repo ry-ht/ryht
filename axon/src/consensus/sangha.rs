@@ -49,6 +49,10 @@ impl ConsensusStrategy for SanghaConsensus {
         self.min_participation
     }
 
+    fn supports_multiple_rounds(&self) -> bool {
+        true
+    }
+
     fn evaluate_votes(&self, votes: Vec<Vote>) -> Result<ConsensusResult> {
         let harmony = self.calculate_harmony(&votes);
 

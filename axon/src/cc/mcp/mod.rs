@@ -182,13 +182,13 @@ impl From<McpError> for Error {
                 // Map mcp-sdk transport errors to cc-sdk transport errors
                 match transport_err {
                     mcp_sdk::error::TransportError::Io(io_err) => {
-                        Error::Transport(crate::error::TransportError::Io(io_err))
+                        Error::Transport(crate::cc::error::TransportError::Io(io_err))
                     }
                     mcp_sdk::error::TransportError::Closed => {
-                        Error::Transport(crate::error::TransportError::Closed)
+                        Error::Transport(crate::cc::error::TransportError::Closed)
                     }
                     mcp_sdk::error::TransportError::InvalidMessage(msg) => {
-                        Error::Transport(crate::error::TransportError::InvalidMessage {
+                        Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                             reason: msg.clone(),
                             raw: msg,
                         })

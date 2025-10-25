@@ -17,8 +17,8 @@
 //! }
 //! ```
 
-use crate::cc::discovery::ClaudeInstallation;
-use crate::cc::version::Version;
+use super::discovery::ClaudeInstallation;
+use super::version::Version;
 
 /// Scored installation with credibility metrics.
 ///

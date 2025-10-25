@@ -246,8 +246,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
-            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
-            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::cc::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::cc::streaming::OutputBuffer::new()),
         });
 
         Ok(ClaudeClientBuilder {
@@ -279,8 +279,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
-            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
-            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::cc::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::cc::streaming::OutputBuffer::new()),
         });
 
         ClaudeClientBuilder {
@@ -614,14 +614,14 @@ impl ClaudeClientBuilder<WithBinary> {
             .expect("Builder should have unique access to inner");
 
         let mut options = inner.options.take().unwrap_or_default();
-        options.system_prompt = Some(crate::options::SystemPrompt::String(prompt.into()));
+        options.system_prompt = Some(crate::cc::options::SystemPrompt::String(prompt.into()));
         inner.options = Some(options);
 
         self
     }
 
     /// Set the system prompt using the SystemPrompt enum.
-    pub fn system_prompt_with(mut self, prompt: crate::options::SystemPrompt) -> Self {
+    pub fn system_prompt_with(mut self, prompt: crate::cc::options::SystemPrompt) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1063,7 +1063,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn output_format(mut self, format: crate::options::OutputFormat) -> Self {
+    pub fn output_format(mut self, format: crate::cc::options::OutputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1092,7 +1092,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn input_format(mut self, format: crate::options::InputFormat) -> Self {
+    pub fn input_format(mut self, format: crate::cc::options::InputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1881,7 +1881,7 @@ impl ClaudeClient<Connected> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn list_project_sessions(&self) -> Result<Vec<crate::session::Session>> {
+    pub async fn list_project_sessions(&self) -> Result<Vec<crate::cc::session::Session>> {
         use crate::cc::session;
 
         // Get the working directory from options
@@ -2416,7 +2416,7 @@ mod tests {
         assert_eq!(options.max_turns, Some(20));
         assert!(matches!(
             options.system_prompt,
-            Some(crate::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
+            Some(crate::cc::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
         ));
     }
 

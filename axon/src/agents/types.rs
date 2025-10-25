@@ -98,7 +98,7 @@ pub enum AgentStatus {
 }
 
 /// Runtime metrics for agent performance
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AgentMetrics {
     /// Total tasks completed
     pub tasks_completed: AtomicU64,

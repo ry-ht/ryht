@@ -246,7 +246,7 @@ impl SessionMetrics {
 
                 // Count tool uses in assistant messages
                 for content in &message.content {
-                    if let crate::messages::ContentBlock::ToolUse(_) = content {
+                    if let crate::cc::messages::ContentBlock::ToolUse(_) = content {
                         self.tool_use_count += 1;
                     }
                 }

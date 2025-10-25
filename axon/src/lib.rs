@@ -31,9 +31,9 @@ pub mod quality;
 
 // Re-export key types from cc module for backward compatibility
 pub use cc::{
-    client::Client,
-    error::Error,
-    result::Result,
+    ClaudeClient,
+    Error,
+    Result,
     prelude::*,
 };
 

@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 
-use crate::cc::types::{Project, Session};
+use super::types::{Project, Session};
 
 /// Re-export generic cache types for backward compatibility and convenience
 pub use crate::cc::cache::{CachedEntry, CacheConfig};

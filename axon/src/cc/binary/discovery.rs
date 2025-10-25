@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::OnceLock;
 
-use crate::cc::cache;
-use crate::cc::env::get_claude_version;
-use crate::cc::version::compare_versions;
+use super::cache;
+use super::env::get_claude_version;
+use super::version::compare_versions;
 
 /// Type of Claude installation source.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

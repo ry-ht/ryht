@@ -10,7 +10,7 @@ use serde_json;
 use crate::cc::error::{Error, SettingsError};
 use crate::cc::result::Result;
 
-use crate::cc::types::{ClaudeSettings, SettingsScope};
+use super::types::{ClaudeSettings, SettingsScope};
 
 /// Load settings from multiple scopes with precedence.
 ///

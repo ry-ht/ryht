@@ -284,7 +284,7 @@ pub enum SessionError {
     #[error("Session not found: {session_id}")]
     NotFound {
         /// Session ID that was not found
-        session_id: crate::core::SessionId,
+        session_id: crate::cc::core::SessionId,
     },
 
     /// I/O error during session operations.
@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn test_session_error_not_found() {
         let error = SessionError::NotFound {
-            session_id: crate::core::SessionId::new("test-session"),
+            session_id: crate::cc::core::SessionId::new("test-session"),
         };
         assert!(error.to_string().contains("test-session"));
     }
@@ -792,7 +792,7 @@ mod tests {
             }),
             Error::Transport(TransportError::Closed),
             Error::Session(SessionError::NotFound {
-                session_id: crate::core::SessionId::new("test"),
+                session_id: crate::cc::core::SessionId::new("test"),
             }),
             Error::Settings(SettingsError::FileNotFound {
                 path: PathBuf::from("test"),

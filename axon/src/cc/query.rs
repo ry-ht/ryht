@@ -138,7 +138,7 @@ pub async fn query(
             // - Bidirectional communication channel management
             // - Input stream to CLI stdin forwarding
             // For now, use ClaudeClient for interactive bidirectional communication.
-            Err(crate::error::Error::Client(crate::error::ClientError::NotSupported {
+            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotSupported {
                 feature: "Streaming input mode not yet implemented. Use ClaudeClient for bidirectional streaming.".into(),
             }))
         }
@@ -156,7 +156,7 @@ async fn query_print_mode(
     use tokio::process::Command;
     use tokio::sync::Mutex;
 
-    let cli_path = crate::transport::subprocess::find_claude_cli()?;
+    let cli_path = crate::cc::transport::subprocess::find_claude_cli()?;
     let mut cmd = Command::new(&cli_path);
 
     // Build command with --print mode
@@ -166,10 +166,10 @@ async fn query_print_mode(
     // Add all options to match Python SDK exactly
     if let Some(ref prompt) = options.system_prompt {
         match prompt {
-            crate::options::SystemPrompt::String(s) => {
+            crate::cc::options::SystemPrompt::String(s) => {
                 cmd.arg("--system-prompt").arg(s);
             }
-            crate::options::SystemPrompt::Preset { preset, append, .. } => {
+            crate::cc::options::SystemPrompt::Preset { preset, append, .. } => {
                 cmd.arg("--system-prompt-preset").arg(preset);
                 if let Some(append_text) = append {
                     cmd.arg("--append-system-prompt").arg(append_text);
@@ -276,7 +276,7 @@ async fn query_print_mode(
     debug!("Command: {:?}", cmd);
 
     let mut child = cmd.spawn().map_err(|e| {
-        crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
+        crate::cc::error::Error::Binary(crate::cc::error::BinaryError::SpawnFailed {
             path: cli_path.clone(),
             reason: format!("Failed to spawn process: {}", e),
             source: e,
@@ -286,11 +286,11 @@ async fn query_print_mode(
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
+        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdout".into())))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
+        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
     // Wrap child process in Arc<Mutex> for shared ownership
     let child = Arc::new(Mutex::new(child));
@@ -328,7 +328,7 @@ async fn query_print_mode(
             // Parse JSON line
             match serde_json::from_str::<serde_json::Value>(&line) {
                 Ok(json) => {
-                    match crate::message_parser::parse_message(json) {
+                    match crate::cc::message_parser::parse_message(json) {
                         Ok(Some(message)) => {
                             if tx.send(Ok(message)).await.is_err() {
                                 break;
@@ -356,14 +356,14 @@ async fn query_print_mode(
             Ok(status) => {
                 if !status.success() {
                     let _ = tx
-                        .send(Err(crate::error::Error::Transport(crate::error::TransportError::ProcessExited {
+                        .send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::ProcessExited {
                             code: status.code(),
                         })))
                         .await;
                 }
             }
             Err(e) => {
-                let _ = tx.send(Err(crate::error::Error::Transport(crate::error::TransportError::Io(e)))).await;
+                let _ = tx.send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::Io(e)))).await;
             }
         }
     });

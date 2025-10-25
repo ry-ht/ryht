@@ -15,7 +15,7 @@ use crate::cc::error::{Error, SessionError};
 use crate::cc::result::Result;
 use crate::cc::messages::Message;
 
-use crate::cc::types::{Project, Session, SessionMetadata};
+use super::types::{Project, Session, SessionMetadata};
 
 /// Get the Claude configuration directory.
 ///

@@ -34,9 +34,9 @@ use crate::cc::error::{Error, SessionError};
 use crate::cc::result::Result;
 use crate::cc::messages::Message;
 
-use crate::cc::discovery::{get_projects_dir, list_projects};
-use crate::cc::types::{Project, Session};
-use crate::cc::cache;
+use super::discovery::{get_projects_dir, list_projects};
+use super::types::{Project, Session};
+use super::cache;
 
 /// Options for creating a new session.
 #[derive(Debug, Clone)]
@@ -250,7 +250,7 @@ pub async fn update_session_metadata(
     session_id: &SessionId,
     metadata: serde_json::Value,
 ) -> Result<()> {
-    use crate::cc::discovery::{list_projects, list_sessions};
+    use super::discovery::{list_projects, list_sessions};
     use tokio::fs;
 
     // Find the session across all projects
@@ -266,7 +266,7 @@ pub async fn update_session_metadata(
     }
 
     let session = session.ok_or_else(|| {
-        Error::Session(crate::error::SessionError::NotFound {
+        Error::Session(crate::cc::error::SessionError::NotFound {
             session_id: session_id.clone(),
         })
     })?;
@@ -278,7 +278,7 @@ pub async fn update_session_metadata(
     // Read existing metadata or create new
     let mut existing_metadata = if metadata_path.exists() {
         let content = fs::read_to_string(&metadata_path).await.map_err(|e| {
-            Error::Session(crate::error::SessionError::IoError(e))
+            Error::Session(crate::cc::error::SessionError::IoError(e))
         })?;
         serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}))
     } else {
@@ -294,7 +294,7 @@ pub async fn update_session_metadata(
 
     // Write updated metadata
     let metadata_content = serde_json::to_string_pretty(&existing_metadata).map_err(|e| {
-        Error::Session(crate::error::SessionError::ParseError(
+        Error::Session(crate::cc::error::SessionError::ParseError(
             format!("Failed to serialize metadata: {}", e)
         ))
     })?;
@@ -302,7 +302,7 @@ pub async fn update_session_metadata(
     fs::write(&metadata_path, metadata_content)
         .await
         .map_err(|e| {
-            Error::Session(crate::error::SessionError::IoError(e))
+            Error::Session(crate::cc::error::SessionError::IoError(e))
         })?;
 
     // Clear cache to ensure next read gets updated data

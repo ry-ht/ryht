@@ -20,7 +20,7 @@ pub fn parse_message(json: Value) -> Result<Option<Message>> {
     let msg_type = json
         .get("type")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::Transport(crate::error::TransportError::InvalidMessage {
+        .ok_or_else(|| Error::Transport(crate::cc::error::TransportError::InvalidMessage {
             reason: "Missing 'type' field".to_string(),
             raw: json.to_string(),
         }))?;
@@ -41,7 +41,7 @@ pub fn parse_message(json: Value) -> Result<Option<Message>> {
 fn parse_user_message(json: Value) -> Result<Option<Message>> {
     let message = json
         .get("message")
-        .ok_or_else(|| Error::Transport(crate::error::TransportError::InvalidMessage {
+        .ok_or_else(|| Error::Transport(crate::cc::error::TransportError::InvalidMessage {
             reason: "Missing 'message' field".to_string(),
             raw: json.to_string(),
         }))?;
@@ -56,7 +56,7 @@ fn parse_user_message(json: Value) -> Result<Option<Message>> {
         debug!("Skipping user message with array content (likely tool result)");
         return Ok(None);
     } else {
-        return Err(Error::Transport(crate::error::TransportError::InvalidMessage {
+        return Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage {
             reason: "Missing or invalid 'content' field".to_string(),
             raw: json.to_string(),
         }));
@@ -71,7 +71,7 @@ fn parse_user_message(json: Value) -> Result<Option<Message>> {
 fn parse_assistant_message(json: Value) -> Result<Option<Message>> {
     let message = json
         .get("message")
-        .ok_or_else(|| Error::Transport(crate::error::TransportError::InvalidMessage {
+        .ok_or_else(|| Error::Transport(crate::cc::error::TransportError::InvalidMessage {
             reason: "Missing 'message' field".to_string(),
             raw: json.to_string(),
         }))?;
@@ -79,7 +79,7 @@ fn parse_assistant_message(json: Value) -> Result<Option<Message>> {
     let content_array = message
         .get("content")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| Error::Transport(crate::error::TransportError::InvalidMessage {
+        .ok_or_else(|| Error::Transport(crate::cc::error::TransportError::InvalidMessage {
             reason: "Missing or invalid 'content' array".to_string(),
             raw: json.to_string(),
         }))?;
@@ -106,7 +106,7 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
         match block_type {
             "text" => {
                 let text = json.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Transport(crate::error::TransportError::InvalidMessage {
+                    Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                         reason: "Missing 'text' field in text block".to_string(),
                         raw: json.to_string(),
                     })
@@ -117,13 +117,13 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
             }
             "thinking" => {
                 let thinking = json.get("thinking").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Transport(crate::error::TransportError::InvalidMessage {
+                    Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                         reason: "Missing 'thinking' field in thinking block".to_string(),
                         raw: json.to_string(),
                     })
                 })?;
                 let signature = json.get("signature").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Transport(crate::error::TransportError::InvalidMessage {
+                    Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                         reason: "Missing 'signature' field in thinking block".to_string(),
                         raw: json.to_string(),
                     })
@@ -135,13 +135,13 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
             }
             "tool_use" => {
                 let id = json.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Transport(crate::error::TransportError::InvalidMessage {
+                    Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                         reason: "Missing 'id' field in tool_use block".to_string(),
                         raw: json.to_string(),
                     })
                 })?;
                 let name = json.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Transport(crate::error::TransportError::InvalidMessage {
+                    Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                         reason: "Missing 'name' field in tool_use block".to_string(),
                         raw: json.to_string(),
                     })
@@ -162,7 +162,7 @@ fn parse_content_block(json: &Value) -> Result<Option<ContentBlock>> {
                     .get("tool_use_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| {
-                        Error::Transport(crate::error::TransportError::InvalidMessage {
+                        Error::Transport(crate::cc::error::TransportError::InvalidMessage {
                             reason: "Missing 'tool_use_id' field in tool_result block".to_string(),
                             raw: json.to_string(),
                         })
@@ -443,7 +443,7 @@ mod tests {
         let result = parse_message(json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'type' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing type field"),
@@ -471,7 +471,7 @@ mod tests {
         let result = parse_message(json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'message' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing message field"),
@@ -491,7 +491,7 @@ mod tests {
         let result = parse_message(json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing or invalid 'content' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing content field"),
@@ -529,7 +529,7 @@ mod tests {
         let result = parse_message(json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'message' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing message field"),
@@ -549,7 +549,7 @@ mod tests {
         let result = parse_message(json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing or invalid 'content' array"));
             }
             _ => panic!("Expected InvalidMessage error for missing content array"),
@@ -580,7 +580,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'text' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing text field"),
@@ -598,7 +598,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'thinking' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing thinking field"),
@@ -616,7 +616,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'signature' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing signature field"),
@@ -634,7 +634,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'id' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing id field"),
@@ -652,7 +652,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'name' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing name field"),
@@ -691,7 +691,7 @@ mod tests {
         let result = parse_content_block(&json);
         assert!(result.is_err());
         match result {
-            Err(Error::Transport(crate::error::TransportError::InvalidMessage { reason, .. })) => {
+            Err(Error::Transport(crate::cc::error::TransportError::InvalidMessage { reason, .. })) => {
                 assert!(reason.contains("Missing 'tool_use_id' field"));
             }
             _ => panic!("Expected InvalidMessage error for missing tool_use_id field"),

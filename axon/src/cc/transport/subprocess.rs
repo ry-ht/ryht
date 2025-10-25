@@ -3,8 +3,8 @@
 //! This module implements the Transport trait using a subprocess to run the Claude CLI.
 
 use super::{InputMessage, Transport, TransportState};
-use super::{
-    Result,
+use crate::cc::{
+    result::Result,
     messages::Message,
     options::ClaudeCodeOptions,
     permissions::PermissionMode,
@@ -189,9 +189,9 @@ impl SubprocessTransport {
 
         // Output format
         let output_format_str = match self.options.output_format {
-            crate::options::OutputFormat::Text => "text",
-            crate::options::OutputFormat::Json => "json",
-            crate::options::OutputFormat::StreamJson => "stream-json",
+            crate::cc::options::OutputFormat::Text => "text",
+            crate::cc::options::OutputFormat::Json => "json",
+            crate::cc::options::OutputFormat::StreamJson => "stream-json",
         };
         cmd.arg("--output-format").arg(output_format_str);
 
@@ -201,8 +201,8 @@ impl SubprocessTransport {
         // Input format (only for non-print mode)
         if !self.options.print_mode {
             let input_format_str = match self.options.input_format {
-                crate::options::InputFormat::Text => "text",
-                crate::options::InputFormat::StreamJson => "stream-json",
+                crate::cc::options::InputFormat::Text => "text",
+                crate::cc::options::InputFormat::StreamJson => "stream-json",
             };
             cmd.arg("--input-format").arg(input_format_str);
         }
@@ -260,10 +260,10 @@ impl SubprocessTransport {
         // System prompts
         if let Some(ref prompt) = self.options.system_prompt {
             match prompt {
-                crate::options::SystemPrompt::String(s) => {
+                crate::cc::options::SystemPrompt::String(s) => {
                     cmd.arg("--system-prompt").arg(s);
                 }
-                crate::options::SystemPrompt::Preset { preset, append, .. } => {
+                crate::cc::options::SystemPrompt::Preset { preset, append, .. } => {
                     // Use preset-based prompt
                     cmd.arg("--system-prompt-preset").arg(preset);
 
@@ -369,7 +369,7 @@ impl SubprocessTransport {
         // Setting sources (comma-separated)
         if let Some(ref sources) = self.options.setting_sources
             && !sources.is_empty() {
-                let value = sources.iter().map(|s| (match s { crate::options::SettingSource::User => "user", crate::options::SettingSource::Project => "project", crate::options::SettingSource::Local => "local" }).to_string()).collect::<Vec<_>>().join(",");
+                let value = sources.iter().map(|s| (match s { crate::cc::options::SettingSource::User => "user", crate::cc::options::SettingSource::Project => "project", crate::cc::options::SettingSource::Local => "local" }).to_string()).collect::<Vec<_>>().join(",");
                 cmd.arg("--setting-sources").arg(value);
             }
 
@@ -484,7 +484,7 @@ impl SubprocessTransport {
 
         let mut child = cmd.spawn().map_err(|e| {
             error!("Failed to spawn Claude CLI: {}", e);
-            crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
+            crate::cc::error::Error::Binary(crate::cc::error::BinaryError::SpawnFailed {
                 path: self.cli_path.clone(),
                 reason: format!("Failed to spawn process: {}", e),
                 source: e,
@@ -495,15 +495,15 @@ impl SubprocessTransport {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdin".into())))?;
+            .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdin".into())))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
+            .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdout".into())))?;
         let stderr = child
             .stderr
             .take()
-            .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
+            .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
         // Determine buffer size from options or use default
         let buffer_size = self.options.cli_channel_buffer_size.unwrap_or(CHANNEL_BUFFER_SIZE);
@@ -627,7 +627,7 @@ impl SubprocessTransport {
                         }
 
                         // Try to parse as a regular message
-                        match crate::message_parser::parse_message(json) {
+                        match crate::cc::message_parser::parse_message(json) {
                             Ok(Some(message)) => {
                                 // Use broadcast send which doesn't fail if no receivers
                                 let _ = message_broadcast_tx_clone.send(message);
@@ -735,11 +735,11 @@ impl Transport for SubprocessTransport {
 
     async fn send_message(&mut self, message: InputMessage) -> Result<()> {
         if self.state != TransportState::Connected {
-            return Err(crate::error::Error::Client(crate::error::ClientError::NotConnected));
+            return Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected));
         }
 
         let json = serde_json::to_string(&message)
-            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
+            .map_err(|e| crate::cc::error::Error::Transport(crate::cc::error::TransportError::Json(e)))?;
         debug!("Serialized message: {}", json);
 
         if let Some(ref tx) = self.stdin_tx {
@@ -748,7 +748,7 @@ impl Transport for SubprocessTransport {
             debug!("Message sent to channel");
             Ok(())
         } else {
-            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
+            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected))
         }
     }
 
@@ -777,7 +777,7 @@ impl Transport for SubprocessTransport {
 
     async fn send_control_request(&mut self, request: ControlRequest) -> Result<()> {
         if self.state != TransportState::Connected {
-            return Err(crate::error::Error::Client(crate::error::ClientError::NotConnected));
+            return Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected));
         }
 
         self.request_counter += 1;
@@ -794,13 +794,13 @@ impl Transport for SubprocessTransport {
         };
 
         let json = serde_json::to_string(&control_msg)
-            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
+            .map_err(|e| crate::cc::error::Error::Transport(crate::cc::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
+            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected))
         }
     }
 
@@ -816,13 +816,13 @@ impl Transport for SubprocessTransport {
         // The request is already properly formatted as {"type": "control_request", ...}
         // Just send it directly without wrapping
         let json = serde_json::to_string(&request)
-            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
+            .map_err(|e| crate::cc::error::Error::Transport(crate::cc::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
+            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected))
         }
     }
 
@@ -835,13 +835,13 @@ impl Transport for SubprocessTransport {
         });
 
         let json = serde_json::to_string(&control_response)
-            .map_err(|e| crate::error::Error::Transport(crate::error::TransportError::Json(e)))?;
+            .map_err(|e| crate::cc::error::Error::Transport(crate::cc::error::TransportError::Json(e)))?;
 
         if let Some(ref tx) = self.stdin_tx {
             tx.send(json).await?;
             Ok(())
         } else {
-            Err(crate::error::Error::Client(crate::error::ClientError::NotConnected))
+            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotConnected))
         }
     }
 
@@ -902,7 +902,7 @@ pub(crate) fn find_claude_cli() -> Result<PathBuf> {
     }
 
     // Check common installation locations
-    let home = dirs::home_dir().ok_or_else(|| crate::error::Error::Binary(crate::error::BinaryError::NotFound {
+    let home = dirs::home_dir().ok_or_else(|| crate::cc::error::Error::Binary(crate::cc::error::BinaryError::NotFound {
         searched_paths: vec![],
     }))?;
 
@@ -941,12 +941,12 @@ pub(crate) fn find_claude_cli() -> Result<PathBuf> {
     // Check if Node.js is installed
     if which::which("node").is_err() && which::which("npm").is_err() {
         error!("Node.js/npm not found - Claude CLI requires Node.js");
-        return Err(crate::error::Error::Binary(crate::error::BinaryError::NotFound {
+        return Err(crate::cc::error::Error::Binary(crate::cc::error::BinaryError::NotFound {
             searched_paths: searched.into_iter().map(PathBuf::from).collect(),
         }));
     }
 
-    Err(crate::error::Error::Binary(crate::error::BinaryError::NotFound {
+    Err(crate::cc::error::Error::Binary(crate::cc::error::BinaryError::NotFound {
         searched_paths: searched.into_iter().map(PathBuf::from).collect(),
     }))
 }
@@ -958,7 +958,7 @@ mod tests {
     #[test]
     fn test_find_claude_cli_error_message() {
         // Test error message format without relying on CLI not being found
-        let error = crate::error::Error::Binary(crate::error::BinaryError::NotFound {
+        let error = crate::cc::error::Error::Binary(crate::cc::error::BinaryError::NotFound {
             searched_paths: vec![PathBuf::from("/test/path1"), PathBuf::from("/test/path2")],
         });
         let error_msg = error.to_string();
@@ -1062,7 +1062,7 @@ mod tests {
     fn test_build_command_output_formats() {
         // Test text output format
         let mut options = ClaudeCodeOptions::default();
-        options.output_format = crate::options::OutputFormat::Text;
+        options.output_format = crate::cc::options::OutputFormat::Text;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1071,7 +1071,7 @@ mod tests {
 
         // Test JSON output format
         let mut options = ClaudeCodeOptions::default();
-        options.output_format = crate::options::OutputFormat::Json;
+        options.output_format = crate::cc::options::OutputFormat::Json;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1091,7 +1091,7 @@ mod tests {
     fn test_build_command_input_formats() {
         // Test text input format
         let mut options = ClaudeCodeOptions::default();
-        options.input_format = crate::options::InputFormat::Text;
+        options.input_format = crate::cc::options::InputFormat::Text;
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
         let cmd = transport.build_command();
         let cmd_str = format!("{:?}", cmd);
@@ -1112,8 +1112,8 @@ mod tests {
         // Test combining multiple CLI features
         let mut options = ClaudeCodeOptions::default();
         options.debug_mode = Some("api".to_string());
-        options.output_format = crate::options::OutputFormat::Json;
-        options.input_format = crate::options::InputFormat::Text;
+        options.output_format = crate::cc::options::OutputFormat::Json;
+        options.input_format = crate::cc::options::InputFormat::Text;
         options.model = Some("claude-sonnet-4".to_string());
 
         let transport = SubprocessTransport::with_cli_path(options, "/usr/bin/true");
