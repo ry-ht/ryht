@@ -346,11 +346,7 @@ impl SemanticMemorySystem {
         let dependencies = deps_json.into_iter()
             .filter_map(|mut dep_json| {
                 // Restore the original id field from cortex_id
-                if let Some(obj) = dep_json.as_object_mut() {
-                    if let Some(cortex_id) = obj.remove("cortex_id") {
-                        obj.insert("id".to_string(), cortex_id);
-                    }
-                }
+                restore_id_field(&mut dep_json);
                 serde_json::from_value::<Dependency>(dep_json).ok()
             })
             .collect();
@@ -382,11 +378,7 @@ impl SemanticMemorySystem {
         let dependencies = deps_json.into_iter()
             .filter_map(|mut dep_json| {
                 // Restore the original id field from cortex_id
-                if let Some(obj) = dep_json.as_object_mut() {
-                    if let Some(cortex_id) = obj.remove("cortex_id") {
-                        obj.insert("id".to_string(), cortex_id);
-                    }
-                }
+                restore_id_field(&mut dep_json);
                 serde_json::from_value::<Dependency>(dep_json).ok()
             })
             .collect();
