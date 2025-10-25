@@ -19,14 +19,16 @@
 //! ## Using NodeChecker
 //!
 //! ```rust
-//! use cortex_code_analysis::{Parser, Lang};
+//! use cortex_code_analysis::{TreeSitterWrapper, Lang};
 //! use cortex_code_analysis::analysis::{NodeChecker, DefaultNodeChecker};
+//! use cortex_code_analysis::Node;
 //!
 //! # fn main() -> anyhow::Result<()> {
-//! let mut parser = Parser::new(Lang::Rust)?;
+//! let mut parser = TreeSitterWrapper::new(tree_sitter_rust::LANGUAGE.into())?;
 //! let code = "// This is a comment\nfn main() {}";
-//! let tree = parser.parse(code.as_bytes())?;
-//! let root = tree.root_node();
+//! let tree = parser.parse(code)?;
+//! let root_node = tree.root_node();
+//! let root = Node::new(root_node);
 //!
 //! // Check if nodes are comments, functions, etc.
 //! for node in root.children() {
@@ -44,14 +46,16 @@
 //! ## Using NodeGetter
 //!
 //! ```rust
-//! use cortex_code_analysis::{Parser, Lang};
+//! use cortex_code_analysis::{TreeSitterWrapper, Lang};
 //! use cortex_code_analysis::analysis::{NodeGetter, DefaultNodeGetter, SpaceKind};
+//! use cortex_code_analysis::Node;
 //!
 //! # fn main() -> anyhow::Result<()> {
-//! let mut parser = Parser::new(Lang::Rust)?;
+//! let mut parser = TreeSitterWrapper::new(tree_sitter_rust::LANGUAGE.into())?;
 //! let code = "fn add(a: i32, b: i32) -> i32 { a + b }";
-//! let tree = parser.parse(code.as_bytes())?;
-//! let root = tree.root_node();
+//! let tree = parser.parse(code)?;
+//! let root_node = tree.root_node();
+//! let root = Node::new(root_node);
 //!
 //! for node in root.children() {
 //!     let space_kind = DefaultNodeGetter::get_space_kind(&node, Lang::Rust);
