@@ -37,13 +37,23 @@ pub mod languages;
 
 // High-level parsing modules
 pub mod ast_editor;
+pub mod comment_removal;
+pub mod concurrent;
 pub mod extractor;
+pub mod function;
 pub mod rust_parser;
 pub mod tree_sitter_wrapper;
 pub mod types;
 pub mod typescript_parser;
 pub mod dependency_extractor;
 pub mod metrics;
+pub mod ops;
+
+// Advanced analysis modules
+pub mod analysis;
+
+// Utility functions
+pub mod utils;
 
 // Re-export core abstractions
 pub use lang::Lang;
@@ -54,12 +64,23 @@ pub use languages::{RustLanguage, TypeScriptLanguage, JavaScriptLanguage, Python
 
 // Re-export main types
 pub use ast_editor::{AstEditor, Edit, OptimizeImportsResult, Position, Range};
+pub use comment_removal::{extract_comments, remove_comments, CommentSpan};
 pub use rust_parser::RustParser;
 pub use tree_sitter_wrapper::TreeSitterWrapper;
 pub use types::*;
 pub use typescript_parser::TypeScriptParser;
 pub use dependency_extractor::{
     Dependency, DependencyExtractor, DependencyGraph, DependencyType, GraphStats, Import, Location,
+};
+pub use function::{detect_functions, FunctionSpan};
+pub use ops::{extract_ops, Ops, SpaceKind};
+
+// Re-export utility functions
+pub use utils::{
+    read_file_with_bom,
+    guess_language_from_content,
+    normalize_path,
+    get_paths_dist,
 };
 
 use anyhow::{Context, Result};
@@ -218,5 +239,43 @@ mod tests {
         let source = "fn test() {}";
         let result = parser.parse_rust("test.rs", source);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_detect_functions_integration() {
+        // Test the function detection API
+        let rust_code = r#"
+fn main() {
+    println!("Hello!");
+}
+
+fn helper() -> i32 {
+    42
+}
+"#;
+        let functions = detect_functions(rust_code, Lang::Rust).unwrap();
+        assert_eq!(functions.len(), 2);
+        assert_eq!(functions[0].name, "main");
+        assert_eq!(functions[1].name, "helper");
+
+        // Test with Python
+        let python_code = "def greet():\n    print('hi')\n\ndef farewell():\n    print('bye')";
+        let functions = detect_functions(python_code, Lang::Python).unwrap();
+        assert_eq!(functions.len(), 2);
+        assert_eq!(functions[0].name, "greet");
+        assert_eq!(functions[1].name, "farewell");
+    }
+
+    #[test]
+    fn test_function_span_utilities() {
+        let code = "fn test() {\n    let x = 1;\n    let y = 2;\n}";
+        let functions = detect_functions(code, Lang::Rust).unwrap();
+        assert_eq!(functions.len(), 1);
+
+        let func = &functions[0];
+        assert_eq!(func.name, "test");
+        assert_eq!(func.line_count(), 4);
+        assert!(func.contains_line(2));
+        assert!(!func.contains_line(10));
     }
 }
