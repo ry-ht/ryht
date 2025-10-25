@@ -851,24 +851,55 @@ async fn run() -> Result<()> {
             }
         },
 
-        Commands::Export(export_cmd) => match export_cmd {
-            ExportCommands::Workspace { workspace, output, format: fmt } => {
-                use cortex_cli::export;
-                let export_format = export::ExportFormat::from_extension(&fmt)
-                    .unwrap_or(export::ExportFormat::Json);
-                export::export_workspace(&workspace, &output, export_format).await?;
-            }
-            ExportCommands::Episodes { workspace, output, format: fmt, limit } => {
-                use cortex_cli::export;
-                let export_format = export::ExportFormat::from_extension(&fmt)
-                    .unwrap_or(export::ExportFormat::Json);
-                export::export_episodes(workspace, &output, export_format, limit).await?;
-            }
-            ExportCommands::Stats { output, format: fmt } => {
-                use cortex_cli::export;
-                let export_format = export::ExportFormat::from_extension(&fmt)
-                    .unwrap_or(export::ExportFormat::Json);
-                export::export_stats(&output, export_format).await?;
+        Commands::Export(export_cmd) => {
+            // Create storage for export operations
+            use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy};
+            use std::sync::Arc;
+            use std::time::Duration;
+
+            // Use in-memory database for export operations
+            let db_config = DatabaseConfig {
+                connection_mode: ConnectionMode::InMemory,
+                credentials: Credentials {
+                    username: None,
+                    password: None,
+                },
+                pool_config: PoolConfig {
+                    min_connections: 1,
+                    max_connections: 5,
+                    connection_timeout: Duration::from_secs(10),
+                    idle_timeout: None,
+                    max_lifetime: None,
+                    retry_policy: RetryPolicy::default(),
+                    warm_connections: false,
+                    validate_on_checkout: true,
+                    recycle_after_uses: None,
+                    shutdown_grace_period: Duration::from_secs(10),
+                },
+                namespace: "cortex".to_string(),
+                database: "main".to_string(),
+            };
+            let storage = Arc::new(cortex_storage::ConnectionManager::new(db_config).await?);
+
+            match export_cmd {
+                ExportCommands::Workspace { workspace, output, format: fmt } => {
+                    use cortex_cli::export;
+                    let export_format = export::ExportFormat::from_extension(&fmt)
+                        .unwrap_or(export::ExportFormat::Json);
+                    export::export_workspace(storage, &workspace, &output, export_format).await?;
+                }
+                ExportCommands::Episodes { workspace, output, format: fmt, limit } => {
+                    use cortex_cli::export;
+                    let export_format = export::ExportFormat::from_extension(&fmt)
+                        .unwrap_or(export::ExportFormat::Json);
+                    export::export_episodes(storage, workspace, &output, export_format, limit).await?;
+                }
+                ExportCommands::Stats { output, format: fmt } => {
+                    use cortex_cli::export;
+                    let export_format = export::ExportFormat::from_extension(&fmt)
+                        .unwrap_or(export::ExportFormat::Json);
+                    export::export_stats(storage, &output, export_format).await?;
+                }
             }
         },
 

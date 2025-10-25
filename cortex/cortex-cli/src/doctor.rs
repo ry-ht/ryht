@@ -344,13 +344,59 @@ async fn check_workspace_integrity() -> DiagnosticResult {
 }
 
 async fn check_memory_subsystems() -> DiagnosticResult {
-    // This is a placeholder - would need actual memory system checks
-    DiagnosticResult {
-        check_name: "Memory Subsystems".to_string(),
-        status: DiagnosticStatus::Pass,
-        message: "All memory subsystems initialized".to_string(),
-        suggestion: None,
-        auto_fixable: false,
+    use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy};
+    use std::time::Duration;
+
+    // Try to create an in-memory test database to check memory subsystems
+    let config = DatabaseConfig {
+        connection_mode: ConnectionMode::InMemory,
+        credentials: Credentials {
+            username: None,
+            password: None,
+        },
+        pool_config: PoolConfig {
+            min_connections: 1,
+            max_connections: 2,
+            connection_timeout: Duration::from_secs(5),
+            idle_timeout: None,
+            max_lifetime: None,
+            retry_policy: RetryPolicy::default(),
+            warm_connections: false,
+            validate_on_checkout: true,
+            recycle_after_uses: None,
+            shutdown_grace_period: Duration::from_secs(5),
+        },
+        namespace: "test".to_string(),
+        database: "memory_check".to_string(),
+    };
+
+    match cortex_storage::ConnectionManager::new(config).await {
+        Ok(manager) => {
+            // Try to acquire a connection
+            match manager.acquire().await {
+                Ok(_) => DiagnosticResult {
+                    check_name: "Memory Subsystems".to_string(),
+                    status: DiagnosticStatus::Pass,
+                    message: "Memory subsystems operational (in-memory DB working)".to_string(),
+                    suggestion: None,
+                    auto_fixable: false,
+                },
+                Err(e) => DiagnosticResult {
+                    check_name: "Memory Subsystems".to_string(),
+                    status: DiagnosticStatus::Fail,
+                    message: format!("Failed to acquire memory connection: {}", e),
+                    suggestion: Some("Check SurrealDB installation and memory availability".to_string()),
+                    auto_fixable: false,
+                },
+            }
+        }
+        Err(e) => DiagnosticResult {
+            check_name: "Memory Subsystems".to_string(),
+            status: DiagnosticStatus::Fail,
+            message: format!("Failed to initialize memory subsystems: {}", e),
+            suggestion: Some("Install SurrealDB: cargo install surrealdb".to_string()),
+            auto_fixable: false,
+        },
     }
 }
 

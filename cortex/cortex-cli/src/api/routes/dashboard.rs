@@ -238,11 +238,28 @@ async fn get_overview(
 
     let tasks_in_progress = tasks.len();
 
-    // Create language distribution (mock data for now)
+    // Calculate real language distribution from code units
+    let mut lang_counts: HashMap<String, usize> = HashMap::new();
+    let mut total_lang_units = 0;
+
+    for unit in &units {
+        if let Some(lang) = unit.get("language").and_then(|l| l.as_str()) {
+            *lang_counts.entry(lang.to_lowercase()).or_insert(0) += 1;
+            total_lang_units += 1;
+        }
+    }
+
+    // Convert counts to percentages
     let mut languages = HashMap::new();
-    languages.insert("rust".to_string(), 0.60);
-    languages.insert("typescript".to_string(), 0.30);
-    languages.insert("other".to_string(), 0.10);
+    if total_lang_units > 0 {
+        for (lang, count) in lang_counts {
+            let percentage = count as f64 / total_lang_units as f64;
+            languages.insert(lang, percentage);
+        }
+    } else {
+        // Fallback for empty workspace
+        languages.insert("unknown".to_string(), 1.0);
+    }
 
     let overview = DashboardOverview {
         workspaces: WorkspaceMetrics {
@@ -604,7 +621,8 @@ async fn get_health(
     // Database component
     let mut db_details = HashMap::new();
     db_details.insert("latency_ms".to_string(), serde_json::json!(db_latency));
-    db_details.insert("connections".to_string(), serde_json::json!(10)); // Mock
+    // Connection pool size is internal to the manager
+    db_details.insert("status".to_string(), serde_json::json!("connected"));
 
     components.insert("database".to_string(), ComponentHealth {
         status: "healthy".to_string(),

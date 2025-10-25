@@ -7,8 +7,12 @@
 //! - Markdown
 
 use anyhow::{Context, Result};
+use cortex_storage::ConnectionManager;
+use cortex_vfs::VirtualFileSystem;
 use serde::Serialize;
+use serde_json::json;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Export format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +203,7 @@ pub fn export_markdown<T: Serialize>(data: &T) -> Result<String> {
 
 /// Export workspace data
 pub async fn export_workspace(
+    storage: Arc<ConnectionManager>,
     workspace_name: &str,
     output_path: &Path,
     format: ExportFormat,
@@ -207,22 +212,83 @@ pub async fn export_workspace(
 
     output::info(format!("Exporting workspace '{}'...", workspace_name));
 
-    // Mock data for now
-    let data = serde_json::json!({
-        "workspace": workspace_name,
+    // Get workspace from storage
+    let conn = storage.acquire().await
+        .context("Failed to acquire database connection")?;
+
+    // Query workspace by name
+    let query = "SELECT * FROM workspace WHERE name = $name LIMIT 1";
+    let workspace_name_owned = workspace_name.to_string();
+    let mut result = conn.connection()
+        .query(query)
+        .bind(("name", workspace_name_owned))
+        .await
+        .context("Failed to query workspace")?;
+
+    let workspace: Option<cortex_vfs::Workspace> = result.take(0)
+        .context("Failed to deserialize workspace")?;
+
+    let workspace = workspace
+        .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_name))?;
+
+    // Count files in workspace
+    let file_count_query = format!("SELECT count() AS count FROM file WHERE workspace_id = '{}'", workspace.id);
+    let mut file_result = conn.connection()
+        .query(&file_count_query)
+        .await
+        .context("Failed to count files")?;
+
+    let file_count: Option<i64> = file_result.take("count")
+        .unwrap_or(Some(0));
+
+    // Get file list from workspace
+    let files_query = format!("SELECT * FROM file WHERE workspace_id = '{}'", workspace.id);
+    let mut files_result = conn.connection()
+        .query(&files_query)
+        .await
+        .context("Failed to query files")?;
+
+    let files: Vec<serde_json::Value> = files_result.take(0)
+        .unwrap_or_default();
+
+    // Collect file information
+    let file_items: Vec<_> = files.iter().map(|file| {
+        json!({
+            "path": file.get("path").and_then(|p| p.as_str()).unwrap_or(""),
+            "size": file.get("size").and_then(|s| s.as_i64()).unwrap_or(0),
+            "modified_at": file.get("updated_at").and_then(|u| u.as_str()).unwrap_or(""),
+        })
+    }).collect();
+
+    let data = json!({
+        "workspace": {
+            "id": workspace.id.to_string(),
+            "name": workspace.name,
+            "type": format!("{:?}", workspace.workspace_type),
+            "source": format!("{:?}", workspace.source_type),
+            "created_at": workspace.created_at.to_rfc3339(),
+            "updated_at": workspace.updated_at.to_rfc3339(),
+        },
         "exported_at": chrono::Utc::now().to_rfc3339(),
-        "items": [],
+        "files_count": file_count.unwrap_or(0),
+        "items": file_items,
     });
 
     export_to_file(&data, output_path, format)?;
 
-    output::success(format!("Exported to {}", output_path.display()));
+    output::success(format!(
+        "Exported workspace '{}' ({} files) to {}",
+        workspace_name,
+        files.len(),
+        output_path.display()
+    ));
 
     Ok(())
 }
 
 /// Export memory episodes
 pub async fn export_episodes(
+    storage: Arc<ConnectionManager>,
     workspace_name: Option<String>,
     output_path: &Path,
     format: ExportFormat,
@@ -232,25 +298,38 @@ pub async fn export_episodes(
 
     output::info("Exporting memory episodes...");
 
-    // Mock data
-    let episodes = vec![
-        serde_json::json!({
-            "id": "ep-001",
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "content": "Example episode",
-            "workspace": workspace_name.as_deref().unwrap_or("default"),
-        }),
-    ];
+    let conn = storage.acquire().await
+        .context("Failed to acquire database connection")?;
 
-    let data = if let Some(limit) = limit {
-        episodes.into_iter().take(limit).collect::<Vec<_>>()
+    // Build query with optional workspace filter
+    let query = if let Some(ref workspace) = workspace_name {
+        format!(
+            "SELECT * FROM episode WHERE workspace = '{}' ORDER BY created_at DESC {}",
+            workspace,
+            limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default()
+        )
     } else {
-        episodes
+        format!(
+            "SELECT * FROM episode ORDER BY created_at DESC {}",
+            limit.map(|l| format!("LIMIT {}", l)).unwrap_or_default()
+        )
     };
 
-    export_to_file(&data, output_path, format)?;
+    let mut result = conn.connection()
+        .query(&query)
+        .await
+        .context("Failed to query episodes")?;
 
-    output::success(format!("Exported {} episodes to {}", data.len(), output_path.display()));
+    let episodes: Vec<serde_json::Value> = result.take(0)
+        .context("Failed to deserialize episodes")?;
+
+    export_to_file(&episodes, output_path, format)?;
+
+    output::success(format!(
+        "Exported {} episode(s) to {}",
+        episodes.len(),
+        output_path.display()
+    ));
 
     Ok(())
 }
@@ -279,6 +358,7 @@ pub async fn export_search_results(
 
 /// Export statistics
 pub async fn export_stats(
+    storage: Arc<ConnectionManager>,
     output_path: &Path,
     format: ExportFormat,
 ) -> Result<()> {
@@ -286,15 +366,51 @@ pub async fn export_stats(
 
     output::info("Exporting system statistics...");
 
-    // Mock stats
-    let stats = serde_json::json!({
+    let conn = storage.acquire().await
+        .context("Failed to acquire database connection")?;
+
+    // Get workspace count
+    let mut result = conn.connection()
+        .query("SELECT count() AS count FROM workspace GROUP ALL")
+        .await
+        .context("Failed to count workspaces")?;
+    let workspace_count: Option<i64> = result.take("count")
+        .unwrap_or(Some(0));
+
+    // Get file count and total size
+    let mut result = conn.connection()
+        .query("SELECT count() AS count, math::sum(size) AS total_size FROM file GROUP ALL")
+        .await
+        .context("Failed to count files")?;
+    let file_count: Option<i64> = result.take("count")
+        .unwrap_or(Some(0));
+    let total_size: Option<i64> = result.take("total_size")
+        .unwrap_or(Some(0));
+
+    // Get episode count
+    let mut result = conn.connection()
+        .query("SELECT count() AS count FROM episode GROUP ALL")
+        .await
+        .context("Failed to count episodes")?;
+    let episode_count: Option<i64> = result.take("count")
+        .unwrap_or(Some(0));
+
+    // Get code unit count
+    let mut result = conn.connection()
+        .query("SELECT count() AS count FROM code_unit GROUP ALL")
+        .await
+        .context("Failed to count code units")?;
+    let code_unit_count: Option<i64> = result.take("count")
+        .unwrap_or(Some(0));
+
+    let stats = json!({
         "timestamp": chrono::Utc::now().to_rfc3339(),
-        "workspaces": 5,
-        "files": 1234,
-        "total_size_bytes": 52428800,
+        "workspaces": workspace_count.unwrap_or(0),
+        "files": file_count.unwrap_or(0),
+        "total_size_bytes": total_size.unwrap_or(0),
         "memory": {
-            "episodes": 156,
-            "semantic_nodes": 4523,
+            "episodes": episode_count.unwrap_or(0),
+            "semantic_nodes": code_unit_count.unwrap_or(0),
         },
     });
 
