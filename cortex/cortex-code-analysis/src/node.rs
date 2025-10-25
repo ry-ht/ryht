@@ -145,22 +145,6 @@ impl<'a> Node<'a> {
         Cursor(self.0.walk())
     }
 
-    /// Get an ancestor at a specific level up
-    #[allow(dead_code)]
-    pub fn get_parent(&self, level: usize) -> Option<Node<'a>> {
-        let mut level = level;
-        let mut node = *self;
-        while level != 0 {
-            if let Some(parent) = node.parent() {
-                node = parent;
-            } else {
-                return None;
-            }
-            level -= 1;
-        }
-        Some(node)
-    }
-
     /// Count ancestors matching a predicate until a stop condition
     pub fn count_specific_ancestors(
         &self,
