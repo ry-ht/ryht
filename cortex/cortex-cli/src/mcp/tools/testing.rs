@@ -1,7 +1,7 @@
 //! Testing & Validation Tools (10 tools)
 
 use async_trait::async_trait;
-use cortex_code_analysis::{CodeParser, FunctionInfo, Language, ParsedFile};
+use cortex_code_analysis::{CodeParser, FunctionInfo, Lang as Language, ParsedFile};
 use cortex_storage::ConnectionManager;
 use mcp_sdk::prelude::*;
 use regex::Regex;
@@ -1693,6 +1693,8 @@ impl Tool for ValidateStyleTool {
             let file_violations = match language {
                 Some(Language::Rust) => self.check_rust_style(&file),
                 Some(Language::TypeScript) | Some(Language::JavaScript) => self.check_typescript_style(&file),
+                Some(Language::Tsx) | Some(Language::Jsx) => self.check_typescript_style(&file),
+                Some(Language::Python) | Some(Language::Cpp) | Some(Language::Java) | Some(Language::Kotlin) => continue,
                 None => continue,
             };
 

@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use cortex_memory::CognitiveManager;
-use cortex_code_analysis::Language;
+use cortex_code_analysis::Lang as Language;
 use cortex_storage::ConnectionManager;
 use cortex_vfs::VirtualFileSystem;
 use mcp_sdk::prelude::*;

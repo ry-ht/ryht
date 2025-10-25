@@ -1,7 +1,7 @@
 //! Code Quality Tools (8 tools)
 
 use async_trait::async_trait;
-use cortex_code_analysis::{CodeParser, FunctionInfo, Language, ParsedFile};
+use cortex_code_analysis::{CodeParser, FunctionInfo, Lang as Language, ParsedFile};
 use cortex_storage::ConnectionManager;
 use mcp_sdk::prelude::*;
 use regex::Regex;

@@ -6,7 +6,6 @@ authors = ["ZhangHanDong", "LuxQuant"]
 license = "MIT"
 description = "Rust SDK for Claude Code CLI with full interactive capabilities"
 repository = "https://github.com/ry-ht/ryht"
-documentation = "https://docs.rs/cc-sdk"
 readme = "README.md"
 keywords = ["claude", "claude-code", "sdk", "ai", "llm"]
 categories = ["api-bindings", "asynchronous", "development-tools"]
