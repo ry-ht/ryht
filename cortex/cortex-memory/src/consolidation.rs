@@ -43,6 +43,7 @@ pub struct ConsolidationReport {
     pub memories_decayed: usize,
     pub duplicates_merged: usize,
     pub knowledge_links_created: usize,
+    pub semantic_concepts_stored: usize,
     pub duration_ms: u64,
 }
 
@@ -54,6 +55,7 @@ impl ConsolidationReport {
             memories_decayed: 0,
             duplicates_merged: 0,
             knowledge_links_created: 0,
+            semantic_concepts_stored: 0,
             duration_ms: 0,
         }
     }
@@ -62,7 +64,6 @@ impl ConsolidationReport {
 /// Consolidates memories from working to long-term storage
 pub struct MemoryConsolidator {
     episodic: Arc<EpisodicMemorySystem>,
-    #[allow(dead_code)]
     semantic: Arc<SemanticMemorySystem>,
     procedural: Arc<ProceduralMemorySystem>,
     working: Arc<WorkingMemorySystem>,
@@ -102,16 +103,20 @@ impl MemoryConsolidator {
         // Step 2: Extract patterns from episodes
         report.patterns_extracted = self.extract_and_store_patterns().await?;
 
-        // Step 3: Build knowledge graph links
+        // Step 3: Consolidate semantic knowledge from episodes
+        report.semantic_concepts_stored = self.consolidate_semantic_knowledge().await?;
+
+        // Step 4: Build knowledge graph links
         report.knowledge_links_created = self.build_knowledge_graph().await?;
 
-        // Step 4: Detect and merge duplicates
+        // Step 5: Detect and merge duplicates
         report.duplicates_merged = self.detect_and_merge_duplicates().await?;
 
         report.duration_ms = start_time.elapsed().as_millis() as u64;
         info!(
             decayed = report.memories_decayed,
             patterns = report.patterns_extracted,
+            semantic = report.semantic_concepts_stored,
             links = report.knowledge_links_created,
             duplicates = report.duplicates_merged,
             duration_ms = report.duration_ms,
@@ -158,6 +163,231 @@ impl MemoryConsolidator {
 
         info!(patterns_stored = stored_count, "Pattern extraction complete");
         Ok(stored_count)
+    }
+
+    /// Consolidate semantic knowledge from episodic memories
+    async fn consolidate_semantic_knowledge(&self) -> Result<usize> {
+        info!("Consolidating semantic knowledge from episodes");
+
+        // Retrieve recent successful episodes to extract semantic knowledge from
+        let episodes = self.episodic
+            .retrieve_by_outcome(EpisodeOutcome::Success, 100)
+            .await?;
+
+        if episodes.is_empty() {
+            debug!("No successful episodes to consolidate");
+            return Ok(0);
+        }
+
+        let episodes_count = episodes.len();
+        let mut stored_count = 0;
+
+        for episode in &episodes {
+            // Extract semantic concepts from the episode
+            // We focus on entities that were created or modified as these represent
+            // concrete code artifacts that should be in semantic memory
+
+            // Store entities that were created
+            for entity_name in &episode.entities_created {
+                if let Some(code_unit) = self.create_code_unit_from_entity(
+                    entity_name,
+                    &episode,
+                    "created"
+                ).await? {
+                    match self.semantic.store_unit(&code_unit).await {
+                        Ok(_) => {
+                            stored_count += 1;
+                            debug!(
+                                entity = %entity_name,
+                                episode_id = %episode.id,
+                                "Stored semantic concept from created entity"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                entity = %entity_name,
+                                error = %e,
+                                "Failed to store semantic concept"
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Store entities that were modified
+            for entity_name in &episode.entities_modified {
+                if let Some(code_unit) = self.create_code_unit_from_entity(
+                    entity_name,
+                    &episode,
+                    "modified"
+                ).await? {
+                    match self.semantic.store_unit(&code_unit).await {
+                        Ok(_) => {
+                            stored_count += 1;
+                            debug!(
+                                entity = %entity_name,
+                                episode_id = %episode.id,
+                                "Stored semantic concept from modified entity"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                entity = %entity_name,
+                                error = %e,
+                                "Failed to store semantic concept"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        info!(
+            concepts_stored = stored_count,
+            episodes_processed = episodes_count,
+            "Semantic knowledge consolidation complete"
+        );
+        Ok(stored_count)
+    }
+
+    /// Create a code unit from an entity name extracted from an episode
+    /// This is a helper method that attempts to construct semantic memory from episodic context
+    async fn create_code_unit_from_entity(
+        &self,
+        entity_name: &str,
+        episode: &EpisodicMemory,
+        action: &str,
+    ) -> Result<Option<cortex_core::types::CodeUnit>> {
+        use cortex_core::types::{CodeUnit, Language, Visibility, Complexity, CodeUnitStatus};
+
+        // Skip entities that don't look like code identifiers
+        if entity_name.is_empty() || !entity_name.chars().any(|c| c.is_alphanumeric()) {
+            return Ok(None);
+        }
+
+        // Try to infer the type from the entity name and context
+        let unit_type = self.infer_code_unit_type(entity_name);
+
+        // Use files touched to determine the file path and language
+        let (file_path, language) = episode.files_touched
+            .first()
+            .map(|path| {
+                let lang = if path.ends_with(".rs") {
+                    Language::Rust
+                } else if path.ends_with(".ts") || path.ends_with(".tsx") {
+                    Language::TypeScript
+                } else if path.ends_with(".js") || path.ends_with(".jsx") {
+                    Language::JavaScript
+                } else if path.ends_with(".py") {
+                    Language::Python
+                } else if path.ends_with(".go") {
+                    Language::Go
+                } else {
+                    Language::Unknown
+                };
+                (path.clone(), lang)
+            })
+            .unwrap_or_else(|| ("unknown".to_string(), Language::Unknown));
+
+        // Create a code unit with available information
+        let code_unit = CodeUnit {
+            id: cortex_core::id::CortexId::new(),
+            unit_type,
+            name: entity_name.to_string(),
+            qualified_name: entity_name.to_string(),
+            display_name: entity_name.to_string(),
+            file_path,
+            language,
+            start_line: 0,
+            start_column: 0,
+            end_line: 0,
+            end_column: 0,
+            start_byte: 0,
+            end_byte: 0,
+            signature: entity_name.to_string(),
+            body: None,
+            docstring: None,
+            comments: vec![],
+            return_type: None,
+            parameters: vec![],
+            type_parameters: vec![],
+            generic_constraints: vec![],
+            throws: vec![],
+            visibility: Visibility::Public,
+            attributes: vec![],
+            modifiers: vec![],
+            is_async: false,
+            is_unsafe: false,
+            is_const: false,
+            is_static: false,
+            is_abstract: false,
+            is_virtual: false,
+            is_override: false,
+            is_final: false,
+            is_exported: true,
+            is_default_export: false,
+            complexity: Complexity {
+                cyclomatic: 1,
+                cognitive: 1,
+                nesting: 0,
+                lines: 1,
+                parameters: 0,
+                returns: 0,
+            },
+            test_coverage: None,
+            has_tests: false,
+            has_documentation: false,
+            language_specific: HashMap::new(),
+            embedding: episode.embedding.clone(),
+            embedding_model: Some("inherited-from-episode".to_string()),
+            summary: Some(format!(
+                "{} during {} task: {}",
+                action,
+                format!("{:?}", episode.episode_type).to_lowercase(),
+                episode.task_description
+            )),
+            purpose: Some(episode.solution_summary.clone()),
+            ast_node_type: None,
+            ast_metadata: None,
+            status: CodeUnitStatus::Active,
+            version: 1,
+            created_at: episode.created_at,
+            updated_at: episode.completed_at.unwrap_or(episode.created_at),
+            created_by: episode.agent_id.clone(),
+            updated_by: episode.agent_id.clone(),
+            tags: vec![format!("episode:{}", episode.id), action.to_string()],
+            metadata: {
+                let mut meta = HashMap::new();
+                meta.insert("source_episode".to_string(), serde_json::json!(episode.id.to_string()));
+                meta.insert("episode_type".to_string(), serde_json::json!(format!("{:?}", episode.episode_type)));
+                meta.insert("action".to_string(), serde_json::json!(action));
+                meta
+            },
+        };
+
+        Ok(Some(code_unit))
+    }
+
+    /// Infer code unit type from entity name
+    fn infer_code_unit_type(&self, entity_name: &str) -> cortex_core::types::CodeUnitType {
+        use cortex_core::types::CodeUnitType;
+
+        // Simple heuristics based on naming conventions
+        if entity_name.ends_with("Struct") || entity_name.ends_with("Data") {
+            CodeUnitType::Struct
+        } else if entity_name.ends_with("Enum") {
+            CodeUnitType::Enum
+        } else if entity_name.ends_with("Trait") || entity_name.ends_with("Interface") {
+            CodeUnitType::Interface
+        } else if entity_name.ends_with("Module") {
+            CodeUnitType::Module
+        } else if entity_name.chars().next().map_or(false, |c| c.is_uppercase()) {
+            // Likely a class/struct based on PascalCase
+            CodeUnitType::Class
+        } else {
+            // Default to function for lowercase names
+            CodeUnitType::Function
+        }
     }
 
     /// Build knowledge graph by creating links between related memories

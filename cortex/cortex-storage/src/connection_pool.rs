@@ -555,6 +555,9 @@ impl ConnectionPool {
     async fn create_connection(&self) -> Result<PooledConnectionInner> {
         let endpoint = self.load_balancer.select_endpoint()?.to_string();
 
+        // Track connection attempt
+        self.load_balancer.record_connection(&endpoint);
+
         debug!("Creating connection to endpoint: {}", endpoint);
 
         // Special handling for in-memory mode
@@ -562,31 +565,49 @@ impl ConnectionPool {
             // For in-memory mode, we need to use a special connection approach
             // The Any engine doesn't support direct "memory" connections,
             // so we use "mem://" which the Any engine interprets as in-memory
-            surrealdb::engine::any::connect("mem://")
+            match surrealdb::engine::any::connect("mem://")
                 .await
-                .context("Failed to connect to in-memory SurrealDB")?
+                .context("Failed to connect to in-memory SurrealDB") {
+                Ok(db) => db,
+                Err(e) => {
+                    self.load_balancer.record_failure(&endpoint);
+                    return Err(CortexError::storage(format!("Failed to connect to in-memory SurrealDB: {}", e)));
+                }
+            }
         } else {
             // Connect using Any engine - this accepts the connection string
-            surrealdb::engine::any::connect(endpoint)
+            match surrealdb::engine::any::connect(&endpoint)
                 .await
-                .context("Failed to connect to SurrealDB")?
+                .context("Failed to connect to SurrealDB") {
+                Ok(db) => db,
+                Err(e) => {
+                    self.load_balancer.record_failure(&endpoint);
+                    return Err(CortexError::storage(format!("Failed to connect to SurrealDB: {}", e)));
+                }
+            }
         };
 
         // Authenticate first (required before using namespace/database)
         if let (Some(username), Some(password)) = (&self.credentials.username, &self.credentials.password) {
-            db.signin(surrealdb::opt::auth::Root {
+            if let Err(e) = db.signin(surrealdb::opt::auth::Root {
                 username,
                 password,
             })
             .await
-            .context("Authentication failed")?;
+            .context("Authentication failed") {
+                self.load_balancer.record_failure(&endpoint);
+                return Err(CortexError::storage(format!("Authentication failed: {}", e)));
+            }
         }
 
         // Then use namespace and database
-        db.use_ns(&self.namespace)
+        if let Err(e) = db.use_ns(&self.namespace)
             .use_db(&self.database)
             .await
-            .context("Failed to set namespace/database")?;
+            .context("Failed to set namespace/database") {
+            self.load_balancer.record_failure(&endpoint);
+            return Err(CortexError::storage(format!("Failed to set namespace/database: {}", e)));
+        }
 
         let conn = PooledConnectionInner {
             id: Uuid::new_v4(),
@@ -596,6 +617,7 @@ impl ConnectionPool {
             uses: Arc::new(AtomicUsize::new(0)),
             healthy: Arc::new(AtomicBool::new(true)),
             recycle: Arc::new(AtomicBool::new(false)),
+            health_check_failures: Arc::new(AtomicU32::new(0)),
         };
 
         self.metrics.connections_created.fetch_add(1, Ordering::Relaxed);
@@ -751,6 +773,8 @@ struct PooledConnectionInner {
     uses: Arc<AtomicUsize>,
     healthy: Arc<AtomicBool>,
     recycle: Arc<AtomicBool>,
+    /// Counter for consecutive failed health checks
+    health_check_failures: Arc<AtomicU32>,
 }
 
 impl PooledConnectionInner {
@@ -999,7 +1023,6 @@ impl LoadBalancer {
             .unwrap_or(&self.endpoints[0])
     }
 
-    #[allow(dead_code)]
     fn record_connection(&self, endpoint: &str) {
         if let Some(stats) = self.endpoint_stats.get(endpoint) {
             stats.active_connections.fetch_add(1, Ordering::Relaxed);
@@ -1007,7 +1030,6 @@ impl LoadBalancer {
         }
     }
 
-    #[allow(dead_code)]
     fn record_failure(&self, endpoint: &str) {
         if let Some(stats) = self.endpoint_stats.get(endpoint) {
             stats.failures.fetch_add(1, Ordering::Relaxed);
@@ -1023,7 +1045,6 @@ impl LoadBalancer {
 pub struct HealthMonitor {
     pool: Arc<ConnectionPool>,
     check_interval: Duration,
-    #[allow(dead_code)]
     unhealthy_threshold: u32,
     metrics: Arc<PoolMetrics>,
     running: Arc<AtomicBool>,
@@ -1079,6 +1100,8 @@ impl HealthMonitor {
     async fn check_health(&self) {
         debug!("Running health check on connection pool");
 
+        let mut connections_to_remove = Vec::new();
+
         for entry in self.pool.connections.iter() {
             let conn = entry.value();
 
@@ -1094,10 +1117,36 @@ impl HealthMonitor {
 
                 if healthy {
                     self.metrics.health_checks_passed.fetch_add(1, Ordering::Relaxed);
+                    // Reset failure counter on successful health check
+                    conn.health_check_failures.store(0, Ordering::Relaxed);
                 } else {
                     self.metrics.health_checks_failed.fetch_add(1, Ordering::Relaxed);
-                    warn!("Connection {} failed health check", conn.id);
+
+                    // Increment failure counter
+                    let failures = conn.health_check_failures.fetch_add(1, Ordering::Relaxed) + 1;
+
+                    warn!("Connection {} failed health check (failure count: {}/{})",
+                        conn.id, failures, self.unhealthy_threshold);
+
+                    // Check if threshold reached
+                    if failures >= self.unhealthy_threshold {
+                        warn!("Connection {} reached unhealthy threshold ({}), marking for removal",
+                            conn.id, self.unhealthy_threshold);
+                        // Mark connection as unhealthy
+                        conn.healthy.store(false, Ordering::Relaxed);
+                        // Schedule for removal
+                        connections_to_remove.push(conn.id);
+                    }
                 }
+            }
+        }
+
+        // Remove connections that exceeded the unhealthy threshold
+        for conn_id in connections_to_remove {
+            if let Some((_, conn)) = self.pool.connections.remove(&conn_id) {
+                info!("Removed unhealthy connection {} after {} failed health checks",
+                    conn.id, self.unhealthy_threshold);
+                self.pool.metrics.connections_closed.fetch_add(1, Ordering::Relaxed);
             }
         }
     }

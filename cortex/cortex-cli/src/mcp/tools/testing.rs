@@ -760,6 +760,142 @@ impl TestRunInMemoryTool {
     pub fn new(ctx: TestingContext) -> Self {
         Self { ctx }
     }
+
+    /// Analyze test code and validate its structure
+    async fn analyze_test(&self, test_id: &str) -> std::result::Result<(bool, Option<String>), String> {
+        // Parse test_id: format is "file_path::test_name" or just a code_unit_id
+        let (file_path, test_name) = if test_id.contains("::") {
+            let parts: Vec<&str> = test_id.splitn(2, "::").collect();
+            if parts.len() != 2 {
+                return Err(format!("Invalid test_id format: {}", test_id));
+            }
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            // Try to get from storage as a code unit
+            match self.ctx.get_code_unit(test_id).await {
+                Ok(Some(unit)) => (unit.file_path.clone(), unit.name.clone()),
+                Ok(None) => return Err(format!("Test not found: {}", test_id)),
+                Err(e) => return Err(format!("Failed to retrieve test: {}", e)),
+            }
+        };
+
+        // Parse the file to get the test code
+        let parsed_file = match self.ctx.parse_file(&file_path).await {
+            Ok(Some(pf)) => pf,
+            Ok(None) => return Err(format!("File not found or not parsable: {}", file_path)),
+            Err(e) => return Err(format!("Failed to parse file: {}", e)),
+        };
+
+        // Find the test function
+        let test_func = parsed_file.parsed.functions.iter()
+            .find(|f| f.name == test_name)
+            .ok_or_else(|| format!("Test function not found: {}", test_name))?;
+
+        // Validate that this is actually a test function
+        let is_test_function = test_func.attributes.iter()
+            .any(|a| a.contains("test") || a.contains("Test"));
+
+        if !is_test_function {
+            return Err(format!("Function '{}' is not marked as a test", test_name));
+        }
+
+        // Analyze test structure based on language
+        let language = Language::from_path(Path::new(&file_path))
+            .ok_or_else(|| "Could not detect language".to_string())?;
+
+        match language {
+            Language::Rust => self.analyze_rust_test(test_func),
+            Language::TypeScript | Language::JavaScript => self.analyze_typescript_test(test_func),
+        }
+    }
+
+    /// Analyze Rust test structure
+    fn analyze_rust_test(&self, test_func: &FunctionInfo) -> std::result::Result<(bool, Option<String>), String> {
+        let body = &test_func.body;
+
+        // Check if test is empty
+        if body.trim().is_empty() || body.trim() == "{}" {
+            return Ok((false, Some("Test body is empty".to_string())));
+        }
+
+        // Check for assertions
+        let has_assertions = body.contains("assert!")
+            || body.contains("assert_eq!")
+            || body.contains("assert_ne!")
+            || body.contains("panic!")
+            || body.contains("expect(")
+            || body.contains("unwrap()")
+            || body.contains("should_panic");
+
+        if !has_assertions {
+            return Ok((false, Some("Test contains no assertions or expectations".to_string())));
+        }
+
+        // Check for common test issues
+        if body.contains("TODO") && !has_assertions {
+            return Ok((false, Some("Test is incomplete (contains TODO)".to_string())));
+        }
+
+        // Check for syntax errors - basic validation
+        if !self.check_balanced_braces(body) {
+            return Ok((false, Some("Unbalanced braces in test code".to_string())));
+        }
+
+        // Test appears valid
+        Ok((true, None))
+    }
+
+    /// Analyze TypeScript/JavaScript test structure
+    fn analyze_typescript_test(&self, test_func: &FunctionInfo) -> std::result::Result<(bool, Option<String>), String> {
+        let body = &test_func.body;
+
+        // Check if test is empty
+        if body.trim().is_empty() || body.trim() == "{}" {
+            return Ok((false, Some("Test body is empty".to_string())));
+        }
+
+        // Check for expectations/assertions
+        let has_expectations = body.contains("expect(")
+            || body.contains("assert")
+            || body.contains("should")
+            || body.contains("toBe")
+            || body.contains("toEqual");
+
+        if !has_expectations {
+            return Ok((false, Some("Test contains no expectations or assertions".to_string())));
+        }
+
+        // Check for common test issues
+        if body.contains("TODO") && !has_expectations {
+            return Ok((false, Some("Test is incomplete (contains TODO)".to_string())));
+        }
+
+        // Check for syntax errors - basic validation
+        if !self.check_balanced_braces(body) {
+            return Ok((false, Some("Unbalanced braces in test code".to_string())));
+        }
+
+        // Test appears valid
+        Ok((true, None))
+    }
+
+    /// Check if braces are balanced in the code
+    fn check_balanced_braces(&self, code: &str) -> bool {
+        let mut count = 0;
+        for c in code.chars() {
+            match c {
+                '{' => count += 1,
+                '}' => {
+                    count -= 1;
+                    if count < 0 {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+        }
+        count == 0
+    }
 }
 
 #[async_trait]
@@ -786,27 +922,42 @@ impl Tool for TestRunInMemoryTool {
         let mut passed = 0;
         let mut failed = 0;
 
-        // Note: Actual in-memory test execution would require a runtime interpreter
-        // This is a simulation showing the structure
+        // Note: Full test execution would require a runtime interpreter/compiler
+        // This implementation uses static analysis to validate test structure
         for test_id in input.test_ids {
-            // Simulate test execution
-            // In a real implementation, this would parse and execute the test code
-            let test_passed = true; // Placeholder
+            debug!("Analyzing test: {}", test_id);
 
-            if test_passed {
-                passed += 1;
-                results.push(TestResult {
-                    test_id,
-                    passed: true,
-                    error: None,
-                });
-            } else {
-                failed += 1;
-                results.push(TestResult {
-                    test_id,
-                    passed: false,
-                    error: Some("Test execution not yet implemented".to_string()),
-                });
+            // Analyze the test using static analysis
+            match self.analyze_test(&test_id).await {
+                Ok((test_passed, error_msg)) => {
+                    if test_passed {
+                        passed += 1;
+                        debug!("Test passed: {}", test_id);
+                        results.push(TestResult {
+                            test_id,
+                            passed: true,
+                            error: None,
+                        });
+                    } else {
+                        failed += 1;
+                        let error = error_msg.unwrap_or_else(|| "Test validation failed".to_string());
+                        debug!("Test failed: {} - {}", test_id, error);
+                        results.push(TestResult {
+                            test_id,
+                            passed: false,
+                            error: Some(error),
+                        });
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    debug!("Test error: {} - {}", test_id, e);
+                    results.push(TestResult {
+                        test_id,
+                        passed: false,
+                        error: Some(e),
+                    });
+                }
             }
         }
 

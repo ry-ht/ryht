@@ -79,7 +79,6 @@ impl DependencyAnalysisContext {
         struct DepEdge {
             source_id: String,
             target_id: String,
-            #[allow(dead_code)]
             dependency_type: String,
         }
 
@@ -89,10 +88,10 @@ impl DependencyAnalysisContext {
 
         info!("Found {} dependency edges", edges.len());
 
-        // Build graph from edges
+        // Build graph from edges with typed dependencies
         let mut graph = Graph::new();
         for edge in edges {
-            graph.add_edge(edge.source_id, edge.target_id);
+            graph.add_typed_edge(edge.source_id, edge.target_id, edge.dependency_type);
         }
 
         debug!("Built graph with {} nodes and {} edges",
@@ -195,7 +194,7 @@ pub struct GetDependenciesInput {
     entity_id: String,
     #[serde(default = "default_outgoing")]
     direction: String,
-    #[allow(dead_code)]
+    /// Filter by specific dependency types (e.g., ["IMPORTS", "CALLS"])
     dependency_types: Option<Vec<String>>,
     #[serde(default = "default_depth_one")]
     max_depth: i32,
@@ -258,10 +257,21 @@ impl DepsGetDependenciesTool {
 
                     for neighbor in graph.neighbors(&node) {
                         if !visited.contains(neighbor) {
+                            let dep_type = graph.edge_type(&node, neighbor)
+                                .unwrap_or("DEPENDS_ON")
+                                .to_string();
+
+                            // Filter by dependency type if specified
+                            if let Some(ref types) = input.dependency_types {
+                                if !types.contains(&dep_type) {
+                                    continue;
+                                }
+                            }
+
                             visited.insert(neighbor.clone());
                             dependencies.push(Dependency {
                                 target_id: neighbor.clone(),
-                                dependency_type: "DEPENDS_ON".to_string(),
+                                dependency_type: dep_type,
                                 depth: depth + 1,
                                 location: None,
                             });
@@ -272,9 +282,20 @@ impl DepsGetDependenciesTool {
             } else {
                 // Direct dependencies only
                 for neighbor in graph.neighbors(&input.entity_id) {
+                    let dep_type = graph.edge_type(&input.entity_id, neighbor)
+                        .unwrap_or("DEPENDS_ON")
+                        .to_string();
+
+                    // Filter by dependency type if specified
+                    if let Some(ref types) = input.dependency_types {
+                        if !types.contains(&dep_type) {
+                            continue;
+                        }
+                    }
+
                     dependencies.push(Dependency {
                         target_id: neighbor.clone(),
-                        dependency_type: "DEPENDS_ON".to_string(),
+                        dependency_type: dep_type,
                         depth: 1,
                         location: None,
                     });
@@ -522,7 +543,7 @@ impl Tool for DepsFindCyclesTool {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ImpactAnalysisInput {
     changed_entities: Vec<String>,
-    #[allow(dead_code)]
+    /// Filter impact analysis by specific dependency types (e.g., ["CALLS", "USES_TYPE"])
     impact_types: Option<Vec<String>>,
     #[serde(default = "default_all_depth")]
     max_depth: i32,
@@ -1108,10 +1129,23 @@ impl DepsGenerateGraphTool {
 
         dot.push_str("\n");
 
-        // Add edges
+        // Add edges with type labels
         for (from, neighbors) in &graph.adjacency {
             for to in neighbors {
-                dot.push_str(&format!("  \"{}\" -> \"{}\";\n", from, to));
+                let edge_type = graph.edge_type(from, to).unwrap_or("DEPENDS_ON");
+                // Use different colors for different dependency types
+                let color = match edge_type {
+                    "IMPORTS" => "blue",
+                    "CALLS" => "green",
+                    "USES_TYPE" => "purple",
+                    "IMPLEMENTS" => "orange",
+                    "INHERITS" => "red",
+                    _ => "black",
+                };
+                dot.push_str(&format!(
+                    "  \"{}\" -> \"{}\" [label=\"{}\", color=\"{}\"];\n",
+                    from, to, edge_type, color
+                ));
             }
         }
 
@@ -1127,7 +1161,14 @@ impl DepsGenerateGraphTool {
             .flat_map(|(from, neighbors)| {
                 neighbors
                     .iter()
-                    .map(move |to| serde_json::json!({"from": from, "to": to}))
+                    .map(move |to| {
+                        let edge_type = graph.edge_type(from, to).unwrap_or("DEPENDS_ON");
+                        serde_json::json!({
+                            "from": from,
+                            "to": to,
+                            "type": edge_type
+                        })
+                    })
             })
             .collect();
 

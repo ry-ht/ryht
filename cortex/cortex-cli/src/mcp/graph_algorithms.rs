@@ -28,6 +28,8 @@ pub struct Graph {
     pub adjacency: HashMap<String, Vec<String>>,
     /// Reverse edges: node -> list of nodes that depend on it
     pub reverse_adjacency: HashMap<String, Vec<String>>,
+    /// Edge types: (from, to) -> dependency type
+    pub edge_types: HashMap<(String, String), String>,
     /// All nodes in the graph
     pub nodes: HashSet<String>,
 }
@@ -38,12 +40,18 @@ impl Graph {
         Self {
             adjacency: HashMap::new(),
             reverse_adjacency: HashMap::new(),
+            edge_types: HashMap::new(),
             nodes: HashSet::new(),
         }
     }
 
-    /// Add an edge from -> to
+    /// Add an edge from -> to with optional type
     pub fn add_edge(&mut self, from: String, to: String) {
+        self.add_typed_edge(from, to, "DEPENDS_ON".to_string());
+    }
+
+    /// Add an edge from -> to with a specific type
+    pub fn add_typed_edge(&mut self, from: String, to: String, edge_type: String) {
         self.nodes.insert(from.clone());
         self.nodes.insert(to.clone());
 
@@ -53,9 +61,29 @@ impl Graph {
             .push(to.clone());
 
         self.reverse_adjacency
-            .entry(to)
+            .entry(to.clone())
             .or_insert_with(Vec::new)
-            .push(from);
+            .push(from.clone());
+
+        self.edge_types.insert((from, to), edge_type);
+    }
+
+    /// Get the type of an edge
+    pub fn edge_type(&self, from: &str, to: &str) -> Option<&str> {
+        self.edge_types.get(&(from.to_string(), to.to_string())).map(|s| s.as_str())
+    }
+
+    /// Get all edges of a specific type from a node
+    pub fn neighbors_by_type(&self, node: &str, edge_type: &str) -> Vec<String> {
+        self.neighbors(node)
+            .iter()
+            .filter(|neighbor| {
+                self.edge_type(node, neighbor)
+                    .map(|t| t == edge_type)
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
     }
 
     /// Get outgoing neighbors

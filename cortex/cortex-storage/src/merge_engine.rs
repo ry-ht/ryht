@@ -13,7 +13,6 @@ use tracing::{debug, info, warn};
 
 /// Engine for performing three-way merges with semantic understanding
 pub struct MergeEngine {
-    #[allow(dead_code)]
     storage: Arc<ConnectionManager>,
     semantic_analyzer: Arc<SemanticAnalyzer>,
 }

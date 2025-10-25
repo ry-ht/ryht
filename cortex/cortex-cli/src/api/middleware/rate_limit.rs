@@ -92,7 +92,7 @@ impl RateLimiter {
     }
 
     /// Check if request should be allowed
-    async fn check_rate_limit(&self, key: &str, tier: RateLimitTier) -> Result<(), RateLimitError> {
+    pub async fn check_rate_limit(&self, key: &str, tier: RateLimitTier) -> Result<(), RateLimitError> {
         let mut states = self.states.write().await;
 
         let state = states.entry(key.to_string()).or_insert_with(RateLimitState::new);
@@ -132,9 +132,9 @@ impl RateLimiter {
 
 /// Rate limit error
 #[derive(Debug)]
-struct RateLimitError {
-    tier: RateLimitTier,
-    retry_after: u64,
+pub struct RateLimitError {
+    pub tier: RateLimitTier,
+    pub retry_after: u64,
 }
 
 #[derive(Debug, Serialize)]

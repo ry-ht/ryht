@@ -108,7 +108,7 @@ pub enum WsSubscriptionMessage {
 }
 
 /// WebSocket message to client
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WsClientMessage {
     /// Event notification
