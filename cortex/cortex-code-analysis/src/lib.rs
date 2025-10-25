@@ -175,12 +175,22 @@ pub use analysis::{
     AstCounter, ConcurrentCounter, CountConfig, CountFilter, CountStats,
     // AST transformation
     Alterator, TransformConfig, TransformConfigBuilder,
+    AstVisitor, VisitAction, visit_ast,
+    AstDiff, DiffConfig, diff_ast,
+    Rewrite, apply_rewrites,
+    AstPattern,
     // Caching
     Cache, CacheManager, CacheBuilder, AstCache, MetricsCache, SearchCache,
     CachedAst, CachedMetrics, CachedSearch, SourceKey, SearchKey,
     // Node analysis
     NodeChecker, DefaultNodeChecker, NodeGetter, DefaultNodeGetter,
     HalsteadType,
+    // Lint rules and anti-patterns
+    LintRule, LintChecker, LintViolation, Severity,
+    AntiPattern, AntiPatternDetector,
+    FunctionTooLongRule, DeepNestingRule, MissingDocCommentRule, TodoCommentRule,
+    // Comment analysis
+    Comment, CommentAnalyzer, CommentMetrics, CommentType, analyze_comments,
 };
 
 // Re-export metrics strategy types
@@ -191,7 +201,14 @@ pub use metrics::{
 
 // Re-export concurrent types
 pub use concurrent::{
+    // Basic sync runner (backward compatible)
     ConcurrentRunner, FilesData,
+    // Enhanced concurrent processing
+    EnhancedProducerConsumer, ProducerConsumerConfig, ProcessingStats,
+    ParallelProcessor, ParallelProcessorBuilder, ParallelConfig, ParallelStats,
+    ProgressTracker, ProgressConfig, ProgressState,
+    FileCache, ContentHashCache, MultiLevelCache, CacheConfig, CacheStats,
+    BatchProcessor, BatchConfig, BatchStrategy, SortStrategy,
 };
 
 use anyhow::{Context, Result};

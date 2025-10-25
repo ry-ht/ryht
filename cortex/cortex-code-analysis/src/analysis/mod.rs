@@ -68,6 +68,7 @@
 pub mod alterator;
 pub mod cache;
 pub mod checker;
+pub mod comment;
 pub mod count;
 pub mod find;
 pub mod getter;
@@ -78,12 +79,19 @@ pub mod types;
 mod tests;
 
 // Re-export core types
-pub use alterator::{Alterator, TransformConfig, TransformConfigBuilder};
+pub use alterator::{
+    Alterator, TransformConfig, TransformConfigBuilder, AstVisitor, VisitAction,
+    AstDiff, DiffConfig, Rewrite, AstPattern, visit_ast, diff_ast, apply_rewrites,
+};
 pub use cache::{
     AstCache, Cache, CacheBuilder, CacheManager, CachedAst, CachedMetrics, CachedSearch,
     MetricsCache, SearchCache, SearchKey, SourceKey,
 };
-pub use checker::{DefaultNodeChecker, NodeChecker};
+pub use checker::{
+    DefaultNodeChecker, NodeChecker, LintRule, LintChecker, LintViolation, Severity,
+    AntiPattern, AntiPatternDetector, FunctionTooLongRule, DeepNestingRule,
+    MissingDocCommentRule, TodoCommentRule,
+};
 pub use count::{
     AstCounter, ConcurrentCounter, CountConfig, CountConfigBuilder, CountFilter, CountStats,
 };
@@ -92,3 +100,6 @@ pub use find::{
 };
 pub use getter::{DefaultNodeGetter, NodeGetter};
 pub use types::{HalsteadType, SpaceKind};
+pub use comment::{
+    Comment, CommentAnalyzer, CommentMetrics, CommentType, analyze_comments,
+};

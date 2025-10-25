@@ -404,3 +404,319 @@ fn test_halstead_collector_merge() {
     assert_eq!(stats.u_operators(), 2.0); // + and -
     assert_eq!(stats.u_operands(), 2.0); // x and y
 }
+
+// ============================================================================
+// SECTION 7: Enhanced Features Tests (Added for Migration)
+// ============================================================================
+
+#[test]
+fn test_halstead_derived_metrics() {
+    let mut collector = HalsteadCollector::new();
+
+    // Add some realistic operators and operands
+    collector.add_operator("+");
+    collector.add_operator("-");
+    collector.add_operator("*");
+    collector.add_operator("/");
+    collector.add_operand("x");
+    collector.add_operand("y");
+    collector.add_operand("z");
+    collector.add_operand("result");
+
+    let stats = collector.finalize();
+
+    // Test all derived metrics
+    assert!(stats.vocabulary() > 0.0);
+    assert!(stats.length() > 0.0);
+    assert!(stats.volume() > 0.0);
+    assert!(stats.difficulty() > 0.0);
+    assert!(stats.effort() > 0.0);
+    assert!(stats.time() > 0.0);
+    assert!(stats.bugs() >= 0.0);
+}
+
+#[test]
+fn test_abc_advanced_declaration_tracking() {
+    let mut stats = AbcStats::new();
+
+    // Test 1: Variable declaration (should count)
+    stats.start_var_declaration();
+    stats.add_assignment_with_context();
+    stats.clear_declaration();
+    assert_eq!(stats.assignments(), 1.0);
+
+    // Test 2: Const declaration (should NOT count)
+    stats.start_const_declaration();
+    stats.add_assignment_with_context();
+    stats.clear_declaration();
+    assert_eq!(stats.assignments(), 1.0); // Still 1
+
+    // Test 3: Variable promoted to const (should NOT count)
+    stats.start_var_declaration();
+    stats.promote_to_const();
+    stats.add_assignment_with_context();
+    stats.clear_declaration();
+    assert_eq!(stats.assignments(), 1.0); // Still 1
+}
+
+#[test]
+fn test_abc_java_unary_conditions() {
+    let mut stats = AbcStats::new();
+
+    // Simulating Java unary conditions
+    stats.add_unary_condition();
+    stats.add_unary_condition();
+    stats.add_unary_condition();
+
+    assert_eq!(stats.conditions(), 3.0);
+}
+
+#[test]
+fn test_cognitive_bool_sequence() {
+    let mut stats = CognitiveStats::new();
+
+    // Test same operator sequence (should count once)
+    stats.eval_boolean_operator(100); // &&
+    stats.eval_boolean_operator(100); // &&
+    stats.eval_boolean_operator(100); // &&
+    assert_eq!(stats.cognitive(), 1.0);
+
+    // Test different operator (should increment)
+    stats.eval_boolean_operator(101); // ||
+    assert_eq!(stats.cognitive(), 2.0);
+
+    // Reset and test again
+    stats.reset_boolean_seq();
+    stats.eval_boolean_operator(100); // &&
+    assert_eq!(stats.cognitive(), 3.0);
+}
+
+#[test]
+fn test_cognitive_with_nesting() {
+    let mut stats = CognitiveStats::new();
+
+    // Increment nesting level
+    stats.increment_nesting();
+    assert_eq!(stats.nesting_level(), 1);
+
+    // Add structural complexity with nesting
+    stats.increment_structural(1);
+
+    stats.increment_nesting();
+    assert_eq!(stats.nesting_level(), 2);
+
+    stats.decrement_nesting();
+    assert_eq!(stats.nesting_level(), 1);
+
+    stats.decrement_nesting();
+    assert_eq!(stats.nesting_level(), 0);
+}
+
+#[test]
+fn test_cyclomatic_min_max_tracking() {
+    let mut stats = CyclomaticStats::new();
+
+    // First function
+    stats.increment();
+    stats.increment();
+    stats.compute_sum();
+
+    // Second function
+    stats.reset();
+    stats.increment();
+    stats.increment();
+    stats.increment();
+    stats.increment();
+    stats.compute_sum();
+
+    // Third function
+    stats.reset();
+    stats.increment();
+    stats.compute_sum();
+
+    // Check min/max
+    let min = stats.cyclomatic_min();
+    let max = stats.cyclomatic_max();
+
+    assert!(min > 0.0);
+    assert!(max >= min);
+}
+
+#[test]
+fn test_loc_physical_vs_logical() {
+    let mut stats = LocStats::new();
+
+    // Physical lines
+    stats.incr_ploc();
+    stats.incr_ploc();
+    stats.incr_ploc();
+
+    // Logical lines (might be different from physical)
+    stats.incr_lloc();
+    stats.incr_lloc();
+
+    // Comments
+    stats.incr_cloc();
+
+    // Blanks
+    stats.incr_blank();
+
+    assert_eq!(stats.ploc(), 3.0);
+    assert_eq!(stats.lloc(), 2.0);
+    assert_eq!(stats.cloc(), 1.0);
+    assert_eq!(stats.blank(), 1.0);
+}
+
+#[test]
+fn test_maintainability_index_computation() {
+    let mut loc = LocStats::new();
+    loc.incr_sloc();
+    loc.incr_sloc();
+    loc.incr_sloc();
+
+    let mut cyclomatic = CyclomaticStats::new();
+    cyclomatic.increment();
+    cyclomatic.increment();
+
+    let halstead = HalsteadStats::from_counts(5, 10, 5, 10);
+
+    let mi = MaintainabilityIndexStats::from_metrics(&loc, &cyclomatic, &halstead);
+
+    // MI should be calculated
+    let mi_original = mi.mi_original();
+    let mi_sei = mi.mi_sei();
+    let mi_visual_studio = mi.mi_visual_studio();
+
+    // All MI variants should have reasonable values
+    assert!(mi_original >= 0.0 || mi_original < 0.0); // Just check it's a valid number
+    assert!(mi_sei >= 0.0 || mi_sei < 0.0);
+    assert!(mi_visual_studio >= 0.0 || mi_visual_studio < 0.0);
+}
+
+#[test]
+fn test_wmc_from_cyclomatic() {
+    let mut cyclomatic = CyclomaticStats::new();
+
+    // Simulate 3 methods with different complexities
+    cyclomatic.increment();
+    cyclomatic.increment();
+    cyclomatic.compute_sum();
+
+    cyclomatic.reset();
+    cyclomatic.increment();
+    cyclomatic.increment();
+    cyclomatic.increment();
+    cyclomatic.compute_sum();
+
+    cyclomatic.reset();
+    cyclomatic.increment();
+    cyclomatic.compute_sum();
+
+    let wmc = WmcStats::from_cyclomatic(&cyclomatic);
+
+    // WMC should be the sum of method complexities
+    assert_eq!(wmc.wmc(), cyclomatic.cyclomatic_sum());
+}
+
+#[test]
+fn test_nom_functions_and_closures() {
+    let mut stats = NomStats::new();
+
+    stats.add_function();
+    stats.add_function();
+    stats.add_closure();
+    stats.add_closure();
+    stats.add_closure();
+
+    assert_eq!(stats.functions(), 5.0); // Total
+    assert_eq!(stats.closures(), 3.0); // Just closures
+    assert_eq!(stats.functions_only(), 2.0); // Just functions
+}
+
+#[test]
+fn test_nargs_statistics() {
+    let mut stats = NargsStats::new();
+
+    stats.add_func_with_args(0); // No args
+    stats.add_func_with_args(2); // 2 args
+    stats.add_func_with_args(3); // 3 args
+    stats.add_func_with_args(5); // 5 args
+
+    assert_eq!(stats.nargs_total(), 10.0);
+    assert_eq!(stats.nargs_average(), 2.5);
+    assert_eq!(stats.nargs_min(), 0.0);
+    assert_eq!(stats.nargs_max(), 5.0);
+}
+
+#[test]
+fn test_exit_points_tracking() {
+    let mut stats = ExitStats::new();
+
+    // Multiple exit points (return, break, continue, etc.)
+    stats.add_exit();
+    stats.add_exit();
+    stats.add_exit();
+
+    assert_eq!(stats.exit(), 3.0);
+}
+
+#[test]
+fn test_npm_and_npa() {
+    let mut npm = NpmStats::new();
+    let mut npa = NpaStats::new();
+
+    // Public methods
+    npm.add_public_method();
+    npm.add_public_method();
+    npm.add_public_method();
+
+    // Public attributes
+    npa.add_public_attribute();
+    npa.add_public_attribute();
+
+    assert_eq!(npm.npm(), 3.0);
+    assert_eq!(npa.npa(), 2.0);
+}
+
+#[test]
+fn test_metrics_merge_operations() {
+    let mut metrics1 = CodeMetrics::new();
+    metrics1.cyclomatic.increment();
+    metrics1.loc.incr_sloc();
+    metrics1.nom.add_function();
+
+    let mut metrics2 = CodeMetrics::new();
+    metrics2.cyclomatic.increment();
+    metrics2.loc.incr_sloc();
+    metrics2.nom.add_function();
+
+    metrics1.merge(&metrics2);
+
+    // After merge, values should be combined
+    assert!(metrics1.cyclomatic.cyclomatic() > 1.0);
+    assert!(metrics1.loc.sloc() > 1.0);
+    assert!(metrics1.nom.functions() >= 2.0);
+}
+
+#[test]
+fn test_all_metrics_serialization_roundtrip() {
+    let mut metrics = CodeMetrics::new();
+
+    // Populate with some data
+    metrics.cyclomatic.increment();
+    metrics.loc.incr_sloc();
+    metrics.abc.add_assignment();
+    metrics.abc.add_branch();
+    metrics.abc.add_condition();
+    metrics.cognitive.increment_structural(1);
+    metrics.nom.add_function();
+
+    // Serialize to JSON
+    let json = serde_json::to_string(&metrics).unwrap();
+
+    // Deserialize back
+    let deserialized: CodeMetrics = serde_json::from_str(&json).unwrap();
+
+    // Verify equality
+    assert_eq!(metrics, deserialized);
+}

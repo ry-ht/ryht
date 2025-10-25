@@ -334,6 +334,97 @@ impl AbcStats {
     }
 }
 
+/// Java-specific ABC helper: Inspects parenthesized expressions and NOT operators to find unary conditions
+///
+/// According to ABC metric definition for Java, unary conditional expressions are implicit conditions
+/// that use no relational operators. Examples:
+/// - `if (x)` - variable used as boolean
+/// - `if (!x)` - NOT operator on variable
+/// - `if (m())` - method invocation returning boolean
+/// - `if (!(m()))` - NOT operator on method call
+///
+/// This function recursively traverses parenthesized expressions and NOT operators to determine
+/// if the contained expression is actually a boolean condition.
+fn java_inspect_container(node: &crate::node::Node, conditions: &mut f64, lang: crate::Lang) {
+    use crate::analysis::checker::{NodeChecker, DefaultNodeChecker};
+
+    let mut current = *node;
+    let mut current_kind = current.kind();
+
+    // Flag is true if container is known to hold boolean value
+    let mut has_boolean_content = if let Some(parent) = node.parent() {
+        match parent.kind() {
+            "binary_expression" | "if_statement" | "while_statement" | "do_statement" | "for_statement" => true,
+            "ternary_expression" => {
+                // Only count if this is the condition part (not the result expressions)
+                node.previous_sibling()
+                    .map(|prev| !matches!(prev.kind(), "?" | ":"))
+                    .unwrap_or(true)
+            }
+            _ => false,
+        }
+    } else {
+        false
+    };
+
+    // Traverse through parentheses and NOT operators
+    loop {
+        let is_parenthesized = current_kind == "parenthesized_expression";
+        let is_not_operator = current_kind == "unary_expression"
+            && current.child(0)
+                .map(|c| c.kind() == "!")
+                .unwrap_or(false);
+
+        if !is_parenthesized && !is_not_operator {
+            break;
+        }
+
+        // NOT operator proves boolean content
+        if !has_boolean_content && is_not_operator {
+            has_boolean_content = true;
+        }
+
+        // Both parenthesized and NOT operators store expression at child index 1
+        if let Some(child) = current.child(1) {
+            current = child;
+            current_kind = current.kind();
+
+            // Found the actual content
+            if matches!(current_kind, "method_invocation" | "identifier" | "true" | "false") {
+                if has_boolean_content {
+                    *conditions += 1.0;
+                }
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+/// Java-specific ABC helper: Counts unary conditions in element lists
+///
+/// Scans through children of a list node (e.g., BinaryExpression, ArgumentList)
+/// and counts any unary conditional expressions found.
+fn java_count_unary_conditions(node: &crate::node::Node, conditions: &mut f64, lang: crate::Lang) {
+    let list_kind = node.kind();
+
+    for child in node.children() {
+        let child_kind = child.kind();
+
+        // Direct unary conditions in binary expressions
+        if matches!(child_kind, "method_invocation" | "identifier" | "true" | "false")
+            && list_kind == "binary_expression"
+            && list_kind != "argument_list"
+        {
+            *conditions += 1.0;
+        } else {
+            // Check for container nodes that might hold unary conditions
+            java_inspect_container(&child, conditions, lang);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

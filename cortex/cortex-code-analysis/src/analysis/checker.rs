@@ -25,6 +25,7 @@ use aho_corasick::AhoCorasick;
 use regex::bytes::Regex;
 
 use crate::node::Node;
+use crate::traits::Search;
 use crate::Lang;
 
 // Lazy-initialized pattern matchers for performance
@@ -639,5 +640,379 @@ mod tests {
         let ac = AHO_CORASICK.get_or_init(|| AhoCorasick::new(["<div rustbindgen"]).unwrap());
         assert!(ac.is_match(b"<div rustbindgen>"));
         assert!(!ac.is_match(b"regular comment"));
+    }
+}
+
+// ============================================================================
+// Pattern Matching and Lint Rules
+// ============================================================================
+
+/// Severity level for lint violations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    /// Informational message
+    Info,
+    /// Warning - potential issue
+    Warning,
+    /// Error - definite problem
+    Error,
+}
+
+/// A lint violation found in code
+#[derive(Debug, Clone)]
+pub struct LintViolation {
+    /// Rule that was violated
+    pub rule_id: String,
+    /// Severity of the violation
+    pub severity: Severity,
+    /// Description of the violation
+    pub message: String,
+    /// Start line (1-indexed)
+    pub start_line: usize,
+    /// End line (1-indexed)
+    pub end_line: usize,
+    /// Start byte offset
+    pub start_byte: usize,
+    /// End byte offset
+    pub end_byte: usize,
+    /// Optional suggestion for fixing
+    pub suggestion: Option<String>,
+}
+
+impl LintViolation {
+    /// Create a new lint violation
+    pub fn new(
+        rule_id: String,
+        severity: Severity,
+        message: String,
+        node: &Node,
+    ) -> Self {
+        Self {
+            rule_id,
+            severity,
+            message,
+            start_line: node.start_row() + 1,
+            end_line: node.end_row() + 1,
+            start_byte: node.start_byte(),
+            end_byte: node.end_byte(),
+            suggestion: None,
+        }
+    }
+
+    /// Add a suggestion for fixing the violation
+    pub fn with_suggestion(mut self, suggestion: String) -> Self {
+        self.suggestion = Some(suggestion);
+        self
+    }
+}
+
+/// Trait for implementing custom lint rules
+pub trait LintRule {
+    /// Get the unique identifier for this rule
+    fn id(&self) -> &str;
+
+    /// Get the description of this rule
+    fn description(&self) -> &str;
+
+    /// Get the default severity for this rule
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    /// Check a node and return violations if any
+    fn check(&self, node: &Node, code: &[u8], lang: Lang) -> Vec<LintViolation>;
+}
+
+/// Built-in lint rules
+
+/// Rule: Function too long (> 50 lines)
+pub struct FunctionTooLongRule;
+
+impl LintRule for FunctionTooLongRule {
+    fn id(&self) -> &str {
+        "function-too-long"
+    }
+
+    fn description(&self) -> &str {
+        "Functions should be shorter than 50 lines"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn check(&self, node: &Node, _code: &[u8], lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        if DefaultNodeChecker::is_func(node, lang) {
+            let line_count = node.line_count();
+            if line_count > 50 {
+                violations.push(
+                    LintViolation::new(
+                        self.id().to_string(),
+                        self.severity(),
+                        format!("Function has {} lines, should be < 50", line_count),
+                        node,
+                    )
+                    .with_suggestion("Consider breaking this function into smaller functions".to_string()),
+                );
+            }
+        }
+
+        violations
+    }
+}
+
+/// Rule: Deeply nested code (> 4 levels)
+pub struct DeepNestingRule;
+
+impl LintRule for DeepNestingRule {
+    fn id(&self) -> &str {
+        "deep-nesting"
+    }
+
+    fn description(&self) -> &str {
+        "Code should not be nested more than 4 levels deep"
+    }
+
+    fn check(&self, node: &Node, _code: &[u8], _lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        let depth = node.depth();
+        if depth > 8 {
+            // Depth > 8 usually means 4+ levels of nesting in code
+            violations.push(
+                LintViolation::new(
+                    self.id().to_string(),
+                    self.severity(),
+                    format!("Code is nested {} levels deep", depth / 2),
+                    node,
+                )
+                .with_suggestion("Consider extracting nested logic into separate functions".to_string()),
+            );
+        }
+
+        violations
+    }
+}
+
+/// Rule: Missing documentation comment
+pub struct MissingDocCommentRule;
+
+impl LintRule for MissingDocCommentRule {
+    fn id(&self) -> &str {
+        "missing-doc-comment"
+    }
+
+    fn description(&self) -> &str {
+        "Public functions should have documentation comments"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Info
+    }
+
+    fn check(&self, node: &Node, code: &[u8], lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        if DefaultNodeChecker::is_func(node, lang) {
+            // Check if there's a doc comment before this function
+            let has_doc = node
+                .previous_sibling()
+                .map(|prev| {
+                    DefaultNodeChecker::is_comment(&prev, lang)
+                        && is_doc_comment_text(&prev, code, lang)
+                })
+                .unwrap_or(false);
+
+            if !has_doc {
+                violations.push(LintViolation::new(
+                    self.id().to_string(),
+                    self.severity(),
+                    "Function is missing a documentation comment".to_string(),
+                    node,
+                ));
+            }
+        }
+
+        violations
+    }
+}
+
+fn is_doc_comment_text(node: &Node, code: &[u8], lang: Lang) -> bool {
+    if let Some(text) = node.utf8_text(code) {
+        match lang {
+            Lang::Rust => text.starts_with("///") || text.starts_with("//!"),
+            Lang::TypeScript | Lang::JavaScript => text.starts_with("/**"),
+            Lang::Java | Lang::Cpp => text.starts_with("/**"),
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
+/// Rule: TODO comment found
+pub struct TodoCommentRule;
+
+impl LintRule for TodoCommentRule {
+    fn id(&self) -> &str {
+        "todo-comment"
+    }
+
+    fn description(&self) -> &str {
+        "TODO comments should be resolved"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Info
+    }
+
+    fn check(&self, node: &Node, code: &[u8], lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        if DefaultNodeChecker::is_comment(node, lang) {
+            if let Some(text) = node.utf8_text(code) {
+                if text.contains("TODO") || text.contains("FIXME") || text.contains("XXX") {
+                    violations.push(LintViolation::new(
+                        self.id().to_string(),
+                        self.severity(),
+                        "TODO comment found".to_string(),
+                        node,
+                    ));
+                }
+            }
+        }
+
+        violations
+    }
+}
+
+/// Lint checker that runs multiple rules
+pub struct LintChecker {
+    rules: Vec<Box<dyn LintRule>>,
+}
+
+impl LintChecker {
+    /// Create a new lint checker
+    pub fn new() -> Self {
+        Self { rules: Vec::new() }
+    }
+
+    /// Create a checker with default rules
+    pub fn with_default_rules() -> Self {
+        let mut checker = Self::new();
+        checker.add_rule(Box::new(FunctionTooLongRule));
+        checker.add_rule(Box::new(DeepNestingRule));
+        checker.add_rule(Box::new(MissingDocCommentRule));
+        checker.add_rule(Box::new(TodoCommentRule));
+        checker
+    }
+
+    /// Add a rule to the checker
+    pub fn add_rule(&mut self, rule: Box<dyn LintRule>) {
+        self.rules.push(rule);
+    }
+
+    /// Check a node against all rules
+    pub fn check_node(&self, node: &Node, code: &[u8], lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        for rule in &self.rules {
+            violations.extend(rule.check(node, code, lang));
+        }
+
+        violations
+    }
+
+    /// Check an entire tree
+    pub fn check_tree(&self, root: &Node, code: &[u8], lang: Lang) -> Vec<LintViolation> {
+        let mut violations = Vec::new();
+
+        root.act_on_node(&mut |node| {
+            violations.extend(self.check_node(node, code, lang));
+        });
+
+        // Sort by line number
+        violations.sort_by_key(|v| (v.start_line, v.start_byte));
+
+        violations
+    }
+}
+
+impl Default for LintChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Anti-pattern Detection
+// ============================================================================
+
+/// Common anti-patterns to detect
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AntiPattern {
+    /// Magic numbers (hardcoded constants)
+    MagicNumber,
+    /// God function (too many responsibilities)
+    GodFunction,
+    /// Deep nesting
+    DeepNesting,
+    /// Long parameter list
+    LongParameterList,
+    /// Duplicate code
+    DuplicateCode,
+    /// Dead code
+    DeadCode,
+}
+
+/// Detect anti-patterns in code
+pub struct AntiPatternDetector;
+
+impl AntiPatternDetector {
+    /// Detect magic numbers (numeric literals in code)
+    pub fn detect_magic_numbers<'a>(node: &Node<'a>, code: &[u8]) -> Vec<Node<'a>> {
+        let mut numbers = Vec::new();
+
+        node.act_on_node(&mut |n| {
+            let kind = n.kind();
+            if kind.contains("integer") || kind.contains("float") || kind.contains("number") {
+                // Exclude 0, 1, -1 as they're common and not "magic"
+                if let Some(text) = n.utf8_text(code) {
+                    if text != "0" && text != "1" && text != "-1" && text != "0.0" && text != "1.0" {
+                        numbers.push(*n);
+                    }
+                }
+            }
+        });
+
+        numbers
+    }
+
+    /// Detect functions with too many parameters (> 4)
+    pub fn detect_long_parameter_lists<'a>(node: &Node<'a>, lang: Lang) -> Vec<Node<'a>> {
+        let mut functions = Vec::new();
+
+        node.act_on_node(&mut |n| {
+            if DefaultNodeChecker::is_func(n, lang) {
+                let param_count = count_parameters(n);
+                if param_count > 4 {
+                    functions.push(*n);
+                }
+            }
+        });
+
+        functions
+    }
+}
+
+fn count_parameters(node: &Node) -> usize {
+    // Look for parameters field or count commas in parameter list
+    if let Some(params) = node.child_by_field_name("parameters") {
+        // Count named children as a rough estimate
+        params.named_child_count()
+    } else {
+        0
     }
 }
