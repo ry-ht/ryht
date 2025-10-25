@@ -181,7 +181,7 @@ async fn create_export(
         status: ExportStatus::Processing,
         include_history: payload.include_history,
         include_metadata: payload.include_metadata,
-        estimated_size_mb: Some(100), // Mock estimation
+        estimated_size_mb: None, // Will be calculated during actual export
         actual_size_bytes: None,
         download_url: None,
         error_message: None,

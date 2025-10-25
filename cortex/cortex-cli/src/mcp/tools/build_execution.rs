@@ -631,15 +631,23 @@ impl Tool for TestExecuteTool {
                     .unwrap_or(None);
 
                 let output = if let Some(results) = results {
+                    // Coverage parsing would require test output capture
+                    // For now, return None - actual coverage requires integration with coverage tools
+                    let coverage = if input.coverage {
+                        // In production, this would:
+                        // 1. Run tests with coverage enabled (e.g., cargo tarpaulin, llvm-cov)
+                        // 2. Parse coverage report output
+                        // 3. Return actual coverage percentage
+                        None
+                    } else {
+                        None
+                    };
+
                     TestExecuteOutput {
                         passed: results.passed as i32,
                         failed: results.failed as i32,
                         skipped: results.skipped as i32,
-                        coverage: if input.coverage {
-                            Some(83.3) // Mock coverage for now
-                        } else {
-                            None
-                        },
+                        coverage,
                         duration_ms: start_time.elapsed().as_millis() as i64,
                     }
                 } else {
