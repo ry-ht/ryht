@@ -8,9 +8,10 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tower_http::{
     cors::{Any, CorsLayer},
+    services::ServeDir,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
-use tracing::{info, Level};
+use tracing::{info, warn, Level};
 
 use super::{middleware as api_middleware, routes, websocket};
 use crate::commands::{config::AxonConfig, runtime_manager::AgentRuntimeManager};
@@ -80,11 +81,27 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Create WebSocket routes
     let ws_routes = websocket::websocket_routes(ws_manager.clone());
 
+    // Check if dashboard directory exists
+    let dashboard_path = std::path::PathBuf::from("./dashboard");
+    let has_dashboard = dashboard_path.exists() && dashboard_path.is_dir();
+
+    if !has_dashboard {
+        warn!("Dashboard directory not found at ./dashboard");
+        warn!("Run build script to copy dashboard files: ./build-and-copy.sh release");
+    }
+
     // Combine all routes
-    let app = Router::new()
+    let mut app = Router::new()
         .nest("/api/v1", api_routes)
-        .nest("/api/v1", ws_routes)
-        .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not found") });
+        .nest("/api/v1", ws_routes);
+
+    // Serve dashboard static files if directory exists
+    if has_dashboard {
+        info!("Serving dashboard from ./dashboard");
+        app = app.nest_service("/", ServeDir::new(&dashboard_path));
+    } else {
+        app = app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not found") });
+    }
 
     // Parse socket address
     let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
@@ -92,6 +109,9 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     info!("API Server listening on http://{}", addr);
     info!("WebSocket endpoint: ws://{}/api/v1/ws", addr);
     info!("API documentation: http://{}/api/v1/", addr);
+    if has_dashboard {
+        info!("Dashboard UI: http://{}/", addr);
+    }
 
     // Print API key information
     if let Ok(_api_key) = std::env::var("AXON_API_KEY") {

@@ -27,7 +27,7 @@ command = "cargo"
 args = ["build"]
 
 [tasks.copy-binaries-release]
-description = "Copy release binaries to dist/"
+description = "Copy release binaries and dashboard to dist/"
 dependencies = ["build-release"]
 script = '''
 #!/usr/bin/env bash
@@ -43,11 +43,19 @@ for binary in cortex axon dashboard; do
     fi
 done
 
+# Copy dashboard static files
+if [ -d "dashboard/dist" ]; then
+    rm -rf ${DIST_DIR}/dashboard
+    cp -r dashboard/dist ${DIST_DIR}/dashboard
+    file_count=$(find ${DIST_DIR}/dashboard -type f | wc -l | tr -d ' ')
+    echo "✓ Copied dashboard UI (${file_count} files)"
+fi
+
 ls -lh ${DIST_DIR}/
 '''
 
 [tasks.copy-binaries-debug]
-description = "Copy debug binaries to dist/"
+description = "Copy debug binaries and dashboard to dist/"
 dependencies = ["build-debug"]
 script = '''
 #!/usr/bin/env bash
@@ -62,6 +70,14 @@ for binary in cortex axon dashboard; do
         echo "✓ Copied ${binary} (debug)"
     fi
 done
+
+# Copy dashboard static files
+if [ -d "dashboard/dist" ]; then
+    rm -rf ${DIST_DIR}/dashboard
+    cp -r dashboard/dist ${DIST_DIR}/dashboard
+    file_count=$(find ${DIST_DIR}/dashboard -type f | wc -l | tr -d ' ')
+    echo "✓ Copied dashboard UI (${file_count} files)"
+fi
 
 ls -lh ${DIST_DIR}/
 '''

@@ -47,15 +47,31 @@ for binary in "${BINARIES[@]}"; do
     fi
 done
 
-# Check for dashboard binary (might have different name)
-if [ -f "${TARGET_DIR}/dashboard" ]; then
-    cp "${TARGET_DIR}/dashboard" dist/
-    echo -e "${GREEN}✓ Copied dashboard${NC}"
-elif [ -f "${TARGET_DIR}/cortex-dashboard" ]; then
-    cp "${TARGET_DIR}/cortex-dashboard" dist/dashboard
-    echo -e "${GREEN}✓ Copied cortex-dashboard as dashboard${NC}"
+# Copy dashboard static files
+echo -e "\n${BLUE}Copying dashboard files...${NC}"
+
+if [ -d "dashboard/dist" ]; then
+    # Remove old dashboard directory if exists
+    rm -rf dist/dashboard
+
+    # Copy dashboard files
+    cp -r dashboard/dist dist/dashboard
+
+    echo -e "${GREEN}✓ Copied dashboard UI from dashboard/dist${NC}"
+
+    # Count files
+    file_count=$(find dist/dashboard -type f | wc -l | tr -d ' ')
+    echo -e "${GREEN}  Files copied: ${file_count}${NC}"
+else
+    echo -e "⚠ Dashboard source not found at dashboard/dist"
+    echo -e "  Run 'cd dashboard && npm run build' to build dashboard first"
 fi
 
 echo -e "\n${GREEN}=== Build Complete ===${NC}"
 echo -e "Binaries available in: ${PWD}/dist/"
-ls -lh dist/
+ls -lh dist/ 2>/dev/null || true
+
+if [ -d "dist/dashboard" ]; then
+    echo -e "\nDashboard files: dist/dashboard/"
+    ls -lh dist/dashboard/ | head -10
+fi
