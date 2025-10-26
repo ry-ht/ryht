@@ -7,9 +7,9 @@ import { usePathname } from 'src/routes/hooks';
 import { themeConfig, ThemeProvider } from 'src/theme';
 
 import { ProgressBar } from 'src/components/progress-bar';
+import { SnackbarProvider } from 'src/components/snackbar';
 import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { SettingsDrawer, defaultSettings, SettingsProvider } from 'src/components/settings';
-import { SnackbarProvider } from 'src/components/snackbar';
 
 import { AuthProvider } from 'src/auth/context/jwt';
 

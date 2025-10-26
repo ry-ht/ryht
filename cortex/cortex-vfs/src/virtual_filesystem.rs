@@ -584,7 +584,7 @@ impl VirtualFileSystem {
     ///
     /// FIXED: Uses database-level atomic increment to prevent race conditions
     /// The reference_count is incremented atomically using a single database operation
-    async fn store_content(&self, hash: &str, content: &[u8]) -> Result<()> {
+    pub async fn store_content(&self, hash: &str, content: &[u8]) -> Result<()> {
         let conn = self.storage.acquire().await?;
 
         // Prepare content record (for potential insertion)

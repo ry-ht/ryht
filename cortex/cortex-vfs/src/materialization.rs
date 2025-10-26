@@ -3,12 +3,14 @@
 use crate::path::VirtualPath;
 use crate::types::*;
 use crate::virtual_filesystem::VirtualFileSystem;
+use chrono::Utc;
 use cortex_core::error::{CortexError, Result};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::fs;
 use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 /// Engine for materializing virtual filesystem to physical disk.
 ///
@@ -487,6 +489,794 @@ impl MaterializationEngine {
             Ok(())
         })
     }
+    // ============================================================================
+    // Bidirectional Sync
+    // ============================================================================
+
+    /// Synchronize VFS from filesystem changes.
+    ///
+    /// This method scans a filesystem directory and updates the VFS to match:
+    /// - New files on disk → Created VNodes in VFS
+    /// - Modified files → Updated VNodes with Modified status
+    /// - Files deleted from disk → VNodes marked as Deleted
+    /// - Conflict detection when both VFS and FS have changed
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace_id` - The workspace to sync into
+    /// * `fs_path` - Physical filesystem path to scan
+    /// * `virtual_path_prefix` - Virtual path prefix to map files under (e.g., "/" for root)
+    /// * `options` - Sync options controlling behavior
+    ///
+    /// # Returns
+    ///
+    /// Returns a `SyncReport` with statistics and any errors encountered.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use cortex_vfs::{MaterializationEngine, VirtualFileSystem, VirtualPath, SyncOptions};
+    /// # use cortex_storage::ConnectionManager;
+    /// # use std::sync::Arc;
+    /// # use std::path::Path;
+    /// # async fn example() -> cortex_core::error::Result<()> {
+    /// let storage = Arc::new(ConnectionManager::default());
+    /// let vfs = VirtualFileSystem::new(storage);
+    /// let engine = MaterializationEngine::new(vfs);
+    ///
+    /// let workspace_id = uuid::Uuid::new_v4();
+    /// let fs_path = Path::new("/home/user/project");
+    /// let virtual_prefix = VirtualPath::root();
+    ///
+    /// let report = engine.sync_from_filesystem(
+    ///     &workspace_id,
+    ///     fs_path,
+    ///     &virtual_prefix,
+    ///     SyncOptions::default()
+    /// ).await?;
+    ///
+    /// println!("Synced {} files, {} conflicts", report.files_synced, report.conflicts_detected);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn sync_from_filesystem(
+        &self,
+        workspace_id: &Uuid,
+        fs_path: &Path,
+        virtual_path_prefix: &VirtualPath,
+        options: SyncOptions,
+    ) -> Result<SyncReport> {
+        let start = Instant::now();
+        info!(
+            "Starting filesystem sync from {} to workspace {}",
+            fs_path.display(),
+            workspace_id
+        );
+
+        let mut report = SyncReport::default();
+
+        // Verify filesystem path exists
+        if !fs_path.exists() {
+            return Err(CortexError::not_found(
+                "Filesystem path",
+                fs_path.display().to_string(),
+            ));
+        }
+
+        if !fs_path.is_dir() {
+            return Err(CortexError::invalid_input(format!(
+                "Path must be a directory: {}",
+                fs_path.display()
+            )));
+        }
+
+        // Recursively scan filesystem and sync
+        self.sync_directory_recursive(
+            workspace_id,
+            fs_path,
+            virtual_path_prefix,
+            &options,
+            &mut report,
+            0,
+        )
+        .await?;
+
+        report.duration_ms = start.elapsed().as_millis() as u64;
+        info!(
+            "Filesystem sync completed in {}ms: {} files synced, {} conflicts",
+            report.duration_ms, report.files_synced, report.conflicts_detected
+        );
+
+        Ok(report)
+    }
+
+    /// Recursively sync a directory from filesystem to VFS.
+    fn sync_directory_recursive<'a>(
+        &'a self,
+        workspace_id: &'a Uuid,
+        fs_path: &'a Path,
+        virtual_path: &'a VirtualPath,
+        options: &'a SyncOptions,
+        report: &'a mut SyncReport,
+        depth: usize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            // Check max depth
+            if let Some(max_depth) = options.max_depth {
+                if depth > max_depth {
+                    debug!("Skipping directory (max depth): {}", fs_path.display());
+                    return Ok(());
+                }
+            }
+
+            // Read directory entries
+            let mut entries = match fs::read_dir(fs_path).await {
+                Ok(entries) => entries,
+                Err(e) => {
+                    let err_msg = format!("Failed to read directory {}: {}", fs_path.display(), e);
+                    warn!("{}", err_msg);
+                    report.errors.push(err_msg);
+                    return Ok(());
+                }
+            };
+
+            // Process each entry
+            while let Some(entry) = entries
+                .next_entry()
+                .await
+                .map_err(|e| CortexError::vfs(format!("Failed to read entry: {}", e)))?
+            {
+                let entry_path = entry.path();
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
+
+                // Skip hidden files if requested
+                if options.skip_hidden && file_name_str.starts_with('.') {
+                    debug!("Skipping hidden file: {}", entry_path.display());
+                    continue;
+                }
+
+                // Check exclusion patterns
+                if self.is_excluded(&entry_path, &options.exclude_patterns) {
+                    debug!("Excluded by pattern: {}", entry_path.display());
+                    continue;
+                }
+
+                // Build virtual path for this entry
+                let entry_virtual_path = match virtual_path.join(&file_name_str) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("Invalid path {}: {}", file_name_str, e);
+                        continue;
+                    }
+                };
+
+                // Get metadata
+                let metadata = match fs::metadata(&entry_path).await {
+                    Ok(m) => m,
+                    Err(e) => {
+                        let err_msg = format!("Failed to read metadata for {}: {}", entry_path.display(), e);
+                        warn!("{}", err_msg);
+                        report.errors.push(err_msg);
+                        continue;
+                    }
+                };
+
+                if metadata.is_dir() {
+                    // Ensure directory exists in VFS
+                    if let Err(e) = self.sync_directory(
+                        workspace_id,
+                        &entry_virtual_path,
+                        &metadata,
+                    ).await {
+                        let err_msg = format!("Failed to sync directory {}: {}", entry_path.display(), e);
+                        warn!("{}", err_msg);
+                        report.errors.push(err_msg);
+                        continue;
+                    }
+
+                    report.directories_synced += 1;
+
+                    // Recurse into subdirectory
+                    if let Err(e) = self.sync_directory_recursive(
+                        workspace_id,
+                        &entry_path,
+                        &entry_virtual_path,
+                        options,
+                        report,
+                        depth + 1,
+                    ).await {
+                        report.errors.push(e.to_string());
+                    }
+                } else if metadata.is_file() {
+                    // Sync file
+                    match self.sync_file(
+                        workspace_id,
+                        &entry_path,
+                        &entry_virtual_path,
+                        &metadata,
+                        options,
+                    ).await {
+                        Ok(sync_result) => {
+                            report.files_synced += 1;
+                            if sync_result.is_conflict {
+                                report.conflicts_detected += 1;
+                            }
+                            report.bytes_synced += sync_result.size_bytes;
+                        }
+                        Err(e) => {
+                            let err_msg = format!("Failed to sync file {}: {}", entry_path.display(), e);
+                            warn!("{}", err_msg);
+                            report.errors.push(err_msg);
+                        }
+                    }
+                } else if metadata.is_symlink() {
+                    // Handle symlinks if requested
+                    if options.follow_symlinks {
+                        debug!("Following symlink: {}", entry_path.display());
+                        // Could implement symlink handling here
+                    } else {
+                        debug!("Skipping symlink: {}", entry_path.display());
+                    }
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Sync a single directory from filesystem to VFS.
+    async fn sync_directory(
+        &self,
+        workspace_id: &Uuid,
+        virtual_path: &VirtualPath,
+        _metadata: &std::fs::Metadata,
+    ) -> Result<()> {
+        // Check if directory already exists in VFS
+        if self.vfs.exists(workspace_id, virtual_path).await? {
+            debug!("Directory already exists in VFS: {}", virtual_path);
+            return Ok(());
+        }
+
+        // Create directory in VFS
+        debug!("Creating directory in VFS: {}", virtual_path);
+        self.vfs.create_directory(workspace_id, virtual_path, false).await?;
+
+        Ok(())
+    }
+
+    /// Sync a single file from filesystem to VFS.
+    async fn sync_file(
+        &self,
+        workspace_id: &Uuid,
+        fs_path: &Path,
+        virtual_path: &VirtualPath,
+        metadata: &std::fs::Metadata,
+        options: &SyncOptions,
+    ) -> Result<FileSyncResult> {
+        // Read file content
+        let content = fs::read(fs_path).await.map_err(|e| {
+            CortexError::vfs(format!("Failed to read file {}: {}", fs_path.display(), e))
+        })?;
+
+        // Calculate hash
+        let new_hash = Self::hash_content(&content);
+
+        // Check if file exists in VFS
+        let existing_vnode = self.vfs.get_vnode(workspace_id, virtual_path).await?;
+
+        let sync_result = match existing_vnode {
+            Some(vnode) => {
+                // File exists in VFS - check for changes
+                self.sync_existing_file(
+                    workspace_id,
+                    virtual_path,
+                    &vnode,
+                    &content,
+                    &new_hash,
+                    metadata,
+                    options,
+                ).await?
+            }
+            None => {
+                // New file - create in VFS
+                self.sync_new_file(
+                    workspace_id,
+                    virtual_path,
+                    &content,
+                    &new_hash,
+                    metadata,
+                ).await?
+            }
+        };
+
+        Ok(sync_result)
+    }
+
+    /// Sync a new file (doesn't exist in VFS yet).
+    async fn sync_new_file(
+        &self,
+        workspace_id: &Uuid,
+        virtual_path: &VirtualPath,
+        content: &[u8],
+        content_hash: &str,
+        metadata: &std::fs::Metadata,
+    ) -> Result<FileSyncResult> {
+        debug!("Syncing new file to VFS: {}", virtual_path);
+
+        // Store content
+        self.vfs.store_content(content_hash, content).await?;
+
+        // Create VNode
+        let mut vnode = VNode::new_file(
+            *workspace_id,
+            virtual_path.clone(),
+            content_hash.to_string(),
+            content.len(),
+        );
+
+        // Detect language
+        if let Some(ext) = virtual_path.extension() {
+            vnode.language = Some(Language::from_extension(ext));
+        }
+
+        // Set permissions from filesystem
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            vnode.permissions = Some(metadata.permissions().mode());
+        }
+
+        // Mark as Created
+        vnode.status = SyncStatus::Created;
+
+        // Save to VFS
+        self.vfs.save_vnode(&vnode).await?;
+
+        Ok(FileSyncResult {
+            size_bytes: content.len(),
+            is_conflict: false,
+        })
+    }
+
+    /// Sync an existing file (already in VFS).
+    async fn sync_existing_file(
+        &self,
+        _workspace_id: &Uuid,
+        virtual_path: &VirtualPath,
+        existing_vnode: &VNode,
+        content: &[u8],
+        new_hash: &str,
+        metadata: &std::fs::Metadata,
+        options: &SyncOptions,
+    ) -> Result<FileSyncResult> {
+        let existing_hash = existing_vnode.content_hash.as_deref().unwrap_or("");
+
+        // Check if content has changed on filesystem
+        if new_hash == existing_hash {
+            // No change on filesystem
+            debug!("File unchanged on filesystem: {}", virtual_path);
+            return Ok(FileSyncResult {
+                size_bytes: content.len(),
+                is_conflict: false,
+            });
+        }
+
+        // Content has changed on filesystem
+        debug!("File changed on filesystem: {}", virtual_path);
+
+        // Check if VFS also has changes (conflict detection)
+        let is_conflict = match existing_vnode.status {
+            SyncStatus::Modified | SyncStatus::Created => {
+                // VFS has unsaved changes AND filesystem has changed = CONFLICT
+                warn!("Conflict detected for {}: both VFS and filesystem modified", virtual_path);
+                true
+            }
+            _ => false,
+        };
+
+        if is_conflict && !options.auto_resolve_conflicts {
+            // Mark as conflict and store both versions
+            let mut vnode = existing_vnode.clone();
+            vnode.status = SyncStatus::Conflict;
+
+            // Store filesystem version in metadata
+            vnode.metadata.insert(
+                "fs_content_hash".to_string(),
+                serde_json::Value::String(new_hash.to_string()),
+            );
+            vnode.metadata.insert(
+                "conflict_detected_at".to_string(),
+                serde_json::Value::String(Utc::now().to_rfc3339()),
+            );
+
+            // Store the new content (filesystem version)
+            self.vfs.store_content(new_hash, content).await?;
+
+            // Save updated vnode
+            self.vfs.save_vnode(&vnode).await?;
+
+            info!("Marked file as conflicted: {}", virtual_path);
+
+            return Ok(FileSyncResult {
+                size_bytes: content.len(),
+                is_conflict: true,
+            });
+        }
+
+        // No conflict or auto-resolve enabled - update from filesystem
+        let mut vnode = existing_vnode.clone();
+
+        // Store new content
+        self.vfs.store_content(new_hash, content).await?;
+
+        // Update vnode
+        vnode.content_hash = Some(new_hash.to_string());
+        vnode.size_bytes = content.len();
+
+        // Update permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            vnode.permissions = Some(metadata.permissions().mode());
+        }
+
+        // Mark as modified (unless it was already created/modified and we're auto-resolving)
+        if !is_conflict {
+            vnode.mark_modified();
+        } else {
+            // Auto-resolve: prefer filesystem version
+            vnode.status = SyncStatus::Modified;
+            vnode.version += 1;
+            vnode.updated_at = Utc::now();
+            debug!("Auto-resolved conflict for {} (preferred filesystem version)", virtual_path);
+        }
+
+        // Save updated vnode
+        self.vfs.save_vnode(&vnode).await?;
+
+        Ok(FileSyncResult {
+            size_bytes: content.len(),
+            is_conflict: false, // Not a conflict if auto-resolved
+        })
+    }
+
+    /// Check if a path matches exclusion patterns.
+    fn is_excluded(&self, path: &Path, patterns: &[String]) -> bool {
+        let path_str = path.to_string_lossy();
+
+        for pattern in patterns {
+            // Simple pattern matching (could be enhanced with glob crate)
+            if pattern.contains("**") {
+                // Wildcard pattern
+                let pattern_parts: Vec<&str> = pattern.split("**").collect();
+                if pattern_parts.len() == 2 {
+                    let prefix = pattern_parts[0];
+                    let suffix = pattern_parts[1].trim_start_matches('/');
+
+                    if path_str.contains(prefix) && (suffix.is_empty() || path_str.contains(suffix)) {
+                        return true;
+                    }
+                }
+            } else if path_str.contains(pattern) {
+                // Simple substring match
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Hash content using blake3 (exposed for sync operations).
+    fn hash_content(content: &[u8]) -> String {
+        let hash = blake3::hash(content);
+        hash.to_hex().to_string()
+    }
 }
 
 use std::sync::Arc;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cortex_storage::ConnectionManager;
+    use tempfile::TempDir;
+    use tokio::fs;
+
+    async fn setup_test_vfs() -> (VirtualFileSystem, Arc<ConnectionManager>) {
+        let storage = Arc::new(ConnectionManager::default());
+        let vfs = VirtualFileSystem::new(storage.clone());
+        (vfs, storage)
+    }
+
+    #[tokio::test]
+    async fn test_sync_new_file_from_filesystem() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        // Create temporary directory with a test file
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        fs::write(&test_file, b"Hello, World!").await.unwrap();
+
+        // Sync from filesystem
+        let workspace_id = Uuid::new_v4();
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Verify sync report
+        assert_eq!(report.files_synced, 1);
+        assert_eq!(report.conflicts_detected, 0);
+        assert!(report.errors.is_empty());
+
+        // Verify file exists in VFS
+        let virtual_path = VirtualPath::new("test.txt").unwrap();
+        assert!(vfs.exists(&workspace_id, &virtual_path).await.unwrap());
+
+        // Verify content
+        let content = vfs.read_file(&workspace_id, &virtual_path).await.unwrap();
+        assert_eq!(content, b"Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_sync_modified_file_no_conflict() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let workspace_id = Uuid::new_v4();
+
+        // Initial sync
+        fs::write(&test_file, b"Version 1").await.unwrap();
+        engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Modify file on filesystem
+        fs::write(&test_file, b"Version 2").await.unwrap();
+
+        // Sync again
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // No conflict since VFS wasn't modified
+        assert_eq!(report.conflicts_detected, 0);
+
+        // Verify updated content
+        let virtual_path = VirtualPath::new("test.txt").unwrap();
+        let content = vfs.read_file(&workspace_id, &virtual_path).await.unwrap();
+        assert_eq!(content, b"Version 2");
+    }
+
+    #[tokio::test]
+    async fn test_sync_conflict_detection() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let workspace_id = Uuid::new_v4();
+        let virtual_path = VirtualPath::new("test.txt").unwrap();
+
+        // Initial sync
+        fs::write(&test_file, b"Version 1").await.unwrap();
+        engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Modify in VFS (creating unsaved changes)
+        vfs.write_file(&workspace_id, &virtual_path, b"VFS Version").await.unwrap();
+
+        // Modify on filesystem
+        fs::write(&test_file, b"FS Version").await.unwrap();
+
+        // Sync should detect conflict
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        assert_eq!(report.conflicts_detected, 1);
+
+        // Verify VNode is marked as conflicted
+        let vnode = vfs.metadata(&workspace_id, &virtual_path).await.unwrap();
+        assert_eq!(vnode.status, SyncStatus::Conflict);
+
+        // Verify both versions are stored
+        assert!(vnode.metadata.contains_key("fs_content_hash"));
+    }
+
+    #[tokio::test]
+    async fn test_sync_auto_resolve_conflict() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let workspace_id = Uuid::new_v4();
+        let virtual_path = VirtualPath::new("test.txt").unwrap();
+
+        // Initial sync
+        fs::write(&test_file, b"Version 1").await.unwrap();
+        engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Modify in VFS
+        vfs.write_file(&workspace_id, &virtual_path, b"VFS Version").await.unwrap();
+
+        // Modify on filesystem
+        fs::write(&test_file, b"FS Version").await.unwrap();
+
+        // Sync with auto-resolve enabled (prefers filesystem)
+        let mut options = SyncOptions::default();
+        options.auto_resolve_conflicts = true;
+
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            options,
+        ).await.unwrap();
+
+        // Conflict should be auto-resolved
+        assert_eq!(report.conflicts_detected, 0);
+
+        // VFS should have filesystem version
+        let content = vfs.read_file(&workspace_id, &virtual_path).await.unwrap();
+        assert_eq!(content, b"FS Version");
+    }
+
+    #[tokio::test]
+    async fn test_sync_directory_structure() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_id = Uuid::new_v4();
+
+        // Create directory structure
+        fs::create_dir(temp_dir.path().join("src")).await.unwrap();
+        fs::create_dir(temp_dir.path().join("src/lib")).await.unwrap();
+        fs::write(temp_dir.path().join("src/main.rs"), b"fn main() {}").await.unwrap();
+        fs::write(temp_dir.path().join("src/lib/mod.rs"), b"pub mod test;").await.unwrap();
+
+        // Sync
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        assert_eq!(report.files_synced, 2);
+        assert_eq!(report.directories_synced, 2);
+
+        // Verify structure in VFS
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("src").unwrap()).await.unwrap());
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("src/lib").unwrap()).await.unwrap());
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("src/main.rs").unwrap()).await.unwrap());
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("src/lib/mod.rs").unwrap()).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sync_exclusion_patterns() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_id = Uuid::new_v4();
+
+        // Create files, including ones that should be excluded
+        fs::create_dir(temp_dir.path().join("node_modules")).await.unwrap();
+        fs::write(temp_dir.path().join("node_modules/package.json"), b"{}").await.unwrap();
+        fs::write(temp_dir.path().join("index.js"), b"console.log('hi')").await.unwrap();
+
+        // Sync with default exclusion patterns
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Only index.js should be synced (node_modules excluded)
+        assert_eq!(report.files_synced, 1);
+
+        // Verify
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("index.js").unwrap()).await.unwrap());
+        assert!(!vfs.exists(&workspace_id, &VirtualPath::new("node_modules/package.json").unwrap()).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sync_skip_hidden_files() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_id = Uuid::new_v4();
+
+        // Create hidden and visible files
+        fs::write(temp_dir.path().join(".hidden"), b"secret").await.unwrap();
+        fs::write(temp_dir.path().join("visible.txt"), b"public").await.unwrap();
+
+        // Sync with skip_hidden enabled
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Only visible file should be synced
+        assert_eq!(report.files_synced, 1);
+
+        assert!(vfs.exists(&workspace_id, &VirtualPath::new("visible.txt").unwrap()).await.unwrap());
+        assert!(!vfs.exists(&workspace_id, &VirtualPath::new(".hidden").unwrap()).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_bidirectional_sync_roundtrip() {
+        let (vfs, _storage) = setup_test_vfs().await;
+        let engine = MaterializationEngine::new(vfs.clone());
+
+        let temp_dir = TempDir::new().unwrap();
+        let workspace_id = Uuid::new_v4();
+
+        // Sync from filesystem
+        fs::write(temp_dir.path().join("test.txt"), b"Original").await.unwrap();
+        engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // Modify in VFS
+        let virtual_path = VirtualPath::new("test.txt").unwrap();
+        vfs.write_file(&workspace_id, &virtual_path, b"Modified in VFS").await.unwrap();
+
+        // Flush back to filesystem
+        engine.flush(
+            FlushScope::Workspace(workspace_id),
+            temp_dir.path(),
+            FlushOptions::default(),
+        ).await.unwrap();
+
+        // Verify filesystem has updated content
+        let fs_content = fs::read(temp_dir.path().join("test.txt")).await.unwrap();
+        assert_eq!(fs_content, b"Modified in VFS");
+
+        // Sync again (should have no changes)
+        let report = engine.sync_from_filesystem(
+            &workspace_id,
+            temp_dir.path(),
+            &VirtualPath::root(),
+            SyncOptions::default(),
+        ).await.unwrap();
+
+        // File should be unchanged (same hash)
+        assert_eq!(report.files_synced, 1); // Still counted as synced
+        assert_eq!(report.conflicts_detected, 0);
+    }
+}

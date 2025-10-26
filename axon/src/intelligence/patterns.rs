@@ -3,6 +3,7 @@
 use super::*;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Pattern {
@@ -226,6 +227,51 @@ impl Default for PatternAnalyzer {
     }
 }
 
+// Regex pattern helpers using OnceLock for compile-time initialization
+fn nested_loop_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r"(for|while|loop)\s*.*\{[^}]*(for|while|loop)")
+            .expect("Failed to compile nested_loop_regex")
+    })
+}
+
+fn secret_regex(pattern: &str) -> Option<Regex> {
+    Regex::new(&format!(r#"(?i){}\s*=\s*["'][^"']+"#, pattern)).ok()
+}
+
+fn db_operation_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r"db\.(insert|update|delete)")
+            .expect("Failed to compile db_operation_regex")
+    })
+}
+
+fn file_operation_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r"file\.(write|read)")
+            .expect("Failed to compile file_operation_regex")
+    })
+}
+
+fn http_operation_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r"http\.(get|post|put|delete)")
+            .expect("Failed to compile http_operation_regex")
+    })
+}
+
+fn expect_message_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r#"\.expect\(["'][^"']*["']\)"#)
+            .expect("Failed to compile expect_message_regex")
+    })
+}
+
 
 // Pattern Detector Implementations
 
@@ -309,8 +355,7 @@ impl PatternDetector for PerformanceBottleneckDetector {
         let mut patterns = Vec::new();
 
         // Detect nested loops
-        let nested_loop_regex = Regex::new(r"(for|while|loop)\s*.*\{[^}]*(for|while|loop)").unwrap();
-        if nested_loop_regex.is_match(data) {
+        if nested_loop_regex().is_match(data) {
             patterns.push(Pattern {
                 id: uuid::Uuid::new_v4().to_string(),
                 pattern_type: PatternType::PerformanceBottleneck.to_string(),
@@ -413,16 +458,17 @@ impl PatternDetector for SecurityVulnerabilityDetector {
         ];
 
         for pattern in &secret_patterns {
-            let regex = Regex::new(&format!(r#"(?i){}\s*=\s*["'][^"']+"#, pattern)).unwrap();
-            if regex.is_match(data) {
-                patterns.push(Pattern {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    pattern_type: PatternType::SecurityVulnerability.to_string(),
-                    confidence: 0.9,
-                    description: "Potential hardcoded secret detected".to_string(),
-                    occurrences: vec![],
-                    metadata: HashMap::new(),
-                });
+            if let Some(regex) = secret_regex(pattern) {
+                if regex.is_match(data) {
+                    patterns.push(Pattern {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        pattern_type: PatternType::SecurityVulnerability.to_string(),
+                        confidence: 0.9,
+                        description: "Potential hardcoded secret detected".to_string(),
+                        occurrences: vec![],
+                        metadata: HashMap::new(),
+                    });
+                }
             }
         }
 
@@ -447,14 +493,13 @@ impl PatternDetector for OptimizationOpportunityDetector {
         let mut patterns = Vec::new();
 
         // Detect multiple consecutive similar operations that could be batched
-        let operation_patterns = [
-            (r"db\.(insert|update|delete)", "database operations"),
-            (r"file\.(write|read)", "file operations"),
-            (r"http\.(get|post|put|delete)", "HTTP requests"),
+        let operation_patterns: Vec<(&Regex, &str)> = vec![
+            (db_operation_regex(), "database operations"),
+            (file_operation_regex(), "file operations"),
+            (http_operation_regex(), "HTTP requests"),
         ];
 
-        for (pattern, op_type) in &operation_patterns {
-            let regex = Regex::new(pattern).unwrap();
+        for (regex, op_type) in &operation_patterns {
             let matches: Vec<_> = regex.find_iter(data).collect();
 
             if matches.len() > 3 {
@@ -478,28 +523,29 @@ impl PatternDetector for OptimizationOpportunityDetector {
         let expensive_ops = ["calculate", "compute", "process", "transform"];
         for op in &expensive_ops {
             let pattern = format!(r"{}[_a-z]*\([^)]*\)", op);
-            let regex = Regex::new(&pattern).unwrap();
-            let matches: Vec<_> = regex.find_iter(data).collect();
+            if let Ok(regex) = Regex::new(&pattern) {
+                let matches: Vec<_> = regex.find_iter(data).collect();
 
-            let mut call_counts = HashMap::new();
-            for m in matches {
-                *call_counts.entry(m.as_str()).or_insert(0) += 1;
-            }
+                let mut call_counts = HashMap::new();
+                for m in matches {
+                    *call_counts.entry(m.as_str()).or_insert(0) += 1;
+                }
 
-            for (call, count) in call_counts {
-                if count > 2 {
-                    let mut metadata = HashMap::new();
-                    metadata.insert("optimization_type".to_string(), serde_json::json!("cache"));
-                    metadata.insert("cacheable_task".to_string(), serde_json::json!(call));
+                for (call, count) in call_counts {
+                    if count > 2 {
+                        let mut metadata = HashMap::new();
+                        metadata.insert("optimization_type".to_string(), serde_json::json!("cache"));
+                        metadata.insert("cacheable_task".to_string(), serde_json::json!(call));
 
-                    patterns.push(Pattern {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        pattern_type: PatternType::OptimizationOpportunity.to_string(),
-                        confidence: 0.6,
-                        description: format!("Repeated computation '{}' could be cached", call),
-                        occurrences: vec![],
-                        metadata,
-                    });
+                        patterns.push(Pattern {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            pattern_type: PatternType::OptimizationOpportunity.to_string(),
+                            confidence: 0.6,
+                            description: format!("Repeated computation '{}' could be cached", call),
+                            occurrences: vec![],
+                            metadata,
+                        });
+                    }
                 }
             }
         }
@@ -538,8 +584,7 @@ impl PatternDetector for ErrorHandlingDetector {
         }
 
         // Detect expect() without meaningful messages
-        let expect_regex = Regex::new(r#"\.expect\(["'][^"']*["']\)"#).unwrap();
-        for m in expect_regex.find_iter(data) {
+        for m in expect_message_regex().find_iter(data) {
             let expect_str = m.as_str();
             if expect_str.contains(r#"expect("")"#) || expect_str.contains(r#"expect("error")"#) {
                 patterns.push(Pattern {

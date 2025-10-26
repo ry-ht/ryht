@@ -389,7 +389,10 @@ impl ModelRouter {
         let model = metrics
             .iter()
             .filter(|m| self.meets_requirements(m, context))
-            .min_by(|a, b| a.avg_cost_per_1k.partial_cmp(&b.avg_cost_per_1k).unwrap())
+            .min_by(|a, b| {
+                a.avg_cost_per_1k.partial_cmp(&b.avg_cost_per_1k)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .ok_or(IntelligenceError::NoSuitableModel)?;
 
         Ok(ModelSelection {
@@ -444,7 +447,8 @@ impl ModelRouter {
             .filter(|m| self.meets_requirements(m, context))
             .max_by(|a, b| {
                 // First compare success rate
-                let success_cmp = a.success_rate.partial_cmp(&b.success_rate).unwrap();
+                let success_cmp = a.success_rate.partial_cmp(&b.success_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal);
                 if success_cmp != std::cmp::Ordering::Equal {
                     success_cmp
                 } else {
@@ -501,12 +505,14 @@ impl ModelRouter {
             .iter()
             .map(|m| m.avg_cost_per_1k)
             .fold(0.0f64, f64::max);
-        let max_latency = filtered.iter().map(|m| m.avg_latency_ms).max().unwrap();
+        let max_latency = filtered.iter().map(|m| m.avg_latency_ms).max()
+            .ok_or(IntelligenceError::NoSuitableModel)?;
         let min_cost = filtered
             .iter()
             .map(|m| m.avg_cost_per_1k)
             .fold(f64::MAX, f64::min);
-        let min_latency = filtered.iter().map(|m| m.avg_latency_ms).min().unwrap();
+        let min_latency = filtered.iter().map(|m| m.avg_latency_ms).min()
+            .ok_or(IntelligenceError::NoSuitableModel)?;
 
         // Calculate scores (higher is better)
         let model = filtered
@@ -532,7 +538,7 @@ impl ModelRouter {
                     speed_weight,
                     quality_weight,
                 );
-                score_a.partial_cmp(&score_b).unwrap()
+                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .ok_or(IntelligenceError::NoSuitableModel)?;
 
@@ -717,7 +723,7 @@ mod tests {
         let selection = router
             .select_model(ModelRequirements::LowestCost, context)
             .await
-            .unwrap();
+            .expect("Failed to select lowest cost model");
 
         // Should select one of the cheaper models
         assert!(
@@ -733,7 +739,7 @@ mod tests {
         let selection = router
             .select_model(ModelRequirements::FastestResponse, context)
             .await
-            .unwrap();
+            .expect("Failed to select fastest model");
 
         // Should select one of the faster models
         assert!(selection.estimated_latency_ms < 1000);
@@ -746,7 +752,7 @@ mod tests {
         let selection = router
             .select_model(ModelRequirements::HighestQuality, context)
             .await
-            .unwrap();
+            .expect("Failed to select highest quality model");
 
         // Should select claude-3-opus (highest success rate in defaults)
         assert_eq!(selection.model_id, "claude-3-opus");
@@ -760,7 +766,7 @@ mod tests {
         let selection = router
             .select_model(ModelRequirements::Balanced, context)
             .await
-            .unwrap();
+            .expect("Failed to select balanced model");
 
         assert!(!selection.model_id.is_empty());
         assert!(!selection.provider_id.is_empty());
@@ -823,7 +829,7 @@ mod tests {
         let selection1 = router
             .select_model(ModelRequirements::Balanced, context.clone())
             .await
-            .unwrap();
+            .expect("First call to select balanced model failed");
         let first_duration = start.elapsed();
 
         // Second call should be cached and faster
@@ -831,7 +837,7 @@ mod tests {
         let selection2 = router
             .select_model(ModelRequirements::Balanced, context)
             .await
-            .unwrap();
+            .expect("Second call to select balanced model failed");
         let second_duration = start.elapsed();
 
         assert_eq!(selection1.model_id, selection2.model_id);
@@ -847,7 +853,7 @@ mod tests {
         router
             .select_model(ModelRequirements::Balanced, context)
             .await
-            .unwrap();
+            .expect("Failed to select model for cache test");
 
         router.clear_cache().await;
 
@@ -871,7 +877,7 @@ mod tests {
                 context,
             )
             .await
-            .unwrap();
+            .expect("Failed to select model with custom weights");
 
         // Should select cheap model
         assert!(selection.estimated_cost < 0.01);

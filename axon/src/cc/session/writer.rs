@@ -408,7 +408,11 @@ pub async fn create_project(project_id: &str, project_path: &Path) -> Result<Pro
         });
 
         let metadata_file = project_dir_clone.join("metadata.json");
-        fs::write(&metadata_file, serde_json::to_string_pretty(&metadata).unwrap())
+        let metadata_json = serde_json::to_string_pretty(&metadata)
+            .map_err(|e| Error::Session(SessionError::ParseError(
+                format!("Failed to serialize project metadata: {}", e)
+            )))?;
+        fs::write(&metadata_file, metadata_json)
             .map_err(|e| Error::Session(SessionError::IoError(e)))?;
 
         Ok(())
@@ -520,13 +524,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_delete_session() {
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()
+            .expect("Failed to create temp directory");
         let project_id = "test-project";
         let projects_dir = temp_dir.path().join("projects");
         let project_dir = projects_dir.join(project_id);
 
         // Create project directory
-        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&project_dir)
+            .expect("Failed to create project directory");
 
         // Note: This test would need to mock get_projects_dir()
         // For now, this is a placeholder showing the test structure

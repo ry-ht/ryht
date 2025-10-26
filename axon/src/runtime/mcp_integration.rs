@@ -470,7 +470,8 @@ mod tests {
             params: serde_json::json!({"name": "test_tool"}),
         };
 
-        let json = serde_json::to_string(&request).unwrap();
+        let json = serde_json::to_string(&request)
+            .expect("Failed to serialize MCP request");
         assert!(json.contains("test-123"));
         assert!(json.contains("tools/call"));
     }
@@ -484,7 +485,8 @@ mod tests {
             ]
         }"#;
 
-        let result: ToolResult = serde_json::from_str(json).unwrap();
+        let result: ToolResult = serde_json::from_str(json)
+            .expect("Failed to deserialize tool result");
         assert!(result.success);
         assert_eq!(result.content.len(), 1);
     }

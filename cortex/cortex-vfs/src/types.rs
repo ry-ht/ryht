@@ -155,7 +155,7 @@ impl VNode {
 
     /// Mark as synchronized with physical filesystem.
     pub fn mark_synchronized(&mut self) {
-        self.status = SyncStatus::Synchronized;
+        self.status = SyncStatus::Synced;
         self.updated_at = Utc::now();
     }
 
@@ -182,7 +182,7 @@ pub enum NodeType {
 #[serde(rename_all = "snake_case")]
 pub enum SyncStatus {
     /// In sync with physical filesystem
-    Synchronized,
+    Synced,
     /// Modified in VFS, not yet flushed
     Modified,
     /// Created in VFS, not yet materialized
@@ -630,6 +630,75 @@ pub enum ChangeType {
     Modified,
     Deleted,
     Renamed,
+}
+
+/// Options for bidirectional filesystem sync.
+#[derive(Debug, Clone)]
+pub struct SyncOptions {
+    /// Skip hidden files (starting with .)
+    pub skip_hidden: bool,
+
+    /// Follow symlinks
+    pub follow_symlinks: bool,
+
+    /// Maximum directory depth (None = unlimited)
+    pub max_depth: Option<usize>,
+
+    /// Auto-resolve conflicts (prefer filesystem version)
+    pub auto_resolve_conflicts: bool,
+
+    /// File patterns to exclude
+    pub exclude_patterns: Vec<String>,
+}
+
+impl Default for SyncOptions {
+    fn default() -> Self {
+        Self {
+            skip_hidden: true,
+            follow_symlinks: false,
+            max_depth: None,
+            auto_resolve_conflicts: false,
+            exclude_patterns: vec![
+                "**/node_modules/**".to_string(),
+                "**/target/**".to_string(),
+                "**/.git/**".to_string(),
+                "**/dist/**".to_string(),
+                "**/build/**".to_string(),
+            ],
+        }
+    }
+}
+
+/// Report from a filesystem sync operation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SyncReport {
+    /// Number of files synced from filesystem
+    pub files_synced: usize,
+
+    /// Number of directories synced
+    pub directories_synced: usize,
+
+    /// Total bytes synced
+    pub bytes_synced: usize,
+
+    /// Number of conflicts detected
+    pub conflicts_detected: usize,
+
+    /// Errors encountered
+    pub errors: Vec<String>,
+
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+}
+
+/// Result of syncing a single file.
+#[derive(Debug, Clone)]
+pub struct FileSyncResult {
+    /// Size of the file in bytes
+    pub size_bytes: usize,
+
+    /// Whether a conflict was detected
+    pub is_conflict: bool,
 }
 
 #[cfg(test)]

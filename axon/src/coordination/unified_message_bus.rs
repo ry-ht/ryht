@@ -549,7 +549,10 @@ impl UnifiedMessageBus {
     }
 
     async fn deliver_direct_message(&self, envelope: &MessageEnvelope) -> Result<()> {
-        let target = envelope.to.as_ref().unwrap();
+        let target = envelope.to.as_ref()
+            .ok_or_else(|| CoordinationError::CommunicationError(
+                "Direct message delivery requires target agent".to_string()
+            ))?;
         let channels = self.direct_channels.read().await;
 
         let tx = channels.get(target)
