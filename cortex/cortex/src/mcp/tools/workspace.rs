@@ -1719,11 +1719,32 @@ impl Tool for WorkspaceMergeTool {
 
         // Convert conflicts to output format
         let conflicts: Vec<ConflictInfo> = merge_report.conflicts.iter().map(|c| {
+            // Compute content hashes using blake3
+            use blake3::Hasher;
+            let mut fork_hasher = Hasher::new();
+            fork_hasher.update(c.fork_content.as_bytes());
+            let fork_hash = fork_hasher.finalize().to_hex().to_string();
+
+            let mut target_hasher = Hasher::new();
+            target_hasher.update(c.target_content.as_bytes());
+            let target_hash = target_hasher.finalize().to_hex().to_string();
+
+            // Determine conflict type based on content
+            let conflict_type = if c.fork_content.is_empty() && !c.target_content.is_empty() {
+                "delete-modify".to_string()
+            } else if !c.fork_content.is_empty() && c.target_content.is_empty() {
+                "modify-delete".to_string()
+            } else if c.fork_content.is_empty() && c.target_content.is_empty() {
+                "add-add".to_string()
+            } else {
+                "modify-modify".to_string()
+            };
+
             ConflictInfo {
                 path: c.path.to_string(),
-                conflict_type: "content-conflict".to_string(), // Conflict type not in struct
-                source_hash: "".to_string(), // Would need to add to MergeConflict
-                target_hash: "".to_string(),
+                conflict_type,
+                source_hash: fork_hash[..16].to_string(), // First 16 chars of hash
+                target_hash: target_hash[..16].to_string(),
             }
         }).collect();
 

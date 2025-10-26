@@ -325,6 +325,79 @@ pub struct Workspace {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Workspace type enum (for backward compatibility with old API).
+/// In the new model, this is stored in metadata.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceType {
+    Code,
+    Documentation,
+    Mixed,
+    External,
+}
+
+impl WorkspaceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            WorkspaceType::Code => "code",
+            WorkspaceType::Documentation => "documentation",
+            WorkspaceType::Mixed => "mixed",
+            WorkspaceType::External => "external",
+        }
+    }
+}
+
+/// Source type enum (for backward compatibility with old API).
+/// In the new model, workspaces have multiple SyncSources.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SourceType {
+    Local,
+    ExternalReadOnly,
+    Fork,
+}
+
+impl Workspace {
+    /// Get workspace type from metadata (for backward compatibility).
+    /// Returns "code", "documentation", "mixed", or "external".
+    pub fn workspace_type(&self) -> String {
+        self.metadata
+            .get("workspace_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("mixed")
+            .to_string()
+    }
+
+    /// Get source type from sync sources (for backward compatibility).
+    /// Returns "local", "github", "ssh", "s3", etc.
+    pub fn source_type(&self) -> String {
+        if self.sync_sources.is_empty() {
+            return "local".to_string();
+        }
+
+        // Return the type of the first (primary) sync source
+        match &self.sync_sources[0].source {
+            SyncSourceType::LocalPath { .. } => "local".to_string(),
+            SyncSourceType::GitHub { .. } => "github".to_string(),
+            SyncSourceType::Git { .. } => "git".to_string(),
+            SyncSourceType::SshRemote { .. } => "ssh".to_string(),
+            SyncSourceType::S3 { .. } => "s3".to_string(),
+            SyncSourceType::CrossWorkspace { .. } => "cross_workspace".to_string(),
+            SyncSourceType::HttpUrl { .. } => "http".to_string(),
+        }
+    }
+
+    /// Get source path from sync sources (for backward compatibility).
+    /// Returns the path of the first local source, if any.
+    pub fn source_path(&self) -> Option<String> {
+        for source in &self.sync_sources {
+            if let SyncSourceType::LocalPath { path, .. } = &source.source {
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+        None
+    }
+}
+
 /// Synchronization source for a workspace.
 /// A workspace can have multiple sync sources of different types.
 #[derive(Debug, Clone, Serialize, Deserialize)]
