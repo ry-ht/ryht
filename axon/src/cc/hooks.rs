@@ -620,8 +620,10 @@ mod tests {
             system_message: Some("Tool blocked".to_string()),
             reason: Some("Security policy".to_string()),
             hook_specific_output: Some(HookSpecificOutput::PreToolUse(
-                PreToolUseOutput {
-                    permission_decision: Some(PermissionDecision::Block),
+                PreToolUseHookSpecificOutput {
+                    permission_decision: Some("deny".to_string()),
+                    permission_decision_reason: None,
+                    updated_input: None,
                 }
             )),
             ..Default::default()
@@ -632,9 +634,10 @@ mod tests {
         assert_eq!(output.reason.as_ref().unwrap(), "Security policy");
         assert!(matches!(
             output.hook_specific_output,
-            Some(HookSpecificOutput::PreToolUse(PreToolUseOutput {
-                permission_decision: Some(PermissionDecision::Block)
-            }))
+            Some(HookSpecificOutput::PreToolUse(PreToolUseHookSpecificOutput {
+                permission_decision: Some(ref s),
+                ..
+            })) if s == "deny"
         ));
     }
 

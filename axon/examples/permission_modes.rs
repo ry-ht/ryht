@@ -3,6 +3,7 @@
 //! This example demonstrates different permission modes for file operations
 
 use cc_sdk::{ClaudeCodeOptions, Message, PermissionMode, Result, query};
+use cc_sdk::options::SystemPrompt;
 use futures::StreamExt;
 
 #[tokio::main]
@@ -21,7 +22,7 @@ async fn main() -> Result<()> {
     println!("Since we're using --print mode, the prompt won't be shown.\n");
 
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful coding assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful coding assistant.".to_string()))
         .permission_mode(PermissionMode::Default)
         .build();
 
@@ -35,7 +36,7 @@ async fn main() -> Result<()> {
     println!("This mode automatically accepts edit prompts but still checks permissions.\n");
 
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful coding assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful coding assistant.".to_string()))
         .permission_mode(PermissionMode::AcceptEdits)
         .allowed_tools(vec!["write".to_string(), "edit".to_string()])
         .build();
@@ -51,7 +52,7 @@ async fn main() -> Result<()> {
     println!("USE WITH CAUTION - only in trusted environments!\n");
 
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful coding assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful coding assistant.".to_string()))
         .permission_mode(PermissionMode::BypassPermissions)
         .build();
 
@@ -65,7 +66,7 @@ async fn main() -> Result<()> {
     println!("Only allows specific tools, auto-accepts those operations.\n");
 
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful coding assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful coding assistant.".to_string()))
         .permission_mode(PermissionMode::AcceptEdits)
         .allowed_tools(vec!["read".to_string()])
         .disallowed_tools(vec!["write".to_string(), "bash".to_string()])

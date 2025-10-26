@@ -4,6 +4,7 @@
 //! similar to Python SDK's streaming capabilities.
 
 use cc_sdk::{InteractiveClient, ClaudeCodeOptions, Message, Result};
+use cc_sdk::options::SystemPrompt;
 use futures::StreamExt;
 use tokio::pin;
 
@@ -18,7 +19,7 @@ async fn main() -> Result<()> {
 
     // Create client with custom options
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful assistant")
+        .system_prompt(SystemPrompt::String("You are a helpful assistant".to_string()))
         .model("claude-sonnet-4-20250514")
         .build();
 

@@ -4,6 +4,7 @@
 //! with retry logic and progress tracking.
 
 use cc_sdk::{ClaudeCodeOptions, ContentBlock, InteractiveClient, PermissionMode, Result};
+use cc_sdk::options::SystemPrompt;
 use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -139,7 +140,7 @@ async fn process_single_question(
 /// Create Claude options for batch processing
 fn create_claude_options() -> ClaudeCodeOptions {
     ClaudeCodeOptions::builder()
-        .system_prompt("You are a Rust expert. Create concise, working solutions.")
+        .system_prompt(SystemPrompt::String("You are a Rust expert. Create concise, working solutions.".to_string()))
         .model("sonnet")
         .permission_mode(PermissionMode::AcceptEdits)
         .allowed_tools(vec![

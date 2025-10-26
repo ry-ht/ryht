@@ -37,10 +37,8 @@ pub struct Query {
     /// SDK MCP servers
     sdk_mcp_servers: HashMap<String, Arc<dyn std::any::Any + Send + Sync>>,
     /// Message channel sender (reserved for future streaming receive support)
-    #[allow(dead_code)]
     message_tx: mpsc::Sender<Result<Message>>,
     /// Message channel receiver (reserved for future streaming receive support)
-    #[allow(dead_code)]
     message_rx: Option<mpsc::Receiver<Result<Message>>>,
     /// Initialization result
     initialization_result: Option<JsonValue>,
@@ -571,7 +569,6 @@ impl Query {
     }
 
     /// Stream input messages to the CLI stdin by converting JSON values to InputMessage
-    #[allow(dead_code)]
     pub async fn stream_input<S>(&mut self, input_stream: S) -> Result<()>
     where
         S: Stream<Item = JsonValue> + Send + 'static,
@@ -605,7 +602,6 @@ impl Query {
     }
 
     /// Receive messages
-    #[allow(dead_code)]
     pub async fn receive_messages(&mut self) -> mpsc::Receiver<Result<Message>> {
         self.message_rx.take().expect("Receiver already taken")
     }
@@ -621,7 +617,6 @@ impl Query {
     }
 
     /// Set permission mode via control protocol
-    #[allow(dead_code)]
     pub async fn set_permission_mode(&mut self, mode: &str) -> Result<()> {
         let req = SDKControlRequest::SetPermissionMode(SDKControlSetPermissionModeRequest {
             subtype: "set_permission_mode".to_string(),
@@ -633,7 +628,6 @@ impl Query {
     }
 
     /// Set the active model via control protocol
-    #[allow(dead_code)]
     pub async fn set_model(&mut self, model: Option<String>) -> Result<()> {
         let req = SDKControlRequest::SetModel(crate::cc::requests::SDKControlSetModelRequest {
             subtype: "set_model".to_string(),

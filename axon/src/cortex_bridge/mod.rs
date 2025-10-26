@@ -42,6 +42,8 @@ pub mod memory;
 pub mod models;
 pub mod search;
 pub mod session;
+pub mod working_memory;
+pub mod consolidation;
 
 // Re-export key types
 pub use client::{CortexConfig, CortexError, Result};
@@ -50,6 +52,8 @@ pub use memory::MemoryManager;
 pub use models::*;
 pub use search::SearchManager;
 pub use session::SessionManager;
+pub use working_memory::WorkingMemoryManager;
+pub use consolidation::ConsolidationManager;
 
 use client::CortexClient;
 
@@ -72,6 +76,12 @@ pub struct CortexBridge {
 
     /// Lock manager
     lock_manager: LockManager,
+
+    /// Working memory manager
+    working_memory_manager: WorkingMemoryManager,
+
+    /// Consolidation manager
+    consolidation_manager: ConsolidationManager,
 
     /// Active sessions tracking
     active_sessions: Arc<RwLock<HashMap<AgentId, SessionId>>>,
@@ -115,6 +125,8 @@ impl CortexBridge {
         let memory_manager = MemoryManager::new(client.as_ref().clone());
         let search_manager = SearchManager::new(client.as_ref().clone());
         let lock_manager = LockManager::new(client.as_ref().clone());
+        let working_memory_manager = WorkingMemoryManager::new(client.as_ref().clone());
+        let consolidation_manager = ConsolidationManager::new(client.as_ref().clone());
 
         Ok(Self {
             client,
@@ -122,6 +134,8 @@ impl CortexBridge {
             memory_manager,
             search_manager,
             lock_manager,
+            working_memory_manager,
+            consolidation_manager,
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
             config,
         })
@@ -396,6 +410,202 @@ impl CortexBridge {
     /// Release all locks for a session
     pub async fn release_session_locks(&self, session_id: &SessionId) -> Result<u32> {
         self.lock_manager.release_session_locks(session_id).await
+    }
+
+    // ========================================================================
+    // Working Memory Operations
+    // ========================================================================
+
+    /// Add an item to working memory
+    pub async fn add_to_working_memory(
+        &self,
+        agent_id: &AgentId,
+        session_id: &SessionId,
+        item: WorkingMemoryItem,
+    ) -> Result<()> {
+        self.working_memory_manager
+            .add_item(agent_id, session_id, item)
+            .await
+    }
+
+    /// Get working memory for an agent session
+    pub async fn get_working_memory(
+        &self,
+        agent_id: &AgentId,
+        session_id: &SessionId,
+    ) -> Result<Vec<WorkingMemoryItem>> {
+        self.working_memory_manager
+            .get_items(agent_id, session_id)
+            .await
+    }
+
+    /// Clear working memory for a session
+    pub async fn clear_working_memory(
+        &self,
+        agent_id: &AgentId,
+        session_id: &SessionId,
+    ) -> Result<()> {
+        self.working_memory_manager
+            .clear_session(agent_id, session_id)
+            .await
+    }
+
+    /// Get working memory statistics
+    pub async fn get_working_memory_stats(
+        &self,
+        agent_id: &AgentId,
+    ) -> Result<WorkingMemoryStats> {
+        self.working_memory_manager.get_stats(agent_id).await
+    }
+
+    // ========================================================================
+    // Memory Consolidation
+    // ========================================================================
+
+    /// Trigger memory consolidation for an agent session
+    ///
+    /// This consolidates working memory into long-term episodic/semantic memory
+    pub async fn consolidate_memory(
+        &self,
+        agent_id: &AgentId,
+        session_id: &SessionId,
+    ) -> Result<ConsolidationReport> {
+        self.consolidation_manager
+            .consolidate_session(agent_id, session_id)
+            .await
+    }
+
+    /// Trigger pattern extraction from episodes
+    ///
+    /// This analyzes recent episodes to extract reusable patterns
+    pub async fn extract_patterns(
+        &self,
+        workspace_id: &WorkspaceId,
+        min_occurrences: u32,
+    ) -> Result<Vec<Pattern>> {
+        self.consolidation_manager
+            .extract_patterns(workspace_id, min_occurrences)
+            .await
+    }
+
+    /// Perform dream-like consolidation (offline learning)
+    ///
+    /// This runs advanced pattern recognition and memory optimization
+    pub async fn dream_consolidation(&self) -> Result<DreamReport> {
+        self.consolidation_manager.dream().await
+    }
+
+    // ========================================================================
+    // Collaborative Memory
+    // ========================================================================
+
+    /// Share episode with other agents
+    pub async fn share_episode(
+        &self,
+        episode_id: &EpisodeId,
+        target_agents: Vec<AgentId>,
+    ) -> Result<()> {
+        self.memory_manager
+            .share_episode(episode_id, target_agents)
+            .await
+    }
+
+    /// Get shared episodes from other agents
+    pub async fn get_shared_episodes(
+        &self,
+        agent_id: &AgentId,
+        limit: usize,
+    ) -> Result<Vec<Episode>> {
+        self.memory_manager
+            .get_shared_episodes(agent_id, limit)
+            .await
+    }
+
+    /// Get collaborative insights (patterns shared across agents)
+    pub async fn get_collaborative_insights(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<CollaborativeInsight>> {
+        self.memory_manager
+            .get_collaborative_insights(workspace_id)
+            .await
+    }
+
+    // ========================================================================
+    // Advanced Pattern Operations
+    // ========================================================================
+
+    /// Search for similar patterns
+    pub async fn search_patterns(
+        &self,
+        query: &str,
+        pattern_type: Option<PatternType>,
+        limit: usize,
+    ) -> Result<Vec<Pattern>> {
+        self.memory_manager
+            .search_patterns(query, pattern_type, limit)
+            .await
+    }
+
+    /// Get pattern evolution history
+    pub async fn get_pattern_history(&self, pattern_id: &str) -> Result<Vec<PatternVersion>> {
+        self.memory_manager.get_pattern_history(pattern_id).await
+    }
+
+    /// Apply a pattern and record the outcome
+    pub async fn apply_pattern(
+        &self,
+        pattern_id: &str,
+        context: serde_json::Value,
+    ) -> Result<PatternApplication> {
+        self.memory_manager
+            .apply_pattern(pattern_id, context)
+            .await
+    }
+
+    // ========================================================================
+    // Code Materialization (Bidirectional Sync)
+    // ========================================================================
+
+    /// Write code to session with automatic semantic analysis
+    pub async fn write_code_with_analysis(
+        &self,
+        session_id: &SessionId,
+        workspace_id: &WorkspaceId,
+        path: &str,
+        content: &str,
+    ) -> Result<CodeAnalysisResult> {
+        // Write to session
+        self.write_file(session_id, path, content).await?;
+
+        // Trigger semantic analysis
+        self.search_manager
+            .analyze_and_index(workspace_id, path, content)
+            .await
+    }
+
+    /// Materialize code from memory representation
+    ///
+    /// This takes a semantic representation and generates actual code
+    pub async fn materialize_code(
+        &self,
+        session_id: &SessionId,
+        representation: CodeRepresentation,
+    ) -> Result<MaterializedCode> {
+        self.consolidation_manager
+            .materialize_code(session_id, representation)
+            .await
+    }
+
+    /// Sync code changes from session to semantic memory
+    pub async fn sync_session_to_memory(
+        &self,
+        session_id: &SessionId,
+        workspace_id: &WorkspaceId,
+    ) -> Result<SyncReport> {
+        self.consolidation_manager
+            .sync_session(session_id, workspace_id)
+            .await
     }
 
     // ========================================================================

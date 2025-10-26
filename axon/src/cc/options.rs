@@ -430,10 +430,36 @@ pub struct ClaudeCodeOptionsBuilder {
 
 impl ClaudeCodeOptionsBuilder {
     /// Set system prompt (modern API)
+    ///
+    /// Use this method to set the system prompt using the `SystemPrompt` enum,
+    /// which supports both simple strings and preset-based configurations.
+    ///
+    /// For a simple string prompt, use `SystemPrompt::String`:
+    /// ```rust
+    /// use crate::cc::options::{ClaudeCodeOptions, SystemPrompt};
+    ///
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .system_prompt(SystemPrompt::String("You are a helpful assistant.".to_string()))
+    ///     .build();
+    /// ```
+    ///
+    /// For a preset-based prompt:
+    /// ```rust
+    /// use crate::cc::options::{ClaudeCodeOptions, SystemPrompt};
+    ///
+    /// let options = ClaudeCodeOptions::builder()
+    ///     .system_prompt(SystemPrompt::Preset {
+    ///         preset_type: "preset".to_string(),
+    ///         preset: "claude_code".to_string(),
+    ///         append: Some("Additional instructions.".to_string()),
+    ///     })
+    ///     .build();
+    /// ```
     pub fn system_prompt(mut self, prompt: SystemPrompt) -> Self {
         self.options.system_prompt = Some(prompt);
         self
     }
+
 
     /// Add allowed tools
     pub fn allowed_tools(mut self, tools: Vec<String>) -> Self {

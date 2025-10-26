@@ -222,6 +222,145 @@ impl MemoryManager {
         let response: EpisodesResponse = self.client.get(&path).await?;
         Ok(response.episodes)
     }
+
+    /// Share an episode with other agents
+    pub async fn share_episode(
+        &self,
+        episode_id: &EpisodeId,
+        target_agents: Vec<AgentId>,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct ShareEpisodeRequest {
+            target_agents: Vec<String>,
+        }
+
+        let request = ShareEpisodeRequest {
+            target_agents: target_agents.iter().map(|a| a.to_string()).collect(),
+        };
+
+        let path = format!("/memory/episodes/{}/share", episode_id);
+        let _: serde_json::Value = self.client.post(&path, &request).await?;
+
+        info!(
+            "Shared episode {} with {} agents",
+            episode_id,
+            target_agents.len()
+        );
+        Ok(())
+    }
+
+    /// Get shared episodes from other agents
+    pub async fn get_shared_episodes(
+        &self,
+        agent_id: &AgentId,
+        limit: usize,
+    ) -> Result<Vec<Episode>> {
+        let path = format!("/memory/shared/{}?limit={}", agent_id, limit);
+
+        #[derive(Deserialize)]
+        struct SharedEpisodesResponse {
+            episodes: Vec<Episode>,
+        }
+
+        let response: SharedEpisodesResponse = self.client.get(&path).await?;
+        info!(
+            "Retrieved {} shared episodes for agent {}",
+            response.episodes.len(),
+            agent_id
+        );
+        Ok(response.episodes)
+    }
+
+    /// Get collaborative insights for a workspace
+    pub async fn get_collaborative_insights(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<CollaborativeInsight>> {
+        let path = format!("/memory/insights/{}", workspace_id);
+
+        #[derive(Deserialize)]
+        struct InsightsResponse {
+            insights: Vec<CollaborativeInsight>,
+        }
+
+        let response: InsightsResponse = self.client.get(&path).await?;
+        info!(
+            "Retrieved {} collaborative insights for workspace {}",
+            response.insights.len(),
+            workspace_id
+        );
+        Ok(response.insights)
+    }
+
+    /// Search for patterns by query and type
+    pub async fn search_patterns(
+        &self,
+        query: &str,
+        pattern_type: Option<PatternType>,
+        limit: usize,
+    ) -> Result<Vec<Pattern>> {
+        #[derive(Serialize)]
+        struct SearchPatternsRequest {
+            query: String,
+            pattern_type: Option<String>,
+            limit: usize,
+        }
+
+        let request = SearchPatternsRequest {
+            query: query.to_string(),
+            pattern_type: pattern_type.map(|t| format!("{:?}", t).to_lowercase()),
+            limit,
+        };
+
+        #[derive(Deserialize)]
+        struct SearchPatternsResponse {
+            patterns: Vec<Pattern>,
+        }
+
+        let response: SearchPatternsResponse = self
+            .client
+            .post("/memory/patterns/search", &request)
+            .await?;
+
+        info!("Found {} patterns for query: {}", response.patterns.len(), query);
+        Ok(response.patterns)
+    }
+
+    /// Get pattern evolution history
+    pub async fn get_pattern_history(&self, pattern_id: &str) -> Result<Vec<PatternVersion>> {
+        let path = format!("/memory/patterns/{}/history", pattern_id);
+
+        #[derive(Deserialize)]
+        struct PatternHistoryResponse {
+            versions: Vec<PatternVersion>,
+        }
+
+        let response: PatternHistoryResponse = self.client.get(&path).await?;
+        Ok(response.versions)
+    }
+
+    /// Apply a pattern and record the outcome
+    pub async fn apply_pattern(
+        &self,
+        pattern_id: &str,
+        context: serde_json::Value,
+    ) -> Result<PatternApplication> {
+        #[derive(Serialize)]
+        struct ApplyPatternRequest {
+            context: serde_json::Value,
+        }
+
+        let request = ApplyPatternRequest { context };
+        let path = format!("/memory/patterns/{}/apply", pattern_id);
+
+        let application: PatternApplication = self.client.post(&path, &request).await?;
+
+        info!(
+            "Applied pattern {} with success: {}",
+            pattern_id, application.success
+        );
+        Ok(application)
+    }
 }
 
 #[cfg(test)]

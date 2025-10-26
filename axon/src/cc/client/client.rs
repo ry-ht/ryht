@@ -588,40 +588,36 @@ impl ClaudeClientBuilder<WithBinary> {
         self
     }
 
-    /// Set system prompt for Claude.
+    /// Set the system prompt using the SystemPrompt enum (modern API)
     ///
-    /// The system prompt provides context and instructions that Claude will
-    /// follow throughout the conversation.
+    /// Use this method to set the system prompt using the `SystemPrompt` enum,
+    /// which supports both simple strings and preset-based configurations.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use super::ClaudeClient;
+    /// use crate::cc::options::SystemPrompt;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
+    /// // Simple string prompt
     /// let builder = ClaudeClient::builder()
     ///     .discover_binary().await?
-    ///     .system_prompt("You are a helpful coding assistant.");
+    ///     .system_prompt(SystemPrompt::String("You are a helpful coding assistant.".to_string()));
+    ///
+    /// // Preset-based prompt
+    /// let builder2 = ClaudeClient::builder()
+    ///     .discover_binary().await?
+    ///     .system_prompt(SystemPrompt::Preset {
+    ///         preset_type: "preset".to_string(),
+    ///         preset: "claude_code".to_string(),
+    ///         append: Some("Be concise.".to_string()),
+    ///     });
     /// # Ok(())
     /// # }
     /// ```
-    /// Set the system prompt from a string.
-    ///
-    /// For more control, use `system_prompt_with` with a `SystemPrompt` enum.
-    pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
-        let inner = Arc::get_mut(&mut self.inner)
-            .expect("Builder should have unique access to inner");
-
-        let mut options = inner.options.take().unwrap_or_default();
-        options.system_prompt = Some(crate::cc::options::SystemPrompt::String(prompt.into()));
-        inner.options = Some(options);
-
-        self
-    }
-
-    /// Set the system prompt using the SystemPrompt enum.
-    pub fn system_prompt_with(mut self, prompt: crate::cc::options::SystemPrompt) -> Self {
+    pub fn system_prompt(mut self, prompt: crate::cc::options::SystemPrompt) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -631,6 +627,7 @@ impl ClaudeClientBuilder<WithBinary> {
 
         self
     }
+
 
     /// Continue from a previous conversation.
     ///
@@ -2408,7 +2405,7 @@ mod tests {
             .binary("/usr/local/bin/claude")
             .max_output_tokens(8000)
             .max_turns(20)
-            .system_prompt("You are a helpful assistant")
+            .system_prompt(crate::cc::options::SystemPrompt::String("You are a helpful assistant".to_string()))
             .configure();
 
         let options = builder.inner.options.as_ref().unwrap();

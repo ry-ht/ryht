@@ -1,7 +1,8 @@
 //! Coordination Patterns and Protocols
 //!
-//! Message bus-based communication, pub/sub system, and topology management
-//! for efficient agent coordination.
+//! Unified messaging system integrating with Cortex for persistent, intelligent,
+//! and resilient multi-agent coordination. Includes message bus, pub/sub,
+//! distributed locking, episodic memory integration, and coordination patterns.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,10 +12,16 @@ use serde::{Deserialize, Serialize};
 pub mod message_bus;
 pub mod patterns;
 pub mod topology;
+pub mod unified_message_bus;
+pub mod message_coordinator;
+pub mod agent_messaging_adapter;
 
 pub use message_bus::*;
 pub use patterns::*;
 pub use topology::*;
+pub use unified_message_bus::*;
+pub use message_coordinator::*;
+pub use agent_messaging_adapter::*;
 
 /// Main coordination pattern trait
 pub trait CoordinationPattern: Send + Sync {

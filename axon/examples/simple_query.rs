@@ -4,6 +4,7 @@
 //! for one-shot interactions with Claude.
 
 use cc_sdk::{ClaudeCodeOptions, Message, Result, query};
+use cc_sdk::options::SystemPrompt;
 use futures::StreamExt;
 
 #[tokio::main]
@@ -43,7 +44,7 @@ async fn main() -> Result<()> {
     println!("------------------------------------");
 
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful coding assistant. Keep responses concise.")
+        .system_prompt(SystemPrompt::String("You are a helpful coding assistant. Keep responses concise.".to_string()))
         .model("sonnet")
         .max_thinking_tokens(1000)
         .build();

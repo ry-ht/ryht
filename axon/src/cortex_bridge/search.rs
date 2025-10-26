@@ -256,6 +256,44 @@ impl SearchManager {
         let response: GraphQueryResponse = self.client.get(&path).await?;
         Ok(response)
     }
+
+    /// Analyze and index code for semantic search
+    pub async fn analyze_and_index(
+        &self,
+        workspace_id: &WorkspaceId,
+        file_path: &str,
+        content: &str,
+    ) -> Result<CodeAnalysisResult> {
+        #[derive(Serialize)]
+        struct AnalyzeRequest {
+            workspace_id: String,
+            file_path: String,
+            content: String,
+        }
+
+        let request = AnalyzeRequest {
+            workspace_id: workspace_id.to_string(),
+            file_path: file_path.to_string(),
+            content: content.to_string(),
+        };
+
+        #[derive(Deserialize)]
+        struct AnalyzeResponse {
+            result: CodeAnalysisResult,
+        }
+
+        let response: AnalyzeResponse = self
+            .client
+            .post("/code/analyze", &request)
+            .await?;
+
+        info!(
+            "Analyzed and indexed {} in workspace {}: {} units extracted",
+            file_path, workspace_id, response.result.units_extracted
+        );
+
+        Ok(response.result)
+    }
 }
 
 #[cfg(test)]

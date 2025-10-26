@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::collections::HashMap;
 
 // ============================================================================
 // Identity Types
@@ -399,7 +400,7 @@ impl Default for Pattern {
 // ============================================================================
 
 /// Search filters for semantic search
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SearchFilters {
     /// Unit types to filter
     pub types: Vec<String>,
@@ -409,6 +410,17 @@ pub struct SearchFilters {
     pub visibility: Option<String>,
     /// Minimum relevance score
     pub min_relevance: f32,
+}
+
+impl Default for SearchFilters {
+    fn default() -> Self {
+        Self {
+            types: Vec::new(),
+            languages: Vec::new(),
+            visibility: None,
+            min_relevance: 0.7,
+        }
+    }
 }
 
 /// Code search result
@@ -638,4 +650,197 @@ pub enum EventFilter {
     FileChanges,
     /// Pattern events only
     Patterns,
+}
+
+// ============================================================================
+// Working Memory Models
+// ============================================================================
+
+/// Working memory item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingMemoryItem {
+    /// Item ID
+    pub id: String,
+    /// Item type (code_snippet, task, note, etc.)
+    pub item_type: String,
+    /// Content
+    pub content: String,
+    /// Context information
+    pub context: serde_json::Value,
+    /// Priority (0.0 - 1.0)
+    pub priority: f32,
+    /// Created timestamp
+    pub created_at: DateTime<Utc>,
+    /// Last accessed timestamp
+    pub last_accessed: DateTime<Utc>,
+    /// Access count
+    pub access_count: u32,
+}
+
+/// Working memory statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkingMemoryStats {
+    /// Total items in working memory
+    pub total_items: usize,
+    /// Total memory usage in bytes
+    pub total_bytes: usize,
+    /// Capacity limit (items)
+    pub capacity_items: usize,
+    /// Capacity limit (bytes)
+    pub capacity_bytes: usize,
+    /// Items by type
+    pub items_by_type: HashMap<String, usize>,
+}
+
+// ============================================================================
+// Consolidation Models
+// ============================================================================
+
+/// Memory consolidation report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsolidationReport {
+    /// Number of working memory items consolidated
+    pub items_consolidated: usize,
+    /// Number of patterns extracted
+    pub patterns_extracted: usize,
+    /// Number of semantic units created
+    pub semantic_units_created: usize,
+    /// Consolidation duration in ms
+    pub duration_ms: u64,
+    /// Memory freed in bytes
+    pub memory_freed_bytes: usize,
+}
+
+/// Dream consolidation report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DreamReport {
+    /// New patterns discovered
+    pub new_patterns: usize,
+    /// Patterns refined
+    pub patterns_refined: usize,
+    /// Low-importance memories forgotten
+    pub memories_forgotten: usize,
+    /// Processing duration in ms
+    pub duration_ms: u64,
+}
+
+/// Pattern version (for evolution tracking)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternVersion {
+    /// Version ID
+    pub version_id: String,
+    /// Pattern ID
+    pub pattern_id: String,
+    /// Version number
+    pub version: u32,
+    /// Changes made
+    pub changes: String,
+    /// Performance metrics
+    pub metrics: serde_json::Value,
+    /// Created timestamp
+    pub created_at: DateTime<Utc>,
+}
+
+/// Pattern application result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternApplication {
+    /// Application ID
+    pub id: String,
+    /// Pattern ID
+    pub pattern_id: String,
+    /// Context applied to
+    pub context: serde_json::Value,
+    /// Result of application
+    pub result: serde_json::Value,
+    /// Success flag
+    pub success: bool,
+    /// Applied timestamp
+    pub applied_at: DateTime<Utc>,
+}
+
+// ============================================================================
+// Collaborative Memory Models
+// ============================================================================
+
+/// Collaborative insight (pattern/knowledge shared across agents)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollaborativeInsight {
+    /// Insight ID
+    pub id: String,
+    /// Insight type
+    pub insight_type: String,
+    /// Title
+    pub title: String,
+    /// Description
+    pub description: String,
+    /// Contributing agents
+    pub contributing_agents: Vec<String>,
+    /// Confidence score (0.0 - 1.0)
+    pub confidence: f32,
+    /// Supporting episodes
+    pub supporting_episodes: Vec<String>,
+    /// Created timestamp
+    pub created_at: DateTime<Utc>,
+}
+
+// ============================================================================
+// Code Materialization Models
+// ============================================================================
+
+/// Code representation in memory
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeRepresentation {
+    /// Representation type (ast, semantic, template)
+    pub repr_type: String,
+    /// Language
+    pub language: String,
+    /// Semantic description
+    pub description: String,
+    /// Structure/AST representation
+    pub structure: serde_json::Value,
+    /// Dependencies
+    pub dependencies: Vec<String>,
+    /// Metadata
+    pub metadata: HashMap<String, String>,
+}
+
+/// Materialized code result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MaterializedCode {
+    /// File path
+    pub path: String,
+    /// Generated code content
+    pub content: String,
+    /// Language
+    pub language: String,
+    /// Analysis results
+    pub analysis: CodeAnalysisResult,
+}
+
+/// Code analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeAnalysisResult {
+    /// Units extracted
+    pub units_extracted: usize,
+    /// Dependencies found
+    pub dependencies_found: usize,
+    /// Complexity metrics
+    pub complexity: serde_json::Value,
+    /// Issues found
+    pub issues: Vec<String>,
+}
+
+/// Sync report for bidirectional sync
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncReport {
+    /// Files synced
+    pub files_synced: usize,
+    /// Units updated
+    pub units_updated: usize,
+    /// Dependencies updated
+    pub dependencies_updated: usize,
+    /// Conflicts detected
+    pub conflicts: usize,
+    /// Sync duration in ms
+    pub duration_ms: u64,
 }

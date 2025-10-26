@@ -2,7 +2,7 @@
 //!
 //! Tests ClaudeCodeOptions, builders, MCP server configs, and control protocol formats.
 
-use cc_sdk::options::{ClaudeCodeOptions, ControlProtocolFormat, McpServerConfig};
+use cc_sdk::options::{ClaudeCodeOptions, ControlProtocolFormat, McpServerConfig, SystemPrompt};
 use cc_sdk::permissions::PermissionMode;
 use std::collections::HashMap;
 
@@ -68,16 +68,15 @@ fn test_claude_code_options_builder_max_values() {
 }
 
 #[test]
-#[allow(deprecated)]
 fn test_claude_code_options_builder_system_prompt() {
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful assistant.".to_string()))
         .build();
 
-    assert_eq!(
+    assert!(matches!(
         options.system_prompt,
-        Some("You are a helpful assistant.".to_string())
-    );
+        Some(SystemPrompt::String(ref s)) if s == "You are a helpful assistant."
+    ));
 }
 
 #[test]
@@ -282,7 +281,6 @@ fn test_mcp_server_config_serialization_http() {
 }
 
 #[test]
-#[allow(deprecated)]
 fn test_claude_code_options_builder_chaining() {
     let options = ClaudeCodeOptions::builder()
         .model("claude-sonnet-4")
@@ -290,7 +288,7 @@ fn test_claude_code_options_builder_chaining() {
         .cwd("/tmp")
         .max_turns(10)
         .max_output_tokens(4000)
-        .system_prompt("Test prompt")
+        .system_prompt(SystemPrompt::String("Test prompt".to_string()))
         .allow_tool("Bash")
         .allow_tool("Read")
         .disallow_tool("Delete")
@@ -302,7 +300,10 @@ fn test_claude_code_options_builder_chaining() {
     assert_eq!(options.cwd, Some("/tmp".into()));
     assert_eq!(options.max_turns, Some(10));
     assert_eq!(options.max_output_tokens, Some(4000));
-    assert_eq!(options.system_prompt, Some("Test prompt".to_string()));
+    assert!(matches!(
+        options.system_prompt,
+        Some(SystemPrompt::String(ref s)) if s == "Test prompt"
+    ));
     assert_eq!(options.allowed_tools.len(), 2);
     assert_eq!(options.disallowed_tools.len(), 1);
     assert_eq!(options.add_dirs.len(), 1);
@@ -374,7 +375,6 @@ fn test_permission_mode_in_options() {
 }
 
 #[test]
-#[allow(deprecated)]
 fn test_empty_options() {
     let options = ClaudeCodeOptions::builder().build();
 

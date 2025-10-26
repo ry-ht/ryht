@@ -6,6 +6,7 @@
 use cc_sdk::{
     ClaudeCodeOptions, ContentBlock, Message, PermissionMode, Result, SimpleInteractiveClient,
 };
+use cc_sdk::options::SystemPrompt;
 use std::io::{self, Write};
 
 #[tokio::main]
@@ -20,7 +21,7 @@ async fn main() -> Result<()> {
 
     // Create client with options
     let options = ClaudeCodeOptions::builder()
-        .system_prompt("You are a helpful assistant.")
+        .system_prompt(SystemPrompt::String("You are a helpful assistant.".to_string()))
         .permission_mode(PermissionMode::AcceptEdits)
         .model("sonnet")
         .build();

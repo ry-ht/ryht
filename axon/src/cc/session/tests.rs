@@ -4,9 +4,11 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::cc::super::*;
+    use super::*;
     use crate::cc::core::SessionId;
     use crate::cc::messages::{Message, UserMessage};
+    use crate::cc::session::{SessionCache, Session, CacheConfig};
+    use crate::Project;
     use chrono::{Duration, Utc};
     use std::path::PathBuf;
     use tempfile::TempDir;
