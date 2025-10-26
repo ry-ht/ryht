@@ -8,7 +8,7 @@ members = [
     "cortex-memory",
     "cortex-semantic",
     "cortex-code-analysis",
-    "cortex-cli",
+    "cortex",
 ]
 
 [workspace.package]
@@ -125,7 +125,7 @@ cortex-semantic = { path = "cortex-semantic" }
 cortex-ingestion = { path = "cortex-ingestion" }
 cortex-code-analysis = { path = "cortex-code-analysis" }
 # cortex-mcp = { path = "cortex-mcp" } # Temporarily disabled due to compilation errors
-# cortex-cli = { path = "cortex-cli" } # Temporarily disabled
+# cortex = { path = "cortex" } # Temporarily disabled
 
 # Test dependencies
 tokio.workspace = true

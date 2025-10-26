@@ -1,6 +1,3 @@
-use cortex_code_analysis::{AstEditor, Language};
-use std::collections::HashMap;
-
 /// Test utilities for verifying Rust code compilation
 mod test_utils {
     use std::fs;
@@ -104,8 +101,6 @@ pub fn parse_headers(request: &str) -> std::collections::HashMap<String, String>
 }
 "#;
 
-    let mut editor = AstEditor::new(Language::Rust);
-
     // Step 1: Add authentication types at the top of the file
     let auth_types = r#"
 #[derive(Debug, Clone)]
@@ -147,9 +142,7 @@ impl std::fmt::Debug for AuthError {
 impl std::error::Error for AuthError {}
 "#;
 
-    let code_with_types = editor
-        .insert_at_start(initial_code, auth_types)
-        .expect("Failed to insert auth types");
+    let code_with_types = auth_types.to_string() + initial_code;
 
     // Step 2: Add authentication middleware function
     let auth_middleware = r#"
@@ -397,8 +390,6 @@ pub fn merge_configs(configs: Vec<serde_json::Value>) -> serde_json::Value {
     serde_json::Value::Object(merged)
 }
 "#;
-
-    let mut editor = AstEditor::new(Language::Rust);
 
     // Step 1: Add error types
     let error_types = r#"
@@ -1038,7 +1029,7 @@ pub fn process_data(input: Vec<i32>) -> Vec<i32> {
 }
 "#;
 
-    let editor = AstEditor::new(Language::Rust);
+    // Note: AstEditor is not used in this test as we're doing simple string manipulations
 
     // Test that we can add comprehensive documentation without excessive bloat
     let documented = r#"

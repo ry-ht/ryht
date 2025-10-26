@@ -1,6 +1,7 @@
-use cortex_code_analysis::{AstEditor, Language};
 use cortex_vfs::{VirtualFileSystem, VirtualPath};
-use std::collections::HashMap;
+use cortex_storage::connection_pool::{ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Full-stack E2E test utilities
 mod test_utils {
@@ -832,7 +833,6 @@ export const UserManagementApp: React.FC = () => {
 
     // Verify field consistency
     let rust_fields = vec!["username", "email", "is_active"];
-    let ts_fields = vec!["username", "email", "is_active"];
 
     for field in rust_fields {
         assert!(rust_backend.contains(field));
@@ -1200,39 +1200,57 @@ export const ChatApp: React.FC = () => {
 }
 
 /// Test VFS integration for full-stack development
-#[test]
-fn test_vfs_full_stack_integration() {
-    let mut vfs = VirtualFileSystem::new();
+#[tokio::test]
+async fn test_vfs_full_stack_integration() {
+    // Create VFS with storage backend
+    let config = DatabaseConfig {
+        connection_mode: ConnectionMode::InMemory, // Use in-memory for tests
+        credentials: Credentials {
+            username: Some("root".to_string()),
+            password: Some("root".to_string()),
+        },
+        pool_config: PoolConfig::default(),
+        namespace: "test".to_string(),
+        database: "test".to_string(),
+    };
+
+    let storage = Arc::new(ConnectionManager::new(config).await.unwrap());
+    let vfs = VirtualFileSystem::new(storage);
+    let workspace_id = Uuid::new_v4();
 
     // Create backend files
     vfs.create_file(
-        &VirtualPath::from("/backend/src/api.rs"),
-        "pub struct ApiServer {}".as_bytes().to_vec(),
-    ).unwrap();
+        &workspace_id,
+        &VirtualPath::new("backend/src/api.rs").unwrap(),
+        "pub struct ApiServer {}".as_bytes(),
+    ).await.unwrap();
 
     vfs.create_file(
-        &VirtualPath::from("/backend/src/models.rs"),
-        "pub struct User { pub id: String }".as_bytes().to_vec(),
-    ).unwrap();
+        &workspace_id,
+        &VirtualPath::new("backend/src/models.rs").unwrap(),
+        "pub struct User { pub id: String }".as_bytes(),
+    ).await.unwrap();
 
     // Create frontend files
     vfs.create_file(
-        &VirtualPath::from("/frontend/src/api.ts"),
-        "export class ApiClient {}".as_bytes().to_vec(),
-    ).unwrap();
+        &workspace_id,
+        &VirtualPath::new("frontend/src/api.ts").unwrap(),
+        "export class ApiClient {}".as_bytes(),
+    ).await.unwrap();
 
     vfs.create_file(
-        &VirtualPath::from("/frontend/src/types.ts"),
-        "export interface User { id: string }".as_bytes().to_vec(),
-    ).unwrap();
+        &workspace_id,
+        &VirtualPath::new("frontend/src/types.ts").unwrap(),
+        "export interface User { id: string }".as_bytes(),
+    ).await.unwrap();
 
     // Verify structure
-    assert!(vfs.exists(&VirtualPath::from("/backend/src/api.rs")));
-    assert!(vfs.exists(&VirtualPath::from("/backend/src/models.rs")));
-    assert!(vfs.exists(&VirtualPath::from("/frontend/src/api.ts")));
-    assert!(vfs.exists(&VirtualPath::from("/frontend/src/types.ts")));
+    assert!(vfs.exists(&workspace_id, &VirtualPath::new("backend/src/api.rs").unwrap()).await.unwrap());
+    assert!(vfs.exists(&workspace_id, &VirtualPath::new("backend/src/models.rs").unwrap()).await.unwrap());
+    assert!(vfs.exists(&workspace_id, &VirtualPath::new("frontend/src/api.ts").unwrap()).await.unwrap());
+    assert!(vfs.exists(&workspace_id, &VirtualPath::new("frontend/src/types.ts").unwrap()).await.unwrap());
 
     // Verify content
-    let api_content = vfs.read_file(&VirtualPath::from("/backend/src/api.rs")).unwrap();
+    let api_content = vfs.read_file(&workspace_id, &VirtualPath::new("backend/src/api.rs").unwrap()).await.unwrap();
     assert!(String::from_utf8_lossy(&api_content).contains("ApiServer"));
 }
