@@ -40,7 +40,6 @@ async fn test_workspace_creation_and_file_listing() {
             json!({
                 "name": "test_workspace",
                 "root_path": project_dir.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": true,
@@ -219,7 +218,6 @@ async fn test_multi_file_workspace_operations() {
             json!({
                 "name": "multi_file_workspace",
                 "root_path": project_dir.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": true,
@@ -324,7 +322,6 @@ async fn test_workspace_file_history_tracking() {
             json!({
                 "name": "history_workspace",
                 "root_path": project_dir.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": false,
@@ -415,7 +412,6 @@ async fn test_concurrent_workspace_operations() {
             json!({
                 "name": "workspace1",
                 "root_path": project1.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": false,
@@ -428,7 +424,6 @@ async fn test_concurrent_workspace_operations() {
             json!({
                 "name": "workspace2",
                 "root_path": project2.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": false,
@@ -506,7 +501,6 @@ async fn test_workspace_performance_benchmarks() {
             json!({
                 "name": "perf_workspace",
                 "root_path": project_dir.to_str().unwrap(),
-                "workspace_type": "code",
                 "import_options": {
                     "import_files": true,
                     "extract_units": true,

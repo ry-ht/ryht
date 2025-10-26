@@ -123,7 +123,6 @@ fn test_table_builder() {
 #[tokio::test]
 async fn test_init_workspace_creation() {
     use cortex::commands::init_workspace;
-    use cortex_vfs::WorkspaceType;
 
     let temp = setup_test_env();
     let workspace_path = temp.path().join("test_workspace");
@@ -132,7 +131,6 @@ async fn test_init_workspace_creation() {
     let result = init_workspace(
         "test_workspace".to_string(),
         Some(workspace_path.clone()),
-        WorkspaceType::Code,  // Changed from Project to Code
     )
     .await;
 
@@ -175,8 +173,9 @@ fn test_output_format_from_flag() {
 
 #[tokio::test]
 async fn test_workspace_operations() {
-    use cortex_vfs::{VirtualFileSystem, Workspace, WorkspaceType};
+    use cortex_vfs::{VirtualFileSystem, Workspace};
     use std::sync::Arc;
+    use std::collections::HashMap;
 
     let _temp = setup_test_env();
 
@@ -192,19 +191,18 @@ async fn test_workspace_operations() {
     let workspace = Workspace {
         id: workspace_id,
         name: "test".to_string(),
-        workspace_type: WorkspaceType::Code,  // Changed from Project to Code
-        source_type: cortex_vfs::SourceType::Local,
         namespace: "test".to_string(),
-        source_path: None,
+        sync_sources: vec![],
+        metadata: HashMap::new(),
         read_only: false,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
 
     assert_eq!(workspace.name, "test");
-    assert!(matches!(workspace.workspace_type, WorkspaceType::Code));
 }
 
 #[test]
@@ -258,10 +256,9 @@ async fn test_db_start_stop() {
 async fn test_workspace_create_list() {
     use cortex::commands::{workspace_create, workspace_list};
     use cortex::output::OutputFormat;
-    use cortex_vfs::WorkspaceType;
 
     // Create workspace
-    let result = workspace_create("test_ws".to_string(), WorkspaceType::Code).await;  // Changed from Project to Code
+    let result = workspace_create("test_ws".to_string()).await;
     assert!(result.is_ok());
 
     // List workspaces

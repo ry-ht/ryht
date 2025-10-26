@@ -36,7 +36,7 @@
 
 use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
-use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex::mcp::tools::{
     workspace::WorkspaceContext,
@@ -380,15 +380,13 @@ impl PerformanceHarness {
         let workspace_id = Uuid::new_v4();
         let workspace = Workspace {
             id: workspace_id,
-            name: name.to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
-            namespace: format!("test_{}", workspace_id),
-            source_path: Some(self.cortex_root.clone()),
-            read_only: false,
+            name: name.to_string(),            namespace: format!("test_{}", workspace_id),            read_only: false,
             parent_workspace: None,
             fork_metadata: None,
             created_at: chrono::Utc::now(),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
+            dependencies: vec![],
             updated_at: chrono::Utc::now(),
         };
 

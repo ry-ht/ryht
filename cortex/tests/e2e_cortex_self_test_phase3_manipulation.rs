@@ -57,13 +57,13 @@ impl TestContext {
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-manipulation-test".to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
             namespace: "cortex_test".to_string(),
-            source_path: Some(temp_dir.path().to_path_buf()),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
             read_only: false,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: vec![],
             created_at: now,
             updated_at: now,
         };

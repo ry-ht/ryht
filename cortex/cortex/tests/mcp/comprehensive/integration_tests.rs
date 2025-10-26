@@ -32,7 +32,7 @@
 
 use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
-use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use cortex::mcp::tools::{
     workspace::WorkspaceContext,
@@ -250,13 +250,13 @@ impl IntegrationHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: "cortex-self-test".to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
             namespace: format!("test_{}", workspace_id),
-            source_path: Some(self.cortex_root.clone()),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
             read_only: false,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: vec![],
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

@@ -6,7 +6,7 @@
 //! - Complete development workflow via REST
 
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, PoolConnectionMode};
-use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType, NodeType};
+use cortex_vfs::{VirtualFileSystem, VirtualPath, SourceType, NodeType};
 use cortex_memory::CognitiveManager;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -50,7 +50,6 @@ async fn create_test_infrastructure() -> (Arc<ConnectionManager>, Arc<VirtualFil
 async fn create_workspace(
     storage: &ConnectionManager,
     name: &str,
-    workspace_type: WorkspaceType,
 ) -> cortex_vfs::Workspace {
     let workspace_id = Uuid::new_v4();
     let namespace = format!("ws_{}", workspace_id.to_string().replace('-', "_"));
@@ -58,7 +57,6 @@ async fn create_workspace(
     let workspace = cortex_vfs::Workspace {
         id: workspace_id,
         name: name.to_string(),
-        workspace_type,
         source_type: SourceType::Local,
         namespace,
         source_path: None,
@@ -91,7 +89,7 @@ async fn test_complete_development_workflow() {
     println!("✓ Infrastructure initialized");
 
     // Step 1: Create a new code workspace
-    let workspace = create_workspace(&storage, "MyProject", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "MyProject"::Code).await;
     println!("✓ Created workspace: {}", workspace.name);
 
     // Step 2: Create project structure
@@ -223,9 +221,9 @@ async fn test_multi_workspace_collaboration() {
     let (storage, vfs, _memory) = create_test_infrastructure().await;
 
     // Create multiple workspaces
-    let backend_ws = create_workspace(&storage, "Backend", WorkspaceType::Code).await;
-    let frontend_ws = create_workspace(&storage, "Frontend", WorkspaceType::Code).await;
-    let docs_ws = create_workspace(&storage, "Documentation", WorkspaceType::Documentation).await;
+    let backend_ws = create_workspace(&storage, "Backend"::Code).await;
+    let frontend_ws = create_workspace(&storage, "Frontend"::Code).await;
+    let docs_ws = create_workspace(&storage, "Documentation"::Documentation).await;
 
     println!("✓ Created 3 workspaces");
 
@@ -286,7 +284,7 @@ async fn test_large_file_operations() {
     println!("=== Large File Operations E2E Test ===");
 
     let (storage, vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "LargeFiles", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "LargeFiles"::Code).await;
 
     // Create a large file (1MB)
     let large_content = "x".repeat(1024 * 1024);
@@ -331,7 +329,7 @@ async fn test_directory_tree_navigation() {
     println!("=== Directory Tree Navigation E2E Test ===");
 
     let (storage, vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "TreeNav", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "TreeNav"::Code).await;
 
     // Create complex directory structure
     let paths = vec![
@@ -426,7 +424,7 @@ async fn test_concurrent_workspace_operations() {
         let vfs_clone = vfs.clone();
 
         let handle = tokio::spawn(async move {
-            let ws = create_workspace(&storage, &format!("Concurrent-{}", i), WorkspaceType::Code).await;
+            let ws = create_workspace(&storage, &format!("Concurrent-{}", i)::Code).await;
 
             // Create some files
             for j in 0..3 {
@@ -487,8 +485,8 @@ async fn test_workspace_isolation() {
     let (storage, vfs, _memory) = create_test_infrastructure().await;
 
     // Create two workspaces
-    let ws1 = create_workspace(&storage, "Workspace1", WorkspaceType::Code).await;
-    let ws2 = create_workspace(&storage, "Workspace2", WorkspaceType::Code).await;
+    let ws1 = create_workspace(&storage, "Workspace1"::Code).await;
+    let ws2 = create_workspace(&storage, "Workspace2"::Code).await;
 
     // Create same file path in both workspaces
     let file_path = VirtualPath::new("/shared_name.txt").expect("Invalid path");
@@ -555,7 +553,7 @@ async fn test_complete_vfs_navigation_workflow() {
 
     // Step 1: Create workspace
     println!("\n--- Step 1: Create Workspace ---");
-    let workspace = create_workspace(&storage, "NavigationWorkflow", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "NavigationWorkflow"::Code).await;
     println!("✓ Created workspace: {} (ID: {})", workspace.name, workspace.id);
 
     // Step 2: Add files with complex directory structure

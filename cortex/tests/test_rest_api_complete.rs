@@ -9,7 +9,7 @@
 //! - GET /memory/patterns - Get learned patterns
 
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, PoolConnectionMode};
-use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, VirtualPath, SourceType};
 use cortex_memory::CognitiveManager;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -52,7 +52,6 @@ async fn create_test_infrastructure() -> (Arc<ConnectionManager>, Arc<VirtualFil
 async fn create_workspace(
     storage: &ConnectionManager,
     name: &str,
-    workspace_type: WorkspaceType,
 ) -> cortex_vfs::Workspace {
     let workspace_id = Uuid::new_v4();
     let namespace = format!("ws_{}", workspace_id.to_string().replace('-', "_"));
@@ -60,13 +59,13 @@ async fn create_workspace(
     let workspace = cortex_vfs::Workspace {
         id: workspace_id,
         name: name.to_string(),
-        workspace_type,
-        source_type: SourceType::Local,
         namespace,
-        source_path: None,
+        sync_sources: vec![],
+        metadata: std::collections::HashMap::new(),
         read_only: false,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -89,7 +88,7 @@ async fn test_workspace_update() {
     println!("=== Testing PUT /workspaces/{{id}} ===");
 
     let (storage, _vfs, _memory) = create_test_infrastructure().await;
-    let mut workspace = create_workspace(&storage, "OriginalName", WorkspaceType::Code).await;
+    let mut workspace = create_workspace(&storage, "OriginalName").await;
 
     println!("✓ Created workspace: {}", workspace.name);
 
@@ -143,7 +142,7 @@ async fn test_workspace_sync() {
     println!("=== Testing POST /workspaces/{{id}}/sync ===");
 
     let (storage, vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "SyncTest", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "SyncTest").await;
 
     // Create some files
     let files = vec![
@@ -209,7 +208,7 @@ async fn test_find_references() {
     println!("=== Testing GET /search/references/{{unit_id}} ===");
 
     let (storage, _vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "RefTest", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "RefTest").await;
 
     // Simulate a code unit (function) that exists in the codebase
     let unit_name = "calculate_total";
@@ -254,7 +253,7 @@ async fn test_pattern_search() {
     println!("=== Testing POST /search/pattern ===");
 
     let (storage, vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "PatternTest", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "PatternTest").await;
 
     // Create files with various patterns
     let files = vec![
@@ -322,7 +321,7 @@ async fn test_memory_search() {
     println!("=== Testing POST /memory/search ===");
 
     let (storage, _vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "MemoryTest", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "MemoryTest").await;
 
     // Create memory episodes (simulated)
     let _session_id = Uuid::new_v4();
@@ -381,7 +380,7 @@ async fn test_get_patterns() {
     println!("=== Testing GET /memory/patterns ===");
 
     let (storage, _vfs, _memory) = create_test_infrastructure().await;
-    let workspace = create_workspace(&storage, "PatternsTest", WorkspaceType::Code).await;
+    let workspace = create_workspace(&storage, "PatternsTest").await;
 
     // Simulate learned patterns (in real implementation, these would be extracted from memory)
     let patterns = vec![

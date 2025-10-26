@@ -19,7 +19,7 @@ mod tests {
         connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy},
         ConnectionManager,
     };
-    use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType, SyncSource, SyncSourceType, SyncSourceStatus};
+    use cortex_vfs::{VirtualFileSystem, VirtualPath, SourceType, SyncSource, SyncSourceType, SyncSourceStatus};
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;
@@ -64,9 +64,7 @@ mod tests {
         let workspace_id = Uuid::new_v4();
         let now = Utc::now();
 
-        // Create metadata with workspace type
-        let mut metadata = HashMap::new();
-        metadata.insert("workspace_type".to_string(), serde_json::json!("code"));
+        let metadata = HashMap::new();
 
         let workspace = cortex_vfs::Workspace {
             id: workspace_id,
@@ -547,14 +545,14 @@ mod tests {
         let workspace = workspace_service
             .create_workspace(workspace::CreateWorkspaceRequest {
                 name: "Test Workspace".to_string(),
-                workspace_type: "code".to_string(),
                 source_path: None,
+                sync_sources: None,
                 read_only: Some(false),
+                metadata: None,
             })
             .await?;
 
         assert_eq!(workspace.name, "Test Workspace");
-        assert_eq!(workspace.workspace_type, "code");
         assert!(!workspace.read_only);
 
         let workspace_id = Uuid::parse_str(&workspace.id)?;
@@ -570,8 +568,8 @@ mod tests {
                 &workspace_id,
                 workspace::UpdateWorkspaceRequest {
                     name: Some("Updated Workspace".to_string()),
-                    workspace_type: None,
                     read_only: Some(true),
+                    metadata: None,
                 },
             )
             .await?;
@@ -582,7 +580,6 @@ mod tests {
         // List workspaces
         let workspaces = workspace_service
             .list_workspaces(workspace::ListWorkspaceFilters {
-                workspace_type: None,
                 limit: None,
             })
             .await?;
@@ -609,9 +606,10 @@ mod tests {
         let workspace = workspace_service
             .create_workspace(workspace::CreateWorkspaceRequest {
                 name: "Stats Test".to_string(),
-                workspace_type: "code".to_string(),
                 source_path: None,
+                sync_sources: None,
                 read_only: Some(false),
+                metadata: None,
             })
             .await?;
 
@@ -1193,9 +1191,10 @@ mod tests {
         let workspace = workspace_service
             .create_workspace(workspace::CreateWorkspaceRequest {
                 name: "Integration Test".to_string(),
-                workspace_type: "code".to_string(),
                 source_path: None,
+                sync_sources: None,
                 read_only: Some(false),
+                metadata: None,
             })
             .await?;
 

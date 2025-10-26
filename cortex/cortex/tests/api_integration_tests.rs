@@ -330,7 +330,6 @@ async fn test_create_workspace() {
 
     let response = client.post("/api/v1/workspaces", json!({
         "name": "Test Workspace",
-        "workspace_type": "code",
         "source_path": "/tmp/test"
     })).await;
 
@@ -369,8 +368,7 @@ async fn test_get_workspace() {
 
     // Create workspace first
     let create_response = client.post("/api/v1/workspaces", json!({
-        "name": "Get Test Workspace",
-        "workspace_type": "code"
+        "name": "Get Test Workspace"
     })).await;
 
     let create_body: Value = create_response.json().await.expect("Failed to parse JSON");
@@ -397,8 +395,7 @@ async fn test_update_workspace() {
 
     // Create workspace first
     let create_response = client.post("/api/v1/workspaces", json!({
-        "name": "Update Test",
-        "workspace_type": "code"
+        "name": "Update Test"
     })).await;
 
     let create_body: Value = create_response.json().await.expect("Failed to parse JSON");
@@ -425,8 +422,7 @@ async fn test_delete_workspace() {
 
     // Create workspace first
     let create_response = client.post("/api/v1/workspaces", json!({
-        "name": "Delete Test",
-        "workspace_type": "code"
+        "name": "Delete Test"
     })).await;
 
     let create_body: Value = create_response.json().await.expect("Failed to parse JSON");
@@ -452,7 +448,6 @@ async fn test_sync_workspace() {
     // Create workspace first
     let create_response = client.post("/api/v1/workspaces", json!({
         "name": "Sync Test",
-        "workspace_type": "code",
         "source_path": "/tmp/sync_test"
     })).await;
 
@@ -986,8 +981,7 @@ async fn authenticate_client(client: &mut ApiTestClient) {
 /// Helper to create a test workspace
 async fn create_test_workspace(client: &mut ApiTestClient) -> String {
     let response = client.post("/api/v1/workspaces", json!({
-        "name": "Test Workspace",
-        "workspace_type": "code"
+        "name": "Test Workspace"
     })).await;
 
     let body: Value = response.json().await.expect("Failed to parse JSON");

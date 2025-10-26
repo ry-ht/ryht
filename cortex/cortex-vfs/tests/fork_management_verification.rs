@@ -83,7 +83,6 @@ async fn create_test_workspace(
         ],
         metadata: {
             let mut m = HashMap::new();
-            m.insert("workspace_type".to_string(), serde_json::Value::String("code".to_string()));
             m
         },
         read_only,

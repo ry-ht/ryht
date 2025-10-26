@@ -92,7 +92,6 @@ async fn test_list_workspaces_single() {
     let workspace = &output["workspaces"][0];
     assert_eq!(workspace["workspace_id"], workspace_id);
     assert_eq!(workspace["name"], "TestProject");
-    assert!(workspace["workspace_type"].is_string());
     assert!(workspace["source_type"].is_string());
     assert!(workspace["file_count"].is_number());
     assert!(workspace["created_at"].is_string());
@@ -557,7 +556,6 @@ async fn test_list_workspaces_summary_not_full_info() {
     // Should have summary fields
     assert!(workspace["workspace_id"].is_string());
     assert!(workspace["name"].is_string());
-    assert!(workspace["workspace_type"].is_string());
     assert!(workspace["source_type"].is_string());
     assert!(workspace["file_count"].is_number());
     assert!(workspace["created_at"].is_string());

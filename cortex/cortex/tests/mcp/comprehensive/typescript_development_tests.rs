@@ -28,7 +28,7 @@ use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
-    FileIngestionPipeline, Workspace, WorkspaceType, SourceType
+    FileIngestionPipeline, Workspace, SourceType
 };
 use cortex_memory::SemanticMemorySystem;
 use cortex::mcp::tools;
@@ -101,15 +101,13 @@ impl TypeScriptTestHarness {
         let workspace_id = Uuid::new_v4();
         let workspace = Workspace {
             id: workspace_id,
-            name: "typescript-test-project".to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
-            namespace: "cortex_test".to_string(),
-            source_path: Some(PathBuf::from("/tmp/typescript-test-project")),
-            read_only: false,
+            name: "typescript-test-project".to_string(),            namespace: "cortex_test".to_string(),            read_only: false,
             parent_workspace: None,
             fork_metadata: None,
             created_at: chrono::Utc::now(),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
+            dependencies: vec![],
             updated_at: chrono::Utc::now(),
         };
 

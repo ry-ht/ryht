@@ -9,7 +9,7 @@
 
 use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, connection::ConnectionConfig};
-use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, SourceType};
 use cortex_memory::SemanticMemorySystem;
 use mcp_sdk::prelude::*;
 use serde_json::Value;
@@ -159,13 +159,15 @@ impl TestHarness {
         let workspace = Workspace {
             id: workspace_id,
             name: name.to_string(),
-            root_path: project_path.to_path_buf(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
+            namespace: format!("ws_{}", workspace_id.to_string().replace('-', "_")),
+            sync_sources: vec![],
             metadata: Default::default(),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
+            dependencies: vec![],
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         // Store workspace

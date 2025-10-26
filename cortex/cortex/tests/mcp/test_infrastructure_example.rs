@@ -55,7 +55,6 @@ async fn example_workspace_creation_with_assertions() {
     // Additional checks
     let json = result.as_json();
     assert!(json["workspace_id"].is_string());
-    assert_eq!(json["workspace_type"], "code");
 
     println!("Workspace created successfully: {}", json["workspace_id"]);
 }

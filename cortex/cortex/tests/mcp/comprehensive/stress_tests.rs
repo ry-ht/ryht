@@ -18,7 +18,7 @@ use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{
     VirtualFileSystem, ExternalProjectLoader, MaterializationEngine,
-    FileIngestionPipeline, Workspace, WorkspaceType, SourceType, VirtualPath,
+    FileIngestionPipeline, Workspace, SourceType, VirtualPath,
     FlushScope, FlushOptions,
 };
 use cortex_memory::SemanticMemorySystem;
@@ -93,15 +93,13 @@ impl StressTestHarness {
         let workspace_id = Uuid::new_v4();
         let workspace = Workspace {
             id: workspace_id,
-            name: name.to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
-            namespace: format!("test_{}", workspace_id),
-            source_path: Some(path.to_path_buf()),
-            read_only: false,
+            name: name.to_string(),            namespace: format!("test_{}", workspace_id),            read_only: false,
             parent_workspace: None,
             fork_metadata: None,
             created_at: chrono::Utc::now(),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
+            dependencies: vec![],
             updated_at: chrono::Utc::now(),
         };
 

@@ -34,7 +34,6 @@ async fn test_create_workspace_basic() {
 
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
     assert!(output["workspace_id"].is_string());
-    assert_eq!(output["workspace_type"], "code");
     assert!(output["files_imported"].as_u64().unwrap() >= 2); // lib.rs, main.rs
 }
 
@@ -93,7 +92,6 @@ async fn test_create_workspace_detects_rust_project() {
 
     let result = tool.execute(input, &TestHarness::tool_context()).await.unwrap();
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
-    assert_eq!(output["workspace_type"], "code");
 }
 
 #[tokio::test]
@@ -228,7 +226,6 @@ async fn test_create_workspace_empty_directory() {
 
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
     assert_eq!(output["files_imported"], 0);
-    assert_eq!(output["workspace_type"], "mixed"); // No project markers
 }
 
 #[tokio::test]

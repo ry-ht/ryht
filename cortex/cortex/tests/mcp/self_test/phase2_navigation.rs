@@ -37,7 +37,7 @@ mod utils;
 
 use utils::TestHarness;
 use cortex_memory::CognitiveManager;
-use cortex_vfs::{Workspace, WorkspaceType, SourceType};
+use cortex_vfs::{Workspace, SourceType};
 use std::collections::{HashSet, HashMap};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -330,7 +330,6 @@ async fn load_or_create_workspace(harness: &TestHarness) -> Uuid {
             id: workspace_id,
             name: WORKSPACE_NAME.to_string(),
             root_path: workspace_root.clone(),
-            workspace_type: WorkspaceType::Code,
             source_type: SourceType::Local,
             metadata: Default::default(),
             created_at: chrono::Utc::now(),

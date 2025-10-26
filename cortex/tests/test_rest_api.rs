@@ -8,7 +8,7 @@
 
 use cortex_core::config::GlobalConfig;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, PoolConnectionMode};
-use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, VirtualPath, SourceType};
 use std::sync::Arc;
 use uuid::Uuid;
 use chrono::Utc;
@@ -53,13 +53,13 @@ async fn create_test_workspace(
     let workspace = cortex_vfs::Workspace {
         id: workspace_id,
         name: name.to_string(),
-        workspace_type: WorkspaceType::Code,
-        source_type: SourceType::Local,
         namespace: namespace.clone(),
-        source_path: None,
+        sync_sources: vec![],
+        metadata: std::collections::HashMap::new(),
         read_only: false,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -99,7 +99,6 @@ async fn test_workspace_crud_workflow() {
     assert!(workspace.is_some());
     let workspace = workspace.unwrap();
     assert_eq!(workspace.name, "Test Workspace");
-    assert_eq!(workspace.workspace_type, WorkspaceType::Code);
 
     // Delete workspace
     let _: Option<cortex_vfs::Workspace> = conn

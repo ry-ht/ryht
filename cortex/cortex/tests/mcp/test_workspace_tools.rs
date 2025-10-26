@@ -128,7 +128,6 @@ async fn test_workspace_create_import() {
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
 
     assert!(output["workspace_id"].is_string());
-    assert_eq!(output["workspace_type"], "code");
     assert!(output["files_imported"].as_u64().unwrap() >= 2); // At least lib.rs and main.rs
     assert!(output["units_extracted"].as_u64().unwrap() > 0); // Should have extracted functions/structs
 
@@ -194,7 +193,6 @@ async fn test_workspace_get() {
 
     assert_eq!(output["workspace_id"], workspace_id);
     assert_eq!(output["name"], "TestProject");
-    assert_eq!(output["workspace_type"], "code");
     assert_eq!(output["source_type"], "local");
     assert_eq!(output["read_only"], false);
     assert!(output["stats"].is_object());
@@ -242,7 +240,6 @@ async fn test_workspace_list() {
     let workspace = &output["workspaces"][0];
     assert!(workspace["workspace_id"].is_string());
     assert!(workspace["name"].is_string());
-    assert!(workspace["workspace_type"].is_string());
     assert!(workspace["created_at"].is_string());
 
     println!("Listed {} workspaces", output["total"]);
@@ -530,7 +527,6 @@ async fn test_workspace_create_detects_project_type() {
     let result = tool.execute(input, &context).await.unwrap();
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
 
-    assert_eq!(output["workspace_type"], "code");
 }
 
 #[tokio::test]

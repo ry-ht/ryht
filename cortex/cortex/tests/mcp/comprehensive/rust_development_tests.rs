@@ -43,7 +43,7 @@ use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig, PoolConnectionMode, Credentials, PoolConfig};
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, MaterializationEngine, SourceType,
-    VirtualFileSystem, Workspace, WorkspaceType,
+    VirtualFileSystem, Workspace,
 };
 use mcp_sdk::{Tool, ToolContext};
 use serde_json::json;
@@ -199,13 +199,13 @@ impl RustDevHarness {
         let workspace = Workspace {
             id: self.workspace_id,
             name: name.to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
             namespace: "cortex_test".to_string(),
-            source_path: Some(root_path),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
             read_only: false,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: vec![],
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

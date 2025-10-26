@@ -26,13 +26,15 @@ impl CodeManipulationFixture {
         let workspace = cortex_vfs::Workspace {
             id: workspace_id,
             name: "test_workspace".to_string(),
-            root_path: harness.temp_path().to_path_buf(),
-            workspace_type: cortex_vfs::WorkspaceType::Code,
-            source_type: cortex_vfs::SourceType::Local,
-            metadata: Default::default(),
+            namespace: format!("ws_{}", workspace_id.to_string().replace('-', "_")),
+            sync_sources: vec![],
+            metadata: std::collections::HashMap::new(),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
+            dependencies: vec![],
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
-            last_synced_at: None,
         };
 
         let conn = harness.storage.acquire().await.expect("Failed to acquire connection");

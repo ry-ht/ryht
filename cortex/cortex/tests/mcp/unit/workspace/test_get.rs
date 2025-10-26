@@ -63,7 +63,6 @@ async fn test_get_workspace_basic() {
     let output: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
     assert_eq!(output["workspace_id"], workspace_id);
     assert_eq!(output["name"], "TestProject");
-    assert_eq!(output["workspace_type"], "code");
     assert_eq!(output["source_type"], "local");
     assert_eq!(output["read_only"], false);
     assert!(output["created_at"].is_string());

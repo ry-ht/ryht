@@ -261,7 +261,6 @@ async fn test_storage_vfs_connection_pool_usage() {
     let workspace = Workspace {
         id: workspace_id,
         name: "test-workspace".to_string(),
-        workspace_type: WorkspaceType::Code,
         source_type: SourceType::Local,
         namespace: "cortex_integration_test".to_string(),
         source_path: None,

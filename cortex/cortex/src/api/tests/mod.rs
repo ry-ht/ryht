@@ -149,7 +149,6 @@ mod types_tests {
         let workspace = WorkspaceResponse {
             id: "ws-123".to_string(),
             name: "My Workspace".to_string(),
-            workspace_type: "code".to_string(),
             source_type: "local".to_string(),
             namespace: "ws_123".to_string(),
             source_path: Some("/path/to/source".to_string()),
@@ -169,13 +168,11 @@ mod types_tests {
     fn test_create_workspace_request_deserialization() {
         let json = r#"{
             "name": "Test Workspace",
-            "workspace_type": "code",
             "source_path": "/path/to/code"
         }"#;
 
         let request: CreateWorkspaceRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.name, "Test Workspace");
-        assert_eq!(request.workspace_type, "code");
         assert_eq!(request.source_path, Some("/path/to/code".to_string()));
     }
 
@@ -481,23 +478,6 @@ mod route_parameter_tests {
     }
 
     #[test]
-    fn test_workspace_type_parsing() {
-        let valid_types = vec!["code", "documentation", "mixed", "external"];
-        for t in valid_types {
-            assert!(matches!(
-                t,
-                "code" | "documentation" | "mixed" | "external"
-            ));
-        }
-
-        let invalid_type = "unknown";
-        assert!(!matches!(
-            invalid_type,
-            "code" | "documentation" | "mixed" | "external"
-        ));
-    }
-
-    #[test]
     fn test_path_validation() {
         // Valid paths
         let valid_paths = vec!["/", "/src", "/src/main.rs", "/path/to/file.txt"];
@@ -557,7 +537,6 @@ mod workspace_update_tests {
     fn test_update_workspace_request_serialization() {
         let request = UpdateWorkspaceRequest {
             name: Some("Updated Name".to_string()),
-            workspace_type: Some("code".to_string()),
             read_only: Some(true),
         };
 
@@ -571,26 +550,22 @@ mod workspace_update_tests {
     fn test_update_workspace_request_partial() {
         let request = UpdateWorkspaceRequest {
             name: Some("New Name".to_string()),
-            workspace_type: None,
             read_only: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("New Name"));
-        assert!(!json.contains("workspace_type") || json.contains("null"));
     }
 
     #[test]
     fn test_update_workspace_request_deserialization() {
         let json = r#"{
             "name": "Test Workspace",
-            "workspace_type": "documentation",
             "read_only": false
         }"#;
 
         let request: UpdateWorkspaceRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.name, Some("Test Workspace".to_string()));
-        assert_eq!(request.workspace_type, Some("documentation".to_string()));
         assert_eq!(request.read_only, Some(false));
     }
 
