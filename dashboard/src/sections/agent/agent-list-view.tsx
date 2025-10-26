@@ -19,6 +19,7 @@ import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
+import { useSnackbar } from 'src/components/snackbar';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 import {
   useTable,
@@ -45,6 +46,7 @@ const TABLE_HEAD = [
 export function AgentListView() {
   const table = useTable();
   const popover = usePopover();
+  const { showSnackbar } = useSnackbar();
 
   const [selectedAgent, setSelectedAgent] = useState<AgentInfo | null>(null);
 
@@ -62,40 +64,48 @@ export function AgentListView() {
       await axonClient.deleteAgent(id);
       mutate(axonEndpoints.agents.list);
       popover.onClose();
+      showSnackbar('Agent deleted successfully', 'success');
     } catch (err) {
       console.error('Failed to delete agent:', err);
+      showSnackbar('Failed to delete agent. Please try again.', 'error');
     }
-  }, [popover]);
+  }, [popover, showSnackbar]);
 
   const handlePauseAgent = useCallback(async (id: string) => {
     try {
       await axonClient.pauseAgent(id);
       mutate(axonEndpoints.agents.list);
       popover.onClose();
+      showSnackbar('Agent paused successfully', 'success');
     } catch (err) {
       console.error('Failed to pause agent:', err);
+      showSnackbar('Failed to pause agent. Please try again.', 'error');
     }
-  }, [popover]);
+  }, [popover, showSnackbar]);
 
   const handleResumeAgent = useCallback(async (id: string) => {
     try {
       await axonClient.resumeAgent(id);
       mutate(axonEndpoints.agents.list);
       popover.onClose();
+      showSnackbar('Agent resumed successfully', 'success');
     } catch (err) {
       console.error('Failed to resume agent:', err);
+      showSnackbar('Failed to resume agent. Please try again.', 'error');
     }
-  }, [popover]);
+  }, [popover, showSnackbar]);
 
   const handleRestartAgent = useCallback(async (id: string) => {
     try {
       await axonClient.restartAgent(id);
       mutate(axonEndpoints.agents.list);
       popover.onClose();
+      showSnackbar('Agent restarted successfully', 'success');
     } catch (err) {
       console.error('Failed to restart agent:', err);
+      showSnackbar('Failed to restart agent. Please try again.', 'error');
     }
-  }, [popover]);
+  }, [popover, showSnackbar]);
 
   const renderStatus = (status: string) => {
     const statusColors = {

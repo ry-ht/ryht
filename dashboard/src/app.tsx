@@ -9,6 +9,7 @@ import { themeConfig, ThemeProvider } from 'src/theme';
 import { ProgressBar } from 'src/components/progress-bar';
 import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { SettingsDrawer, defaultSettings, SettingsProvider } from 'src/components/settings';
+import { SnackbarProvider } from 'src/components/snackbar';
 
 import { AuthProvider } from 'src/auth/context/jwt';
 
@@ -28,11 +29,13 @@ export default function App({ children }: AppProps) {
           modeStorageKey={themeConfig.modeStorageKey}
           defaultMode={themeConfig.defaultMode}
         >
-          <MotionLazy>
-            <ProgressBar />
-            <SettingsDrawer defaultSettings={defaultSettings} />
-            {children}
-          </MotionLazy>
+          <SnackbarProvider>
+            <MotionLazy>
+              <ProgressBar />
+              <SettingsDrawer defaultSettings={defaultSettings} />
+              {children}
+            </MotionLazy>
+          </SnackbarProvider>
         </ThemeProvider>
       </SettingsProvider>
     </AuthProvider>
