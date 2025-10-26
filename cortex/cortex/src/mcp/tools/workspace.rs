@@ -206,7 +206,7 @@ impl Tool for WorkspaceCreateTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Creates a new workspace by importing an existing project. Respects .gitignore, parses code structure, and extracts semantic units.")
+        Some("Creates a new workspace. Can import an existing project or create an empty workspace. When importing, respects .gitignore, parses code structure, and extracts semantic units. Empty workspaces allow agents to create projects from scratch.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
