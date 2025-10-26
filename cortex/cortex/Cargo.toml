@@ -76,6 +76,7 @@ similar = "2.7.0"
 once_cell = "1.21.3"
 dashmap = "6.1"
 walkdir = "2.5"
+filetime = "0.2.26"
 
 # Authentication & Security
 jsonwebtoken = { version = "10.1.0", default-features = false, features = ["rust_crypto"] }

@@ -1003,8 +1003,22 @@ impl Tool for WorkspaceExportTool {
 
                                 // Set timestamps if requested
                                 if input.preserve_timestamps {
-                                    // Note: Setting timestamps requires platform-specific code
-                                    // For now, skip this to keep it simple
+                                    use std::time::SystemTime;
+
+                                    // Convert DateTime<Utc> to SystemTime
+                                    let mtime = SystemTime::UNIX_EPOCH +
+                                        std::time::Duration::from_secs(vnode.updated_at.timestamp() as u64);
+                                    let atime = SystemTime::UNIX_EPOCH +
+                                        std::time::Duration::from_secs(vnode.accessed_at.timestamp() as u64);
+
+                                    // Set file times using filetime crate
+                                    if let Err(e) = filetime::set_file_times(
+                                        &file_path,
+                                        filetime::FileTime::from_system_time(atime),
+                                        filetime::FileTime::from_system_time(mtime),
+                                    ) {
+                                        warn!("Failed to set timestamps for {}: {}", vnode.path, e);
+                                    }
                                 }
                             }
                             Err(e) => {
