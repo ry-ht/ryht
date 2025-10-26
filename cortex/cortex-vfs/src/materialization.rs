@@ -98,37 +98,26 @@ impl MaterializationEngine {
 
     /// Collect changes to flush based on scope.
     async fn collect_changes(&self, scope: FlushScope) -> Result<Vec<VNode>> {
-        let _query = match scope {
+        use SyncStatus::*;
+        let change_statuses = vec![Modified, Created, Deleted];
+
+        let vnodes = match scope {
             FlushScope::All => {
-                "SELECT * FROM vnode WHERE status IN ['modified', 'created', 'deleted']".to_string()
+                self.vfs.query_vnodes_by_status(&change_statuses).await?
             }
             FlushScope::Path(path) => {
-                format!(
-                    "SELECT * FROM vnode WHERE status IN ['modified', 'created', 'deleted'] \
-                     AND path LIKE '{}%'",
-                    path.to_string_with_slash()
-                )
+                self.vfs.query_vnodes_by_status_and_path(&change_statuses, &path).await?
             }
             FlushScope::Specific(ids) => {
-                let ids_str = ids.iter()
-                    .map(|id| format!("'{}'", id))
-                    .collect::<Vec<_>>()
-                    .join(",");
-                format!("SELECT * FROM vnode WHERE id IN [{}]", ids_str)
+                self.vfs.query_vnodes_by_ids(&ids).await?
             }
             FlushScope::Workspace(workspace_id) => {
-                format!(
-                    "SELECT * FROM vnode WHERE workspace_id = '{}' \
-                     AND status IN ['modified', 'created', 'deleted']",
-                    workspace_id
-                )
+                self.vfs.query_vnodes_by_status_and_workspace(&change_statuses, &workspace_id).await?
             }
         };
 
-        // Use VFS metadata method to get vnodes
-        // Since we don't have direct storage access, we need to implement a helper method
-        // For now, return empty vec - this needs proper VFS API
-        Ok(Vec::new())
+        debug!("Collected {} vnodes for flush", vnodes.len());
+        Ok(vnodes)
     }
 
     /// Flush changes atomically (all or nothing).

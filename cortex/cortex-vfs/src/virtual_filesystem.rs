@@ -362,6 +362,147 @@ impl VirtualFileSystem {
         Ok(())
     }
 
+    /// Query vnodes by status (e.g., modified, created, deleted).
+    pub async fn query_vnodes_by_status(&self, statuses: &[SyncStatus]) -> Result<Vec<VNode>> {
+        let status_strings: Vec<String> = statuses
+            .iter()
+            .map(|s| match s {
+                SyncStatus::Synced => "synced".to_string(),
+                SyncStatus::Modified => "modified".to_string(),
+                SyncStatus::Created => "created".to_string(),
+                SyncStatus::Deleted => "deleted".to_string(),
+                SyncStatus::Conflict => "conflict".to_string(),
+            })
+            .collect();
+
+        let status_list = status_strings
+            .iter()
+            .map(|s| format!("'{}'", s))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!("SELECT * FROM vnode WHERE status IN [{}]", status_list);
+
+        let conn = self.storage.acquire().await?;
+        let mut response = conn.connection()
+            .query(&query)
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let vnodes: Vec<VNode> = response.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        Ok(vnodes)
+    }
+
+    /// Query vnodes by status with workspace filter.
+    pub async fn query_vnodes_by_status_and_workspace(
+        &self,
+        statuses: &[SyncStatus],
+        workspace_id: &Uuid,
+    ) -> Result<Vec<VNode>> {
+        let status_strings: Vec<String> = statuses
+            .iter()
+            .map(|s| match s {
+                SyncStatus::Synced => "synced".to_string(),
+                SyncStatus::Modified => "modified".to_string(),
+                SyncStatus::Created => "created".to_string(),
+                SyncStatus::Deleted => "deleted".to_string(),
+                SyncStatus::Conflict => "conflict".to_string(),
+            })
+            .collect();
+
+        let status_list = status_strings
+            .iter()
+            .map(|s| format!("'{}'", s))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!(
+            "SELECT * FROM vnode WHERE status IN [{}] AND workspace_id = $workspace_id",
+            status_list
+        );
+
+        let conn = self.storage.acquire().await?;
+        let mut response = conn.connection()
+            .query(&query)
+            .bind(("workspace_id", workspace_id.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let vnodes: Vec<VNode> = response.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        Ok(vnodes)
+    }
+
+    /// Query vnodes by status with path filter.
+    pub async fn query_vnodes_by_status_and_path(
+        &self,
+        statuses: &[SyncStatus],
+        path_prefix: &VirtualPath,
+    ) -> Result<Vec<VNode>> {
+        let status_strings: Vec<String> = statuses
+            .iter()
+            .map(|s| match s {
+                SyncStatus::Synced => "synced".to_string(),
+                SyncStatus::Modified => "modified".to_string(),
+                SyncStatus::Created => "created".to_string(),
+                SyncStatus::Deleted => "deleted".to_string(),
+                SyncStatus::Conflict => "conflict".to_string(),
+            })
+            .collect();
+
+        let status_list = status_strings
+            .iter()
+            .map(|s| format!("'{}'", s))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!(
+            "SELECT * FROM vnode WHERE status IN [{}] AND path LIKE $path_prefix",
+            status_list
+        );
+
+        let conn = self.storage.acquire().await?;
+        let mut response = conn.connection()
+            .query(&query)
+            .bind(("path_prefix", format!("{}%", path_prefix.to_string_with_slash())))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let vnodes: Vec<VNode> = response.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        Ok(vnodes)
+    }
+
+    /// Query specific vnodes by IDs.
+    pub async fn query_vnodes_by_ids(&self, ids: &[Uuid]) -> Result<Vec<VNode>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids_str = ids
+            .iter()
+            .map(|id| format!("'{}'", id))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let query = format!("SELECT * FROM vnode WHERE id IN [{}]", ids_str);
+
+        let conn = self.storage.acquire().await?;
+        let mut response = conn.connection()
+            .query(&query)
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let vnodes: Vec<VNode> = response.take(0)
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        Ok(vnodes)
+    }
+
     /// Mark a vnode as deleted.
     async fn mark_deleted(&self, vnode_id: &Uuid) -> Result<()> {
         let query = format!(
