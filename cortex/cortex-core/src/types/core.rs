@@ -34,9 +34,10 @@ impl Project {
     }
 }
 
-/// Represents a document in the virtual filesystem.
+/// Represents a file/document in the virtual filesystem.
+/// This is for VFS files, not documentation system documents.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Document {
+pub struct VfsDocument {
     pub id: CortexId,
     pub project_id: CortexId,
     pub path: String,

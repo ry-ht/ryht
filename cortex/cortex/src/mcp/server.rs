@@ -133,7 +133,7 @@ impl CortexMcpServer {
         let agent_ctx = MultiAgentContext::new(storage.clone());
         let mat_ctx = MaterializationContext::new(storage.clone());
         let test_ctx = TestingContext::new(storage.clone());
-        let doc_ctx = DocumentationContext::new(storage.clone());
+        let doc_ctx = DocumentationContext::new(storage.clone(), vfs.clone());
         let build_ctx = BuildExecutionContext::with_active_workspace(storage.clone(), active_workspace.clone());
         let monitor_ctx = MonitoringContext::new(storage.clone());
         let security_ctx = SecurityAnalysisContext::new(storage.clone());
@@ -292,15 +292,30 @@ impl CortexMcpServer {
             .tool(ValidateContractsTool::new(test_ctx.clone()))
             .tool(ValidateDependenciesTool::new(test_ctx.clone()))
             .tool(ValidateStyleTool::new(test_ctx.clone()))
-            // Documentation Tools (8)
-            .tool(DocGenerateTool::new(doc_ctx.clone()))
-            .tool(DocUpdateTool::new(doc_ctx.clone()))
-            .tool(DocExtractTool::new(doc_ctx.clone()))
-            .tool(DocFindUndocumentedTool::new(doc_ctx.clone()))
-            .tool(DocCheckConsistencyTool::new(doc_ctx.clone()))
-            .tool(DocLinkToCodeTool::new(doc_ctx.clone()))
-            .tool(DocGenerateReadmeTool::new(doc_ctx.clone()))
-            .tool(DocGenerateChangelogTool::new(doc_ctx.clone()))
+            // Documentation Tools (16)
+            // Document CRUD
+            .tool(DocumentCreateTool::new(doc_ctx.clone()))
+            .tool(DocumentGetTool::new(doc_ctx.clone()))
+            .tool(DocumentUpdateTool::new(doc_ctx.clone()))
+            .tool(DocumentDeleteTool::new(doc_ctx.clone()))
+            .tool(DocumentListTool::new(doc_ctx.clone()))
+            // Section Management
+            .tool(SectionCreateTool::new(doc_ctx.clone()))
+            .tool(SectionUpdateTool::new(doc_ctx.clone()))
+            .tool(SectionDeleteTool::new(doc_ctx.clone()))
+            .tool(SectionListTool::new(doc_ctx.clone()))
+            // Link Management
+            .tool(LinkCreateTool::new(doc_ctx.clone()))
+            .tool(LinkListTool::new(doc_ctx.clone()))
+            .tool(LinkDeleteTool::new(doc_ctx.clone()))
+            // Search
+            .tool(DocumentSearchTool::new(doc_ctx.clone()))
+            // Versioning
+            .tool(VersionCreateTool::new(doc_ctx.clone()))
+            .tool(VersionListTool::new(doc_ctx.clone()))
+            // Legacy (to be migrated)
+            // .tool(DocGenerateFromCodeTool::new(doc_ctx.clone()))
+            // .tool(DocCheckConsistencyTool::new(doc_ctx.clone()))
             // Build & Execution Tools (8)
             .tool(BuildTriggerTool::new(build_ctx.clone()))
             .tool(BuildConfigureTool::new(build_ctx.clone()))
@@ -354,7 +369,7 @@ impl CortexMcpServer {
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 174); // Total: 149 + 4 + 4 + 6 + 6 + 5 = 174
+        info!("Registered {} tools", 182); // Total: 149 + 4 + 4 + 6 + 6 + 5 + 8 (updated docs) = 182
 
         Ok(server)
     }

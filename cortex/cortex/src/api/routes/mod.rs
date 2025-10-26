@@ -13,6 +13,7 @@ pub mod auth;
 pub mod dashboard;
 pub mod tasks;
 pub mod export;
+pub mod documents;
 
 pub use workspaces::workspace_routes;
 pub use vfs::vfs_routes;
@@ -27,3 +28,4 @@ pub use auth::{auth_routes, AuthContext};
 pub use dashboard::dashboard_routes;
 pub use tasks::task_routes;
 pub use export::export_routes;
+pub use documents::{document_routes, DocumentContext};

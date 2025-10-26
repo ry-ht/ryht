@@ -274,7 +274,7 @@ impl Storage for SurrealStorage {
         Ok(())
     }
 
-    async fn store_document(&self, document: &Document) -> Result<()> {
+    async fn store_document(&self, document: &VfsDocument) -> Result<()> {
         let db = self.pool.get().await?;
 
         // Construct the content map manually to ensure proper datetime serialization
@@ -302,10 +302,10 @@ impl Storage for SurrealStorage {
         Ok(())
     }
 
-    async fn get_document(&self, id: CortexId) -> Result<Option<Document>> {
+    async fn get_document(&self, id: CortexId) -> Result<Option<VfsDocument>> {
         let db = self.pool.get().await?;
 
-        let document: Option<Document> = db
+        let document: Option<VfsDocument> = db
             .select(("documents", id.to_string()))
             .await
             .map_err(|e| CortexError::storage(format!("Failed to get document: {}", e)))?;
@@ -313,7 +313,7 @@ impl Storage for SurrealStorage {
         Ok(document)
     }
 
-    async fn list_documents(&self, project_id: CortexId) -> Result<Vec<Document>> {
+    async fn list_documents(&self, project_id: CortexId) -> Result<Vec<VfsDocument>> {
         let db = self.pool.get().await?;
 
         let mut result = db
@@ -322,7 +322,7 @@ impl Storage for SurrealStorage {
             .await
             .map_err(|e| CortexError::storage(format!("Failed to list documents: {}", e)))?;
 
-        let documents: Vec<Document> = result.take(0)
+        let documents: Vec<VfsDocument> = result.take(0)
             .map_err(|e| CortexError::storage(format!("Failed to parse documents: {}", e)))?;
 
         Ok(documents)
@@ -331,7 +331,7 @@ impl Storage for SurrealStorage {
     async fn delete_document(&self, id: CortexId) -> Result<()> {
         let db = self.pool.get().await?;
 
-        let _: Option<Document> = db
+        let _: Option<VfsDocument> = db
             .delete(("documents", id.to_string()))
             .await
             .map_err(|e| CortexError::storage(format!("Failed to delete document: {}", e)))?;

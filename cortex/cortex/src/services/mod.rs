@@ -13,6 +13,7 @@ pub mod dependencies;
 pub mod auth;
 pub mod sessions;
 pub mod build;
+pub mod document;
 
 pub use workspace::WorkspaceService;
 pub use vfs::VfsService;
@@ -23,6 +24,7 @@ pub use dependencies::DependencyService;
 pub use auth::AuthService;
 pub use sessions::SessionService;
 pub use build::BuildService;
+pub use document::DocumentService;
 
 #[cfg(test)]
 mod tests;

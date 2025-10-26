@@ -22,16 +22,16 @@ pub trait Storage: Send + Sync {
     /// Delete a project
     async fn delete_project(&self, id: CortexId) -> Result<()>;
 
-    /// Store a document
-    async fn store_document(&self, document: &Document) -> Result<()>;
+    /// Store a VFS document (file)
+    async fn store_document(&self, document: &VfsDocument) -> Result<()>;
 
-    /// Get a document by ID
-    async fn get_document(&self, id: CortexId) -> Result<Option<Document>>;
+    /// Get a VFS document (file) by ID
+    async fn get_document(&self, id: CortexId) -> Result<Option<VfsDocument>>;
 
-    /// List documents in a project
-    async fn list_documents(&self, project_id: CortexId) -> Result<Vec<Document>>;
+    /// List VFS documents (files) in a project
+    async fn list_documents(&self, project_id: CortexId) -> Result<Vec<VfsDocument>>;
 
-    /// Delete a document
+    /// Delete a VFS document (file)
     async fn delete_document(&self, id: CortexId) -> Result<()>;
 
     /// Store an embedding
@@ -67,17 +67,17 @@ pub trait Storage: Send + Sync {
     async fn list_agent_sessions(&self) -> Result<Vec<AgentSession>>;
 }
 
-/// Trait for document ingestion.
+/// Trait for VFS document (file) ingestion.
 #[async_trait]
 pub trait Ingester: Send + Sync {
     /// Ingest a file into the system
-    async fn ingest_file(&self, project_id: CortexId, path: &Path) -> Result<Document>;
+    async fn ingest_file(&self, project_id: CortexId, path: &Path) -> Result<VfsDocument>;
 
     /// Ingest a directory recursively
-    async fn ingest_directory(&self, project_id: CortexId, path: &Path) -> Result<Vec<Document>>;
+    async fn ingest_directory(&self, project_id: CortexId, path: &Path) -> Result<Vec<VfsDocument>>;
 
-    /// Update a document when the file changes
-    async fn update_document(&self, document_id: CortexId, path: &Path) -> Result<Document>;
+    /// Update a VFS document (file) when the file changes
+    async fn update_document(&self, document_id: CortexId, path: &Path) -> Result<VfsDocument>;
 }
 
 /// Trait for text chunking strategies.

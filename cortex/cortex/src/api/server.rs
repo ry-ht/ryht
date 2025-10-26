@@ -6,6 +6,7 @@ use super::routes::{
     build::BuildContext,
     dashboard::DashboardContext,
     dependencies::DependencyContext,
+    documents::DocumentContext,
     export::ExportContext,
     health::AppState,
     memory::MemoryContext,
@@ -18,7 +19,7 @@ use super::routes::{
 };
 use super::websocket::WsManager;
 use crate::services::{
-    CodeUnitService, DependencyService, MemoryService, SearchService, SessionService, VfsService,
+    CodeUnitService, DependencyService, DocumentService, MemoryService, SearchService, SessionService, VfsService,
     WorkspaceService,
 };
 use anyhow::{Context, Result};
@@ -262,6 +263,11 @@ impl RestApiServer {
 
         let dependency_service = Arc::new(DependencyService::new(self.storage.clone()));
 
+        let document_service = Arc::new(DocumentService::new(
+            self.storage.clone(),
+            self.vfs.clone(),
+        ));
+
         // Create contexts for different route groups
         let workspace_context = WorkspaceContext {
             workspace_service: workspace_service.clone(),
@@ -318,6 +324,11 @@ impl RestApiServer {
             storage: self.storage.clone(),
         };
 
+        // Create document context
+        let document_context = DocumentContext {
+            document_service: document_service.clone(),
+        };
+
         // Build public routes (no authentication required)
         let public_routes = Router::new()
             .merge(super::routes::health_routes(app_state))
@@ -337,6 +348,7 @@ impl RestApiServer {
             .merge(super::routes::dashboard_routes(dashboard_context))
             .merge(super::routes::task_routes(task_context))
             .merge(super::routes::export_routes(export_context))
+            .merge(super::routes::document_routes(document_context))
             .route_layer(middleware::from_fn(move |req, next| {
                 let auth_state = auth_state_clone.clone();
                 async move {

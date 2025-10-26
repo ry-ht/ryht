@@ -6,7 +6,7 @@ use crate::processors::ProcessorFactory;
 use cortex_core::error::{CortexError, Result};
 use cortex_core::id::CortexId;
 use cortex_core::traits::{Ingester, Storage};
-use cortex_core::types::{Chunk, Document};
+use cortex_core::types::{Chunk, VfsDocument};
 use async_trait::async_trait;
 use std::path::Path;
 use std::sync::Arc;
@@ -144,7 +144,7 @@ struct ProcessedFileInfo {
 
 #[async_trait]
 impl Ingester for DocumentIngester {
-    async fn ingest_file(&self, project_id: CortexId, path: &Path) -> Result<Document> {
+    async fn ingest_file(&self, project_id: CortexId, path: &Path) -> Result<VfsDocument> {
         tracing::info!("Ingesting file: {:?}", path);
 
         let content = self.read_file(path).await?;
@@ -161,7 +161,7 @@ impl Ingester for DocumentIngester {
             .map(|(k, v)| (k, v.to_string()))
             .collect();
 
-        let document = Document {
+        let document = VfsDocument {
             id: CortexId::new(),
             project_id,
             path: path.to_string_lossy().to_string(),
@@ -231,7 +231,7 @@ impl Ingester for DocumentIngester {
         Ok(document)
     }
 
-    async fn ingest_directory(&self, project_id: CortexId, path: &Path) -> Result<Vec<Document>> {
+    async fn ingest_directory(&self, project_id: CortexId, path: &Path) -> Result<Vec<VfsDocument>> {
         tracing::info!("Ingesting directory: {:?}", path);
 
         let walker = ignore::WalkBuilder::new(path)
@@ -257,7 +257,7 @@ impl Ingester for DocumentIngester {
         Ok(documents)
     }
 
-    async fn update_document(&self, document_id: CortexId, path: &Path) -> Result<Document> {
+    async fn update_document(&self, document_id: CortexId, path: &Path) -> Result<VfsDocument> {
         tracing::info!("Updating document: {:?}", path);
 
         let content = self.read_file(path).await?;
