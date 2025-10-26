@@ -1048,8 +1048,8 @@ impl CodeExtractFunctionTool {
 #[derive(Debug, Deserialize, JsonSchema)]
 struct ExtractFunctionInput {
     source_unit_id: String,
-    start_line: i32,
-    end_line: i32,
+    start_line: usize,
+    end_line: usize,
     function_name: String,
     #[serde(default = "default_before_position")]
     #[allow(dead_code)]

@@ -189,6 +189,29 @@ impl VirtualFileSystem {
         Ok(())
     }
 
+    /// Create a symbolic link in the virtual filesystem.
+    pub async fn create_symlink(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+        target: &str,
+    ) -> Result<()> {
+        debug!("Creating symlink: {} -> {} in workspace {}", path, target, workspace_id);
+
+        // Create parent directories if needed
+        if let Some(parent) = path.parent() {
+            if self.get_vnode(workspace_id, &parent).await?.is_none() {
+                self.create_directory(workspace_id, &parent, true).await?;
+            }
+        }
+
+        // Create the symlink vnode
+        let vnode = VNode::new_symlink(*workspace_id, path.clone(), target.to_string());
+        self.save_vnode(&vnode).await?;
+
+        Ok(())
+    }
+
     /// List entries in a directory.
     pub async fn list_directory(
         &self,
