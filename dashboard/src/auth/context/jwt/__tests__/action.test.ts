@@ -51,12 +51,12 @@ describe('Auth Actions', () => {
         password: 'password123',
       });
 
-      expect(axios.post).toHaveBeenCalledWith('/api/auth/signin', {
+      expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/api/auth/signin', {
         email: 'test@example.com',
         password: 'password123',
       });
 
-      expect(setSession).toHaveBeenCalledWith(mockAccessToken);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(mockAccessToken);
     });
 
     it('should throw error when access token is missing', async () => {
@@ -84,7 +84,7 @@ describe('Auth Actions', () => {
         })
       ).rejects.toThrow('Network error');
 
-      expect(setSession).not.toHaveBeenCalled();
+      expect(vi.mocked(setSession)).not.toHaveBeenCalled();
     });
 
     it('should handle server error responses', async () => {
@@ -116,8 +116,8 @@ describe('Auth Actions', () => {
         password: 'admin123',
       });
 
-      expect(setSession).toHaveBeenCalledTimes(1);
-      expect(setSession).toHaveBeenCalledWith(mockAccessToken);
+      expect(vi.mocked(setSession)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(mockAccessToken);
     });
   });
 
@@ -146,7 +146,7 @@ describe('Auth Actions', () => {
         lastName: 'Doe',
       });
 
-      expect(setSession).toHaveBeenCalledWith(mockAccessToken);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(mockAccessToken);
     });
 
     it('should throw error when access token is missing in signup response', async () => {
@@ -183,7 +183,7 @@ describe('Auth Actions', () => {
         })
       ).rejects.toMatchObject(mockError);
 
-      expect(setSession).not.toHaveBeenCalled();
+      expect(vi.mocked(setSession)).not.toHaveBeenCalled();
     });
 
     it('should handle network errors during signup', async () => {
@@ -210,7 +210,7 @@ describe('Auth Actions', () => {
     it('should sign out successfully', async () => {
       await signOut();
 
-      expect(setSession).toHaveBeenCalledWith(null);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(null);
     });
 
     it('should handle errors during sign out', async () => {
@@ -225,8 +225,8 @@ describe('Auth Actions', () => {
       // Sign out when not signed in
       await signOut();
 
-      expect(setSession).toHaveBeenCalledWith(null);
-      expect(setSession).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(null);
+      expect(vi.mocked(setSession)).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -247,14 +247,14 @@ describe('Auth Actions', () => {
         password: 'password123',
       });
 
-      expect(setSession).toHaveBeenCalledWith(mockAccessToken);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(mockAccessToken);
 
       // Sign out
       vi.mocked(setSession).mockClear();
 
       await signOut();
 
-      expect(setSession).toHaveBeenCalledWith(null);
+      expect(vi.mocked(setSession)).toHaveBeenCalledWith(null);
     });
   });
 });

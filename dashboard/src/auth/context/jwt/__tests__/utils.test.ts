@@ -11,7 +11,7 @@ vi.mock('src/lib/axios', () => ({
   default: {
     defaults: {
       headers: {
-        common: {},
+        common: {} as Record<string, string>,
       },
     },
   },
@@ -27,6 +27,8 @@ describe('Auth Utils', () => {
     vi.clearAllMocks();
     sessionStorage.clear();
     vi.useFakeTimers();
+    // Reset axios headers
+    axios.defaults.headers.common = {};
   });
 
   afterEach(() => {
