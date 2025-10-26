@@ -1096,10 +1096,14 @@ impl Tool for WorkspaceArchiveTool {
 
         info!("Archiving workspace: {} ({})", workspace.name, workspace_id);
 
-        // Store archive reason in metadata if Workspace had a metadata field
-        // For now, just log it
-        if let Some(reason) = input.reason {
+        // Prepare metadata with archive information
+        let mut archive_metadata = std::collections::HashMap::new();
+        archive_metadata.insert("archived".to_string(), serde_json::json!(true));
+        archive_metadata.insert("archived_at".to_string(), serde_json::json!(chrono::Utc::now().to_rfc3339()));
+
+        if let Some(reason) = &input.reason {
             info!("Archive reason: {}", reason);
+            archive_metadata.insert("archive_reason".to_string(), serde_json::json!(reason));
         }
 
         // Mark as read-only and update metadata
@@ -1108,6 +1112,7 @@ impl Tool for WorkspaceArchiveTool {
             name: None,
             workspace_type: None,
             read_only: Some(true),
+            metadata: Some(archive_metadata),
         };
 
         self.ctx.workspace_service.update_workspace(&workspace_id, update_request).await

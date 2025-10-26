@@ -168,6 +168,13 @@ impl WorkspaceService {
             workspace.read_only = read_only;
         }
 
+        // Merge additional metadata if provided
+        if let Some(metadata) = request.metadata {
+            for (key, value) in metadata {
+                workspace.metadata.insert(key, value);
+            }
+        }
+
         workspace.updated_at = Utc::now();
 
         // Save to database
@@ -377,6 +384,7 @@ pub struct UpdateWorkspaceRequest {
     pub name: Option<String>,
     pub workspace_type: Option<String>,
     pub read_only: Option<bool>,
+    pub metadata: Option<HashMap<String, Value>>,
 }
 
 #[derive(Debug, Clone, Default)]

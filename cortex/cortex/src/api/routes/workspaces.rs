@@ -306,6 +306,7 @@ async fn update_workspace(
         name: payload.name.clone(),
         workspace_type: payload.workspace_type.clone(),
         read_only: payload.read_only,
+        metadata: None, // API doesn't expose metadata updates yet
     };
 
     // Use workspace service to update workspace
