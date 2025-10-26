@@ -634,10 +634,336 @@ impl StrategyLibrary {
 
         debug!("Loading learned strategies from Cortex");
 
-        // TODO: Query Cortex for patterns that represent successful strategies
-        // This would analyze episodic memory to extract effective patterns
+        // Query Cortex for successful workflow executions
+        let episodes = match self.cortex.search_episodes("workflow execution task", 100).await {
+            Ok(eps) => eps,
+            Err(e) => {
+                debug!("Failed to query Cortex episodes, skipping learned strategies: {}", e);
+                return Ok(());
+            }
+        };
+
+        info!("Retrieved {} episodes from Cortex for pattern extraction", episodes.len());
+
+        // Filter for successful episodes only
+        let successful_episodes: Vec<_> = episodes
+            .into_iter()
+            .filter(|ep| matches!(ep.outcome, crate::cortex_bridge::models::EpisodeOutcome::Success))
+            .collect();
+
+        if successful_episodes.is_empty() {
+            debug!("No successful episodes found, skipping learned strategy extraction");
+            return Ok(());
+        }
+
+        info!("Found {} successful episodes for analysis", successful_episodes.len());
+
+        // Extract patterns from successful episodes
+        let learned_strategies = self.extract_strategies_from_episodes(&successful_episodes);
+
+        if learned_strategies.is_empty() {
+            debug!("No patterns extracted from episodes");
+            return Ok(());
+        }
+
+        info!("Extracted {} learned strategies from episodes", learned_strategies.len());
+
+        // Add learned strategies to the library (limited to prevent memory bloat)
+        let max_learned_strategies = 50;
+        let strategies_to_add = learned_strategies
+            .into_iter()
+            .take(max_learned_strategies);
+
+        let mut strategy_map = self.strategies.write().await;
+        let mut pattern_idx = self.pattern_index.write().await;
+
+        for strategy in strategies_to_add {
+            // Index by pattern types
+            for pattern in &strategy.patterns {
+                pattern_idx
+                    .entry(pattern.pattern_type)
+                    .or_insert_with(Vec::new)
+                    .push(strategy.id.clone());
+            }
+
+            info!("Added learned strategy: {}", strategy.name);
+            strategy_map.insert(strategy.id.clone(), strategy);
+        }
 
         Ok(())
+    }
+
+    /// Extract execution strategies from successful episodes
+    fn extract_strategies_from_episodes(&self, episodes: &[crate::cortex_bridge::models::Episode]) -> Vec<ExecutionStrategy> {
+        use std::collections::HashMap;
+
+        // Group episodes by task description patterns
+        let mut pattern_groups: HashMap<String, Vec<&crate::cortex_bridge::models::Episode>> = HashMap::new();
+
+        for episode in episodes {
+            // Extract key terms from task description for pattern matching
+            let key_terms = self.extract_key_terms(&episode.task_description);
+            let pattern_key = key_terms.join("_");
+
+            pattern_groups
+                .entry(pattern_key)
+                .or_insert_with(Vec::new)
+                .push(episode);
+        }
+
+        let mut strategies = Vec::new();
+        let total_groups = pattern_groups.len();
+
+        // Create strategies for patterns that appear multiple times (indicating a learnable pattern)
+        for (pattern_key, group_episodes) in pattern_groups {
+            // Only create strategy if pattern appears at least 3 times
+            if group_episodes.len() < 3 {
+                continue;
+            }
+
+            // Analyze the group to extract common characteristics
+            let avg_duration = group_episodes.iter()
+                .map(|e| e.duration_seconds as f32)
+                .sum::<f32>() / group_episodes.len() as f32;
+
+            let avg_workers = self.infer_worker_count(&group_episodes);
+            let common_tools = self.extract_common_tools(&group_episodes);
+            let pattern_type = self.infer_pattern_type(&group_episodes);
+            let keywords = self.extract_key_terms(&group_episodes[0].task_description);
+
+            // Calculate success metrics
+            let success_rate = group_episodes.len() as f32 / (group_episodes.len() as f32 + 0.1); // All are successful
+            let avg_improvement = self.calculate_avg_improvement(&group_episodes);
+
+            // Create learned strategy
+            let strategy_id = format!("learned_strategy_{}", pattern_key.to_lowercase());
+            let strategy_name = format!("Learned: {}", self.humanize_pattern_key(&pattern_key));
+
+            let strategy = ExecutionStrategy {
+                id: strategy_id,
+                name: strategy_name,
+                description: format!(
+                    "Learned strategy from {} successful executions with {:.1}s avg duration",
+                    group_episodes.len(),
+                    avg_duration
+                ),
+                patterns: vec![QueryPattern {
+                    pattern_type,
+                    keywords: keywords.clone(),
+                    required_capabilities: self.infer_capabilities(&group_episodes),
+                    complexity_indicator: if avg_duration < 30.0 {
+                        "low".to_string()
+                    } else if avg_duration < 120.0 {
+                        "medium".to_string()
+                    } else {
+                        "high".to_string()
+                    },
+                }],
+                recommended_workers: avg_workers,
+                max_parallel: avg_workers.max(2),
+                allowed_tools: common_tools,
+                output_format: OutputFormat::default(),
+                success_criteria: SuccessCriteria {
+                    min_confidence: 0.7,
+                    max_time_seconds: (avg_duration * 1.5) as u64,
+                    max_cost_cents: 100,
+                    required_completeness: 0.8,
+                    quality_metrics: HashMap::new(),
+                },
+                times_applied: group_episodes.len() as u64,
+                success_rate,
+                avg_time_saved_percent: avg_improvement,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            };
+
+            strategies.push(strategy);
+        }
+
+        debug!("Extracted {} strategies from {} episode groups", strategies.len(), total_groups);
+        strategies
+    }
+
+    /// Extract key terms from task description
+    fn extract_key_terms(&self, description: &str) -> Vec<String> {
+        let description_lower = description.to_lowercase();
+        let mut terms = Vec::new();
+
+        // Common task patterns
+        let patterns = [
+            "implement", "refactor", "optimize", "debug", "review", "test",
+            "generate", "analyze", "fix", "create", "update", "investigate",
+            "parallel", "sequential", "distributed", "search", "query",
+        ];
+
+        for pattern in &patterns {
+            if description_lower.contains(pattern) {
+                terms.push(pattern.to_string());
+            }
+        }
+
+        // If no patterns found, use first 2 words
+        if terms.is_empty() {
+            terms = description
+                .split_whitespace()
+                .take(2)
+                .map(|s| s.to_lowercase())
+                .collect();
+        }
+
+        terms.truncate(3); // Limit to 3 key terms
+        terms
+    }
+
+    /// Infer pattern type from episodes
+    fn infer_pattern_type(&self, episodes: &[&crate::cortex_bridge::models::Episode]) -> PatternType {
+        // Analyze episode types and task descriptions
+        for episode in episodes.iter().take(5) {
+            let desc_lower = episode.task_description.to_lowercase();
+
+            if desc_lower.contains("code") && desc_lower.contains("review") {
+                return PatternType::CodeReview;
+            } else if desc_lower.contains("bug") || desc_lower.contains("debug") || desc_lower.contains("fix") {
+                return PatternType::BugInvestigation;
+            } else if desc_lower.contains("refactor") {
+                return PatternType::Refactoring;
+            } else if desc_lower.contains("test") {
+                return PatternType::Testing;
+            } else if desc_lower.contains("generate") || desc_lower.contains("implement") || desc_lower.contains("create") {
+                return PatternType::CodeGeneration;
+            } else if desc_lower.contains("research") || desc_lower.contains("investigate") || desc_lower.contains("explore") {
+                return PatternType::Research;
+            } else if desc_lower.contains("compare") || desc_lower.contains("versus") {
+                return PatternType::Comparison;
+            } else if desc_lower.contains("architect") || desc_lower.contains("design") {
+                return PatternType::ArchitectureDesign;
+            } else if desc_lower.contains("document") {
+                return PatternType::Documentation;
+            }
+        }
+
+        PatternType::General
+    }
+
+    /// Infer worker count from episodes
+    fn infer_worker_count(&self, episodes: &[&crate::cortex_bridge::models::Episode]) -> usize {
+        // Analyze task complexity and parallelization patterns
+        let avg_files = episodes.iter()
+            .map(|e| e.files_touched.len())
+            .sum::<usize>() as f32 / episodes.len() as f32;
+
+        let avg_queries = episodes.iter()
+            .map(|e| e.queries_made.len())
+            .sum::<usize>() as f32 / episodes.len() as f32;
+
+        // More files and queries suggest higher parallelization
+        if avg_files > 10.0 || avg_queries > 5.0 {
+            10
+        } else if avg_files > 5.0 || avg_queries > 3.0 {
+            5
+        } else if avg_files > 2.0 || avg_queries > 1.0 {
+            3
+        } else {
+            2
+        }
+    }
+
+    /// Extract common tools used across episodes
+    fn extract_common_tools(&self, episodes: &[&crate::cortex_bridge::models::Episode]) -> Vec<String> {
+        use std::collections::HashMap;
+
+        let mut tool_counts: HashMap<String, usize> = HashMap::new();
+
+        for episode in episodes {
+            for tool in &episode.tools_used {
+                *tool_counts.entry(tool.tool_name.clone()).or_insert(0) += 1;
+            }
+        }
+
+        // Return tools that appear in at least 50% of episodes
+        let threshold = episodes.len() / 2;
+        tool_counts
+            .into_iter()
+            .filter(|(_, count)| *count >= threshold)
+            .map(|(tool, _)| tool)
+            .collect()
+    }
+
+    /// Infer required capabilities from episodes
+    fn infer_capabilities(&self, episodes: &[&crate::cortex_bridge::models::Episode]) -> Vec<String> {
+        let mut capabilities = Vec::new();
+
+        for episode in episodes.iter().take(5) {
+            let desc_lower = episode.task_description.to_lowercase();
+
+            if desc_lower.contains("code") || desc_lower.contains("implement") {
+                if !capabilities.contains(&"CodeGeneration".to_string()) {
+                    capabilities.push("CodeGeneration".to_string());
+                }
+            }
+            if desc_lower.contains("review") || desc_lower.contains("analyze") {
+                if !capabilities.contains(&"CodeReview".to_string()) {
+                    capabilities.push("CodeReview".to_string());
+                }
+            }
+            if desc_lower.contains("test") {
+                if !capabilities.contains(&"Testing".to_string()) {
+                    capabilities.push("Testing".to_string());
+                }
+            }
+            if desc_lower.contains("refactor") {
+                if !capabilities.contains(&"CodeRefactoring".to_string()) {
+                    capabilities.push("CodeRefactoring".to_string());
+                }
+            }
+            if desc_lower.contains("search") || desc_lower.contains("find") {
+                if !capabilities.contains(&"InformationRetrieval".to_string()) {
+                    capabilities.push("InformationRetrieval".to_string());
+                }
+            }
+        }
+
+        if capabilities.is_empty() {
+            capabilities.push("General".to_string());
+        }
+
+        capabilities
+    }
+
+    /// Calculate average improvement from episodes
+    fn calculate_avg_improvement(&self, episodes: &[&crate::cortex_bridge::models::Episode]) -> f32 {
+        let mut total_improvement = 0.0;
+        let mut count = 0;
+
+        for episode in episodes {
+            if let Some(improvement) = episode.success_metrics.get("improvement_percent") {
+                if let Some(val) = improvement.as_f64() {
+                    total_improvement += val as f32;
+                    count += 1;
+                }
+            }
+        }
+
+        if count > 0 {
+            total_improvement / count as f32
+        } else {
+            0.0
+        }
+    }
+
+    /// Humanize pattern key for display
+    fn humanize_pattern_key(&self, key: &str) -> String {
+        key.replace('_', " ")
+            .split_whitespace()
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(first) => first.to_uppercase().chain(chars).collect(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// Find the best strategy for a query analysis
