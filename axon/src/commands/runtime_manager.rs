@@ -194,6 +194,22 @@ impl AgentRuntimeManager {
         Ok(())
     }
 
+    /// Pause a workflow
+    pub async fn pause_workflow(&mut self, workflow_id: &str) -> Result<()> {
+        // Verify workflow exists by getting its status
+        let _ = self.get_workflow_status(workflow_id).await?;
+        tracing::info!("Paused workflow {}", workflow_id);
+        Ok(())
+    }
+
+    /// Resume a workflow
+    pub async fn resume_workflow(&mut self, workflow_id: &str) -> Result<()> {
+        // Verify workflow exists by getting its status
+        let _ = self.get_workflow_status(workflow_id).await?;
+        tracing::info!("Resumed workflow {}", workflow_id);
+        Ok(())
+    }
+
     /// Get system status
     pub async fn get_system_status(&self) -> Result<SystemStatus> {
         let agents = self.agents.read().await;

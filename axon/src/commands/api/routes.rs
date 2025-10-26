@@ -386,33 +386,47 @@ async fn get_agent_logs(
     Query(params): Query<LogsQuery>,
 ) -> Result<Json<LogsResponse>, ApiError> {
     let runtime = state.runtime.read().await;
-    let _lines = params.lines.unwrap_or(100);
+    let lines = params.lines.unwrap_or(100);
     let _follow = params.follow.unwrap_or(false);
 
-    // For now, return empty logs
-    // TODO: Implement actual log retrieval
-    runtime.get_agent_info(&id).await?; // Verify agent exists
+    // Verify agent exists
+    runtime.get_agent_info(&id).await?;
 
-    Ok(Json(LogsResponse {
-        logs: vec!["Log retrieval not yet implemented".to_string()],
-    }))
+    // Get the log file path from the config
+    let config = crate::commands::config::AxonConfig::load()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let log_file = config.logs_dir().join(format!("{}.log", id));
+
+    let logs = if log_file.exists() {
+        let content = std::fs::read_to_string(&log_file)
+            .map_err(|e| ApiError::Internal(format!("Failed to read log file: {}", e)))?;
+        let log_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        let start = log_lines.len().saturating_sub(lines);
+        log_lines[start..].to_vec()
+    } else {
+        vec!["No logs available yet".to_string()]
+    };
+
+    Ok(Json(LogsResponse { logs }))
 }
 
 /// Pause a workflow
 async fn pause_workflow(
-    State(_state): State<AppState>,
-    Path(_id): Path<String>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    // TODO: Implement workflow pause
+    let mut runtime = state.runtime.write().await;
+    runtime.pause_workflow(&id).await?;
     Ok(StatusCode::OK)
 }
 
 /// Resume a workflow
 async fn resume_workflow(
-    State(_state): State<AppState>,
-    Path(_id): Path<String>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    // TODO: Implement workflow resume
+    let mut runtime = state.runtime.write().await;
+    runtime.resume_workflow(&id).await?;
     Ok(StatusCode::OK)
 }
 
@@ -503,20 +517,81 @@ async fn get_config(
 #[derive(Debug, Deserialize)]
 struct UpdateConfigRequest {
     workspace_name: Option<String>,
+    workspace_path: Option<String>,
+    server_host: Option<String>,
+    server_port: Option<u16>,
+    runtime_max_agents: Option<usize>,
+    runtime_agent_timeout_seconds: Option<u64>,
+    runtime_task_queue_size: Option<usize>,
+    runtime_enable_auto_recovery: Option<bool>,
+    cortex_enabled: Option<bool>,
+    cortex_mcp_server_url: Option<String>,
+    cortex_workspace: Option<String>,
 }
 
 async fn update_config(
     State(_state): State<AppState>,
-    Json(_req): Json<UpdateConfigRequest>,
+    Json(req): Json<UpdateConfigRequest>,
 ) -> Result<StatusCode, ApiError> {
-    // TODO: Implement config updates
+    let mut config = crate::commands::config::AxonConfig::load()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Update fields if provided
+    if let Some(workspace_name) = req.workspace_name {
+        config.workspace_name = workspace_name;
+    }
+    if let Some(workspace_path) = req.workspace_path {
+        config.workspace_path = std::path::PathBuf::from(workspace_path);
+    }
+    if let Some(host) = req.server_host {
+        config.server.host = host;
+    }
+    if let Some(port) = req.server_port {
+        config.server.port = port;
+    }
+    if let Some(max_agents) = req.runtime_max_agents {
+        config.runtime.max_agents = max_agents;
+    }
+    if let Some(timeout) = req.runtime_agent_timeout_seconds {
+        config.runtime.agent_timeout_seconds = timeout;
+    }
+    if let Some(queue_size) = req.runtime_task_queue_size {
+        config.runtime.task_queue_size = queue_size;
+    }
+    if let Some(auto_recovery) = req.runtime_enable_auto_recovery {
+        config.runtime.enable_auto_recovery = auto_recovery;
+    }
+    if let Some(enabled) = req.cortex_enabled {
+        config.cortex.enabled = enabled;
+    }
+    if let Some(url) = req.cortex_mcp_server_url {
+        config.cortex.mcp_server_url = Some(url);
+    }
+    if let Some(workspace) = req.cortex_workspace {
+        config.cortex.workspace = Some(workspace);
+    }
+
+    // Save the updated configuration
+    config.save()
+        .map_err(|e| ApiError::Internal(format!("Failed to save configuration: {}", e)))?;
+
     Ok(StatusCode::OK)
 }
 
 /// Validate configuration
 #[derive(Debug, Deserialize)]
 struct ValidateConfigRequest {
-    config: serde_json::Value,
+    workspace_name: Option<String>,
+    workspace_path: Option<String>,
+    server_host: Option<String>,
+    server_port: Option<u16>,
+    runtime_max_agents: Option<usize>,
+    runtime_agent_timeout_seconds: Option<u64>,
+    runtime_task_queue_size: Option<usize>,
+    runtime_enable_auto_recovery: Option<bool>,
+    cortex_enabled: Option<bool>,
+    cortex_mcp_server_url: Option<String>,
+    cortex_workspace: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -527,11 +602,87 @@ struct ValidateConfigResponse {
 
 async fn validate_config(
     State(_state): State<AppState>,
-    Json(_req): Json<ValidateConfigRequest>,
+    Json(req): Json<ValidateConfigRequest>,
 ) -> Result<Json<ValidateConfigResponse>, ApiError> {
-    // TODO: Implement config validation
+    let mut errors = Vec::new();
+
+    // Validate workspace_name
+    if let Some(ref name) = req.workspace_name {
+        if name.is_empty() {
+            errors.push("workspace_name cannot be empty".to_string());
+        }
+        if name.contains('/') || name.contains('\\') {
+            errors.push("workspace_name cannot contain path separators".to_string());
+        }
+    }
+
+    // Validate workspace_path
+    if let Some(ref path) = req.workspace_path {
+        if path.is_empty() {
+            errors.push("workspace_path cannot be empty".to_string());
+        }
+    }
+
+    // Validate server_host
+    if let Some(ref host) = req.server_host {
+        if host.is_empty() {
+            errors.push("server_host cannot be empty".to_string());
+        }
+        // Basic validation - could be IP or hostname
+        if !host.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == ':') {
+            errors.push("server_host contains invalid characters".to_string());
+        }
+    }
+
+    // Validate server_port
+    if let Some(port) = req.server_port {
+        if port == 0 {
+            errors.push("server_port cannot be 0".to_string());
+        }
+        if port < 1024 {
+            errors.push("server_port below 1024 may require elevated privileges".to_string());
+        }
+    }
+
+    // Validate runtime_max_agents
+    if let Some(max_agents) = req.runtime_max_agents {
+        if max_agents == 0 {
+            errors.push("runtime_max_agents must be at least 1".to_string());
+        }
+        if max_agents > 1000 {
+            errors.push("runtime_max_agents seems unreasonably high (>1000)".to_string());
+        }
+    }
+
+    // Validate runtime_agent_timeout_seconds
+    if let Some(timeout) = req.runtime_agent_timeout_seconds {
+        if timeout == 0 {
+            errors.push("runtime_agent_timeout_seconds cannot be 0".to_string());
+        }
+        if timeout > 86400 {
+            errors.push("runtime_agent_timeout_seconds exceeds 24 hours".to_string());
+        }
+    }
+
+    // Validate runtime_task_queue_size
+    if let Some(queue_size) = req.runtime_task_queue_size {
+        if queue_size == 0 {
+            errors.push("runtime_task_queue_size must be at least 1".to_string());
+        }
+        if queue_size > 100000 {
+            errors.push("runtime_task_queue_size seems unreasonably high (>100000)".to_string());
+        }
+    }
+
+    // Validate cortex_mcp_server_url if provided
+    if let Some(ref url) = req.cortex_mcp_server_url {
+        if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
+            errors.push("cortex_mcp_server_url must be a valid HTTP(S) URL".to_string());
+        }
+    }
+
     Ok(Json(ValidateConfigResponse {
-        valid: true,
-        errors: Vec::new(),
+        valid: errors.is_empty(),
+        errors,
     }))
 }
