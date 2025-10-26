@@ -1154,8 +1154,8 @@ mod integration_tests {
         while let Some(result) = response_stream.next().await {
             if let Ok(message) = result {
                 match message {
-                    Message::AssistantText { content, .. } => {
-                        println!("Assistant: {}", content);
+                    Message::Assistant { message, .. } => {
+                        println!("Assistant: {:?}", message.content);
                     }
                     Message::System { subtype, .. } => {
                         println!("System ({})", subtype);

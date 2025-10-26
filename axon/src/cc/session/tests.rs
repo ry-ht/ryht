@@ -7,7 +7,11 @@ mod integration_tests {
     use super::*;
     use crate::cc::core::SessionId;
     use crate::cc::messages::{Message, UserMessage};
-    use crate::cc::session::{SessionCache, Session, CacheConfig, SessionFilter, SortBy};
+    use crate::cc::session::{
+        SessionCache, Session, CacheConfig, SessionFilter, SortBy,
+        ExportFormat, SessionStats, CreateSessionOptions, SessionInfo,
+        SessionMetadata, clear_cache, set_cached_projects, get_cached_projects,
+    };
     use crate::Project;
     use chrono::{Duration, Utc};
     use std::path::PathBuf;

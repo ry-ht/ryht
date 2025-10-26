@@ -1338,13 +1338,11 @@ mod proptests {
         #[test]
         fn test_sync_output_roundtrip(
             continue_ in proptest::option::of(any::<bool>()),
-            suppress in proptest::option::of(any::<bool>()),
-            decision in proptest::option::of(prop::sample::select(vec!["block", "approve"]))
+            suppress in proptest::option::of(any::<bool>())
         ) {
             let output = HookJSONOutput::Sync(SyncHookJSONOutput {
                 continue_,
                 suppress_output: suppress,
-                decision: decision.map(|s| s.to_string()),
                 ..Default::default()
             });
 

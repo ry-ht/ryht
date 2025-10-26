@@ -510,7 +510,7 @@ mod tests {
         let task = WorkflowTask {
             task_id: "task-1".to_string(),
             description: "Test task".to_string(),
-            assigned_agent: AgentId::from("agent-1".to_string()),
+            assigned_agent: AgentId::from_string("agent-1"),
             context: serde_json::json!({}),
             priority: 5,
             deadline: None,
