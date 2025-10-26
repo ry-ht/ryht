@@ -29,7 +29,7 @@ The Workspace Management tools provide comprehensive lifecycle management for wo
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                    Cortex Cognitive System                     │
-│                                                                 │
+│                                                                │
 │  ┌────────────────┐      ┌─────────────────┐                   │
 │  │   MCP Server   │─────▶│Workspace Tools  │                   │
 │  │   (AI Agent    │      │   (12 tools)    │                   │
@@ -43,20 +43,20 @@ The Workspace Management tools provide comprehensive lifecycle management for wo
 │                                   │                            │
 │              ┌────────────────────┼──────────────────┐         │
 │              ▼                    ▼                  ▼         │
-│      ┌──────────────┐    ┌───────────────┐   ┌──────────────┐ │
-│      │VirtualFS     │    │ExternalProject│   │ForkManager   │ │
-│      │System        │    │Loader         │   │              │ │
-│      │(VFS)         │    │               │   │              │ │
-│      └──────┬───────┘    └───────┬───────┘   └──────┬───────┘ │
-│             │                    │                   │         │
-│             ▼                    ▼                   ▼         │
+│      ┌──────────────┐    ┌───────────────┐   ┌──────────────┐  │
+│      │VirtualFS     │    │ExternalProject│   │ForkManager   │  │
+│      │System        │    │Loader         │   │              │  │
+│      │(VFS)         │    │               │   │              │  │
+│      └──────┬───────┘    └───────┬───────┘   └──────┬───────┘  │
+│             │                    │                  │          │
+│             ▼                    ▼                  ▼          │
 │      ┌─────────────────────────────────────────────────────┐   │
 │      │              SurrealDB Storage                      │   │
-│      │  ┌──────────┐  ┌───────┐  ┌──────────┐             │   │
-│      │  │Workspace │  │VNode  │  │CodeUnits │             │   │
-│      │  └──────────┘  └───────┘  └──────────┘             │   │
+│      │  ┌──────────┐  ┌───────┐  ┌──────────┐              │   │
+│      │  │Workspace │  │VNode  │  │CodeUnits │              │   │
+│      │  └──────────┘  └───────┘  └──────────┘              │   │
 │      └─────────────────────────────────────────────────────┘   │
-│                                                                 │
+│                                                                │
 │      ┌─────────────────────────────────────────────────────┐   │
 │      │         Physical Filesystem (Disk I/O)              │   │
 │      │  - Bidirectional sync                               │   │

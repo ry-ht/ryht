@@ -23,6 +23,7 @@ use chrono::Utc;
 use cortex_core::error::{CortexError, Result};
 use cortex_code_analysis::CodeParser;
 use cortex_storage::ConnectionManager;
+use regex;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,
     MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, WorkspaceType, SourceType,
@@ -1262,7 +1263,7 @@ impl Tool for WorkspaceForkTool {
 
         // Get source workspace details
         let source = self.ctx.workspace_service.get_workspace(&workspace_id).await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e))))?
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
         // Create fork using fork manager
@@ -1329,7 +1330,7 @@ struct SearchMatch {
     path: String,
     node_type: String,
     match_type: String, // "filename", "content", "both"
-    size_bytes: u64,
+    size_bytes: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     content_snippet: Option<String>,
 }
@@ -1384,7 +1385,8 @@ impl Tool for WorkspaceSearchTool {
             // Filter by language if specified
             if let Some(ref lang) = input.language {
                 if let Some(ref node_lang) = vnode.language {
-                    if !node_lang.to_lowercase().contains(&lang.to_lowercase()) {
+                    let lang_str = format!("{:?}", node_lang).to_lowercase();
+                    if !lang_str.contains(&lang.to_lowercase()) {
                         continue;
                     }
                 } else {
@@ -1400,8 +1402,16 @@ impl Tool for WorkspaceSearchTool {
             if let Some(ref pattern) = input.pattern {
                 let file_name = vnode.path.to_string();
                 let matches_pattern = if pattern.contains('*') || pattern.contains('?') {
-                    // Glob pattern matching
-                    glob_match::glob_match(pattern, &file_name)
+                    // Simple glob pattern matching (only * and ?)
+                    let pattern_regex = pattern
+                        .replace(".", "\\.")
+                        .replace("*", ".*")
+                        .replace("?", ".");
+                    if let Ok(re) = regex::Regex::new(&format!("^{}$", pattern_regex)) {
+                        re.is_match(&file_name)
+                    } else {
+                        false
+                    }
                 } else {
                     // Simple substring match
                     if input.case_sensitive {
@@ -1513,8 +1523,8 @@ struct CompareOutput {
 #[derive(Debug, Serialize, JsonSchema)]
 struct FileDiff {
     path: String,
-    size_a: u64,
-    size_b: u64,
+    size_a: usize,
+    size_b: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     content_diff: Option<String>,
 }
@@ -1582,7 +1592,9 @@ impl Tool for WorkspaceCompareTool {
                     // Content differs
                     if files_modified.len() < input.max_diffs {
                         let content_diff = if input.include_content_diff {
-                            Some(format!("Hash A: {}, Hash B: {}", vnode_a.content_hash, vnode_b.content_hash))
+                            Some(format!("Hash A: {}, Hash B: {}",
+                                vnode_a.content_hash.as_deref().unwrap_or("none"),
+                                vnode_b.content_hash.as_deref().unwrap_or("none")))
                         } else {
                             None
                         };
@@ -1713,8 +1725,8 @@ impl Tool for WorkspaceMergeTool {
         // Convert conflicts to output format
         let conflicts: Vec<ConflictInfo> = merge_report.conflicts.iter().map(|c| {
             ConflictInfo {
-                path: c.path.clone(),
-                conflict_type: c.conflict_type.clone(),
+                path: c.path.to_string(),
+                conflict_type: "content-conflict".to_string(), // Conflict type not in struct
                 source_hash: "".to_string(), // Would need to add to MergeConflict
                 target_hash: "".to_string(),
             }
