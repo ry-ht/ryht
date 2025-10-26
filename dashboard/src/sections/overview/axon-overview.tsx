@@ -14,6 +14,8 @@ import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
 
+import { getAgentStatusColor, getWorkflowStatusColor } from 'src/utils/status-colors';
+
 import { axonWebSocket } from 'src/lib/axon-websocket';
 import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
@@ -211,14 +213,6 @@ export function AxonOverview() {
 // ----------------------------------------------------------------------
 
 function AgentCard({ agent }: { agent: AgentInfo }) {
-  const statusColors = {
-    Idle: 'success',
-    Working: 'info',
-    Paused: 'warning',
-    Failed: 'error',
-    ShuttingDown: 'default',
-  } as const;
-
   return (
     <Stack
       direction="row"
@@ -238,7 +232,7 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
           {agent.agent_type}
         </Typography>
       </Box>
-      <Label variant="soft" color={statusColors[agent.status]}>
+      <Label variant="soft" color={getAgentStatusColor(agent.status)}>
         {agent.status}
       </Label>
     </Stack>
@@ -246,14 +240,6 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
 }
 
 function WorkflowCard({ workflow }: { workflow: WorkflowInfo }) {
-  const statusColors = {
-    Pending: 'default',
-    Running: 'info',
-    Completed: 'success',
-    Failed: 'error',
-    Cancelled: 'warning',
-  } as const;
-
   const progress =
     workflow.total_tasks > 0 ? (workflow.completed_tasks / workflow.total_tasks) * 100 : 0;
 
@@ -275,7 +261,7 @@ function WorkflowCard({ workflow }: { workflow: WorkflowInfo }) {
             {workflow.completed_tasks} / {workflow.total_tasks} tasks
           </Typography>
         </Box>
-        <Label variant="soft" color={statusColors[workflow.status]}>
+        <Label variant="soft" color={getWorkflowStatusColor(workflow.status)}>
           {workflow.status}
         </Label>
       </Stack>

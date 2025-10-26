@@ -14,6 +14,8 @@ import IconButton from '@mui/material/IconButton';
 import TableContainer from '@mui/material/TableContainer';
 import TablePagination from '@mui/material/TablePagination';
 
+import { getAgentStatusColor } from 'src/utils/status-colors';
+
 import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
@@ -107,21 +109,11 @@ export function AgentListView() {
     }
   }, [popover, showSnackbar]);
 
-  const renderStatus = (status: string) => {
-    const statusColors = {
-      Idle: 'success',
-      Working: 'info',
-      Paused: 'warning',
-      Failed: 'error',
-      ShuttingDown: 'default',
-    } as const;
-
-    return (
-      <Label variant="soft" color={statusColors[status as keyof typeof statusColors] || 'default'}>
-        {status}
-      </Label>
-    );
-  };
+  const renderStatus = (status: string) => (
+    <Label variant="soft" color={getAgentStatusColor(status)}>
+      {status}
+    </Label>
+  );
 
   return (
     <>

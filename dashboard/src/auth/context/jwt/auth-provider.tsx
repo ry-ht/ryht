@@ -47,7 +47,7 @@ export function AuthProvider({ children }: Props) {
 
   useEffect(() => {
     checkUserSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount to initialize user session
   }, []);
 
   // ----------------------------------------------------------------------

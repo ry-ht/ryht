@@ -41,7 +41,7 @@ export function GuestGuard({ children }: GuestGuardProps) {
 
   useEffect(() => {
     checkPermissions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checkPermissions uses redirectUrl which would cause unnecessary re-renders
   }, [authenticated, loading]);
 
   if (isChecking) {

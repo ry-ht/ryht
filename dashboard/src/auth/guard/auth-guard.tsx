@@ -57,7 +57,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     checkPermissions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checkPermissions uses router/pathname which would cause unnecessary re-renders
   }, [authenticated, loading]);
 
   if (isChecking) {

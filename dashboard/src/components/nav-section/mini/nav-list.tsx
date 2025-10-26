@@ -45,7 +45,7 @@ export function NavList({
     if (open) {
       onClose();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only respond to pathname changes, onClose and open are stable
   }, [pathname]);
 
   const handleOpenMenu = useCallback(() => {

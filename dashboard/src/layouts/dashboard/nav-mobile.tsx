@@ -42,7 +42,7 @@ export function NavMobile({
     if (open) {
       onClose();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only respond to pathname changes to auto-close mobile nav, onClose and open are stable
   }, [pathname]);
 
   return (

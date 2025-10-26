@@ -17,6 +17,8 @@ import TableContainer from '@mui/material/TableContainer';
 import LinearProgress from '@mui/material/LinearProgress';
 import TablePagination from '@mui/material/TablePagination';
 
+import { getWorkflowStatusColor } from 'src/utils/status-colors';
+
 import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
@@ -73,21 +75,11 @@ export function WorkflowListView() {
     [popover]
   );
 
-  const renderStatus = (status: string) => {
-    const statusColors = {
-      Pending: 'default',
-      Running: 'info',
-      Completed: 'success',
-      Failed: 'error',
-      Cancelled: 'warning',
-    } as const;
-
-    return (
-      <Label variant="soft" color={statusColors[status as keyof typeof statusColors] || 'default'}>
-        {status}
-      </Label>
-    );
-  };
+  const renderStatus = (status: string) => (
+    <Label variant="soft" color={getWorkflowStatusColor(status)}>
+      {status}
+    </Label>
+  );
 
   const calculateDuration = (workflow: WorkflowInfo) => {
     if (!workflow.started_at) return '-';

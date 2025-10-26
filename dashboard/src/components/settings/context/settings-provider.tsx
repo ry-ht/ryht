@@ -49,7 +49,7 @@ export function SettingsProvider({
         onReset();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on mount to check version and reset if needed
   }, []);
 
   const memoizedValue = useMemo(
