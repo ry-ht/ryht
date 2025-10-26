@@ -463,7 +463,7 @@ mod tests {
                 assert_eq!(pre_tool.tool_name, "Write");
                 assert_eq!(pre_tool.base.session_id, "test-session-123");
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected PreToolUse variant, got {:?}", other),
         }
     }
 
@@ -485,7 +485,7 @@ mod tests {
                 assert_eq!(post_tool.base.session_id, "test-session-456");
                 assert!(post_tool.base.permission_mode.is_none());
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected PostToolUse variant, got {:?}", other),
         }
     }
 
@@ -503,7 +503,7 @@ mod tests {
             HookInput::UserPromptSubmit(submit) => {
                 assert_eq!(submit.prompt, "Test prompt");
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected UserPromptSubmit variant, got {:?}", other),
         }
     }
 
@@ -521,7 +521,7 @@ mod tests {
             HookInput::Stop(stop) => {
                 assert!(stop.stop_hook_active);
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected Stop variant, got {:?}", other),
         }
     }
 
@@ -539,7 +539,7 @@ mod tests {
             HookInput::SubagentStop(subagent_stop) => {
                 assert!(!subagent_stop.stop_hook_active);
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected SubagentStop variant, got {:?}", other),
         }
     }
 
@@ -559,7 +559,7 @@ mod tests {
                 assert_eq!(compact.trigger, "manual");
                 assert_eq!(compact.custom_instructions.unwrap(), "Custom");
             }
-            _ => panic!("Wrong hook type deserialized"),
+            other => assert!(false, "Expected PreCompact variant, got {:?}", other),
         }
     }
 
@@ -781,7 +781,7 @@ mod tests {
                 assert!(async_out.async_);
                 assert_eq!(async_out.async_timeout.unwrap(), 3000);
             }
-            _ => panic!("Wrong output type"),
+            other => assert!(false, "Expected Async variant, got {:?}", other),
         }
     }
 
@@ -801,7 +801,7 @@ mod tests {
                 assert_eq!(sync_out.continue_.unwrap(), true);
                 assert_eq!(sync_out.suppress_output.unwrap(), false);
             }
-            _ => panic!("Wrong output type"),
+            other => assert!(false, "Expected Sync variant, got {:?}", other),
         }
     }
 
@@ -936,7 +936,7 @@ mod tests {
             HookJSONOutput::Sync(sync_out) => {
                 assert_eq!(sync_out.continue_.unwrap(), true);
             }
-            _ => panic!("Expected sync output"),
+            other => assert!(false, "Expected Sync variant, got {:?}", other),
         }
     }
 
@@ -958,7 +958,7 @@ mod tests {
             HookJSONOutput::Sync(sync_out) => {
                 assert_eq!(sync_out.continue_.unwrap(), false);
             }
-            _ => panic!("Expected sync output"),
+            other => assert!(false, "Expected Sync variant, got {:?}", other),
         }
     }
 
@@ -1002,7 +1002,7 @@ mod tests {
                 assert_eq!(hook_name, "ErrorHook");
                 assert_eq!(reason, "Test error");
             }
-            _ => panic!("Expected HookFailed error"),
+            other => assert!(false, "Expected HookFailed error, got {:?}", other),
         }
     }
 
@@ -1038,7 +1038,7 @@ mod tests {
                 assert!(async_out.async_);
                 assert_eq!(async_out.async_timeout.unwrap(), 10000);
             }
-            _ => panic!("Expected async output"),
+            other => assert!(false, "Expected Async variant, got {:?}", other),
         }
     }
 
@@ -1079,7 +1079,7 @@ mod tests {
                     "/sanitized/path.txt"
                 );
             }
-            _ => panic!("Wrong hook specific output type"),
+            other => assert!(false, "Expected PreToolUse variant, got {:?}", other),
         }
     }
 
@@ -1107,10 +1107,10 @@ mod tests {
                             "File was modified successfully"
                         );
                     }
-                    _ => panic!("Wrong hook specific output type"),
+                    other => assert!(false, "Expected PostToolUse variant, got {:?}", other),
                 }
             }
-            _ => panic!("Wrong hook output type"),
+            other => assert!(false, "Expected Sync variant, got {:?}", other),
         }
     }
 
@@ -1243,7 +1243,9 @@ mod proptests {
                     prop_assert_eq!(&orig.base.session_id, &deser.base.session_id);
                     prop_assert_eq!(&orig.tool_name, &deser.tool_name);
                 }
-                _ => panic!("Deserialization changed variant"),
+                (_, other) => {
+                    assert!(false, "Expected PreToolUse variant, got {:?}", other);
+                }
             }
         }
 
@@ -1258,7 +1260,9 @@ mod proptests {
                     prop_assert_eq!(&orig.base.session_id, &deser.base.session_id);
                     prop_assert_eq!(&orig.tool_name, &deser.tool_name);
                 }
-                _ => panic!("Deserialization changed variant"),
+                (_, other) => {
+                    assert!(false, "Expected PostToolUse variant, got {:?}", other);
+                }
             }
         }
 
@@ -1272,7 +1276,9 @@ mod proptests {
                 (HookInput::UserPromptSubmit(orig), HookInput::UserPromptSubmit(deser)) => {
                     prop_assert_eq!(&orig.prompt, &deser.prompt);
                 }
-                _ => panic!("Deserialization changed variant"),
+                (_, other) => {
+                    assert!(false, "Expected UserPromptSubmit variant, got {:?}", other);
+                }
             }
         }
 
@@ -1286,7 +1292,9 @@ mod proptests {
                 (HookInput::Stop(orig), HookInput::Stop(deser)) => {
                     prop_assert_eq!(orig.stop_hook_active, deser.stop_hook_active);
                 }
-                _ => panic!("Deserialization changed variant"),
+                (_, other) => {
+                    assert!(false, "Expected Stop variant, got {:?}", other);
+                }
             }
         }
 
@@ -1300,7 +1308,9 @@ mod proptests {
                 (HookInput::PreCompact(orig), HookInput::PreCompact(deser)) => {
                     prop_assert_eq!(&orig.trigger, &deser.trigger);
                 }
-                _ => panic!("Deserialization changed variant"),
+                (_, other) => {
+                    assert!(false, "Expected PreCompact variant, got {:?}", other);
+                }
             }
         }
 
@@ -1319,7 +1329,9 @@ mod proptests {
                     prop_assert_eq!(async_out.async_, async_);
                     prop_assert_eq!(async_out.async_timeout, timeout);
                 }
-                _ => panic!("Wrong output type"),
+                other => {
+                    assert!(false, "Expected Async variant, got {:?}", other);
+                }
             }
         }
 
@@ -1344,7 +1356,9 @@ mod proptests {
                     prop_assert_eq!(sync_out.continue_, continue_);
                     prop_assert_eq!(sync_out.suppress_output, suppress);
                 }
-                _ => panic!("Wrong output type"),
+                other => {
+                    assert!(false, "Expected Sync variant, got {:?}", other);
+                }
             }
         }
     }
