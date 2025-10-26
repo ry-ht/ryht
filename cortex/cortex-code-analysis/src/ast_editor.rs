@@ -408,6 +408,182 @@ impl AstEditor {
         })
     }
 
+    /// Extract a block of code into a new function (Rust-specific).
+    ///
+    /// Analyzes the code block between start_line and end_line, extracts variables
+    /// that need to be passed as parameters, and generates a new function.
+    ///
+    /// # Limitations
+    ///
+    /// - Basic variable analysis (may not catch all dependencies)
+    /// - Uses generic types for parameters when type cannot be inferred
+    /// - Return type analysis is simplified
+    /// - Does not handle complex control flow (break, continue, return)
+    /// - Does not handle mutable borrows or lifetime annotations
+    ///
+    /// # Returns
+    ///
+    /// Returns (parameters, return_type, function_code)
+    pub fn extract_function_rust(
+        &mut self,
+        start_line: usize,
+        end_line: usize,
+        function_name: &str,
+    ) -> Result<(Vec<(String, String)>, Option<String>, String)> {
+        let lines: Vec<&str> = self.source.lines().collect();
+
+        if start_line >= lines.len() || end_line >= lines.len() || start_line > end_line {
+            return Err(anyhow!("Invalid line range: {}-{}", start_line, end_line));
+        }
+
+        // Extract the code block
+        let extracted_lines = &lines[start_line..=end_line];
+        let extracted_code = extracted_lines.join("\n");
+
+        // Find all identifiers used in the extracted code
+        let mut used_vars = HashSet::new();
+        let mut defined_vars = HashSet::new();
+
+        // Parse just the extracted code to analyze it
+        let wrapped_code = format!("fn _temp() {{\n{}\n}}", extracted_code);
+        let mut temp_parser = Parser::new();
+        temp_parser.set_language(&self.language)?;
+
+        if let Some(temp_tree) = temp_parser.parse(&wrapped_code, None) {
+            self.analyze_variables_in_node(
+                temp_tree.root_node(),
+                &wrapped_code,
+                &mut used_vars,
+                &mut defined_vars,
+            );
+        }
+
+        // Parameters are variables used but not defined in the extracted code
+        let mut params: Vec<(String, String)> = used_vars
+            .difference(&defined_vars)
+            .filter(|v| !self.is_rust_keyword(v))
+            .map(|v| (v.to_string(), "/* infer type */".to_string()))
+            .collect();
+        params.sort();
+
+        // Determine return type based on last expression or return statements
+        let return_type = self.infer_return_type(&extracted_code);
+
+        // Generate function code
+        let param_list = if params.is_empty() {
+            String::new()
+        } else {
+            params
+                .iter()
+                .map(|(name, ty)| format!("{}: {}", name, ty))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let return_annotation = if let Some(ref rt) = return_type {
+            format!(" -> {}", rt)
+        } else {
+            String::new()
+        };
+
+        let function_code = format!(
+            "fn {}({}){} {{\n{}\n}}",
+            function_name, param_list, return_annotation, extracted_code
+        );
+
+        // Replace the extracted code with a function call
+        let call_args = params
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let function_call = format!("{}({})", function_name, call_args);
+
+        // Create edit to replace extracted code with function call
+        let start_pos = Position::new(start_line, 0);
+        let end_pos = Position::new(end_line, lines[end_line].len());
+        let range = Range::new(start_pos, end_pos);
+
+        self.edits.push(Edit::replace(range, function_call));
+
+        // Add the new function at the end of the file
+        let insert_pos = Position::new(lines.len(), 0);
+        self.edits.push(Edit::insert(insert_pos, format!("\n\n{}", function_code)));
+
+        Ok((params, return_type, function_code))
+    }
+
+    /// Analyze variables in a node recursively
+    fn analyze_variables_in_node(
+        &self,
+        node: Node,
+        source: &str,
+        used_vars: &mut HashSet<String>,
+        defined_vars: &mut HashSet<String>,
+    ) {
+        match node.kind() {
+            "identifier" => {
+                let text = &source[node.byte_range()];
+                // Check if this is a variable being assigned to
+                if let Some(parent) = node.parent() {
+                    if parent.kind() == "let_declaration" {
+                        // This is a variable definition
+                        if let Some(pattern) = parent.child_by_field_name("pattern") {
+                            if pattern.id() == node.id() {
+                                defined_vars.insert(text.to_string());
+                                return;
+                            }
+                        }
+                    }
+                }
+                // Otherwise, it's a variable being used
+                used_vars.insert(text.to_string());
+            }
+            _ => {
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    self.analyze_variables_in_node(child, source, used_vars, defined_vars);
+                }
+            }
+        }
+    }
+
+    /// Check if a string is a Rust keyword
+    fn is_rust_keyword(&self, s: &str) -> bool {
+        matches!(
+            s,
+            "as" | "break" | "const" | "continue" | "crate" | "else" | "enum" | "extern"
+                | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match"
+                | "mod" | "move" | "mut" | "pub" | "ref" | "return" | "self" | "Self"
+                | "static" | "struct" | "super" | "trait" | "true" | "type" | "unsafe" | "use"
+                | "where" | "while" | "async" | "await" | "dyn" | "abstract" | "become" | "box"
+                | "do" | "final" | "macro" | "override" | "priv" | "typeof" | "unsized"
+                | "virtual" | "yield" | "try"
+        )
+    }
+
+    /// Infer return type from code (simplified heuristic)
+    fn infer_return_type(&self, code: &str) -> Option<String> {
+        let trimmed = code.trim();
+
+        // Check for explicit return statements
+        if trimmed.contains("return") {
+            // If there's an explicit return, assume it returns something
+            return Some("/* infer type */".to_string());
+        }
+
+        // Check if the last line is an expression (no semicolon)
+        if let Some(last_line) = trimmed.lines().last() {
+            let last_line = last_line.trim();
+            if !last_line.is_empty() && !last_line.ends_with(';') && !last_line.ends_with('}') {
+                return Some("/* infer type */".to_string());
+            }
+        }
+
+        // No return value
+        None
+    }
+
     /// Change function signature for a Rust function.
     ///
     /// This method replaces the entire function with a new signature while preserving the body.

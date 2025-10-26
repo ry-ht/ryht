@@ -1115,22 +1115,33 @@ impl Tool for CodeExtractFunctionTool {
             }
         };
 
-        let _editor = AstEditor::new(content.clone(), tree_sitter_lang)
+        let mut editor = AstEditor::new(content.clone(), tree_sitter_lang)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        // TODO: Implement extract_function method in AstEditor
-        // Temporary stub implementation
-        let _result = (input.start_line, input.end_line, &input.function_name);
+        // Extract the function using AstEditor
+        let (params, return_type, _function_code) = editor
+            .extract_function_rust(
+                input.start_line,
+                input.end_line,
+                &input.function_name,
+            )
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        // Save modified file (currently no modification)
-        self.ctx.save_file(&workspace_id, &unit.file_path, &content).await
+        // Apply the edits to get the modified content
+        editor.apply_edits()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let modified_content = editor.get_source();
+
+        // Save the modified file
+        self.ctx.save_file(&workspace_id, &unit.file_path, modified_content).await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let output = ExtractFunctionOutput {
             new_unit_id: format!("unit_{}", uuid::Uuid::new_v4()),
             function_name: input.function_name.clone(),
-            parameters: vec![], // TODO: Extract from actual code
-            return_type: Some("()".to_string()), // TODO: Infer from actual code
+            parameters: params.iter().map(|(name, ty)| format!("{}: {}", name, ty)).collect(),
+            return_type,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
