@@ -59,11 +59,8 @@ impl WorkspaceService {
             });
         }
 
-        // Merge metadata from request with workspace_type if provided
-        let mut metadata = request.metadata.unwrap_or_default();
-        if let Some(workspace_type) = request.workspace_type {
-            metadata.insert("workspace_type".to_string(), Value::String(workspace_type));
-        }
+        // Use metadata from request
+        let metadata = request.metadata.unwrap_or_default();
 
         let workspace = Workspace {
             id: workspace_id,
@@ -114,14 +111,7 @@ impl WorkspaceService {
 
         let conn = self.storage.acquire().await?;
 
-        let mut query = String::from("SELECT * FROM workspace WHERE 1=1");
-
-        // Can still filter by workspace_type if stored in metadata
-        if let Some(ref workspace_type) = filters.workspace_type {
-            query.push_str(&format!(" AND metadata.workspace_type = '{}'", workspace_type));
-        }
-
-        query.push_str(" ORDER BY created_at DESC");
+        let mut query = String::from("SELECT * FROM workspace ORDER BY created_at DESC");
 
         if let Some(limit) = filters.limit {
             query.push_str(&format!(" LIMIT {}", limit));
@@ -154,14 +144,6 @@ impl WorkspaceService {
         // Update fields
         if let Some(name) = request.name {
             workspace.name = name;
-        }
-
-        // Update workspace_type in metadata if provided (for backward compatibility)
-        if let Some(workspace_type_str) = request.workspace_type {
-            workspace.metadata.insert(
-                "workspace_type".to_string(),
-                Value::String(workspace_type_str)
-            );
         }
 
         if let Some(read_only) = request.read_only {
@@ -372,7 +354,6 @@ impl WorkspaceService {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateWorkspaceRequest {
     pub name: String,
-    pub workspace_type: Option<String>, // Optional, for backward compatibility
     pub source_path: Option<String>,    // Optional, can create empty workspace
     pub sync_sources: Option<Vec<SyncSource>>, // Optional, for advanced multi-source setup
     pub read_only: Option<bool>,
@@ -382,14 +363,12 @@ pub struct CreateWorkspaceRequest {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateWorkspaceRequest {
     pub name: Option<String>,
-    pub workspace_type: Option<String>,
     pub read_only: Option<bool>,
     pub metadata: Option<HashMap<String, Value>>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ListWorkspaceFilters {
-    pub workspace_type: Option<String>,
     pub limit: Option<usize>,
 }
 

@@ -59,7 +59,6 @@ async fn list_workspaces(
 
     // Use workspace service to list workspaces
     let filters = ListWorkspaceFilters {
-        workspace_type: None,
         limit: Some(params.limit + 1), // Fetch one extra to check if there are more
     };
 
@@ -91,13 +90,11 @@ async fn list_workspaces(
     let workspace_responses: Vec<WorkspaceResponse> = workspaces
         .into_iter()
         .map(|ws| {
-            let workspace_type = ws.workspace_type();
             let source_type = ws.source_type();
             let source_path = ws.source_path();
             WorkspaceResponse {
                 id: ws.id,
                 name: ws.name,
-                workspace_type,
                 source_type,
                 namespace: ws.namespace,
                 source_path,
@@ -156,13 +153,11 @@ async fn get_workspace(
         .ok_or_else(|| ApiError::NotFound(format!("Workspace {} not found", workspace_id)))?;
 
     // Convert to API response format
-    let workspace_type = workspace.workspace_type();
     let source_type = workspace.source_type();
     let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type,
         source_type,
         namespace: workspace.namespace,
         source_path,
@@ -201,7 +196,6 @@ async fn create_workspace(
     // Convert API request to service request
     let service_request = crate::services::workspace::CreateWorkspaceRequest {
         name: payload.name.clone(),
-        workspace_type: Some(payload.workspace_type.clone()),
         source_path: payload.source_path.clone(),
         sync_sources: None,
         read_only: Some(false),
@@ -218,13 +212,11 @@ async fn create_workspace(
     let workspace_id = workspace.id.clone();
 
     // Convert to API response format
-    let workspace_type = workspace.workspace_type();
     let source_type = workspace.source_type();
     let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type,
         source_type,
         namespace: workspace.namespace,
         source_path,
@@ -304,7 +296,6 @@ async fn update_workspace(
     // Convert API request to service request
     let service_request = crate::services::workspace::UpdateWorkspaceRequest {
         name: payload.name.clone(),
-        workspace_type: payload.workspace_type.clone(),
         read_only: payload.read_only,
         metadata: None, // API doesn't expose metadata updates yet
     };
@@ -322,13 +313,11 @@ async fn update_workspace(
         })?;
 
     // Convert to API response format
-    let workspace_type = workspace.workspace_type();
     let source_type = workspace.source_type();
     let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type,
         source_type,
         namespace: workspace.namespace,
         source_path,

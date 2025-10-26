@@ -40,13 +40,6 @@ use crate::services::workspace::{WorkspaceDetails, CreateWorkspaceRequest as Ser
 
 impl ToApiResponse<WorkspaceResponse> for WorkspaceDetails {
     fn to_api_response(self) -> WorkspaceResponse {
-        // Extract workspace_type from metadata
-        let workspace_type = self.metadata
-            .get("workspace_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("mixed")
-            .to_string();
-
         // Extract source_type from first sync source
         let source_type = if self.sync_sources.is_empty() {
             "local".to_string()
@@ -75,7 +68,6 @@ impl ToApiResponse<WorkspaceResponse> for WorkspaceDetails {
         WorkspaceResponse {
             id: self.id,
             name: self.name,
-            workspace_type,
             source_type,
             namespace: self.namespace,
             source_path,
@@ -90,10 +82,9 @@ impl ToServiceRequest<ServiceCreateRequest> for ApiCreateRequest {
     fn to_service_request(self) -> ServiceCreateRequest {
         ServiceCreateRequest {
             name: self.name,
-            workspace_type: Some(self.workspace_type),
             source_path: self.source_path,
             sync_sources: None, // Will be created from source_path by service layer
-            metadata: None, // Will be created from workspace_type by service layer
+            metadata: None,
             read_only: Some(false), // Default to read-write
         }
     }

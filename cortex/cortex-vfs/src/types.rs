@@ -325,28 +325,6 @@ pub struct Workspace {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Workspace type enum (for backward compatibility with old API).
-/// In the new model, this is stored in metadata.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum WorkspaceType {
-    Code,
-    Documentation,
-    Mixed,
-    External,
-}
-
-impl WorkspaceType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            WorkspaceType::Code => "code",
-            WorkspaceType::Documentation => "documentation",
-            WorkspaceType::Mixed => "mixed",
-            WorkspaceType::External => "external",
-        }
-    }
-}
-
 /// Source type enum (for backward compatibility with old API).
 /// In the new model, workspaces have multiple SyncSources.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -357,16 +335,6 @@ pub enum SourceType {
 }
 
 impl Workspace {
-    /// Get workspace type from metadata (for backward compatibility).
-    /// Returns "code", "documentation", "mixed", or "external".
-    pub fn workspace_type(&self) -> String {
-        self.metadata
-            .get("workspace_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("mixed")
-            .to_string()
-    }
-
     /// Get source type from sync sources (for backward compatibility).
     /// Returns "local", "github", "ssh", "s3", etc.
     pub fn source_type(&self) -> String {

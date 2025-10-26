@@ -145,20 +145,6 @@ impl WorkspaceContext {
         })
     }
 
-    /// Detect project type from directory
-    fn detect_project_type(&self, path: &Path) -> String {
-        if path.join("Cargo.toml").exists() {
-            "code".to_string()
-        } else if path.join("package.json").exists() {
-            "code".to_string()
-        } else if path.join("go.mod").exists() {
-            "code".to_string()
-        } else if path.join("pyproject.toml").exists() {
-            "code".to_string()
-        } else {
-            "mixed".to_string()
-        }
-    }
 }
 
 // =============================================================================
@@ -179,8 +165,9 @@ impl WorkspaceCreateTool {
 struct CreateInput {
     /// Workspace name
     name: String,
-    /// Root path of the project to import
-    root_path: String,
+    /// Root path of the project to import (optional for empty workspace)
+    #[serde(default)]
+    root_path: Option<String>,
     /// Auto import on creation
     #[serde(default = "default_true")]
     auto_import: bool,
@@ -196,7 +183,6 @@ struct CreateInput {
 #[derive(Debug, Serialize, JsonSchema)]
 struct CreateOutput {
     workspace_id: String,
-    workspace_type: String,
     files_imported: usize,
     directories_imported: usize,
     units_extracted: usize,
@@ -235,53 +221,60 @@ impl Tool for WorkspaceCreateTool {
         let input: CreateInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
 
-        info!("Creating workspace: {} from {}", input.name, input.root_path);
+        info!("Creating workspace: {}", input.name);
         let start = std::time::Instant::now();
 
-        let root_path = PathBuf::from(&input.root_path);
-        if !root_path.exists() {
-            return Err(ToolError::ExecutionFailed(format!(
-                "Root path does not exist: {}",
-                input.root_path
-            )));
-        }
-
-        if !root_path.is_dir() {
-            return Err(ToolError::ExecutionFailed(format!(
-                "Root path is not a directory: {}",
-                input.root_path
-            )));
-        }
-
         let mut warnings = Vec::new();
-        let workspace_type = self.ctx.detect_project_type(&root_path);
+
+        // Handle optional root_path
+        let root_path = if let Some(ref path_str) = input.root_path {
+            let path = PathBuf::from(path_str);
+            if !path.exists() {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "Root path does not exist: {}",
+                    path_str
+                )));
+            }
+
+            if !path.is_dir() {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "Root path is not a directory: {}",
+                    path_str
+                )));
+            }
+            Some(path)
+        } else {
+            None
+        };
 
         // Create workspace with new model
         let workspace_id = Uuid::new_v4();
 
-        // Create sync source for local path
-        let sync_source = SyncSource {
-            id: Uuid::new_v4(),
-            source: SyncSourceType::LocalPath {
-                path: root_path.clone(),
-                watch: false,
-            },
-            read_only: false,
-            priority: 0,
-            last_sync: None,
-            status: SyncSourceStatus::Unsynced,
-            metadata: HashMap::new(),
+        // Create sync source for local path if provided
+        let sync_sources = if let Some(ref path) = root_path {
+            vec![SyncSource {
+                id: Uuid::new_v4(),
+                source: SyncSourceType::LocalPath {
+                    path: path.clone(),
+                    watch: false,
+                },
+                read_only: false,
+                priority: 0,
+                last_sync: None,
+                status: SyncSourceStatus::Unsynced,
+                metadata: HashMap::new(),
+            }]
+        } else {
+            Vec::new()
         };
 
-        // Store workspace_type in metadata for backward compatibility
-        let mut metadata = HashMap::new();
-        metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type));
+        let metadata = HashMap::new();
 
         let workspace = Workspace {
             id: workspace_id,
             name: input.name.clone(),
             namespace: "main".to_string(),
-            sync_sources: vec![sync_source],
+            sync_sources,
             metadata,
             read_only: false,
             parent_workspace: None,
@@ -295,10 +288,9 @@ impl Tool for WorkspaceCreateTool {
         use crate::services::workspace::CreateWorkspaceRequest;
         let create_request = CreateWorkspaceRequest {
             name: workspace.name.clone(),
-            workspace_type: Some(workspace_type.clone()),
-            source_path: Some(root_path.display().to_string()),
+            source_path: root_path.as_ref().map(|p| p.display().to_string()),
             sync_sources: None, // Service layer will create from source_path
-            metadata: None, // Service layer will create from workspace_type
+            metadata: None,
             read_only: Some(workspace.read_only),
         };
         self.ctx.workspace_service.create_workspace(create_request).await
@@ -309,8 +301,9 @@ impl Tool for WorkspaceCreateTool {
         let mut units_extracted = 0;
         let mut total_bytes = 0;
 
-        // Import if requested
-        if input.auto_import {
+        // Import if requested and root_path is provided
+        if input.auto_import && root_path.is_some() {
+            let path = root_path.as_ref().unwrap();
             let vfs_opts = VfsImportOptions {
                 read_only: false,
                 create_fork: false,
@@ -329,7 +322,7 @@ impl Tool for WorkspaceCreateTool {
                 generate_embeddings: false,
             };
 
-            match self.ctx.loader.import_project(&root_path, vfs_opts).await {
+            match self.ctx.loader.import_project(path, vfs_opts).await {
                 Ok(report) => {
                     files_imported = report.files_imported;
                     directories_imported = report.directories_imported;
@@ -369,7 +362,6 @@ impl Tool for WorkspaceCreateTool {
 
         Ok(ToolResult::success_json(serde_json::json!(CreateOutput {
             workspace_id: workspace_id.to_string(),
-            workspace_type,
             files_imported,
             directories_imported,
             units_extracted,
@@ -405,7 +397,6 @@ struct GetInput {
 struct GetOutput {
     workspace_id: String,
     name: String,
-    workspace_type: String,
     source_type: String,
     root_path: Option<String>,
     read_only: bool,
@@ -462,13 +453,11 @@ impl Tool for WorkspaceGetTool {
             None
         };
 
-        let workspace_type = workspace.workspace_type();
         let source_type = workspace.source_type();
         let root_path = workspace.source_path();
         let output = GetOutput {
             workspace_id: workspace.id.clone(),
             name: workspace.name,
-            workspace_type,
             source_type,
             root_path,
             read_only: workspace.read_only,
@@ -517,7 +506,6 @@ struct ListOutput {
 struct WorkspaceSummary {
     workspace_id: String,
     name: String,
-    workspace_type: String,
     source_type: String,
     file_count: usize,
     created_at: String,
@@ -549,7 +537,6 @@ impl Tool for WorkspaceListTool {
 
         use crate::services::workspace::ListWorkspaceFilters;
         let filters = ListWorkspaceFilters {
-            workspace_type: None,
             limit: Some(input.limit),
         };
         let workspaces = self.ctx.workspace_service.list_workspaces(filters).await
@@ -566,7 +553,6 @@ impl Tool for WorkspaceListTool {
             summaries.push(WorkspaceSummary {
                 workspace_id: workspace.id.clone(),
                 name: workspace.name.clone(),
-                workspace_type: workspace.workspace_type(),
                 source_type: workspace.source_type(),
                 file_count: stats.total_files,
                 created_at: workspace.created_at.to_rfc3339(),
@@ -1124,7 +1110,6 @@ impl Tool for WorkspaceArchiveTool {
         use crate::services::workspace::UpdateWorkspaceRequest;
         let update_request = UpdateWorkspaceRequest {
             name: None,
-            workspace_type: None,
             read_only: Some(true),
             metadata: Some(archive_metadata),
         };

@@ -10,7 +10,7 @@ use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
-    VirtualPath, VNode, Workspace, WorkspaceType, SourceType, SyncSource, SyncSourceType,
+    VirtualPath, VNode, Workspace, SyncSource, SyncSourceType,
     SyncSourceStatus,
 };
 use std::collections::HashMap;
@@ -62,7 +62,6 @@ fn init_file_logging(log_file: &str, log_level: &str) -> Result<()> {
 pub async fn init_workspace(
     name: String,
     path: Option<PathBuf>,
-    workspace_type: WorkspaceType,
 ) -> Result<()> {
     let spinner = output::spinner("Initializing Cortex workspace...");
 
@@ -90,9 +89,8 @@ pub async fn init_workspace(
     // Create workspace in VFS
     let workspace_id = Uuid::new_v4();
 
-    // Create metadata with workspace type
-    let mut metadata = HashMap::new();
-    metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type.as_str()));
+    // Create metadata
+    let metadata = HashMap::new();
 
     // Create sync source for local path
     let sync_sources = vec![SyncSource {
@@ -138,7 +136,6 @@ pub async fn init_workspace(
 
     output::success(format!("Initialized Cortex workspace: {}", name));
     output::kv("Workspace ID", workspace_id);
-    output::kv("Type", format!("{:?}", workspace_type));
     output::kv("Path", workspace_path.display());
     output::kv("Config", cortex_dir.join("config.toml").display());
 
@@ -150,7 +147,7 @@ pub async fn init_workspace(
 // ============================================================================
 
 /// Create a new workspace
-pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Result<()> {
+pub async fn workspace_create(name: String) -> Result<()> {
     let spinner = output::spinner("Creating workspace...");
 
     let config = CortexConfig::load()?;
@@ -159,9 +156,8 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
 
     let workspace_id = Uuid::new_v4();
 
-    // Create metadata with workspace type
-    let mut metadata = HashMap::new();
-    metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type.as_str()));
+    // Create metadata
+    let metadata = HashMap::new();
 
     let workspace = Workspace {
         id: workspace_id,
@@ -192,7 +188,6 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
     spinner.finish_and_clear();
     output::success(format!("Created workspace: {}", name));
     output::kv("ID", workspace_id);
-    output::kv("Type", format!("{:?}", workspace_type));
 
     Ok(())
 }
@@ -220,7 +215,7 @@ pub async fn workspace_list(format: OutputFormat) -> Result<()> {
             }
 
             let table = TableBuilder::new()
-                .header(vec!["ID", "Name", "Type", "Created", "Root Path"]);
+                .header(vec!["ID", "Name", "Created", "Root Path"]);
 
             let mut table_with_rows = table;
             for ws in &workspaces {
@@ -232,7 +227,6 @@ pub async fn workspace_list(format: OutputFormat) -> Result<()> {
                 table_with_rows = table_with_rows.row(vec![
                     ws.id.to_string(),
                     ws.name.clone(),
-                    ws.workspace_type(),
                     created,
                     path_str,
                 ]);
@@ -540,7 +534,7 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
                 output::info("No projects found");
             } else {
                 for ws in &workspaces {
-                    println!("  {} - {} ({})", ws.name, ws.id, ws.workspace_type());
+                    println!("  {} - {}", ws.name, ws.id);
                     if let Some(path) = ws.source_path() {
                         println!("    Path: {}", path);
                     }

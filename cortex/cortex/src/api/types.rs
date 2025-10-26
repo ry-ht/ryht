@@ -285,7 +285,6 @@ pub struct FileWriteResponse {
 pub struct WorkspaceResponse {
     pub id: String,
     pub name: String,
-    pub workspace_type: String,
     pub source_type: String,
     pub namespace: String,
     pub source_path: Option<String>,
@@ -297,7 +296,6 @@ pub struct WorkspaceResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateWorkspaceRequest {
     pub name: String,
-    pub workspace_type: String,
     pub source_path: Option<String>,
 }
 
@@ -571,7 +569,6 @@ pub struct DependencyCycle {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UpdateWorkspaceRequest {
     pub name: Option<String>,
-    pub workspace_type: Option<String>,
     pub read_only: Option<bool>,
 }
 

@@ -24,7 +24,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use cortex::{commands, output, OutputFormat};
 use cortex::qdrant_commands;
-use cortex_vfs::{FlushScope, WorkspaceType};
+use cortex_vfs::FlushScope;
 use std::path::PathBuf;
 use std::process;
 
@@ -66,25 +66,6 @@ impl From<OutputFormatArg> for OutputFormat {
     }
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
-enum WorkspaceTypeArg {
-    Code,
-    Documentation,
-    Mixed,
-    External,
-}
-
-impl From<WorkspaceTypeArg> for WorkspaceType {
-    fn from(arg: WorkspaceTypeArg) -> Self {
-        match arg {
-            WorkspaceTypeArg::Code => WorkspaceType::Code,
-            WorkspaceTypeArg::Documentation => WorkspaceType::Documentation,
-            WorkspaceTypeArg::Mixed => WorkspaceType::Mixed,
-            WorkspaceTypeArg::External => WorkspaceType::External,
-        }
-    }
-}
-
 #[derive(Subcommand)]
 enum Commands {
     /// Initialize a new Cortex workspace
@@ -95,10 +76,6 @@ enum Commands {
         /// Workspace path (default: current directory)
         #[arg(short, long)]
         path: Option<PathBuf>,
-
-        /// Workspace type
-        #[arg(short = 't', long, default_value = "code")]
-        workspace_type: WorkspaceTypeArg,
     },
 
     /// Workspace management
@@ -221,10 +198,6 @@ enum WorkspaceCommands {
     Create {
         /// Workspace name
         name: String,
-
-        /// Workspace type
-        #[arg(short = 't', long, default_value = "code")]
-        workspace_type: WorkspaceTypeArg,
     },
 
     /// List all workspaces
@@ -677,17 +650,15 @@ async fn run() -> Result<()> {
         Commands::Init {
             name,
             path,
-            workspace_type,
         } => {
-            commands::init_workspace(name, path, workspace_type.into()).await?;
+            commands::init_workspace(name, path).await?;
         }
 
         Commands::Workspace(workspace_cmd) => match workspace_cmd {
             WorkspaceCommands::Create {
                 name,
-                workspace_type,
             } => {
-                commands::workspace_create(name, workspace_type.into()).await?;
+                commands::workspace_create(name).await?;
             }
             WorkspaceCommands::List => {
                 commands::workspace_list(format).await?;
@@ -950,7 +921,7 @@ async fn run() -> Result<()> {
                 "wizard" => {
                     use cortex::interactive;
                     let config = interactive::workspace_setup_wizard().await?;
-                    commands::workspace_create(config.name, config.workspace_type).await?;
+                    commands::workspace_create(config.name).await?;
                 }
                 "search" => {
                     use cortex::interactive;
@@ -973,7 +944,7 @@ async fn run() -> Result<()> {
                     match choice {
                         0 => {
                             let config = interactive::workspace_setup_wizard().await?;
-                            commands::workspace_create(config.name, config.workspace_type).await?;
+                            commands::workspace_create(config.name).await?;
                         }
                         1 => {
                             interactive::interactive_health_check().await?;

@@ -164,21 +164,6 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
     // Get workspace name
     let name: String = session.input("Workspace name")?;
 
-    // Select workspace type
-    let workspace_types = [
-        cortex_vfs::WorkspaceType::Code,
-        cortex_vfs::WorkspaceType::Documentation,
-        cortex_vfs::WorkspaceType::Mixed,
-        cortex_vfs::WorkspaceType::External,
-    ];
-    let workspace_type_idx = session.select(
-        "Workspace type",
-        &["Code (for source code)", "Documentation", "Mixed (code + docs)", "External (readonly)"],
-    )?;
-    let workspace_type = workspace_types.get(workspace_type_idx)
-        .copied()
-        .unwrap_or(cortex_vfs::WorkspaceType::Code);
-
     // Get optional description
     let description: String = session
         .input_with_default("Description (optional)", String::new())
@@ -187,7 +172,6 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
     // Confirm
     println!("\nConfiguration:");
     println!("  Name: {}", style(&name).cyan());
-    println!("  Type: {}", style(format!("{:?}", workspace_type)).cyan());
     if !description.is_empty() {
         println!("  Description: {}", style(&description).cyan());
     }
@@ -198,7 +182,6 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
 
     Ok(WorkspaceSetupConfig {
         name,
-        workspace_type,
         description: if description.is_empty() {
             None
         } else {
@@ -210,7 +193,6 @@ pub async fn workspace_setup_wizard() -> Result<WorkspaceSetupConfig> {
 /// Configuration from workspace setup wizard
 pub struct WorkspaceSetupConfig {
     pub name: String,
-    pub workspace_type: cortex_vfs::WorkspaceType,
     pub description: Option<String>,
 }
 
