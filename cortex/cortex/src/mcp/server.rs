@@ -292,15 +292,19 @@ impl CortexMcpServer {
             .tool(ValidateContractsTool::new(test_ctx.clone()))
             .tool(ValidateDependenciesTool::new(test_ctx.clone()))
             .tool(ValidateStyleTool::new(test_ctx.clone()))
-            // Documentation Tools (16)
+            // Documentation Tools (21)
             // Document CRUD
             .tool(DocumentCreateTool::new(doc_ctx.clone()))
             .tool(DocumentGetTool::new(doc_ctx.clone()))
+            .tool(DocumentGetBySlugTool::new(doc_ctx.clone()))
             .tool(DocumentUpdateTool::new(doc_ctx.clone()))
             .tool(DocumentDeleteTool::new(doc_ctx.clone()))
             .tool(DocumentListTool::new(doc_ctx.clone()))
+            .tool(DocumentPublishTool::new(doc_ctx.clone()))
+            .tool(DocumentArchiveTool::new(doc_ctx.clone()))
             // Section Management
             .tool(SectionCreateTool::new(doc_ctx.clone()))
+            .tool(SectionGetTool::new(doc_ctx.clone()))
             .tool(SectionUpdateTool::new(doc_ctx.clone()))
             .tool(SectionDeleteTool::new(doc_ctx.clone()))
             .tool(SectionListTool::new(doc_ctx.clone()))
@@ -312,6 +316,7 @@ impl CortexMcpServer {
             .tool(DocumentSearchTool::new(doc_ctx.clone()))
             // Versioning
             .tool(VersionCreateTool::new(doc_ctx.clone()))
+            .tool(VersionGetTool::new(doc_ctx.clone()))
             .tool(VersionListTool::new(doc_ctx.clone()))
             // Legacy (to be migrated)
             // .tool(DocGenerateFromCodeTool::new(doc_ctx.clone()))
@@ -369,7 +374,7 @@ impl CortexMcpServer {
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 182); // Total: 149 + 4 + 4 + 6 + 6 + 5 + 8 (updated docs) = 182
+        info!("Registered {} tools", 187); // Total: 182 + 5 (new doc tools) = 187
 
         Ok(server)
     }

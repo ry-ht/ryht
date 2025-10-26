@@ -1218,6 +1218,337 @@ impl Tool for VersionListTool {
 }
 
 // =============================================================================
+// cortex.document.publish - Publish document
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentPublishInput {
+    document_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentPublishOutput {
+    document_id: String,
+    status: String,
+    published_at: String,
+}
+
+pub struct DocumentPublishTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentPublishTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentPublishTool {
+    fn name(&self) -> &str {
+        "cortex.document.publish"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Publish a document (set status to Published)")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentPublishInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentPublishInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        let document = self.ctx.service.publish_document(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to publish document: {}", e)))?;
+
+        let output = DocumentPublishOutput {
+            document_id: document.id.to_string(),
+            status: format!("{:?}", document.status),
+            published_at: document.published_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.archive - Archive document
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentArchiveInput {
+    document_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentArchiveOutput {
+    document_id: String,
+    status: String,
+}
+
+pub struct DocumentArchiveTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentArchiveTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentArchiveTool {
+    fn name(&self) -> &str {
+        "cortex.document.archive"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Archive a document (set status to Archived)")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentArchiveInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentArchiveInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        let document = self.ctx.service.archive_document(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to archive document: {}", e)))?;
+
+        let output = DocumentArchiveOutput {
+            document_id: document.id.to_string(),
+            status: format!("{:?}", document.status),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.get-by-slug - Get document by slug
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentGetBySlugInput {
+    slug: String,
+}
+
+pub struct DocumentGetBySlugTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentGetBySlugTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentGetBySlugTool {
+    fn name(&self) -> &str {
+        "cortex.document.get-by-slug"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get a document by its URL slug")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentGetBySlugInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentGetBySlugInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document = self.ctx.service.get_document_by_slug(&input.slug)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get document: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("Document not found".to_string()))?;
+
+        let output = DocumentGetOutput {
+            document_id: document.id.to_string(),
+            title: document.title,
+            content: document.content,
+            slug: document.slug,
+            doc_type: format!("{:?}", document.doc_type),
+            status: format!("{:?}", document.status),
+            description: document.description,
+            parent_id: document.parent_id.map(|id| id.to_string()),
+            tags: document.tags,
+            keywords: document.keywords,
+            author: Some(document.author),
+            language: document.language,
+            workspace_id: document.workspace_id,
+            version: document.version,
+            created_at: document.created_at.to_rfc3339(),
+            updated_at: document.updated_at.to_rfc3339(),
+            published_at: document.published_at.map(|dt| dt.to_rfc3339()),
+            metadata: document.metadata,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.version.get - Get specific version
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct VersionGetInput {
+    version_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct VersionGetOutput {
+    version_id: String,
+    document_id: String,
+    version: String,
+    content: String,
+    author: String,
+    message: String,
+    created_at: String,
+}
+
+pub struct VersionGetTool {
+    ctx: DocumentationContext,
+}
+
+impl VersionGetTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for VersionGetTool {
+    fn name(&self) -> &str {
+        "cortex.document.version.get"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get a specific document version by its ID")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(VersionGetInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: VersionGetInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let version_id = CortexId::from_str(&input.version_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid version_id: {}", e)))?;
+
+        let version = self.ctx.service.get_version(&version_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get version: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("Version not found".to_string()))?;
+
+        let output = VersionGetOutput {
+            version_id: version.id.to_string(),
+            document_id: version.document_id.to_string(),
+            version: version.version,
+            content: version.content,
+            author: version.author,
+            message: version.message,
+            created_at: version.created_at.to_rfc3339(),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.section.get - Get specific section
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SectionGetInput {
+    section_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SectionGetOutput {
+    section_id: String,
+    document_id: String,
+    title: String,
+    content: String,
+    level: u32,
+    order: i32,
+    parent_section_id: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+pub struct SectionGetTool {
+    ctx: DocumentationContext,
+}
+
+impl SectionGetTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for SectionGetTool {
+    fn name(&self) -> &str {
+        "cortex.document.section.get"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get a specific section by its ID")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(SectionGetInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: SectionGetInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let section_id = CortexId::from_str(&input.section_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid section_id: {}", e)))?;
+
+        let section = self.ctx.service.get_section(&section_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get section: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("Section not found".to_string()))?;
+
+        let output = SectionGetOutput {
+            section_id: section.id.to_string(),
+            document_id: section.document_id.to_string(),
+            title: section.title,
+            content: section.content,
+            level: section.level,
+            order: section.order,
+            parent_section_id: section.parent_section_id,
+            created_at: section.created_at.to_rfc3339(),
+            updated_at: section.updated_at.to_rfc3339(),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
 // Legacy compatibility tools - refactored from old documentation.rs
 // =============================================================================
 

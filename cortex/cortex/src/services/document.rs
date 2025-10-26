@@ -327,6 +327,20 @@ impl DocumentService {
         Ok(sections)
     }
 
+    /// Get a specific section by ID
+    pub async fn get_section(&self, section_id: &CortexId) -> Result<Option<DocumentSection>> {
+        debug!("Getting section: {}", section_id);
+
+        let conn = self.storage.acquire().await?;
+
+        let section: Option<DocumentSection> = conn
+            .connection()
+            .select(("document_section", section_id.to_string()))
+            .await?;
+
+        Ok(section)
+    }
+
     /// Update section
     pub async fn update_section(
         &self,
