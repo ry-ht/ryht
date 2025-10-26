@@ -333,23 +333,51 @@ impl ForkManager {
         })
     }
 
-    /// Perform three-way merge.
+    /// Perform three-way merge using diff algorithm.
     async fn three_way_merge(&self, conflict: &Conflict) -> Result<String> {
-        // Simple line-based merge
-        // In production, you'd want a more sophisticated merge algorithm
+        use similar::{ChangeTag, TextDiff};
 
-        let _fork_lines: Vec<&str> = conflict.fork_content.lines().collect();
-        let _target_lines: Vec<&str> = conflict.target_content.lines().collect();
+        // Use original strings directly for diff (they're already owned)
+        let diff = TextDiff::from_lines(&conflict.fork_content, &conflict.target_content);
 
-        // For now, just concatenate with conflict markers
-        // A real implementation would use a proper diff3 algorithm
+        // Try to auto-merge non-conflicting changes
+        let mut merged_lines = Vec::new();
+        let mut has_conflicts = false;
 
-        let merged = format!(
-            "<<<<<<< FORK\n{}\n=======\n{}\n>>>>>>> TARGET\n",
-            conflict.fork_content, conflict.target_content
-        );
+        for change in diff.iter_all_changes() {
+            match change.tag() {
+                ChangeTag::Equal => {
+                    merged_lines.push(change.value().trim_end().to_string());
+                }
+                ChangeTag::Delete => {
+                    // Line deleted in target - mark as conflict
+                    if !has_conflicts {
+                        merged_lines.push("<<<<<<< FORK".to_string());
+                        has_conflicts = true;
+                    }
+                    merged_lines.push(change.value().trim_end().to_string());
+                }
+                ChangeTag::Insert => {
+                    // Line added in target - mark as conflict
+                    if has_conflicts {
+                        merged_lines.push("=======".to_string());
+                    } else {
+                        merged_lines.push("<<<<<<< FORK".to_string());
+                        merged_lines.push("=======".to_string());
+                    }
+                    merged_lines.push(change.value().trim_end().to_string());
+                    merged_lines.push(">>>>>>> TARGET".to_string());
+                    has_conflicts = false;
+                }
+            }
+        }
 
-        Ok(merged)
+        if has_conflicts {
+            merged_lines.push("=======".to_string());
+            merged_lines.push(">>>>>>> TARGET".to_string());
+        }
+
+        Ok(merged_lines.join("\n"))
     }
 
     /// Apply a conflict resolution.
