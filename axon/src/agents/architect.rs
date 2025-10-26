@@ -27,7 +27,7 @@ pub struct ArchitectAgent {
     design_patterns: Vec<String>,
     architectural_styles: Vec<ArchitecturalStyle>,
 
-    // Cortex integration (optional for backward compatibility)
+    // Cortex integration (optional)
     cortex: Option<Arc<CortexBridge>>,
     workspace_id: Option<WorkspaceId>,
 }
@@ -289,9 +289,8 @@ impl ArchitectAgent {
         })
     }
 
-    /// Analyze dependencies in the codebase (sync version, no Cortex)
+    /// Analyze dependencies in the codebase
     ///
-    /// This is a synchronous version for backward compatibility.
     /// For Cortex integration, use `analyze_dependencies_async`.
     ///
     /// # Arguments
@@ -533,7 +532,7 @@ impl ArchitectAgent {
 
     fn generate_components(
         &self,
-        requirements: &SystemRequirements,
+        _requirements: &SystemRequirements,
         style: &ArchitecturalStyle,
     ) -> Vec<Component> {
         // Generate basic components based on style
@@ -580,7 +579,7 @@ impl ArchitectAgent {
 
     fn make_design_decisions(
         &self,
-        requirements: &SystemRequirements,
+        _requirements: &SystemRequirements,
         style: &ArchitecturalStyle,
     ) -> Vec<DesignDecision> {
         vec![

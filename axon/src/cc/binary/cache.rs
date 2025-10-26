@@ -20,7 +20,7 @@ use std::hash::Hash;
 
 use super::discovery::ClaudeInstallation;
 
-/// Re-export generic cache types for backward compatibility and convenience
+/// Re-export generic cache types for convenience
 pub use crate::cc::cache::{CachedEntry, CacheConfig};
 
 /// Cache key based on discovery configuration.

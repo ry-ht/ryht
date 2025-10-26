@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock};
 
 use super::types::{Project, Session};
 
-/// Re-export generic cache types for backward compatibility and convenience
+/// Re-export generic cache types for convenience
 pub use crate::cc::cache::{CachedEntry, CacheConfig};
 
 /// Cache key for session queries.
@@ -250,14 +250,12 @@ impl SessionCache {
         let ttl = self.config.ttl;
 
         // Clean projects cache
-        if let Ok(mut cache) = self.projects_cache.write() {
-            if let Some(entry) = cache.as_ref() {
-                if !entry.is_valid(ttl) {
+        if let Ok(mut cache) = self.projects_cache.write()
+            && let Some(entry) = cache.as_ref()
+                && !entry.is_valid(ttl) {
                     *cache = None;
                     removed += 1;
                 }
-            }
-        }
 
         // Clean sessions cache
         if let Ok(mut cache) = self.sessions_cache.write() {

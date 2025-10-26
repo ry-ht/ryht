@@ -2,8 +2,7 @@
 //!
 //! Compile-time state machine for agent lifecycle with type-safe state transitions.
 
-use super::{AgentId, AgentStatus, AgentMetrics};
-use std::marker::PhantomData;
+use super::{AgentId, AgentMetrics};
 
 /// Sealed trait to prevent external state implementations
 mod sealed {

@@ -4,6 +4,12 @@ use super::*;
 
 pub struct DagValidator;
 
+impl Default for DagValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DagValidator {
     pub fn new() -> Self {
         Self
@@ -20,13 +26,12 @@ impl DagValidator {
         let mut rec_stack = HashSet::new();
 
         for task_id in deps.keys() {
-            if !visited.contains(task_id) {
-                if self.has_cycle(task_id, deps, &mut visited, &mut rec_stack) {
+            if !visited.contains(task_id)
+                && self.has_cycle(task_id, deps, &mut visited, &mut rec_stack) {
                     return Err(OrchestrationError::CycleDetected {
                         task_id: task_id.clone(),
                     });
                 }
-            }
         }
 
         Ok(())

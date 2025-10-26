@@ -27,7 +27,7 @@ pub struct ResearcherAgent {
     search_strategies: Vec<SearchStrategy>,
     information_sources: Vec<InformationSource>,
 
-    // Cortex integration (optional for backward compatibility)
+    // Cortex integration (optional)
     cortex: Option<Arc<CortexBridge>>,
     workspace_id: Option<WorkspaceId>,
 }
@@ -324,15 +324,14 @@ impl ResearcherAgent {
         agent
     }
 
-    /// Conduct research on a topic (sync version, no Cortex)
+    /// Conduct research on a topic
     ///
-    /// This is a synchronous version for backward compatibility.
     /// For Cortex integration, use `research_async`.
     pub fn research(&self, query: ResearchQuery) -> Result<ResearchReport> {
         info!("Starting research for query: {} (sync)", query.query);
 
         // Select appropriate search strategy
-        let strategy = self.select_strategy(&query);
+        let _strategy = self.select_strategy(&query);
 
         // Use basic findings without Cortex
         let raw_findings = vec![RawFinding {

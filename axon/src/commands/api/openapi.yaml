@@ -1,0 +1,619 @@
+openapi: 3.0.3
+info:
+  title: Axon Multi-Agent System API
+  description: |
+    REST API for managing and orchestrating multi-agent systems in Axon.
+
+    ## Authentication
+
+    All API endpoints (except `/health` and `/`) require authentication using an API key.
+    Include the API key in the `Authorization` header:
+
+    ```
+    Authorization: Bearer <your-api-key>
+    ```
+
+    Or:
+
+    ```
+    Authorization: ApiKey <your-api-key>
+    ```
+
+    Default development API key: `axon-dev-key-change-in-production`
+
+    Set the `AXON_API_KEY` environment variable to use a custom API key.
+
+    ## Rate Limiting
+
+    API requests are rate limited by tier:
+    - Auth endpoints: 10 req/minute
+    - Read endpoints: 1000 req/minute
+    - Write endpoints: 100 req/minute
+    - Execute endpoints: 50 req/minute
+    - Admin endpoints: 200 req/minute
+
+    ## WebSocket
+
+    Real-time updates are available via WebSocket at `/api/v1/ws`.
+
+    Subscribe to channels by sending:
+    ```json
+    {
+      "type": "Subscribe",
+      "channels": ["agents", "workflows", "metrics"]
+    }
+    ```
+
+  version: 0.4.0
+  contact:
+    name: LuxQuant
+    url: https://github.com/ry-ht/ryht
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development server
+  - url: http://localhost:8080/api/v1
+    description: Alternative local server
+
+tags:
+  - name: System
+    description: System health and information
+  - name: Agents
+    description: Agent management operations
+  - name: Workflows
+    description: Workflow execution and management
+  - name: Monitoring
+    description: Metrics and telemetry
+  - name: Configuration
+    description: Configuration management
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Use format: Bearer <api-key> or ApiKey <api-key>"
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          example: healthy
+        version:
+          type: string
+          example: 0.4.0
+        uptime_seconds:
+          type: integer
+          format: int64
+        active_agents:
+          type: integer
+        running_workflows:
+          type: integer
+        websocket_connections:
+          type: integer
+
+    AgentInfo:
+      type: object
+      required:
+        - id
+        - name
+        - agent_type
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        agent_type:
+          type: string
+          enum: [Documenter, Tester, Optimizer, Reviewer, Custom]
+        status:
+          type: string
+          enum: [Idle, Working, Paused, Failed, ShuttingDown]
+        capabilities:
+          type: array
+          items:
+            type: string
+        last_heartbeat:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          properties:
+            version:
+              type: string
+            max_concurrent_tasks:
+              type: integer
+            performance_score:
+              type: number
+              format: float
+
+    CreateAgentRequest:
+      type: object
+      required:
+        - name
+        - agent_type
+      properties:
+        name:
+          type: string
+          example: "test-agent"
+        agent_type:
+          type: string
+          enum: [Documenter, Tester, Optimizer, Reviewer, Custom]
+        capabilities:
+          type: array
+          items:
+            type: string
+        max_concurrent_tasks:
+          type: integer
+          minimum: 1
+          default: 1
+
+    CreateAgentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    WorkflowInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        started_at:
+          type: string
+          format: date-time
+
+    WorkflowStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    RunWorkflowRequest:
+      type: object
+      required:
+        - workflow_def
+        - input_params
+      properties:
+        workflow_def:
+          type: string
+          description: Workflow definition
+        input_params:
+          type: object
+          description: Input parameters for the workflow
+
+    SystemStatus:
+      type: object
+      properties:
+        active_agents:
+          type: integer
+        running_workflows:
+          type: integer
+        total_tasks:
+          type: integer
+        cpu_usage:
+          type: number
+          format: float
+        memory_usage:
+          type: number
+          format: float
+        thread_count:
+          type: integer
+
+    MetricsData:
+      type: object
+      properties:
+        tasks_completed:
+          type: integer
+          format: int64
+        tasks_failed:
+          type: integer
+          format: int64
+        success_rate:
+          type: integer
+          format: int64
+        tokens_used:
+          type: integer
+          format: int64
+        total_cost_cents:
+          type: integer
+          format: int64
+
+    TelemetryData:
+      type: object
+      properties:
+        range_minutes:
+          type: integer
+          format: int64
+        total_requests:
+          type: integer
+          format: int64
+        successful_requests:
+          type: integer
+          format: int64
+        failed_requests:
+          type: integer
+          format: int64
+        avg_response_time_ms:
+          type: integer
+          format: int64
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /:
+    get:
+      tags:
+        - System
+      summary: API information
+      description: Get API version and endpoint documentation
+      security: []
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  description:
+                    type: string
+                  endpoints:
+                    type: array
+                    items:
+                      type: object
+
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check
+      description: Check API health and get system statistics
+      security: []
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /status:
+    get:
+      tags:
+        - System
+      summary: System status
+      description: Get detailed system status including resource usage
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+
+  /agents:
+    get:
+      tags:
+        - Agents
+      summary: List agents
+      description: Get list of all active agents
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentInfo'
+
+    post:
+      tags:
+        - Agents
+      summary: Create agent
+      description: Create and start a new agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentRequest'
+      responses:
+        '200':
+          description: Agent created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAgentResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/{id}:
+    get:
+      tags:
+        - Agents
+      summary: Get agent
+      description: Get detailed information about a specific agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentInfo'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Agents
+      summary: Stop agent
+      description: Stop and remove an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Agent stopped successfully
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/{id}/pause:
+    post:
+      tags:
+        - Agents
+      summary: Pause agent
+      description: Pause an agent's task processing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent paused successfully
+        '404':
+          description: Agent not found
+
+  /agents/{id}/resume:
+    post:
+      tags:
+        - Agents
+      summary: Resume agent
+      description: Resume a paused agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent resumed successfully
+        '404':
+          description: Agent not found
+
+  /agents/{id}/restart:
+    post:
+      tags:
+        - Agents
+      summary: Restart agent
+      description: Restart an agent (stop and start with same configuration)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent restarted successfully
+        '404':
+          description: Agent not found
+
+  /workflows:
+    get:
+      tags:
+        - Workflows
+      summary: List workflows
+      description: Get list of all workflows
+      responses:
+        '200':
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowInfo'
+
+    post:
+      tags:
+        - Workflows
+      summary: Run workflow
+      description: Execute a workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunWorkflowRequest'
+      responses:
+        '200':
+          description: Workflow started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflow_id:
+                    type: string
+
+  /workflows/{id}:
+    get:
+      tags:
+        - Workflows
+      summary: Get workflow status
+      description: Get detailed status of a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStatus'
+
+  /workflows/{id}/cancel:
+    post:
+      tags:
+        - Workflows
+      summary: Cancel workflow
+      description: Cancel a running workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow cancelled
+
+  /metrics:
+    get:
+      tags:
+        - Monitoring
+      summary: Get metrics
+      description: Get system and agent metrics
+      responses:
+        '200':
+          description: Metrics data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/MetricsData'
+
+  /telemetry:
+    get:
+      tags:
+        - Monitoring
+      summary: Get telemetry
+      description: Get telemetry data for a time range
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: integer
+            default: 60
+          description: Time range in minutes
+      responses:
+        '200':
+          description: Telemetry data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryData'
+
+  /config:
+    get:
+      tags:
+        - Configuration
+      summary: Get configuration
+      description: Get current system configuration
+      responses:
+        '200':
+          description: Configuration data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspace_name:
+                    type: string
+                  workspace_path:
+                    type: string

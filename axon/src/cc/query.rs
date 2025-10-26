@@ -550,17 +550,15 @@ async fn query_stream_mode(
         let capped = max_tokens.clamp(1, 32000);
         cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", capped.to_string());
         debug!("Setting max_output_tokens from option: {}", capped);
-    } else {
-        if let Ok(current_value) = std::env::var("CLAUDE_CODE_MAX_OUTPUT_TOKENS") {
-            if let Ok(tokens) = current_value.parse::<u32>() {
-                if tokens > 32000 {
-                    warn!("CLAUDE_CODE_MAX_OUTPUT_TOKENS={} exceeds maximum safe value of 32000, overriding to 32000", tokens);
-                    cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "32000");
-                }
-            } else {
-                warn!("Invalid CLAUDE_CODE_MAX_OUTPUT_TOKENS value: {}, setting to 8192", current_value);
-                cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "8192");
+    } else if let Ok(current_value) = std::env::var("CLAUDE_CODE_MAX_OUTPUT_TOKENS") {
+        if let Ok(tokens) = current_value.parse::<u32>() {
+            if tokens > 32000 {
+                warn!("CLAUDE_CODE_MAX_OUTPUT_TOKENS={} exceeds maximum safe value of 32000, overriding to 32000", tokens);
+                cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "32000");
             }
+        } else {
+            warn!("Invalid CLAUDE_CODE_MAX_OUTPUT_TOKENS value: {}, setting to 8192", current_value);
+            cmd.env("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "8192");
         }
     }
 

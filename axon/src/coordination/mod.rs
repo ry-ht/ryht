@@ -4,22 +4,20 @@
 //! and resilient multi-agent coordination. Includes message bus, pub/sub,
 //! distributed locking, episodic memory integration, and coordination patterns.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{mpsc, broadcast, RwLock};
 use serde::{Deserialize, Serialize};
 
-pub mod message_bus;
 pub mod patterns;
 pub mod topology;
 pub mod unified_message_bus;
 pub mod message_coordinator;
 pub mod agent_messaging_adapter;
 
-pub use message_bus::*;
 pub use patterns::*;
 pub use topology::*;
+
+// Export unified message bus as the primary implementation
 pub use unified_message_bus::*;
+
 pub use message_coordinator::*;
 pub use agent_messaging_adapter::*;
 

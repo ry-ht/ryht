@@ -112,7 +112,7 @@ fn setup_nvm_env(cmd: &mut Command, program: &str) {
         // Ensure the Node.js bin directory is in PATH
         let current_path = std::env::var("PATH").unwrap_or_default();
         let node_bin_str = node_bin_dir.to_string_lossy();
-        if !current_path.contains(&node_bin_str.as_ref()) {
+        if !current_path.contains(node_bin_str.as_ref()) {
             let new_path = format!("{}:{}", node_bin_str, current_path);
             tracing::debug!("Adding NVM bin directory to PATH: {}", node_bin_str);
             cmd.env("PATH", new_path);
@@ -161,7 +161,7 @@ fn setup_homebrew_env(cmd: &mut Command, program: &str) {
         // Ensure the Homebrew bin directory is in PATH
         let current_path = std::env::var("PATH").unwrap_or_default();
         let homebrew_bin_str = program_dir.to_string_lossy();
-        if !current_path.contains(&homebrew_bin_str.as_ref()) {
+        if !current_path.contains(homebrew_bin_str.as_ref()) {
             let new_path = format!("{}:{}", homebrew_bin_str, current_path);
             tracing::debug!(
                 "Adding Homebrew bin directory to PATH: {}",
@@ -306,18 +306,16 @@ pub fn setup_environment() -> HashMap<String, String> {
     }
 
     // Ensure we have HOME set
-    if !env.contains_key("HOME") {
-        if let Ok(home) = std::env::var("HOME") {
+    if !env.contains_key("HOME")
+        && let Ok(home) = std::env::var("HOME") {
             env.insert("HOME".to_string(), home);
         }
-    }
 
     // Ensure we have PATH set
-    if !env.contains_key("PATH") {
-        if let Ok(path) = std::env::var("PATH") {
+    if !env.contains_key("PATH")
+        && let Ok(path) = std::env::var("PATH") {
             env.insert("PATH".to_string(), path);
         }
-    }
 
     env
 }
@@ -362,29 +360,26 @@ pub fn reconstruct_path() -> String {
     ];
 
     for brew_path in homebrew_paths {
-        if !paths.contains(&brew_path.to_string()) {
-            if std::path::Path::new(brew_path).exists() {
+        if !paths.contains(&brew_path.to_string())
+            && std::path::Path::new(brew_path).exists() {
                 paths.push(brew_path.to_string());
             }
-        }
     }
 
     // Add user local bin if not present
     if let Ok(home) = std::env::var("HOME") {
         let local_bin = format!("{}/.local/bin", home);
-        if !paths.contains(&local_bin) {
-            if std::path::Path::new(&local_bin).exists() {
+        if !paths.contains(&local_bin)
+            && std::path::Path::new(&local_bin).exists() {
                 paths.push(local_bin);
             }
-        }
     }
 
     // Add NVM bin if set
-    if let Ok(nvm_bin) = std::env::var("NVM_BIN") {
-        if !paths.contains(&nvm_bin) {
+    if let Ok(nvm_bin) = std::env::var("NVM_BIN")
+        && !paths.contains(&nvm_bin) {
             paths.push(nvm_bin);
         }
-    }
 
     paths.join(":")
 }

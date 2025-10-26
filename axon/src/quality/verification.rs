@@ -79,8 +79,8 @@ impl Verifier {
         }
 
         // Apply format-specific verification if specified
-        if let Some(format) = &context.expected_format {
-            if let Some(verifier) = self.format_verifiers.get(format) {
+        if let Some(format) = &context.expected_format
+            && let Some(verifier) = self.format_verifiers.get(format) {
                 let format_result = verifier.verify(output);
                 if !format_result.valid {
                     failed.extend(format_result.errors.iter().map(|e| format!("format: {}", e)));
@@ -88,7 +88,6 @@ impl Verifier {
                 warnings.extend(format_result.warnings);
                 suggestions.extend(format_result.suggestions);
             }
-        }
 
         let success = failed.is_empty();
         Ok(VerificationReport {
@@ -167,11 +166,10 @@ impl Verifier {
                         for task in tasks {
                             if let Some(deps) = task.get("dependencies").and_then(|v| v.as_array()) {
                                 for dep in deps {
-                                    if let Some(dep_id) = dep.as_str() {
-                                        if !task_ids.contains(dep_id) {
+                                    if let Some(dep_id) = dep.as_str()
+                                        && !task_ids.contains(dep_id) {
                                             return CheckResult::Fail(format!("Invalid dependency reference: {}", dep_id));
                                         }
-                                    }
                                 }
                             }
                         }
@@ -347,7 +345,7 @@ impl FormatVerifier for CodeFormatVerifier {
     fn verify(&self, output: &str) -> FormatVerificationResult {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
-        let mut suggestions = Vec::new();
+        let suggestions = Vec::new();
 
         // Check for basic code patterns
         if output.trim().is_empty() {
@@ -405,7 +403,7 @@ impl FormatVerifier for MarkdownFormatVerifier {
 
         // Check for unclosed code blocks
         let code_block_count = output.matches("```").count();
-        if code_block_count % 2 != 0 {
+        if !code_block_count.is_multiple_of(2) {
             errors.push("Unclosed code block detected".to_string());
         }
 

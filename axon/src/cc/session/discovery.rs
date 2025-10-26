@@ -135,7 +135,7 @@ fn list_sessions_sync(_project_id: &str, project_dir: &Path) -> Result<Vec<Sessi
         let path = entry.path();
 
         // Only process .jsonl files
-        if !path.extension().map_or(false, |ext| ext == "jsonl") {
+        if !path.extension().is_some_and(|ext| ext == "jsonl") {
             continue;
         }
 
@@ -330,11 +330,10 @@ pub async fn find_project_by_path(workspace_path: &Path) -> Result<Option<Projec
     let workspace_path = workspace_path.canonicalize().ok();
 
     for project in projects {
-        if let Ok(project_path) = project.path.canonicalize() {
-            if Some(&project_path) == workspace_path.as_ref() {
+        if let Ok(project_path) = project.path.canonicalize()
+            && Some(&project_path) == workspace_path.as_ref() {
                 return Ok(Some(project));
             }
-        }
     }
 
     Ok(None)

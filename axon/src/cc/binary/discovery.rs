@@ -224,11 +224,10 @@ fn discover_system_installations() -> Vec<ClaudeInstallation> {
     installations.extend(find_standard_installations());
 
     // 4. Check custom environment variable
-    if let Ok(custom_path) = std::env::var("CLAUDE_BINARY_PATH") {
-        if let Some(installation) = validate_custom_path(&custom_path) {
+    if let Ok(custom_path) = std::env::var("CLAUDE_BINARY_PATH")
+        && let Some(installation) = validate_custom_path(&custom_path) {
             installations.push(installation);
         }
-    }
 
     // Remove duplicates by path
     let mut unique_paths = HashSet::new();
@@ -486,8 +485,8 @@ fn find_standard_installations() -> Vec<ClaudeInstallation> {
     }
 
     // Also check if claude is available in PATH (without full path)
-    if let Ok(output) = Command::new("claude").arg("--version").output() {
-        if output.status.success() {
+    if let Ok(output) = Command::new("claude").arg("--version").output()
+        && output.status.success() {
             tracing::debug!("claude is available in PATH");
             let version = super::version::extract_version_from_output(&output.stdout);
 
@@ -498,7 +497,6 @@ fn find_standard_installations() -> Vec<ClaudeInstallation> {
                 installation_type: InstallationType::System,
             });
         }
-    }
 
     installations
 }
@@ -695,8 +693,8 @@ impl DiscoveryBuilder {
     /// Perform discovery with the configured options.
     pub fn discover(self) -> Vec<ClaudeInstallation> {
         // Check cache if enabled
-        if self.use_cache {
-            if let Some(cached) = cache::get_cached_default() {
+        if self.use_cache
+            && let Some(cached) = cache::get_cached_default() {
                 // For now, we only cache default configurations
                 // Custom configurations could have a more sophisticated cache key
                 if self.custom_paths.is_empty()
@@ -708,7 +706,6 @@ impl DiscoveryBuilder {
                     return cached;
                 }
             }
-        }
 
         let mut installations = Vec::new();
 

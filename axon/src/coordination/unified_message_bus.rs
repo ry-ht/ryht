@@ -23,7 +23,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, broadcast, RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 // ==============================================================================
 // Core Types
@@ -219,8 +219,8 @@ pub enum CircuitState {
 
 /// Unified message bus integrating with Cortex for persistent, intelligent messaging
 pub struct UnifiedMessageBus {
-    /// Cortex bridge for persistence and coordination
-    cortex: Arc<CortexBridge>,
+    /// Cortex bridge for persistence and coordination (optional for lightweight mode)
+    cortex: Option<Arc<CortexBridge>>,
 
     /// Direct message channels: agent_id -> sender
     direct_channels: Arc<RwLock<HashMap<AgentId, mpsc::UnboundedSender<MessageEnvelope>>>>,
@@ -326,17 +326,14 @@ impl CircuitBreaker {
     fn record_success(&mut self) {
         self.success_count += 1;
 
-        match self.state {
-            CircuitState::HalfOpen => {
-                if self.success_count >= 3 {
-                    self.state = CircuitState::Closed;
-                    self.failure_count = 0;
-                    self.success_count = 0;
-                    self.last_state_change = Utc::now();
-                    info!("Circuit breaker closed after successful recovery");
-                }
+        if self.state == CircuitState::HalfOpen {
+            if self.success_count >= 3 {
+                self.state = CircuitState::Closed;
+                self.failure_count = 0;
+                self.success_count = 0;
+                self.last_state_change = Utc::now();
+                info!("Circuit breaker closed after successful recovery");
             }
-            _ => {}
         }
     }
 
@@ -381,12 +378,12 @@ impl CircuitBreaker {
 }
 
 impl UnifiedMessageBus {
-    /// Create a new unified message bus
-    pub fn new(cortex: Arc<CortexBridge>, config: MessageBusConfig) -> Self {
+    /// Create a new unified message bus with Cortex integration
+    pub fn new_with_cortex(cortex: Arc<CortexBridge>, config: MessageBusConfig) -> Self {
         info!("Initializing unified message bus with Cortex integration");
 
         Self {
-            cortex,
+            cortex: Some(cortex),
             direct_channels: Arc::new(RwLock::new(HashMap::new())),
             topic_channels: Arc::new(RwLock::new(HashMap::new())),
             message_history: Arc::new(RwLock::new(HashMap::new())),
@@ -394,6 +391,27 @@ impl UnifiedMessageBus {
             circuit_breakers: Arc::new(RwLock::new(HashMap::new())),
             rate_limiters: Arc::new(RwLock::new(HashMap::new())),
             config,
+            stats: Arc::new(RwLock::new(MessageBusStats::default())),
+        }
+    }
+
+    /// Create a new unified message bus without Cortex (lightweight mode)
+    ///
+    /// This mode is suitable for testing, development, or scenarios where Cortex
+    /// cognitive memory is not needed. Message persistence and episodic memory
+    /// features will be disabled.
+    pub fn new() -> Self {
+        info!("Initializing unified message bus (lightweight mode - no Cortex)");
+
+        Self {
+            cortex: None,
+            direct_channels: Arc::new(RwLock::new(HashMap::new())),
+            topic_channels: Arc::new(RwLock::new(HashMap::new())),
+            message_history: Arc::new(RwLock::new(HashMap::new())),
+            dead_letters: Arc::new(RwLock::new(VecDeque::new())),
+            circuit_breakers: Arc::new(RwLock::new(HashMap::new())),
+            rate_limiters: Arc::new(RwLock::new(HashMap::new())),
+            config: MessageBusConfig::default(),
             stats: Arc::new(RwLock::new(MessageBusStats::default())),
         }
     }
@@ -458,7 +476,7 @@ impl UnifiedMessageBus {
         let target = envelope.to.as_ref()
             .ok_or_else(|| CoordinationError::CommunicationError(
                 "Direct message requires target agent".to_string()
-            ))?;
+            ))?.clone();
 
         // Generate message ID if not present
         if envelope.message_id.is_empty() {
@@ -469,16 +487,16 @@ impl UnifiedMessageBus {
         envelope.timestamp = Utc::now();
 
         // Check circuit breaker
-        if !self.check_circuit_breaker(target).await {
+        if !self.check_circuit_breaker(&target).await {
             warn!("Circuit breaker open for agent {}, message rejected", target);
-            self.move_to_dead_letter(envelope, "Circuit breaker open").await;
+            self.move_to_dead_letter(envelope, "Circuit breaker open".to_string()).await;
             return Err(CoordinationError::SendFailed {
                 target: target.to_string(),
             });
         }
 
         // Check rate limit
-        if !self.check_rate_limit(target).await {
+        if !self.check_rate_limit(&target).await {
             warn!("Rate limit exceeded for agent {}", target);
             let mut stats = self.stats.write().await;
             stats.rate_limit_hits += 1;
@@ -503,13 +521,13 @@ impl UnifiedMessageBus {
         // Update circuit breaker
         match result {
             Ok(_) => {
-                self.record_success(target).await;
+                self.record_success(&target).await;
                 let mut stats = self.stats.write().await;
                 stats.total_sent += 1;
                 stats.total_delivered += 1;
             }
             Err(e) => {
-                self.record_failure(target).await;
+                self.record_failure(&target).await;
                 let mut stats = self.stats.write().await;
                 stats.total_sent += 1;
                 stats.total_failed += 1;
@@ -612,22 +630,33 @@ impl UnifiedMessageBus {
     // ==========================================================================
 
     async fn persist_message(&self, envelope: &MessageEnvelope) -> Result<()> {
+        // Only persist if Cortex is available
+        let Some(ref cortex) = self.cortex else {
+            return Ok(()); // Silently skip if no Cortex
+        };
+
+        use crate::cortex_bridge::{EpisodeType, EpisodeOutcome, TokenUsage, ToolUsage};
+
         // Create episode from message for episodic memory
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: "message".to_string(),
+            episode_type: EpisodeType::Task,
             task_description: format!("Message from {} to {:?}", envelope.from, envelope.to),
             agent_id: envelope.from.to_string(),
-            session_id: envelope.session_id.to_string(),
+            session_id: Some(envelope.session_id.to_string()),
             workspace_id: envelope.workspace_id.to_string(),
             entities_created: vec![],
             entities_modified: vec![],
             entities_deleted: vec![],
             files_touched: vec![],
             queries_made: vec![],
-            tools_used: vec![format!("message_bus::{:?}", envelope.payload)],
+            tools_used: vec![ToolUsage {
+                tool_name: format!("message_bus::{:?}", envelope.payload),
+                invocations: 1,
+                success_rate: 1.0,
+            }],
             solution_summary: serde_json::to_string(&envelope.payload).unwrap_or_default(),
-            outcome: "success".to_string(),
+            outcome: EpisodeOutcome::Success,
             success_metrics: serde_json::json!({
                 "message_id": envelope.message_id,
                 "timestamp": envelope.timestamp,
@@ -635,13 +664,14 @@ impl UnifiedMessageBus {
             }),
             errors_encountered: vec![],
             lessons_learned: vec![],
-            duration_seconds: 0.0,
-            tokens_used: 0,
+            duration_seconds: 0,
+            tokens_used: TokenUsage::default(),
+            embedding: vec![],
             created_at: envelope.timestamp,
-            completed_at: envelope.timestamp,
+            completed_at: Some(envelope.timestamp),
         };
 
-        self.cortex.store_episode(episode).await
+        cortex.store_episode(episode).await
             .map_err(|e| CoordinationError::Other(e.into()))?;
 
         Ok(())
@@ -674,8 +704,13 @@ impl UnifiedMessageBus {
         session_id: &SessionId,
         limit: usize,
     ) -> Result<Vec<MessageEnvelope>> {
+        // Only replay if Cortex is available
+        let Some(ref cortex) = self.cortex else {
+            return Ok(vec![]); // Return empty if no Cortex
+        };
+
         // Query episodic memory for messages
-        let episodes = self.cortex.search_episodes(
+        let episodes = cortex.search_episodes(
             &format!("session_id:{}", session_id),
             limit
         ).await.map_err(|e| CoordinationError::Other(e.into()))?;

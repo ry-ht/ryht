@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::cortex_bridge::{
-    AgentId as CortexAgentId, CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern,
-    SearchFilters, SessionId, TokenUsage, UnitFilters, WorkspaceId, WorkingMemoryItem,
+    CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern,
+    SearchFilters, TokenUsage, UnitFilters, WorkspaceId,
 };
 use std::sync::Arc;
 use std::time::Instant;
@@ -405,7 +405,7 @@ impl TesterAgent {
         // Generate tests for each unit
         let mut test_count = 0;
         for unit in units.iter().take(5) {
-            tests.push_str(&format!("#[test]\n"));
+            tests.push_str(&"#[test]\n".to_string());
             tests.push_str(&format!("fn test_{}() {{\n", unit.name));
             tests.push_str("    // TODO: Implement test based on unit behavior\n");
             tests.push_str("    assert!(true);\n");

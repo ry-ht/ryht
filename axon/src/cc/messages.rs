@@ -122,6 +122,7 @@ impl From<&str> for UserMessage {
 
 /// Assistant message content
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub struct AssistantMessage {
     /// Content blocks
     pub content: Vec<ContentBlock>,
@@ -165,13 +166,6 @@ impl AssistantMessage {
     }
 }
 
-impl Default for AssistantMessage {
-    fn default() -> Self {
-        Self {
-            content: Vec::new(),
-        }
-    }
-}
 
 /// Result message (re-export for convenience)
 pub use Message::Result as ResultMessage;

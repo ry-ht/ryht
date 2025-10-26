@@ -2,7 +2,6 @@
 //!
 //! Comprehensive monitoring for agents, workflows, and system performance.
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};

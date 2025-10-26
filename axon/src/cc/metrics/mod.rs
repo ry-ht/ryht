@@ -317,11 +317,10 @@ impl SessionMetrics {
         }
 
         // Track errors
-        if let Some(is_error) = value.get("is_error").and_then(|v| v.as_bool()) {
-            if is_error {
+        if let Some(is_error) = value.get("is_error").and_then(|v| v.as_bool())
+            && is_error {
                 self.error_count += 1;
             }
-        }
 
         self.message_count += 1;
         self.calculate_cost();

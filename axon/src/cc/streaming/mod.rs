@@ -50,31 +50,31 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 /// Maximum buffer size for output buffering (in lines)
 const MAX_BUFFER_SIZE: usize = 10000;
 
-/// A JSONL (JSON Lines) reader that parses messages line by line.
-///
-/// This reader takes any `AsyncBufRead` source and provides a `Stream` of
-/// parsed `Message` objects. Each line should contain a valid JSON object
-/// representing a Claude CLI message.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use crate::cc::streaming::JsonlReader;
-/// use tokio::io::BufReader;
-/// use futures::StreamExt;
-///
-/// # async fn example() -> cc_sdk::Result<()> {
-/// let reader = BufReader::new(tokio::io::stdin());
-/// let mut jsonl_reader = JsonlReader::new(reader);
-///
-/// while let Some(result) = jsonl_reader.next().await {
-///     let message = result?;
-///     println!("Message: {:?}", message);
-/// }
-/// # Ok(())
-/// # }
-/// ```
 pin_project! {
+    /// A JSONL (JSON Lines) reader that parses messages line by line.
+    ///
+    /// This reader takes any `AsyncBufRead` source and provides a `Stream` of
+    /// parsed `Message` objects. Each line should contain a valid JSON object
+    /// representing a Claude CLI message.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use crate::cc::streaming::JsonlReader;
+    /// use tokio::io::BufReader;
+    /// use futures::StreamExt;
+    ///
+    /// # async fn example() -> cc_sdk::Result<()> {
+    /// let reader = BufReader::new(tokio::io::stdin());
+    /// let mut jsonl_reader = JsonlReader::new(reader);
+    ///
+    /// while let Some(result) = jsonl_reader.next().await {
+    ///     let message = result?;
+    ///     println!("Message: {:?}", message);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub struct JsonlReader<R: AsyncBufRead> {
         #[pin]
         reader: BufReader<R>,
@@ -387,11 +387,10 @@ pub fn extract_session_id(message: &Message) -> Option<SessionId> {
     match message {
         Message::System { subtype, data } if subtype == "init" => {
             // Try to extract session_id from data
-            if let Some(session_id_val) = data.get("session_id") {
-                if let Some(session_id_str) = session_id_val.as_str() {
+            if let Some(session_id_val) = data.get("session_id")
+                && let Some(session_id_str) = session_id_val.as_str() {
                     return Some(SessionId::new(session_id_str));
                 }
-            }
             None
         }
         Message::Result { session_id, .. } => {
@@ -425,28 +424,21 @@ pub fn extract_session_id_from_line(line: &str) -> Result<Option<SessionId>> {
     })?;
 
     // Check for session_id field
-    if let Some(session_id_val) = value.get("session_id") {
-        if let Some(session_id_str) = session_id_val.as_str() {
+    if let Some(session_id_val) = value.get("session_id")
+        && let Some(session_id_str) = session_id_val.as_str() {
             return Ok(Some(SessionId::new(session_id_str)));
         }
-    }
 
     // Check for init message with session_id in data
-    if let Some(msg_type) = value.get("type").and_then(|v| v.as_str()) {
-        if msg_type == "system" {
-            if let Some(subtype) = value.get("subtype").and_then(|v| v.as_str()) {
-                if subtype == "init" {
-                    if let Some(data) = value.get("data") {
-                        if let Some(session_id_val) = data.get("session_id") {
-                            if let Some(session_id_str) = session_id_val.as_str() {
+    if let Some(msg_type) = value.get("type").and_then(|v| v.as_str())
+        && msg_type == "system"
+            && let Some(subtype) = value.get("subtype").and_then(|v| v.as_str())
+                && subtype == "init"
+                    && let Some(data) = value.get("data")
+                        && let Some(session_id_val) = data.get("session_id")
+                            && let Some(session_id_str) = session_id_val.as_str() {
                                 return Ok(Some(SessionId::new(session_id_str)));
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     Ok(None)
 }

@@ -1,6 +1,7 @@
 //! Network topology management
 
-use super::*;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use crate::agents::AgentId;
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,12 @@ pub enum Topology {
 
 pub struct TopologyManager {
     current: Arc<RwLock<Topology>>,
+}
+
+impl Default for TopologyManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TopologyManager {

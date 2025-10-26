@@ -224,7 +224,7 @@ impl ContextOptimizer {
         Ok(result)
     }
 
-    /// Optimize with simple target (backward compatibility)
+    /// Optimize with simple semantic strategy
     pub async fn optimize_simple(
         &self,
         content: String,
@@ -358,11 +358,10 @@ impl ContextOptimizer {
         }
 
         // Check Cortex patterns if available
-        if let Some(cortex) = &self.cortex {
-            if let Ok(patterns) = cortex.get_patterns().await {
+        if let Some(cortex) = &self.cortex
+            && let Ok(patterns) = cortex.get_patterns().await {
                 importance = self.adjust_importance_from_patterns(line, importance, patterns);
             }
-        }
 
         importance
     }
@@ -378,11 +377,10 @@ impl ContextOptimizer {
 
         for pattern in patterns {
             // Check if pattern context matches
-            if let Some(keywords) = pattern.context.split_whitespace().next() {
-                if line.contains(keywords) && pattern.success_rate > 0.8 {
+            if let Some(keywords) = pattern.context.split_whitespace().next()
+                && line.contains(keywords) && pattern.success_rate > 0.8 {
                     importance = (importance + 0.1).min(1.0);
                 }
-            }
         }
 
         importance

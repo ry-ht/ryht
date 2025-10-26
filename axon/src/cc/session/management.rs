@@ -436,10 +436,10 @@ fn export_as_text(messages: &[Message]) -> String {
                 for block in &asst_msg.content {
                     if let crate::cc::messages::ContentBlock::Text(text_content) = block {
                         output.push_str(&text_content.text);
-                        output.push_str("\n");
+                        output.push('\n');
                     }
                 }
-                output.push_str("\n");
+                output.push('\n');
             }
             _ => {}
         }

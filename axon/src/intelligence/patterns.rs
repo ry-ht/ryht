@@ -75,6 +75,7 @@ trait PatternDetector: Send + Sync {
 }
 
 /// Context for pattern analysis
+#[derive(Default)]
 pub struct AnalysisContext {
     pub file_path: Option<String>,
     pub language: Option<String>,
@@ -155,8 +156,8 @@ impl PatternAnalyzer {
         for pattern in patterns {
             match pattern.pattern_type.as_str() {
                 "performance_bottleneck" => {
-                    if let Some(tasks) = pattern.metadata.get("affected_tasks") {
-                        if let Some(tasks_array) = tasks.as_array() {
+                    if let Some(tasks) = pattern.metadata.get("affected_tasks")
+                        && let Some(tasks_array) = tasks.as_array() {
                             let task_ids: Vec<String> = tasks_array
                                 .iter()
                                 .filter_map(|v| v.as_str())
@@ -167,11 +168,10 @@ impl PatternAnalyzer {
                                 optimizations.push(Optimization::Parallelize { tasks: task_ids });
                             }
                         }
-                    }
                 }
                 "code_duplication" => {
-                    if let Some(duplicates) = pattern.metadata.get("duplicate_blocks") {
-                        if let Some(dup_array) = duplicates.as_array() {
+                    if let Some(duplicates) = pattern.metadata.get("duplicate_blocks")
+                        && let Some(dup_array) = duplicates.as_array() {
                             let dup_tasks: Vec<String> = dup_array
                                 .iter()
                                 .filter_map(|v| v.as_str())
@@ -182,23 +182,21 @@ impl PatternAnalyzer {
                                 optimizations.push(Optimization::Deduplicate { tasks: dup_tasks });
                             }
                         }
-                    }
                 }
                 "optimization_opportunity" => {
                     if let Some(opt_type) = pattern.metadata.get("optimization_type") {
                         match opt_type.as_str() {
                             Some("cache") => {
-                                if let Some(task) = pattern.metadata.get("cacheable_task") {
-                                    if let Some(task_id) = task.as_str() {
+                                if let Some(task) = pattern.metadata.get("cacheable_task")
+                                    && let Some(task_id) = task.as_str() {
                                         optimizations.push(Optimization::Cache {
                                             task: task_id.to_string(),
                                         });
                                     }
-                                }
                             }
                             Some("batch") => {
-                                if let Some(ops) = pattern.metadata.get("batchable_operations") {
-                                    if let Some(ops_array) = ops.as_array() {
+                                if let Some(ops) = pattern.metadata.get("batchable_operations")
+                                    && let Some(ops_array) = ops.as_array() {
                                         let operations: Vec<String> = ops_array
                                             .iter()
                                             .filter_map(|v| v.as_str())
@@ -209,7 +207,6 @@ impl PatternAnalyzer {
                                             optimizations.push(Optimization::Batch { operations });
                                         }
                                     }
-                                }
                             }
                             _ => {}
                         }
@@ -229,16 +226,6 @@ impl Default for PatternAnalyzer {
     }
 }
 
-impl Default for AnalysisContext {
-    fn default() -> Self {
-        Self {
-            file_path: None,
-            language: None,
-            project_type: None,
-            history: Vec::new(),
-        }
-    }
-}
 
 // Pattern Detector Implementations
 
@@ -281,7 +268,7 @@ impl PatternDetector for CodeDuplicationDetector {
         }
 
         // Create patterns for detected duplicates
-        for (block, locations) in duplicate_blocks.iter() {
+        for (_block, locations) in duplicate_blocks.iter() {
             if locations.len() >= 2 {
                 let mut metadata = HashMap::new();
                 metadata.insert(

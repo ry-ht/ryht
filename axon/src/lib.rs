@@ -14,6 +14,7 @@
 //! - `intelligence` - Intelligence layer for agent reasoning
 //! - `monitoring` - Performance monitoring and optimization
 //! - `quality` - Quality assurance and validation
+//! - `runtime` - Agent runtime system for process management and execution
 
 #![warn(missing_docs)]
 
@@ -29,10 +30,16 @@ pub mod intelligence;
 pub mod monitoring;
 pub mod quality;
 
+// Agent runtime system
+pub mod runtime;
+
 // Cortex integration
 pub mod cortex_bridge;
 
-// Re-export key types from cc module for backward compatibility
+// CLI commands and server
+pub mod commands;
+
+// Re-export key types from cc module
 pub use cc::{
     ClaudeClient,
     Error,

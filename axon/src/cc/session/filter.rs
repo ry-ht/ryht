@@ -203,16 +203,14 @@ pub async fn search_sessions(filter: SessionFilter) -> Result<Vec<SessionInfo>> 
         for session in sessions {
             // Apply date range filter
             if let Some((start, end)) = filter.date_range {
-                if let Some(start) = start {
-                    if session.created_at < start {
+                if let Some(start) = start
+                    && session.created_at < start {
                         continue;
                     }
-                }
-                if let Some(end) = end {
-                    if session.created_at > end {
+                if let Some(end) = end
+                    && session.created_at > end {
                         continue;
                     }
-                }
             }
 
             // For content search and message count, we need to load the session
@@ -225,23 +223,20 @@ pub async fn search_sessions(filter: SessionFilter) -> Result<Vec<SessionInfo>> 
                 let count = messages.len();
 
                 // Apply message count filters
-                if let Some(min) = filter.min_messages {
-                    if count < min {
+                if let Some(min) = filter.min_messages
+                    && count < min {
                         continue;
                     }
-                }
-                if let Some(max) = filter.max_messages {
-                    if count > max {
+                if let Some(max) = filter.max_messages
+                    && count > max {
                         continue;
                     }
-                }
 
                 // Apply content search
-                if let Some(ref search_text) = filter.content_search {
-                    if !matches_content_search(&messages, search_text, &filter) {
+                if let Some(ref search_text) = filter.content_search
+                    && !matches_content_search(&messages, search_text, &filter) {
                         continue;
                     }
-                }
 
                 // Get file metadata for last modified time
                 let last_modified = if let Some(ref file_path) = session.file_path {

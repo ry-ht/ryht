@@ -254,6 +254,7 @@ pub struct ToolUsage {
 
 /// Token usage statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TokenUsage {
     /// Input tokens
     pub input: u64,
@@ -263,15 +264,6 @@ pub struct TokenUsage {
     pub total: u64,
 }
 
-impl Default for TokenUsage {
-    fn default() -> Self {
-        Self {
-            input: 0,
-            output: 0,
-            total: 0,
-        }
-    }
-}
 
 /// Episode data structure - matches Cortex database schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -551,7 +543,7 @@ pub struct TaskMetadata {
 // ============================================================================
 
 /// Lock type for coordination
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LockType {
     /// Shared lock (multiple readers)
     Shared,

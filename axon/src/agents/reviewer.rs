@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::cortex_bridge::{
-    AgentId as CortexAgentId, CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern,
+    CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern,
     SearchFilters, SessionId, TokenUsage, UnitFilters, WorkspaceId,
 };
 use std::sync::Arc;
@@ -546,7 +546,7 @@ impl ReviewerAgent {
     /// 4. Unsafe operations
     pub async fn check_security(
         &self,
-        workspace_id: &WorkspaceId,
+        _workspace_id: &WorkspaceId,
         session_id: &SessionId,
         file_path: &str,
     ) -> Result<SecurityAnalysisResult> {
@@ -818,8 +818,8 @@ impl ReviewerAgent {
             0.0
         } else {
             // Assume some coverage based on number of tests
-            let coverage = (tests.len() as f32 * 0.15).min(1.0);
-            coverage
+            
+            (tests.len() as f32 * 0.15).min(1.0)
         }
     }
 

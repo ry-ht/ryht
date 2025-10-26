@@ -23,10 +23,7 @@
 //! - `OptimizerAgent` - Performance and cost optimization
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 // Re-export submodules
 pub mod types;

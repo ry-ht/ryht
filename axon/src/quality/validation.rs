@@ -2,7 +2,6 @@
 
 use super::*;
 use serde_json::Value;
-use regex::Regex;
 use std::collections::HashSet;
 
 pub struct Validator {
@@ -267,15 +266,14 @@ impl SchemaValidator for DevelopmentTaskValidator {
             suggestions.push("Consider specifying the programming language".to_string());
         }
 
-        if let Some(complexity) = data.get("complexity") {
-            if let Some(comp_str) = complexity.as_str() {
+        if let Some(complexity) = data.get("complexity")
+            && let Some(comp_str) = complexity.as_str() {
                 let valid_complexities = ["simple", "moderate", "complex"];
                 if !valid_complexities.contains(&comp_str) {
                     warnings.push(format!("Unknown complexity level: {}", comp_str));
                     suggestions.push(format!("Valid complexity levels: {:?}", valid_complexities));
                 }
             }
-        }
 
         SchemaValidationResult {
             errors,
@@ -298,14 +296,12 @@ impl SchemaValidator for TestingTaskValidator {
             warnings.push("No 'test_type' specified (unit, integration, e2e)".to_string());
         }
 
-        if let Some(coverage) = data.get("target_coverage") {
-            if let Some(cov_num) = coverage.as_f64() {
-                if cov_num < 0.0 || cov_num > 100.0 {
+        if let Some(coverage) = data.get("target_coverage")
+            && let Some(cov_num) = coverage.as_f64()
+                && (!(0.0..=100.0).contains(&cov_num)) {
                     errors.push(format!("Invalid coverage target: {}", cov_num));
                     suggestions.push("Coverage should be between 0 and 100".to_string());
                 }
-            }
-        }
 
         if data.get("test_framework").is_none() {
             suggestions.push("Consider specifying a test framework".to_string());

@@ -170,7 +170,7 @@ impl ModelRouter {
         Ok(selection)
     }
 
-    /// Select model for a specific task type (backward compatibility)
+    /// Select model for a specific task type
     pub async fn select_model_for_task(
         &self,
         task_type: &str,
@@ -291,8 +291,8 @@ impl ModelRouter {
 
         for pattern in patterns {
             // Look for patterns about model selection
-            if let Some(model_info) = pattern.transformation.get("recommended_model") {
-                if let Some(model_str) = model_info.as_str() {
+            if let Some(model_info) = pattern.transformation.get("recommended_model")
+                && let Some(model_str) = model_info.as_str() {
                     let parts: Vec<&str> = model_str.split(':').collect();
                     let (provider, model_id) = if parts.len() == 2 {
                         (parts[0].to_string(), parts[1].to_string())
@@ -322,7 +322,6 @@ impl ModelRouter {
                         last_updated: chrono::Utc::now(),
                     });
                 }
-            }
         }
 
         metrics
@@ -593,11 +592,10 @@ impl ModelRouter {
     /// Check if model meets context requirements
     fn meets_requirements(&self, model: &ModelMetrics, context: &SelectionContext) -> bool {
         // Check deadline constraint
-        if let Some(deadline) = context.deadline_ms {
-            if model.avg_latency_ms > deadline {
+        if let Some(deadline) = context.deadline_ms
+            && model.avg_latency_ms > deadline {
                 return false;
             }
-        }
 
         // Filter by complexity (simple tasks don't need expensive models)
         match context.expected_complexity {
@@ -631,11 +629,10 @@ impl ModelRouter {
     /// Get cached selection if still valid
     async fn get_cached_selection(&self, key: &str) -> Option<ModelSelection> {
         let cache = self.cache.read().await;
-        if let Some((selection, timestamp)) = cache.get(key) {
-            if timestamp.elapsed() < self.cache_ttl {
+        if let Some((selection, timestamp)) = cache.get(key)
+            && timestamp.elapsed() < self.cache_ttl {
                 return Some(selection.clone());
             }
-        }
         None
     }
 
@@ -654,8 +651,8 @@ impl ModelRouter {
         let now = Instant::now();
 
         for (metric_key, metric) in cache.iter() {
-            if metric_key.starts_with(key) {
-                if now.duration_since(
+            if metric_key.starts_with(key)
+                && now.duration_since(
                     Instant::now()
                         - Duration::from_secs(
                             (chrono::Utc::now() - metric.last_updated).num_seconds() as u64,
@@ -664,7 +661,6 @@ impl ModelRouter {
                 {
                     result.push(metric.clone());
                 }
-            }
         }
 
         if result.is_empty() {

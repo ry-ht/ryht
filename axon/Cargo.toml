@@ -2,7 +2,7 @@
 name = "axon"
 version = "0.4.0"
 edition = "2024"
-authors = ["ZhangHanDong", "LuxQuant"]
+authors = ["LuxQuant"]
 license = "MIT"
 description = "Multi-Agent System Framework with Claude Code SDK integration"
 repository = "https://github.com/ry-ht/ryht"
@@ -10,6 +10,10 @@ readme = "README.md"
 keywords = ["multi-agent", "agents", "orchestration", "claude", "ai"]
 categories = ["api-bindings", "asynchronous", "development-tools", "concurrency"]
 exclude = ["examples/", "tests/", "doc/", "README_*.md", "*.sh", "*.py"]
+
+[[bin]]
+name = "axon"
+path = "src/main.rs"
 
 [features]
 default = []
@@ -50,7 +54,33 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 urlencoding = "2.1"
 
 # Token counting for context optimization
-tiktoken-rs = "0.6"
+tiktoken-rs = "0.7.0"
+
+# CLI dependencies
+clap = { workspace = true }
+console = "0.16.1"
+indicatif = "0.18.1"
+dialoguer = "0.12.0"
+comfy-table = "7.2.1"
+
+# Configuration
+toml = { workspace = true }
+serde_yaml = "0.9"
+
+# CLI utilities
+lazy_static = "1.5.0"
+
+# HTTP/API Server dependencies
+axum = { workspace = true, features = ["ws"] }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace"] }
+
+# Logging
+tracing-subscriber = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30.1", features = ["signal"] }
+libc = "0.2.177"
 
 [dev-dependencies]
 tokio-test = "0.4"

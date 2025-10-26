@@ -9,7 +9,6 @@
 //! - Integration with CortexBridge for optimization patterns
 
 use super::*;
-use std::sync::Arc;
 use std::time::Duration;
 
 /// Optimizer agent for performance and cost optimization
@@ -611,11 +610,8 @@ impl OptimizerAgent {
         }
 
         // Add strategy based on optimization type
-        match target.optimization_type {
-            OptimizationType::Cost => {
-                strategies.push(OptimizationStrategy::ResourcePooling);
-            }
-            _ => {}
+        if let OptimizationType::Cost = target.optimization_type {
+            strategies.push(OptimizationStrategy::ResourcePooling);
         }
 
         Ok(strategies)

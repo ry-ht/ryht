@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 use tokio::time::{timeout, Duration};
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
@@ -39,6 +39,12 @@ pub trait ConsensusStrategy: Send + Sync {
 pub struct ConsensusProtocol {
     strategies: HashMap<String, Box<dyn ConsensusStrategy>>,
     vote_collector: Arc<VoteCollector>,
+}
+
+impl Default for ConsensusProtocol {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConsensusProtocol {
@@ -111,15 +117,14 @@ impl ConsensusProtocol {
             let result = strategy.evaluate_votes(current_votes.clone())?;
 
             // Check if harmony is achieved
-            if let ConsensusResult::Harmonious { harmony_level, .. } = &result {
-                if *harmony_level >= 0.85 {
+            if let ConsensusResult::Harmonious { harmony_level, .. } = &result
+                && *harmony_level >= 0.85 {
                     return Ok(ConsensusResult::Harmonious {
                         harmony_level: *harmony_level,
                         rounds: round,
                         votes: current_votes,
                     });
                 }
-            }
 
             // If not harmonious and we have more rounds, collect revised votes
             if round < max_rounds {
@@ -231,17 +236,17 @@ impl VoteCollector {
         // Simulate agent decision-making
         // In a real implementation, this would communicate with actual agents
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
-        let decision = if rng.gen_bool(0.7) {
+        let decision = if rng.random_bool(0.7) {
             Decision::Accept
-        } else if rng.gen_bool(0.5) {
+        } else if rng.random_bool(0.5) {
             Decision::Reject
         } else {
             Decision::Abstain
         };
 
-        let confidence = rng.gen_range(0.5..1.0);
+        let confidence = rng.random_range(0.5..1.0);
 
         Some(Vote {
             voter,
@@ -262,7 +267,7 @@ impl VoteCollector {
     ) -> Option<Vote> {
         // Simulate agent revising their vote based on others' opinions
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Calculate group tendency
         let accept_ratio = previous_votes
@@ -271,15 +276,15 @@ impl VoteCollector {
             .count() as f32 / previous_votes.len().max(1) as f32;
 
         // Agents tend to move towards consensus in revision
-        let decision = if accept_ratio > 0.6 && rng.gen_bool(0.8) {
+        let decision = if accept_ratio > 0.6 && rng.random_bool(0.8) {
             Decision::Accept
-        } else if accept_ratio < 0.4 && rng.gen_bool(0.8) {
+        } else if accept_ratio < 0.4 && rng.random_bool(0.8) {
             Decision::Reject
         } else {
             Decision::Abstain
         };
 
-        let confidence = rng.gen_range(0.6..1.0); // Higher confidence after discussion
+        let confidence = rng.random_range(0.6..1.0); // Higher confidence after discussion
 
         Some(Vote {
             voter,

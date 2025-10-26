@@ -115,13 +115,18 @@ impl MessageCoordinator {
         session_id: SessionId,
         workspace_id: WorkspaceId,
     ) -> Result<String> {
+        use crate::cortex_bridge::AgentId as CortexAgentId;
+
         info!("Agent {} requesting {} lock on {}", agent_id,
-              if matches!(lock_type, LockType::Read) { "read" } else { "write" },
+              if matches!(lock_type, LockType::Shared) { "shared" } else { "exclusive" },
               entity_id);
+
+        // Convert AgentId to CortexAgentId
+        let cortex_agent_id = CortexAgentId::from(agent_id.to_string());
 
         // Acquire lock through Cortex
         let lock_id = self.cortex
-            .acquire_lock(&entity_id, lock_type, &agent_id, &session_id)
+            .acquire_lock(&entity_id, lock_type, &cortex_agent_id, &session_id)
             .await
             .map_err(|e| CoordinationError::Other(e.into()))?;
 
@@ -129,7 +134,7 @@ impl MessageCoordinator {
         self.active_locks
             .write()
             .await
-            .insert(entity_id.clone(), (agent_id.clone(), lock_id.clone()));
+            .insert(entity_id.clone(), (agent_id.clone(), lock_id.to_string()));
 
         // Broadcast lock acquisition event
         let envelope = MessageEnvelope {
@@ -146,7 +151,7 @@ impl MessageCoordinator {
                 severity: EventSeverity::Info,
                 data: serde_json::json!({
                     "entity_id": entity_id,
-                    "lock_id": lock_id,
+                    "lock_id": lock_id.to_string(),
                     "lock_type": format!("{:?}", lock_type),
                 }),
             },
@@ -160,7 +165,7 @@ impl MessageCoordinator {
 
         let _ = self.bus.publish(envelope).await;
 
-        Ok(lock_id)
+        Ok(lock_id.to_string())
     }
 
     /// Release a coordinated lock
@@ -172,10 +177,15 @@ impl MessageCoordinator {
         session_id: SessionId,
         workspace_id: WorkspaceId,
     ) -> Result<()> {
+        use crate::cortex_bridge::LockId;
+
         info!("Agent {} releasing lock {} on {}", agent_id, lock_id, entity_id);
 
+        // Convert String to LockId
+        let cortex_lock_id = LockId::from(lock_id.clone());
+
         // Release lock through Cortex
-        self.cortex.release_lock(&lock_id)
+        self.cortex.release_lock(&cortex_lock_id)
             .await
             .map_err(|e| CoordinationError::Other(e.into()))?;
 
@@ -244,7 +254,7 @@ impl MessageCoordinator {
     ) -> Result<WorkflowExecution> {
         info!("Starting workflow {} with {} tasks", workflow_id, tasks.len());
 
-        let mut execution = WorkflowExecution {
+        let execution = WorkflowExecution {
             workflow_id: workflow_id.clone(),
             status: WorkflowStatus::Running,
             tasks: tasks.clone(),
@@ -294,7 +304,7 @@ impl MessageCoordinator {
         workflow_id: String,
         task_id: String,
         status: TaskStatus,
-        result: Option<serde_json::Value>,
+        _result: Option<serde_json::Value>,
     ) -> Result<()> {
         debug!("Updating workflow {} task {} to {:?}", workflow_id, task_id, status);
 
@@ -319,6 +329,8 @@ impl MessageCoordinator {
         session_id: SessionId,
         workspace_id: WorkspaceId,
     ) -> Result<()> {
+        use crate::cortex_bridge::EpisodeId;
+
         info!("Agent {} sharing episode {} with {} agents",
               source_agent, episode_id, target_agents.len());
 
@@ -333,7 +345,7 @@ impl MessageCoordinator {
                 session_id: session_id.clone(),
                 workspace_id: workspace_id.clone(),
                 payload: Message::KnowledgeShare {
-                    episode_id: episode_id.clone(),
+                    episode_id: EpisodeId::from(episode_id.clone()),
                     summary: summary.clone(),
                     insights: insights.clone(),
                 },
@@ -362,6 +374,8 @@ impl MessageCoordinator {
         session_id: SessionId,
         workspace_id: WorkspaceId,
     ) -> Result<usize> {
+        use crate::cortex_bridge::EpisodeId;
+
         info!("Broadcasting episode {} to topic {}", episode_id, topic);
 
         let envelope = MessageEnvelope {
@@ -374,7 +388,7 @@ impl MessageCoordinator {
             session_id,
             workspace_id,
             payload: Message::KnowledgeShare {
-                episode_id,
+                episode_id: EpisodeId::from(episode_id),
                 summary,
                 insights,
             },

@@ -2,8 +2,7 @@
 
 use super::*;
 use crate::agents::{
-    Agent, AgentType, AgentId, Capability, CapabilityMatcher, AgentInstance,
-    lifecycle::{Idle, Assigned, Working, Completed, Failed as AgentFailed},
+    Agent, AgentType, AgentId, Capability, CapabilityMatcher,
     developer::DeveloperAgent,
     reviewer::ReviewerAgent,
     tester::TesterAgent,
@@ -15,6 +14,12 @@ use tokio::time::{timeout, Duration as TokioDuration};
 pub struct WorkflowExecutor {
     agent_pool: Arc<RwLock<AgentPool>>,
     capability_matcher: Arc<RwLock<CapabilityMatcher>>,
+}
+
+impl Default for WorkflowExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WorkflowExecutor {
@@ -128,7 +133,7 @@ impl WorkflowExecutor {
     ) -> bool {
         if let Some(deps) = dependencies.get(task_id) {
             for dep in deps {
-                if !completed_tasks.get(dep).map_or(false, |r| r.success) {
+                if !completed_tasks.get(dep).is_some_and(|r| r.success) {
                     return false;
                 }
             }

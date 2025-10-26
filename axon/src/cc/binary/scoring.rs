@@ -232,14 +232,13 @@ fn calculate_bonus(
     let mut bonus = 0;
 
     // Bonus for having both version and being from a reliable source
-    if installation.version.is_some() {
-        if matches!(
+    if installation.version.is_some()
+        && matches!(
             installation.source.as_str(),
             "which" | "where" | "homebrew" | "system"
         ) {
             bonus += 5;
         }
-    }
 
     // Bonus for NVM active installation (it's what user is currently using)
     if installation.source == "nvm-active" {

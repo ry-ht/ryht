@@ -134,7 +134,7 @@ pub struct ProcessHandle {
     /// Child process handle (wrapped for thread-safe access)
     pub child: Arc<Mutex<Option<Child>>>,
 
-    /// Optional rich process information (None for legacy processes)
+    /// Rich process information
     pub info: Option<ProcessInfo>,
 }
 
@@ -517,10 +517,12 @@ impl ProcessRegistry {
         Ok(id)
     }
 
-    /// Register a new process (legacy method for backward compatibility).
+    /// Register a new process.
     ///
     /// Adds a process to the registry and returns a handle for accessing it.
     /// If a process with the same session ID already exists, it will be replaced.
+    ///
+    /// For processes that need rich metadata, use `register_process` instead.
     ///
     /// # Arguments
     ///
@@ -530,25 +532,6 @@ impl ProcessRegistry {
     /// # Returns
     ///
     /// Returns a `ProcessHandle` that can be used to interact with the process.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use crate::cc::process::ProcessRegistry;
-    /// use crate::cc::core::SessionId;
-    /// use tokio::process::Command;
-    ///
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let registry = ProcessRegistry::new();
-    /// let session_id = SessionId::generate();
-    /// let child = Command::new("claude").spawn()?;
-    ///
-    /// let handle = registry.register(session_id, child)?;
-    /// println!("Registered process with PID: {}", handle.pid);
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn register(&self, session_id: SessionId, child: Child) -> Result<ProcessHandle> {
         let pid = child.id().ok_or_else(|| {
             crate::Error::protocol("Failed to get process ID from child")
@@ -1113,12 +1096,9 @@ impl ProcessRegistry {
                 // Wait a bit for kill to take effect
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
-                match child.try_wait() {
-                    Ok(Some(_)) => {
-                        *child_guard = None;
-                        return Ok(());
-                    }
-                    _ => {}
+                if let Ok(Some(_)) = child.try_wait() {
+                    *child_guard = None;
+                    return Ok(());
                 }
             } else {
                 return Ok(());
@@ -1245,13 +1225,10 @@ impl ProcessRegistry {
 
         for session_id in session_ids {
             if let Some(handle) = self.get(&session_id) {
-                match handle.is_running().await {
-                    Ok(false) => {
-                        // Process has finished
-                        self.unregister(&session_id);
-                        cleanup_count += 1;
-                    }
-                    _ => {}
+                if let Ok(false) = handle.is_running().await {
+                    // Process has finished
+                    self.unregister(&session_id);
+                    cleanup_count += 1;
                 }
             }
         }
@@ -1680,29 +1657,6 @@ mod tests {
         assert_eq!(id3, 3);
     }
 
-    #[tokio::test]
-    async fn test_backward_compatibility() {
-        let registry = ProcessRegistry::new();
-        let session_id = SessionId::new("legacy-session");
-
-        // Use old register method
-        let child = tokio::process::Command::new("echo")
-            .arg("hello")
-            .spawn()
-            .expect("Failed to spawn");
-
-        let handle = registry.register(session_id.clone(), child)
-            .expect("Failed to register");
-
-        // Should work with legacy API
-        assert_eq!(handle.session_id, session_id);
-        assert!(handle.info.is_none()); // No metadata for legacy registration
-
-        // Should still appear in list_active
-        let active = registry.list_active();
-        assert_eq!(active.len(), 1);
-        assert!(active.contains(&session_id));
-    }
 
     #[tokio::test]
     async fn test_process_handle_with_info() {
@@ -1765,14 +1719,6 @@ mod tests {
     async fn test_mixed_process_types() {
         let registry = ProcessRegistry::new();
 
-        // Register legacy process
-        let legacy_id = SessionId::new("legacy");
-        let child = tokio::process::Command::new("echo")
-            .arg("test")
-            .spawn()
-            .expect("Failed to spawn");
-        registry.register(legacy_id.clone(), child).expect("Failed to register");
-
         // Register agent process
         let agent_id = SessionId::new("agent");
         let child = tokio::process::Command::new("echo")
@@ -1799,9 +1745,9 @@ mod tests {
             "claude-3-5-sonnet-20241022".to_string(),
         ).await.expect("Failed to register");
 
-        // All should appear in list_active
+        // Both should appear in list_active
         let active = registry.list_active();
-        assert_eq!(active.len(), 3);
+        assert_eq!(active.len(), 2);
 
         // Only agent should appear in get_running_agent_processes
         let agents = registry.get_running_agent_processes();

@@ -163,7 +163,7 @@ impl ClaudeSettings {
         for (hook_type, configs) in other.hooks {
             self.hooks
                 .entry(hook_type)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .extend(configs);
         }
 
@@ -191,7 +191,7 @@ impl ClaudeSettings {
         let hook_type = hook_type.into();
         self.hooks
             .entry(hook_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(config);
     }
 

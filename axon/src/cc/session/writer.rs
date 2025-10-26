@@ -40,6 +40,7 @@ use super::cache;
 
 /// Options for creating a new session.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct CreateSessionOptions {
     /// Initial message to write to the session
     pub initial_message: Option<Message>,
@@ -49,15 +50,6 @@ pub struct CreateSessionOptions {
     pub overwrite: bool,
 }
 
-impl Default for CreateSessionOptions {
-    fn default() -> Self {
-        Self {
-            initial_message: None,
-            created_at: None,
-            overwrite: false,
-        }
-    }
-}
 
 /// Create a new session for a project.
 ///

@@ -160,7 +160,7 @@ impl CortexClient {
     pub async fn health_check(&self) -> Result<HealthStatus> {
         let response = self
             .client
-            .get(&format!("{}/health", self.base_url))
+            .get(format!("{}/health", self.base_url))
             .send()
             .await
             .map_err(|e| CortexError::CortexUnavailable(e.to_string()))?;
