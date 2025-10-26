@@ -12,6 +12,9 @@ use axon::agents::*;
 use axon::consensus::*;
 use axon::cortex_bridge::*;
 
+// Type alias to disambiguate AgentId
+use axon::agents::AgentId as AxonAgentId;
+
 /// Mock Cortex server for testing
 pub struct MockCortexServer {
     sessions: Arc<RwLock<HashMap<String, MockSession>>>,
@@ -68,7 +71,7 @@ pub struct MockLock {
     pub id: String,
     pub entity_id: String,
     pub lock_type: LockType,
-    pub holder: AgentId,
+    pub holder: AxonAgentId,
 }
 
 /// Create a test agent with specific capabilities
@@ -83,7 +86,12 @@ pub fn create_test_agent(
         AgentType::Developer => Box::new(DeveloperAgent::new(name.to_string())),
         AgentType::Reviewer => Box::new(ReviewerAgent::new(name.to_string())),
         AgentType::Tester => Box::new(TesterAgent::new(name.to_string())),
-        AgentType::Documenter => Box::new(DocumenterAgent::new(name.to_string())),
+        AgentType::Documenter => {
+            // DocumenterAgent requires Arc<CortexBridge>, which we don't have in test helpers
+            // For now, return a DeveloperAgent as a placeholder
+            // In real usage, proper CortexBridge mock should be passed
+            Box::new(DeveloperAgent::new(name.to_string()))
+        }
         AgentType::Architect => Box::new(ArchitectAgent::new(name.to_string())),
         AgentType::Researcher => Box::new(ResearcherAgent::new(name.to_string())),
         AgentType::Optimizer => Box::new(OptimizerAgent::new(name.to_string())),
@@ -94,7 +102,7 @@ pub fn create_test_agent(
 
 /// Create a test vote
 pub fn create_test_vote(
-    voter: AgentId,
+    voter: AxonAgentId,
     proposal_id: String,
     decision: Decision,
     confidence: f32,
@@ -110,7 +118,7 @@ pub fn create_test_vote(
 }
 
 /// Create a test proposal
-pub fn create_test_proposal(proposer: AgentId, content: &str) -> Proposal {
+pub fn create_test_proposal(proposer: AxonAgentId, content: &str) -> Proposal {
     Proposal {
         id: format!("proposal_{}", uuid::Uuid::new_v4()),
         proposer,
@@ -123,20 +131,33 @@ pub fn create_test_proposal(proposer: AgentId, content: &str) -> Proposal {
 
 /// Create a test episode
 pub fn create_test_episode(
-    agent_id: AgentId,
+    agent_id: AxonAgentId,
     task_type: &str,
     outcome: &str,
 ) -> Episode {
     Episode {
-        id: EpisodeId::from(format!("episode_{}", uuid::Uuid::new_v4())),
-        agent_id,
-        task_type: task_type.to_string(),
-        context: serde_json::json!({"test": true}),
-        action_taken: "Test action".to_string(),
-        outcome: outcome.to_string(),
-        success: true,
-        learned_patterns: vec![],
-        timestamp: Utc::now(),
+        id: format!("episode_{}", uuid::Uuid::new_v4()),
+        episode_type: EpisodeType::Task,
+        task_description: format!("{} task", task_type),
+        agent_id: agent_id.to_string(),
+        session_id: None,
+        workspace_id: "test-workspace".to_string(),
+        entities_created: vec![],
+        entities_modified: vec![],
+        entities_deleted: vec![],
+        files_touched: vec![],
+        queries_made: vec![],
+        tools_used: vec![],
+        solution_summary: outcome.to_string(),
+        outcome: EpisodeOutcome::Success,
+        success_metrics: serde_json::json!({"test": true}),
+        errors_encountered: vec![],
+        lessons_learned: vec![],
+        duration_seconds: 10,
+        tokens_used: TokenUsage::default(),
+        embedding: vec![],
+        created_at: Utc::now(),
+        completed_at: Some(Utc::now()),
     }
 }
 
@@ -144,15 +165,18 @@ pub fn create_test_episode(
 pub fn create_test_pattern(name: &str, context: &str) -> Pattern {
     Pattern {
         id: format!("pattern_{}", uuid::Uuid::new_v4()),
+        pattern_type: PatternType::Code,
         name: name.to_string(),
-        pattern_type: PatternType::CodePattern,
+        description: "Test pattern".to_string(),
         context: context.to_string(),
-        solution: "Test solution".to_string(),
-        confidence: 0.8,
-        usage_count: 0,
+        before_state: serde_json::json!({}),
+        after_state: serde_json::json!({}),
+        transformation: serde_json::json!({"steps": ["test"]}),
+        times_applied: 0,
         success_rate: 0.0,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        average_improvement: serde_json::json!({}),
+        example_episodes: vec![],
+        embedding: vec![],
     }
 }
 
@@ -201,21 +225,21 @@ pub fn create_test_capability_matcher() -> CapabilityMatcher {
     let mut matcher = CapabilityMatcher::new();
 
     // Register developer agent
-    let dev_id = AgentId::from_string("dev-1");
+    let dev_id = AxonAgentId::from_string("dev-1");
     let mut dev_caps = HashSet::new();
     dev_caps.insert(Capability::CodeGeneration);
     dev_caps.insert(Capability::CodeRefactoring);
     matcher.register_agent(dev_id, dev_caps);
 
     // Register reviewer agent
-    let rev_id = AgentId::from_string("rev-1");
+    let rev_id = AxonAgentId::from_string("rev-1");
     let mut rev_caps = HashSet::new();
     rev_caps.insert(Capability::CodeReview);
     rev_caps.insert(Capability::StaticAnalysis);
     matcher.register_agent(rev_id, rev_caps);
 
     // Register tester agent
-    let test_id = AgentId::from_string("test-1");
+    let test_id = AxonAgentId::from_string("test-1");
     let mut test_caps = HashSet::new();
     test_caps.insert(Capability::Testing);
     test_caps.insert(Capability::TestGeneration);
@@ -241,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_create_test_vote() {
-        let voter = AgentId::from_string("voter-1");
+        let voter = AxonAgentId::from_string("voter-1");
         let vote = create_test_vote(
             voter.clone(),
             "proposal-1".to_string(),

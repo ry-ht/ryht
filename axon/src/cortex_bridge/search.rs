@@ -47,6 +47,7 @@ pub struct GraphQueryRequest {
 pub struct GraphQueryResponse {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
+    pub results: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
