@@ -288,17 +288,9 @@ fn test_import_options_default() {
 // Workspace Tests
 // ============================================================================
 
-#[test]
-fn test_workspace_type() {
-    assert_eq!(WorkspaceType::Code, WorkspaceType::Code);
-    assert_ne!(WorkspaceType::Code, WorkspaceType::Documentation);
-}
-
-#[test]
-fn test_source_type() {
-    assert_eq!(SourceType::Local, SourceType::Local);
-    assert_ne!(SourceType::Local, SourceType::Fork);
-}
+// WorkspaceType and SourceType enums have been removed in the redesigned workspace model.
+// Workspace types can now be stored in metadata if needed for backward compatibility.
+// Source types are now represented by the SyncSourceType enum with specific variants.
 
 // ============================================================================
 // Change Tracking Tests
@@ -313,7 +305,7 @@ fn test_change_type() {
 #[test]
 fn test_sync_status() {
     assert_eq!(SyncStatus::Modified, SyncStatus::Modified);
-    assert_ne!(SyncStatus::Modified, SyncStatus::Synchronized);
+    assert_ne!(SyncStatus::Modified, SyncStatus::Synced);
 }
 
 // ============================================================================

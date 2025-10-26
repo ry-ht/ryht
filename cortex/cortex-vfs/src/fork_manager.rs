@@ -49,13 +49,16 @@ impl ForkManager {
         );
 
         // Create fork workspace
+        let mut fork_metadata = source.metadata.clone();
+        fork_metadata.insert("is_fork".to_string(), serde_json::Value::Bool(true));
+        fork_metadata.insert("source_workspace_id".to_string(), serde_json::Value::String(source_workspace_id.to_string()));
+
         let fork = Workspace {
             id: Uuid::new_v4(),
             name: fork_name,
-            workspace_type: source.workspace_type,
-            source_type: SourceType::Fork,
             namespace: fork_namespace.clone(),
-            source_path: None,
+            sync_sources: vec![], // Fork doesn't inherit sync sources initially
+            metadata: fork_metadata,
             read_only: false, // Forks are editable
             parent_workspace: Some(*source_workspace_id),
             fork_metadata: Some(ForkMetadata {
@@ -64,6 +67,7 @@ impl ForkManager {
                 fork_point: chrono::Utc::now(),
                 fork_commit: None,
             }),
+            dependencies: source.dependencies.clone(), // Inherit dependencies from source
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

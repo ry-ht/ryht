@@ -93,10 +93,10 @@ async fn list_workspaces(
         .map(|ws| WorkspaceResponse {
             id: ws.id,
             name: ws.name,
-            workspace_type: ws.workspace_type,
-            source_type: ws.source_type,
+            workspace_type: ws.workspace_type(),
+            source_type: ws.source_type(),
             namespace: ws.namespace,
-            source_path: ws.source_path,
+            source_path: ws.source_path(),
             read_only: ws.read_only,
             created_at: ws.created_at,
             updated_at: ws.updated_at,
@@ -154,10 +154,10 @@ async fn get_workspace(
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type,
-        source_type: workspace.source_type,
+        workspace_type: workspace.workspace_type(),
+        source_type: workspace.source_type(),
         namespace: workspace.namespace,
-        source_path: workspace.source_path,
+        source_path: workspace.source_path(),
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -193,9 +193,11 @@ async fn create_workspace(
     // Convert API request to service request
     let service_request = crate::services::workspace::CreateWorkspaceRequest {
         name: payload.name.clone(),
-        workspace_type: payload.workspace_type.clone(),
+        workspace_type: Some(payload.workspace_type.clone()),
         source_path: payload.source_path.clone(),
+        sync_sources: None,
         read_only: Some(false),
+        metadata: None,
     };
 
     // Use workspace service to create workspace
@@ -211,10 +213,10 @@ async fn create_workspace(
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type,
-        source_type: workspace.source_type,
+        workspace_type: workspace.workspace_type(),
+        source_type: workspace.source_type(),
         namespace: workspace.namespace,
-        source_path: workspace.source_path,
+        source_path: workspace.source_path(),
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -311,10 +313,10 @@ async fn update_workspace(
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type,
-        source_type: workspace.source_type,
+        workspace_type: workspace.workspace_type(),
+        source_type: workspace.source_type(),
         namespace: workspace.namespace,
-        source_path: workspace.source_path,
+        source_path: workspace.source_path(),
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -351,7 +353,7 @@ async fn sync_workspace(
         .ok_or_else(|| ApiError::NotFound(format!("Workspace {} not found", workspace_id)))?;
 
     // Check if workspace has a source path
-    let source_path_str = workspace.source_path.ok_or_else(||
+    let source_path_str = workspace.source_path().ok_or_else(||
         ApiError::BadRequest("Workspace has no source path to sync from".to_string())
     )?;
 

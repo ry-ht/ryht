@@ -26,8 +26,8 @@ use cortex_storage::ConnectionManager;
 use regex;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,
-    MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, WorkspaceType, SourceType,
-    ForkManager, MergeStrategy,
+    MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, SyncSource, SyncSourceType,
+    SyncSourceStatus, ForkManager, MergeStrategy,
 };
 use cortex_memory::SemanticMemorySystem;
 use mcp_sdk::prelude::*;
@@ -146,17 +146,17 @@ impl WorkspaceContext {
     }
 
     /// Detect project type from directory
-    fn detect_project_type(&self, path: &Path) -> WorkspaceType {
+    fn detect_project_type(&self, path: &Path) -> String {
         if path.join("Cargo.toml").exists() {
-            WorkspaceType::Code
+            "code".to_string()
         } else if path.join("package.json").exists() {
-            WorkspaceType::Code
+            "code".to_string()
         } else if path.join("go.mod").exists() {
-            WorkspaceType::Code
+            "code".to_string()
         } else if path.join("pyproject.toml").exists() {
-            WorkspaceType::Code
+            "code".to_string()
         } else {
-            WorkspaceType::Mixed
+            "mixed".to_string()
         }
     }
 }
@@ -256,29 +256,47 @@ impl Tool for WorkspaceCreateTool {
         let mut warnings = Vec::new();
         let workspace_type = self.ctx.detect_project_type(&root_path);
 
-        // Create workspace
-        let workspace = Workspace {
+        // Create workspace with new model
+        let workspace_id = Uuid::new_v4();
+
+        // Create sync source for local path
+        let sync_source = SyncSource {
             id: Uuid::new_v4(),
+            source: SyncSourceType::LocalPath {
+                path: root_path.clone(),
+                watch: false,
+            },
+            read_only: false,
+            priority: 0,
+            last_sync: None,
+            status: SyncSourceStatus::Unsynced,
+            metadata: HashMap::new(),
+        };
+
+        // Store workspace_type in metadata for backward compatibility
+        let mut metadata = HashMap::new();
+        metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type));
+
+        let workspace = Workspace {
+            id: workspace_id,
             name: input.name.clone(),
-            workspace_type,
-            source_type: SourceType::Local,
             namespace: "main".to_string(),
-            source_path: Some(root_path.clone()),
+            sync_sources: vec![sync_source],
+            metadata,
             read_only: false,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: Vec::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-
-        let workspace_id = workspace.id;
 
         // Store workspace in database using workspace service
         use crate::services::workspace::CreateWorkspaceRequest;
         let create_request = CreateWorkspaceRequest {
             name: workspace.name.clone(),
-            workspace_type: format!("{:?}", workspace_type).to_lowercase(),
-            source_path: workspace.source_path.as_ref().map(|p| p.display().to_string()),
+            workspace_type: workspace_type.clone(),
+            source_path: Some(root_path.display().to_string()),
             read_only: Some(workspace.read_only),
         };
         self.ctx.workspace_service.create_workspace(create_request).await
@@ -349,7 +367,7 @@ impl Tool for WorkspaceCreateTool {
 
         Ok(ToolResult::success_json(serde_json::json!(CreateOutput {
             workspace_id: workspace_id.to_string(),
-            workspace_type: format!("{:?}", workspace_type).to_lowercase(),
+            workspace_type,
             files_imported,
             directories_imported,
             units_extracted,
@@ -445,9 +463,9 @@ impl Tool for WorkspaceGetTool {
         let output = GetOutput {
             workspace_id: workspace.id.clone(),
             name: workspace.name,
-            workspace_type: workspace.workspace_type,
-            source_type: workspace.source_type,
-            root_path: workspace.source_path,
+            workspace_type: workspace.workspace_type(),
+            source_type: workspace.source_type(),
+            root_path: workspace.source_path(),
             read_only: workspace.read_only,
             created_at: workspace.created_at.to_rfc3339(),
             updated_at: workspace.updated_at.to_rfc3339(),
@@ -543,8 +561,8 @@ impl Tool for WorkspaceListTool {
             summaries.push(WorkspaceSummary {
                 workspace_id: workspace.id.clone(),
                 name: workspace.name.clone(),
-                workspace_type: workspace.workspace_type.clone(),
-                source_type: workspace.source_type.clone(),
+                workspace_type: workspace.workspace_type(),
+                source_type: workspace.source_type(),
                 file_count: stats.total_files,
                 created_at: workspace.created_at.to_rfc3339(),
             });
@@ -696,33 +714,10 @@ impl Tool for WorkspaceSyncTool {
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
-        let workspace = Workspace {
-            id: Uuid::parse_str(&workspace_details.id).unwrap(),
-            name: workspace_details.name,
-            workspace_type: match workspace_details.workspace_type.as_str() {
-                "code" => WorkspaceType::Code,
-                "documentation" => WorkspaceType::Documentation,
-                "mixed" => WorkspaceType::Mixed,
-                "external" => WorkspaceType::External,
-                _ => WorkspaceType::Mixed,
-            },
-            source_type: match workspace_details.source_type.as_str() {
-                "local" => SourceType::Local,
-                "externalreadonly" => SourceType::ExternalReadOnly,
-                "fork" => SourceType::Fork,
-                _ => SourceType::Local,
-            },
-            namespace: workspace_details.namespace,
-            source_path: workspace_details.source_path.map(PathBuf::from),
-            read_only: workspace_details.read_only,
-            parent_workspace: None,
-            fork_metadata: None,
-            created_at: workspace_details.created_at,
-            updated_at: workspace_details.updated_at,
-        };
-
-        let root_path = workspace.source_path
-            .ok_or_else(|| ToolError::ExecutionFailed("Workspace has no source path".to_string()))?;
+        // Get the first LocalPath sync source
+        let root_path = workspace_details.source_path()
+            .map(PathBuf::from)
+            .ok_or_else(|| ToolError::ExecutionFailed("Workspace has no source path for syncing".to_string()))?;
 
         if !root_path.exists() {
             return Err(ToolError::ExecutionFailed(format!(

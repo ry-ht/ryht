@@ -286,7 +286,9 @@ pub enum CompressionType {
     Lz4,
 }
 
-/// Workspace representing a project or external content.
+/// Workspace representing a universal container for any type of content.
+/// A workspace can be synchronized with multiple sources (local paths, GitHub repos, SSH remotes, etc.)
+/// and can contain any type of content (code, documentation, research, data).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     /// Unique identifier
@@ -295,17 +297,14 @@ pub struct Workspace {
     /// Human-readable name
     pub name: String,
 
-    /// Type of workspace
-    pub workspace_type: WorkspaceType,
-
-    /// Source type (local, external, fork)
-    pub source_type: SourceType,
-
     /// Database namespace for isolation
     pub namespace: String,
 
-    /// Original physical path (if applicable)
-    pub source_path: Option<PathBuf>,
+    /// Multiple synchronization sources (can be empty for purely virtual workspaces)
+    pub sync_sources: Vec<SyncSource>,
+
+    /// Extended metadata (can store workspace_type here if needed for heuristics)
+    pub metadata: HashMap<String, Value>,
 
     /// Whether workspace is read-only
     pub read_only: bool,
@@ -316,6 +315,9 @@ pub struct Workspace {
     /// Fork metadata (if this is a fork)
     pub fork_metadata: Option<ForkMetadata>,
 
+    /// Cross-workspace dependencies and links
+    pub dependencies: Vec<WorkspaceDependency>,
+
     /// Creation timestamp
     pub created_at: DateTime<Utc>,
 
@@ -323,60 +325,132 @@ pub struct Workspace {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Type of workspace.
+/// Synchronization source for a workspace.
+/// A workspace can have multiple sync sources of different types.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncSource {
+    /// Unique identifier for this sync source
+    pub id: Uuid,
+
+    /// Type and configuration of the sync source
+    pub source: SyncSourceType,
+
+    /// Whether this source is read-only
+    pub read_only: bool,
+
+    /// Priority for conflict resolution (higher = preferred)
+    pub priority: i32,
+
+    /// Last sync timestamp
+    pub last_sync: Option<DateTime<Utc>>,
+
+    /// Sync status
+    pub status: SyncSourceStatus,
+
+    /// Metadata specific to this source
+    pub metadata: HashMap<String, Value>,
+}
+
+/// Types of synchronization sources.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SyncSourceType {
+    /// Local filesystem path
+    LocalPath {
+        path: PathBuf,
+        watch: bool, // Enable filesystem watching
+    },
+
+    /// GitHub repository
+    GitHub {
+        owner: String,
+        repo: String,
+        branch: Option<String>,
+        path: Option<String>, // Subdirectory in the repo
+        token: Option<String>, // For private repos
+    },
+
+    /// SSH remote
+    SshRemote {
+        host: String,
+        port: Option<u16>,
+        user: String,
+        path: String,
+        key_path: Option<PathBuf>,
+    },
+
+    /// S3 bucket
+    S3 {
+        bucket: String,
+        region: String,
+        prefix: Option<String>,
+        endpoint: Option<String>, // For S3-compatible services
+    },
+
+    /// Another Cortex workspace
+    CrossWorkspace {
+        workspace_id: Uuid,
+        namespace: String,
+    },
+
+    /// HTTP/HTTPS URL (for downloading archives, etc.)
+    HttpUrl {
+        url: String,
+        auth_header: Option<String>,
+    },
+
+    /// Git repository (generic)
+    Git {
+        url: String,
+        branch: Option<String>,
+        path: Option<String>,
+    },
+}
+
+/// Status of a sync source.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkspaceType {
-    /// Source code project
+pub enum SyncSourceStatus {
+    /// Never synced
+    Unsynced,
+    /// Currently syncing
+    Syncing,
+    /// Synced successfully
+    Synced,
+    /// Sync failed
+    Failed,
+    /// Source is offline/unreachable
+    Offline,
+}
+
+/// Cross-workspace dependency.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceDependency {
+    /// ID of the dependent workspace
+    pub workspace_id: Uuid,
+
+    /// Type of dependency
+    pub dependency_type: DependencyType,
+
+    /// Optional version constraint
+    pub version: Option<String>,
+
+    /// Metadata about the dependency
+    pub metadata: HashMap<String, Value>,
+}
+
+/// Type of dependency between workspaces.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyType {
+    /// Uses code from another workspace
     Code,
-    /// Documentation project
+    /// References documentation from another workspace
     Documentation,
-    /// Mixed content
-    Mixed,
-    /// External library/dependency
-    External,
-}
-
-impl WorkspaceType {
-    /// Parse workspace type from a string.
-    ///
-    /// # Arguments
-    /// * `type_str` - String representation of workspace type (case-insensitive)
-    ///
-    /// # Returns
-    /// * `Ok(WorkspaceType)` - Parsed workspace type
-    /// * `Err(String)` - Error message if type is invalid
-    ///
-    /// # Examples
-    /// ```
-    /// use cortex_vfs::WorkspaceType;
-    ///
-    /// assert_eq!(WorkspaceType::parse("code").unwrap(), WorkspaceType::Code);
-    /// assert_eq!(WorkspaceType::parse("Code").unwrap(), WorkspaceType::Code);
-    /// assert_eq!(WorkspaceType::parse("DOCUMENTATION").unwrap(), WorkspaceType::Documentation);
-    /// assert!(WorkspaceType::parse("invalid").is_err());
-    /// ```
-    pub fn parse(type_str: &str) -> Result<Self, String> {
-        match type_str.to_lowercase().as_str() {
-            "code" => Ok(WorkspaceType::Code),
-            "documentation" => Ok(WorkspaceType::Documentation),
-            "mixed" => Ok(WorkspaceType::Mixed),
-            "external" => Ok(WorkspaceType::External),
-            _ => Err(format!("Invalid workspace type: {}", type_str)),
-        }
-    }
-}
-
-/// Source type for workspace.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SourceType {
-    /// Local development workspace
-    Local,
-    /// External read-only content
-    ExternalReadOnly,
-    /// Fork of another workspace
-    Fork,
+    /// Shares data with another workspace
+    Data,
+    /// Generic dependency
+    Generic,
 }
 
 /// Metadata for forked workspaces.
@@ -706,33 +780,67 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_workspace_type_parse_valid() {
-        assert_eq!(WorkspaceType::parse("code").unwrap(), WorkspaceType::Code);
-        assert_eq!(WorkspaceType::parse("Code").unwrap(), WorkspaceType::Code);
-        assert_eq!(WorkspaceType::parse("CODE").unwrap(), WorkspaceType::Code);
+    fn test_sync_source_type_variants() {
+        // Test local path variant
+        let local = SyncSourceType::LocalPath {
+            path: PathBuf::from("/home/user/project"),
+            watch: true,
+        };
 
-        assert_eq!(WorkspaceType::parse("documentation").unwrap(), WorkspaceType::Documentation);
-        assert_eq!(WorkspaceType::parse("Documentation").unwrap(), WorkspaceType::Documentation);
-        assert_eq!(WorkspaceType::parse("DOCUMENTATION").unwrap(), WorkspaceType::Documentation);
-
-        assert_eq!(WorkspaceType::parse("mixed").unwrap(), WorkspaceType::Mixed);
-        assert_eq!(WorkspaceType::parse("Mixed").unwrap(), WorkspaceType::Mixed);
-        assert_eq!(WorkspaceType::parse("MIXED").unwrap(), WorkspaceType::Mixed);
-
-        assert_eq!(WorkspaceType::parse("external").unwrap(), WorkspaceType::External);
-        assert_eq!(WorkspaceType::parse("External").unwrap(), WorkspaceType::External);
-        assert_eq!(WorkspaceType::parse("EXTERNAL").unwrap(), WorkspaceType::External);
+        match local {
+            SyncSourceType::LocalPath { path, watch } => {
+                assert_eq!(path, PathBuf::from("/home/user/project"));
+                assert!(watch);
+            }
+            _ => panic!("Expected LocalPath variant"),
+        }
     }
 
     #[test]
-    fn test_workspace_type_parse_invalid() {
-        assert!(WorkspaceType::parse("invalid").is_err());
-        assert!(WorkspaceType::parse("").is_err());
-        assert!(WorkspaceType::parse("cod").is_err());
-        assert!(WorkspaceType::parse("docs").is_err());
+    fn test_workspace_with_multiple_sources() {
+        let ws = Workspace {
+            id: Uuid::new_v4(),
+            name: "multi-source-project".to_string(),
+            namespace: "ws_test".to_string(),
+            sync_sources: vec![
+                SyncSource {
+                    id: Uuid::new_v4(),
+                    source: SyncSourceType::LocalPath {
+                        path: PathBuf::from("/local/path"),
+                        watch: true,
+                    },
+                    read_only: false,
+                    priority: 10,
+                    last_sync: None,
+                    status: SyncSourceStatus::Unsynced,
+                    metadata: HashMap::new(),
+                },
+                SyncSource {
+                    id: Uuid::new_v4(),
+                    source: SyncSourceType::GitHub {
+                        owner: "user".to_string(),
+                        repo: "repo".to_string(),
+                        branch: Some("main".to_string()),
+                        path: None,
+                        token: None,
+                    },
+                    read_only: true,
+                    priority: 5,
+                    last_sync: None,
+                    status: SyncSourceStatus::Unsynced,
+                    metadata: HashMap::new(),
+                },
+            ],
+            metadata: HashMap::new(),
+            read_only: false,
+            parent_workspace: None,
+            fork_metadata: None,
+            dependencies: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
 
-        let err = WorkspaceType::parse("invalid").unwrap_err();
-        assert!(err.contains("Invalid workspace type"));
-        assert!(err.contains("invalid"));
+        assert_eq!(ws.sync_sources.len(), 2);
+        assert_eq!(ws.name, "multi-source-project");
     }
 }

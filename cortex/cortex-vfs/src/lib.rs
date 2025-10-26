@@ -78,10 +78,11 @@ pub use ingestion::{FileIngestionPipeline, IngestionResult, WorkspaceIngestionRe
 pub mod prelude {
     pub use crate::path::{VirtualPath, VirtualPathError};
     pub use crate::types::{
-        Change, ChangeType, Conflict, FileContent, FileSyncResult, FlushOptions, FlushReport,
-        FlushScope, ForkMetadata, ImportOptions, ImportReport, Language, MergeReport,
-        MergeStrategy, NodeType, SourceType, SyncOptions, SyncReport, SyncStatus, VNode,
-        Workspace, WorkspaceType,
+        Change, ChangeType, Conflict, DependencyType, FileContent, FileSyncResult,
+        FlushOptions, FlushReport, FlushScope, ForkMetadata, ImportOptions, ImportReport,
+        Language, MergeReport, MergeStrategy, NodeType, SyncOptions, SyncReport,
+        SyncSource, SyncSourceStatus, SyncSourceType, SyncStatus, VNode,
+        Workspace, WorkspaceDependency,
     };
     pub use crate::virtual_filesystem::VirtualFileSystem;
     pub use crate::content_cache::{ContentCache, CacheStatistics};

@@ -85,6 +85,27 @@ impl ExternalProjectLoader {
         source_path: &Path,
         options: &ImportOptions,
     ) -> Result<Workspace> {
+        use std::collections::HashMap;
+
+        // Create sync source for the imported project
+        let sync_source = SyncSource {
+            id: Uuid::new_v4(),
+            source: SyncSourceType::LocalPath {
+                path: source_path.to_path_buf(),
+                watch: false, // External imports don't watch by default
+            },
+            read_only: options.read_only && !options.create_fork,
+            priority: 10,
+            last_sync: Some(chrono::Utc::now()),
+            status: SyncSourceStatus::Synced,
+            metadata: HashMap::new(),
+        };
+
+        // Create metadata indicating this was imported as external
+        let mut metadata = HashMap::new();
+        metadata.insert("import_type".to_string(), serde_json::Value::String("external".to_string()));
+        metadata.insert("is_fork".to_string(), serde_json::Value::Bool(options.create_fork));
+
         let workspace = Workspace {
             id: Uuid::new_v4(),
             name: source_path
@@ -92,19 +113,13 @@ impl ExternalProjectLoader {
                 .and_then(|n| n.to_str())
                 .unwrap_or("external")
                 .to_string(),
-            workspace_type: WorkspaceType::External,
-            source_type: if options.create_fork {
-                SourceType::Fork
-            } else if options.read_only {
-                SourceType::ExternalReadOnly
-            } else {
-                SourceType::Local
-            },
             namespace: options.namespace.clone(),
-            source_path: Some(source_path.to_path_buf()),
+            sync_sources: vec![sync_source],
+            metadata,
             read_only: options.read_only && !options.create_fork,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: vec![],
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

@@ -216,46 +216,19 @@ fn test_merge_strategies() {
     }
 }
 
-#[test]
-fn test_workspace_types() {
-    use WorkspaceType::*;
-
-    let types = vec![Code, Documentation, Mixed, External];
-
-    for wt in types {
-        match wt {
-            Code => assert_eq!(wt, Code),
-            Documentation => assert_eq!(wt, Documentation),
-            Mixed => assert_eq!(wt, Mixed),
-            External => assert_eq!(wt, External),
-        }
-    }
-}
-
-#[test]
-fn test_source_types() {
-    use SourceType::*;
-
-    let types = vec![Local, ExternalReadOnly, Fork];
-
-    for st in types {
-        match st {
-            Local => assert_eq!(st, Local),
-            ExternalReadOnly => assert_eq!(st, ExternalReadOnly),
-            Fork => assert_eq!(st, Fork),
-        }
-    }
-}
+// WorkspaceType and SourceType enums have been removed in the redesigned workspace model.
+// Workspace types can now be stored in metadata if needed for backward compatibility.
+// Source types are now represented by the SyncSourceType enum with specific variants.
 
 #[test]
 fn test_sync_status() {
     use SyncStatus::*;
 
-    let statuses = vec![Synchronized, Modified, Created, Deleted, Conflict];
+    let statuses = vec![Synced, Modified, Created, Deleted, Conflict];
 
     for status in statuses {
         match status {
-            Synchronized => assert_eq!(status, Synchronized),
+            Synced => assert_eq!(status, Synced),
             Modified => assert_eq!(status, Modified),
             Created => assert_eq!(status, Created),
             Deleted => assert_eq!(status, Deleted),
@@ -277,7 +250,7 @@ fn test_vnode_status_transitions() {
 
     // Mark as synchronized
     vnode.mark_synchronized();
-    assert_eq!(vnode.status, SyncStatus::Synchronized);
+    assert_eq!(vnode.status, SyncStatus::Synced);
 
     // Mark as modified (should increment version)
     vnode.mark_modified();

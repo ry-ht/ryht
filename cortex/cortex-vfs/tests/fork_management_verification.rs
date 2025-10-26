@@ -11,8 +11,10 @@ use cortex_storage::connection_pool::{
     ConnectionManager, ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy,
 };
 use cortex_vfs::fork_manager::ForkManager;
-use cortex_vfs::types::{MergeStrategy, SourceType, Workspace, WorkspaceType};
+use cortex_vfs::types::{MergeStrategy, SyncSource, SyncSourceType, SyncSourceStatus, Workspace};
 use cortex_vfs::virtual_filesystem::VirtualFileSystem;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -56,18 +58,38 @@ async fn create_test_workspace(
 ) -> Workspace {
     let workspace = Workspace {
         id: Uuid::new_v4(),
-        name,
-        workspace_type: WorkspaceType::Code,
-        source_type: if read_only {
-            SourceType::ExternalReadOnly
-        } else {
-            SourceType::Local
-        },
+        name: name.clone(),
         namespace: format!("workspace_{}", Uuid::new_v4()),
-        source_path: None,
+        sync_sources: vec![
+            SyncSource {
+                id: Uuid::new_v4(),
+                source: if read_only {
+                    SyncSourceType::LocalPath {
+                        path: PathBuf::from(format!("/test/{}", name)),
+                        watch: false,
+                    }
+                } else {
+                    SyncSourceType::LocalPath {
+                        path: PathBuf::from(format!("/test/{}", name)),
+                        watch: false,
+                    }
+                },
+                read_only,
+                priority: 10,
+                last_sync: None,
+                status: SyncSourceStatus::Unsynced,
+                metadata: HashMap::new(),
+            }
+        ],
+        metadata: {
+            let mut m = HashMap::new();
+            m.insert("workspace_type".to_string(), serde_json::Value::String("code".to_string()));
+            m
+        },
         read_only,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -116,10 +138,9 @@ async fn test_fork_creation_from_readonly() {
     println!("    ID: {}", fork.id);
     println!("    Name: {}", fork.name);
     println!("    Read-only: {}", fork.read_only);
-    println!("    Source type: {:?}", fork.source_type);
+    println!("    Sync sources: {}", fork.sync_sources.len());
 
     assert!(!fork.read_only, "Fork should be editable");
-    assert_eq!(fork.source_type, SourceType::Fork);
     assert_eq!(fork.parent_workspace, Some(source_workspace.id));
     assert!(fork.fork_metadata.is_some(), "Fork should have metadata");
 

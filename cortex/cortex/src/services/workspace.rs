@@ -5,8 +5,9 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use cortex_storage::ConnectionManager;
-use cortex_vfs::{VirtualFileSystem, Workspace, WorkspaceType, SourceType};
+use cortex_vfs::{VirtualFileSystem, Workspace, SyncSource, SyncSourceType, SyncSourceStatus};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,25 +31,50 @@ impl WorkspaceService {
     pub async fn create_workspace(&self, request: CreateWorkspaceRequest) -> Result<WorkspaceDetails> {
         info!("Creating workspace: {}", request.name);
 
-        // Parse workspace type
-        let workspace_type = WorkspaceType::parse(&request.workspace_type)
-            .map_err(|e| anyhow::anyhow!(e))?;
-
         // Create workspace entity
         let workspace_id = Uuid::new_v4();
         let namespace = format!("ws_{}", workspace_id.to_string().replace('-', "_"));
         let now = Utc::now();
 
+        // Create sync sources from request
+        let mut sync_sources = if let Some(sources) = request.sync_sources {
+            sources
+        } else {
+            Vec::new()
+        };
+
+        // Add a local path sync source for backward compatibility if source_path is provided
+        if let Some(source_path) = request.source_path {
+            sync_sources.push(SyncSource {
+                id: Uuid::new_v4(),
+                source: SyncSourceType::LocalPath {
+                    path: PathBuf::from(source_path),
+                    watch: false,
+                },
+                read_only: false,
+                priority: 10,
+                last_sync: None,
+                status: SyncSourceStatus::Unsynced,
+                metadata: HashMap::new(),
+            });
+        }
+
+        // Merge metadata from request with workspace_type if provided
+        let mut metadata = request.metadata.unwrap_or_default();
+        if let Some(workspace_type) = request.workspace_type {
+            metadata.insert("workspace_type".to_string(), Value::String(workspace_type));
+        }
+
         let workspace = Workspace {
             id: workspace_id,
             name: request.name.clone(),
-            workspace_type,
-            source_type: SourceType::Local,
             namespace: namespace.clone(),
-            source_path: request.source_path.map(PathBuf::from),
+            sync_sources,
+            metadata,
             read_only: request.read_only.unwrap_or(false),
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: Vec::new(),
             created_at: now,
             updated_at: now,
         };
@@ -90,8 +116,9 @@ impl WorkspaceService {
 
         let mut query = String::from("SELECT * FROM workspace WHERE 1=1");
 
+        // Can still filter by workspace_type if stored in metadata
         if let Some(ref workspace_type) = filters.workspace_type {
-            query.push_str(&format!(" AND workspace_type = '{}'", workspace_type));
+            query.push_str(&format!(" AND metadata.workspace_type = '{}'", workspace_type));
         }
 
         query.push_str(" ORDER BY created_at DESC");
@@ -129,9 +156,12 @@ impl WorkspaceService {
             workspace.name = name;
         }
 
+        // Update workspace_type in metadata if provided (for backward compatibility)
         if let Some(workspace_type_str) = request.workspace_type {
-            workspace.workspace_type = WorkspaceType::parse(&workspace_type_str)
-                .map_err(|e| anyhow::anyhow!(e))?;
+            workspace.metadata.insert(
+                "workspace_type".to_string(),
+                Value::String(workspace_type_str)
+            );
         }
 
         if let Some(read_only) = request.read_only {
@@ -179,55 +209,6 @@ impl WorkspaceService {
         Ok(())
     }
 
-    /// Detect project type from path
-    pub fn detect_project_type(path: &std::path::Path) -> WorkspaceType {
-        // Check for various project indicators
-        if path.join("Cargo.toml").exists() {
-            return WorkspaceType::Code;
-        }
-        if path.join("package.json").exists() {
-            return WorkspaceType::Code;
-        }
-        if path.join("pom.xml").exists() || path.join("build.gradle").exists() {
-            return WorkspaceType::Code;
-        }
-        if path.join("pyproject.toml").exists() || path.join("setup.py").exists() {
-            return WorkspaceType::Code;
-        }
-        if path.join("go.mod").exists() {
-            return WorkspaceType::Code;
-        }
-
-        // Check for documentation-heavy projects
-        if path.join("README.md").exists() && path.join("docs").is_dir() {
-            // Count source files vs markdown files
-            let mut src_count = 0;
-            let mut doc_count = 0;
-
-            if let Ok(entries) = std::fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    if let Some(ext) = entry.path().extension() {
-                        match ext.to_str() {
-                            Some("rs") | Some("js") | Some("ts") | Some("py") | Some("java") | Some("go") => {
-                                src_count += 1;
-                            }
-                            Some("md") | Some("rst") | Some("txt") => {
-                                doc_count += 1;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-
-            if doc_count > src_count * 2 {
-                return WorkspaceType::Documentation;
-            }
-        }
-
-        // Default to mixed if we can't determine
-        WorkspaceType::Mixed
-    }
 
     /// Get workspace statistics
     pub async fn get_workspace_stats(&self, workspace_id: &Uuid) -> Result<WorkspaceStats> {
@@ -384,9 +365,11 @@ impl WorkspaceService {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateWorkspaceRequest {
     pub name: String,
-    pub workspace_type: String,
-    pub source_path: Option<String>,
+    pub workspace_type: Option<String>, // Optional, for backward compatibility
+    pub source_path: Option<String>,    // Optional, can create empty workspace
+    pub sync_sources: Option<Vec<SyncSource>>, // Optional, for advanced multi-source setup
     pub read_only: Option<bool>,
+    pub metadata: Option<HashMap<String, Value>>, // Additional metadata
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -406,11 +389,12 @@ pub struct ListWorkspaceFilters {
 pub struct WorkspaceDetails {
     pub id: String,
     pub name: String,
-    pub workspace_type: String,
-    pub source_type: String,
     pub namespace: String,
-    pub source_path: Option<String>,
+    pub sync_sources: Vec<SyncSource>,
+    pub metadata: HashMap<String, Value>,
     pub read_only: bool,
+    pub parent_workspace: Option<String>,
+    pub dependencies: Vec<cortex_vfs::WorkspaceDependency>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -420,14 +404,51 @@ impl WorkspaceDetails {
         Self {
             id: workspace.id.to_string(),
             name: workspace.name,
-            workspace_type: format!("{:?}", workspace.workspace_type).to_lowercase(),
-            source_type: format!("{:?}", workspace.source_type).to_lowercase(),
             namespace: workspace.namespace,
-            source_path: workspace.source_path.map(|p| p.to_string_lossy().to_string()),
+            sync_sources: workspace.sync_sources,
+            metadata: workspace.metadata,
             read_only: workspace.read_only,
+            parent_workspace: workspace.parent_workspace.map(|id| id.to_string()),
+            dependencies: workspace.dependencies,
             created_at: workspace.created_at,
             updated_at: workspace.updated_at,
         }
+    }
+
+    /// Get workspace_type from metadata (for backward compatibility)
+    pub fn workspace_type(&self) -> String {
+        self.metadata
+            .get("workspace_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("mixed")
+            .to_string()
+    }
+
+    /// Get source_type from first sync source (for backward compatibility)
+    pub fn source_type(&self) -> String {
+        if self.sync_sources.is_empty() {
+            return "virtual".to_string();
+        }
+
+        match &self.sync_sources[0].source {
+            SyncSourceType::LocalPath { .. } => "local".to_string(),
+            SyncSourceType::GitHub { .. } => "github".to_string(),
+            SyncSourceType::Git { .. } => "git".to_string(),
+            SyncSourceType::SshRemote { .. } => "ssh".to_string(),
+            SyncSourceType::S3 { .. } => "s3".to_string(),
+            SyncSourceType::CrossWorkspace { .. } => "cross_workspace".to_string(),
+            SyncSourceType::HttpUrl { .. } => "http".to_string(),
+        }
+    }
+
+    /// Get source_path from first LocalPath sync source (for backward compatibility)
+    pub fn source_path(&self) -> Option<String> {
+        for source in &self.sync_sources {
+            if let SyncSourceType::LocalPath { path, .. } = &source.source {
+                return Some(path.display().to_string());
+            }
+        }
+        None
     }
 }
 
@@ -464,11 +485,25 @@ mod tests {
         let details = WorkspaceDetails {
             id: Uuid::new_v4().to_string(),
             name: "test".to_string(),
-            workspace_type: "code".to_string(),
-            source_type: "local".to_string(),
             namespace: "ws_test".to_string(),
-            source_path: Some("/path/to/workspace".to_string()),
+            sync_sources: vec![
+                SyncSource {
+                    id: Uuid::new_v4(),
+                    source: SyncSourceType::LocalPath {
+                        path: PathBuf::from("/path/to/workspace"),
+                        watch: false,
+                    },
+                    read_only: false,
+                    priority: 10,
+                    last_sync: None,
+                    status: SyncSourceStatus::Unsynced,
+                    metadata: HashMap::new(),
+                }
+            ],
+            metadata: HashMap::new(),
             read_only: false,
+            parent_workspace: None,
+            dependencies: vec![],
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
