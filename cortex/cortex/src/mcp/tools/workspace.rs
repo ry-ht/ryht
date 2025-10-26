@@ -1,14 +1,22 @@
 //! Workspace Management Tools
 //!
-//! This module implements the 8 workspace management tools defined in the MCP spec:
-//! - cortex.workspace.create - Import existing project
-//! - cortex.workspace.get - Get workspace info
-//! - cortex.workspace.list - List all workspaces
-//! - cortex.workspace.activate - Set active workspace
-//! - cortex.workspace.sync_from_disk - Sync filesystem changes
-//! - cortex.workspace.export - Export to disk
-//! - cortex.workspace.archive - Archive workspace
-//! - cortex.workspace.delete - Delete workspace
+//! This module implements 12 workspace management tools:
+//!
+//! **Core Operations (8):**
+//! - cortex.workspace.create - Import existing project with auto-parsing
+//! - cortex.workspace.get - Get workspace info and statistics
+//! - cortex.workspace.list - List all workspaces with filtering
+//! - cortex.workspace.activate - Set active workspace context
+//! - cortex.workspace.sync_from_disk - Sync filesystem changes to VFS
+//! - cortex.workspace.export - Export/materialize to disk
+//! - cortex.workspace.archive - Archive workspace (mark read-only)
+//! - cortex.workspace.delete - Permanent deletion with cascade
+//!
+//! **Advanced Operations (4):**
+//! - cortex.workspace.fork - Create editable fork for experimentation
+//! - cortex.workspace.search - Search files/content within workspace
+//! - cortex.workspace.compare - Compare two workspaces and identify differences
+//! - cortex.workspace.merge - Merge workspaces with conflict resolution
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -18,6 +26,7 @@ use cortex_storage::ConnectionManager;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,
     MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, WorkspaceType, SourceType,
+    ForkManager, MergeStrategy,
 };
 use cortex_memory::SemanticMemorySystem;
 use mcp_sdk::prelude::*;
@@ -50,6 +59,7 @@ pub struct WorkspaceContext {
     #[allow(dead_code)]
     semantic_memory: Arc<SemanticMemorySystem>,
     ingestion: Arc<FileIngestionPipeline>,
+    fork_manager: Arc<ForkManager>,
     /// Active workspace ID (shared across all tools)
     active_workspace: Arc<RwLock<Option<Uuid>>>,
     /// Workspace service
@@ -70,6 +80,7 @@ impl WorkspaceContext {
             vfs.clone(),
             semantic_memory.clone(),
         ));
+        let fork_manager = Arc::new(ForkManager::new((*vfs).clone(), storage.clone()));
 
         // Create workspace service
         let workspace_service = Arc::new(WorkspaceService::new(storage.clone(), vfs.clone()));
@@ -82,6 +93,7 @@ impl WorkspaceContext {
             parser,
             semantic_memory,
             ingestion,
+            fork_manager,
             active_workspace: Arc::new(RwLock::new(None)),
             workspace_service,
         })
@@ -1183,6 +1195,537 @@ impl Tool for WorkspaceDeleteTool {
             workspace_id: workspace_id.to_string(),
             status: "deleted".to_string(),
             message: format!("Workspace '{}' and all associated data have been permanently deleted", workspace.name),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.workspace.fork
+// =============================================================================
+
+pub struct WorkspaceForkTool {
+    ctx: WorkspaceContext,
+}
+
+impl WorkspaceForkTool {
+    pub fn new(ctx: WorkspaceContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ForkInput {
+    workspace_id: String,
+    fork_name: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct ForkOutput {
+    fork_workspace_id: String,
+    fork_name: String,
+    source_workspace_id: String,
+    source_name: String,
+    vnodes_copied: usize,
+    fork_point: String,
+}
+
+#[async_trait]
+impl Tool for WorkspaceForkTool {
+    fn name(&self) -> &str {
+        "cortex.workspace.fork"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Creates an editable fork of a workspace for experimentation. Perfect for trying changes without affecting the original workspace.")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(ForkInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: ForkInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = Uuid::parse_str(&input.workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
+
+        info!("Forking workspace: {} as {}", workspace_id, input.fork_name);
+
+        // Get source workspace details
+        let source = self.ctx.workspace_service.get_workspace(&workspace_id).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e))))?
+            .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
+
+        // Create fork using fork manager
+        let fork = self.ctx.fork_manager.create_fork(&workspace_id, input.fork_name.clone()).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create fork: {}", e)))?;
+
+        // Count vnodes in fork
+        let stats = self.ctx.calculate_stats(&fork.id).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to calculate stats: {}", e)))?;
+
+        let output = ForkOutput {
+            fork_workspace_id: fork.id.to_string(),
+            fork_name: fork.name.clone(),
+            source_workspace_id: workspace_id.to_string(),
+            source_name: source.name,
+            vnodes_copied: stats.total_files + stats.total_directories,
+            fork_point: fork.created_at.to_rfc3339(),
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.workspace.search
+// =============================================================================
+
+pub struct WorkspaceSearchTool {
+    ctx: WorkspaceContext,
+}
+
+impl WorkspaceSearchTool {
+    pub fn new(ctx: WorkspaceContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchInput {
+    workspace_id: String,
+    #[serde(default)]
+    pattern: Option<String>,
+    #[serde(default)]
+    content_query: Option<String>,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default = "default_root")]
+    base_path: String,
+    #[serde(default = "default_limit")]
+    max_results: usize,
+    #[serde(default)]
+    case_sensitive: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct SearchOutput {
+    matches: Vec<SearchMatch>,
+    total: usize,
+    truncated: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct SearchMatch {
+    path: String,
+    node_type: String,
+    match_type: String, // "filename", "content", "both"
+    size_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_snippet: Option<String>,
+}
+
+fn default_root() -> String {
+    "/".to_string()
+}
+
+#[async_trait]
+impl Tool for WorkspaceSearchTool {
+    fn name(&self) -> &str {
+        "cortex.workspace.search"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Searches for files and content within a workspace using patterns and queries.")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(SearchInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: SearchInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = Uuid::parse_str(&input.workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
+
+        debug!("Searching workspace {} with pattern: {:?}, content: {:?}",
+            workspace_id, input.pattern, input.content_query);
+
+        let base_path = VirtualPath::new(&input.base_path)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid base path: {}", e)))?;
+
+        // Get all vnodes in base path
+        let vnodes = self.ctx.vfs.list_directory(&workspace_id, &base_path, true).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list directory: {}", e)))?;
+
+        let mut matches = Vec::new();
+        let mut total_found = 0;
+
+        for vnode in vnodes {
+            if !vnode.is_file() {
+                continue;
+            }
+
+            // Filter by language if specified
+            if let Some(ref lang) = input.language {
+                if let Some(ref node_lang) = vnode.language {
+                    if !node_lang.to_lowercase().contains(&lang.to_lowercase()) {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+
+            let mut matched = false;
+            let mut match_type = String::new();
+            let mut content_snippet = None;
+
+            // Pattern matching on filename
+            if let Some(ref pattern) = input.pattern {
+                let file_name = vnode.path.to_string();
+                let matches_pattern = if pattern.contains('*') || pattern.contains('?') {
+                    // Glob pattern matching
+                    glob_match::glob_match(pattern, &file_name)
+                } else {
+                    // Simple substring match
+                    if input.case_sensitive {
+                        file_name.contains(pattern)
+                    } else {
+                        file_name.to_lowercase().contains(&pattern.to_lowercase())
+                    }
+                };
+
+                if matches_pattern {
+                    matched = true;
+                    match_type = "filename".to_string();
+                }
+            }
+
+            // Content search
+            if let Some(ref query) = input.content_query {
+                if let Ok(content) = self.ctx.vfs.read_file(&workspace_id, &vnode.path).await {
+                    let content_str = String::from_utf8_lossy(&content);
+                    let content_matches = if input.case_sensitive {
+                        content_str.contains(query)
+                    } else {
+                        content_str.to_lowercase().contains(&query.to_lowercase())
+                    };
+
+                    if content_matches {
+                        matched = true;
+                        match_type = if match_type.is_empty() {
+                            "content".to_string()
+                        } else {
+                            "both".to_string()
+                        };
+
+                        // Extract snippet
+                        if let Some(pos) = content_str.to_lowercase().find(&query.to_lowercase()) {
+                            let start = pos.saturating_sub(50);
+                            let end = (pos + query.len() + 50).min(content_str.len());
+                            content_snippet = Some(format!("...{}...", &content_str[start..end]));
+                        }
+                    }
+                }
+            }
+
+            // If no pattern or query, match all files
+            if input.pattern.is_none() && input.content_query.is_none() {
+                matched = true;
+                match_type = "all".to_string();
+            }
+
+            if matched {
+                total_found += 1;
+                if matches.len() < input.max_results {
+                    matches.push(SearchMatch {
+                        path: vnode.path.to_string(),
+                        node_type: format!("{:?}", vnode.node_type).to_lowercase(),
+                        match_type,
+                        size_bytes: vnode.size_bytes,
+                        content_snippet,
+                    });
+                }
+            }
+        }
+
+        let output = SearchOutput {
+            total: total_found,
+            truncated: total_found > matches.len(),
+            matches,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.workspace.compare
+// =============================================================================
+
+pub struct WorkspaceCompareTool {
+    ctx: WorkspaceContext,
+}
+
+impl WorkspaceCompareTool {
+    pub fn new(ctx: WorkspaceContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CompareInput {
+    workspace_a_id: String,
+    workspace_b_id: String,
+    #[serde(default)]
+    include_content_diff: bool,
+    #[serde(default = "default_limit")]
+    max_diffs: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct CompareOutput {
+    workspace_a_id: String,
+    workspace_b_id: String,
+    files_only_in_a: Vec<String>,
+    files_only_in_b: Vec<String>,
+    files_modified: Vec<FileDiff>,
+    files_identical: usize,
+    total_differences: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct FileDiff {
+    path: String,
+    size_a: u64,
+    size_b: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_diff: Option<String>,
+}
+
+#[async_trait]
+impl Tool for WorkspaceCompareTool {
+    fn name(&self) -> &str {
+        "cortex.workspace.compare"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Compares two workspaces and identifies differences in files, content, and structure.")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(CompareInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: CompareInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_a = Uuid::parse_str(&input.workspace_a_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace A ID: {}", e)))?;
+        let workspace_b = Uuid::parse_str(&input.workspace_b_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace B ID: {}", e)))?;
+
+        info!("Comparing workspaces: {} vs {}", workspace_a, workspace_b);
+
+        let root = VirtualPath::root();
+
+        // Get all files from both workspaces
+        let vnodes_a = self.ctx.vfs.list_directory(&workspace_a, &root, true).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list workspace A: {}", e)))?;
+        let vnodes_b = self.ctx.vfs.list_directory(&workspace_b, &root, true).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list workspace B: {}", e)))?;
+
+        // Build path maps
+        let mut map_a: HashMap<String, _> = vnodes_a
+            .into_iter()
+            .filter(|v| v.is_file())
+            .map(|v| (v.path.to_string(), v))
+            .collect();
+
+        let mut map_b: HashMap<String, _> = vnodes_b
+            .into_iter()
+            .filter(|v| v.is_file())
+            .map(|v| (v.path.to_string(), v))
+            .collect();
+
+        let mut files_only_in_a = Vec::new();
+        let mut files_only_in_b = Vec::new();
+        let mut files_modified = Vec::new();
+        let mut files_identical = 0;
+
+        // Find files only in A and modified files
+        for (path, vnode_a) in &map_a {
+            if let Some(vnode_b) = map_b.remove(path) {
+                // File exists in both
+                if vnode_a.content_hash != vnode_b.content_hash {
+                    // Content differs
+                    if files_modified.len() < input.max_diffs {
+                        let content_diff = if input.include_content_diff {
+                            Some(format!("Hash A: {}, Hash B: {}", vnode_a.content_hash, vnode_b.content_hash))
+                        } else {
+                            None
+                        };
+
+                        files_modified.push(FileDiff {
+                            path: path.clone(),
+                            size_a: vnode_a.size_bytes,
+                            size_b: vnode_b.size_bytes,
+                            content_diff,
+                        });
+                    }
+                } else {
+                    files_identical += 1;
+                }
+            } else {
+                // File only in A
+                files_only_in_a.push(path.clone());
+            }
+        }
+
+        // Remaining files in B are only in B
+        files_only_in_b = map_b.keys().cloned().collect();
+
+        let total_differences = files_only_in_a.len() + files_only_in_b.len() + files_modified.len();
+
+        let output = CompareOutput {
+            workspace_a_id: workspace_a.to_string(),
+            workspace_b_id: workspace_b.to_string(),
+            files_only_in_a,
+            files_only_in_b,
+            files_modified,
+            files_identical,
+            total_differences,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.workspace.merge
+// =============================================================================
+
+pub struct WorkspaceMergeTool {
+    ctx: WorkspaceContext,
+}
+
+impl WorkspaceMergeTool {
+    pub fn new(ctx: WorkspaceContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct MergeInput {
+    source_workspace_id: String,
+    target_workspace_id: String,
+    #[serde(default = "default_merge_strategy")]
+    strategy: String, // "manual", "auto", "prefer_source", "prefer_target"
+}
+
+fn default_merge_strategy() -> String {
+    "manual".to_string()
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct MergeOutput {
+    changes_applied: usize,
+    conflicts_count: usize,
+    auto_resolved: usize,
+    conflicts: Vec<ConflictInfo>,
+    success: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct ConflictInfo {
+    path: String,
+    conflict_type: String,
+    source_hash: String,
+    target_hash: String,
+}
+
+#[async_trait]
+impl Tool for WorkspaceMergeTool {
+    fn name(&self) -> &str {
+        "cortex.workspace.merge"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Merges changes from one workspace into another with configurable conflict resolution strategies.")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(MergeInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: MergeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let source_id = Uuid::parse_str(&input.source_workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid source workspace ID: {}", e)))?;
+        let target_id = Uuid::parse_str(&input.target_workspace_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid target workspace ID: {}", e)))?;
+
+        info!("Merging workspace {} into {}", source_id, target_id);
+
+        // Parse merge strategy
+        let strategy = match input.strategy.as_str() {
+            "manual" => MergeStrategy::Manual,
+            "auto" => MergeStrategy::AutoMerge,
+            "prefer_source" => MergeStrategy::PreferFork,
+            "prefer_target" => MergeStrategy::PreferTarget,
+            _ => return Err(ToolError::ExecutionFailed(format!(
+                "Invalid merge strategy: {}. Use: manual, auto, prefer_source, prefer_target",
+                input.strategy
+            ))),
+        };
+
+        // Perform merge using fork manager
+        let merge_report = self.ctx.fork_manager.merge_fork(&source_id, &target_id, strategy).await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Merge failed: {}", e)))?;
+
+        // Convert conflicts to output format
+        let conflicts: Vec<ConflictInfo> = merge_report.conflicts.iter().map(|c| {
+            ConflictInfo {
+                path: c.path.clone(),
+                conflict_type: c.conflict_type.clone(),
+                source_hash: "".to_string(), // Would need to add to MergeConflict
+                target_hash: "".to_string(),
+            }
+        }).collect();
+
+        let output = MergeOutput {
+            changes_applied: merge_report.changes_applied,
+            conflicts_count: merge_report.conflicts_count,
+            auto_resolved: merge_report.auto_resolved,
+            conflicts,
+            success: merge_report.errors.is_empty() && merge_report.conflicts_count == 0,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))

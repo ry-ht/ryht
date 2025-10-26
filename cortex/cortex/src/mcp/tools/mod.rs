@@ -1,8 +1,8 @@
 //! Cortex MCP Tools
 //!
-//! This module provides 170+ MCP tools for Cortex, organized by category:
+//! This module provides 175+ MCP tools for Cortex, organized by category:
 //! - Workspace Management (8 tools)
-//! - Virtual Filesystem (12 tools)
+//! - Virtual Filesystem (17 tools)
 //! - Code Navigation (10 tools)
 //! - Code Manipulation (15 tools)
 //! - Semantic Search (8 tools)

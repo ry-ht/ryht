@@ -1510,3 +1510,522 @@ impl Tool for VfsRestoreFileVersionTool {
         ))
     }
 }
+
+// =============================================================================
+// cortex.vfs.get_node_by_id
+// =============================================================================
+
+pub struct VfsGetNodeByIdTool {
+    ctx: VfsContext,
+}
+
+impl VfsGetNodeByIdTool {
+    pub fn new(ctx: VfsContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetNodeByIdInput {
+    node_id: String,
+    #[serde(default = "default_true")]
+    include_content: bool,
+    #[serde(default)]
+    include_metadata: bool,
+}
+
+#[async_trait]
+impl Tool for VfsGetNodeByIdTool {
+    fn name(&self) -> &str {
+        "cortex.vfs.get_node_by_id"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Retrieves a virtual node by its unique ID")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(GetNodeByIdInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: GetNodeByIdInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let node_id = Uuid::parse_str(&input.node_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid node ID: {}", e)))?;
+
+        debug!("Getting node by ID: {}", node_id);
+
+        // Get node metadata by ID
+        let details = self
+            .ctx
+            .vfs_service
+            .get_file_by_id(&node_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get node: {}", e)))?;
+
+        let content = if input.include_content && details.node_type == "file" {
+            match self.ctx.vfs_service.read_file_by_id(&node_id).await {
+                Ok(bytes) => Some(String::from_utf8_lossy(&bytes).to_string()),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let output = GetNodeOutput {
+            node_id: details.id,
+            node_type: details.node_type,
+            name: details.name,
+            path: details.path,
+            content,
+            size_bytes: details.size_bytes,
+            permissions: details
+                .permissions
+                .map(|p| format!("{:o}", p))
+                .unwrap_or_else(|| "644".to_string()),
+            metadata: if input.include_metadata {
+                Some(serde_json::json!({
+                    "created_at": details.created_at,
+                    "updated_at": details.updated_at,
+                    "language": details.language,
+                }))
+            } else {
+                None
+            },
+            version: details.version as u64,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.vfs.exists
+// =============================================================================
+
+pub struct VfsExistsTool {
+    ctx: VfsContext,
+}
+
+impl VfsExistsTool {
+    pub fn new(ctx: VfsContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ExistsInput {
+    path: String,
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct ExistsOutput {
+    path: String,
+    exists: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node_type: Option<String>,
+}
+
+#[async_trait]
+impl Tool for VfsExistsTool {
+    fn name(&self) -> &str {
+        "cortex.vfs.exists"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Checks if a path exists in the virtual filesystem")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(ExistsInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: ExistsInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = input
+            .workspace_id
+            .as_ref()
+            .map(|s| Uuid::parse_str(s))
+            .transpose()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("workspace_id is required".to_string()))?;
+
+        debug!("Checking existence: {} in workspace {}", input.path, workspace_id);
+
+        let exists = self
+            .ctx
+            .vfs_service
+            .exists(&workspace_id, &input.path)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to check existence: {}", e)))?;
+
+        let node_type = if exists {
+            match self.ctx.vfs_service.get_metadata(&workspace_id, &input.path).await {
+                Ok(details) => Some(details.node_type),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let output = ExistsOutput {
+            path: input.path,
+            exists,
+            node_type,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.vfs.get_workspace_stats
+// =============================================================================
+
+pub struct VfsGetWorkspaceStatsTool {
+    ctx: VfsContext,
+}
+
+impl VfsGetWorkspaceStatsTool {
+    pub fn new(ctx: VfsContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetWorkspaceStatsInput {
+    workspace_id: Option<String>,
+    #[serde(default = "default_root")]
+    path: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct GetWorkspaceStatsOutput {
+    workspace_id: String,
+    path: String,
+    total_files: usize,
+    total_directories: usize,
+    total_size_bytes: u64,
+    file_types: std::collections::HashMap<String, usize>,
+    language_distribution: std::collections::HashMap<String, usize>,
+}
+
+#[async_trait]
+impl Tool for VfsGetWorkspaceStatsTool {
+    fn name(&self) -> &str {
+        "cortex.vfs.get_workspace_stats"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Gets statistics about workspace file structure and usage")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(GetWorkspaceStatsInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: GetWorkspaceStatsInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = input
+            .workspace_id
+            .as_ref()
+            .map(|s| Uuid::parse_str(s))
+            .transpose()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("workspace_id is required".to_string()))?;
+
+        info!("Getting workspace stats for: {} in workspace {}", input.path, workspace_id);
+
+        // List all files recursively
+        let all_nodes = self
+            .ctx
+            .vfs_service
+            .list_directory(&workspace_id, &input.path, true)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to list directory: {}", e)))?;
+
+        let mut total_files = 0;
+        let mut total_directories = 0;
+        let mut total_size_bytes = 0u64;
+        let mut file_types = std::collections::HashMap::new();
+        let mut language_distribution = std::collections::HashMap::new();
+
+        for node in all_nodes {
+            match node.node_type.as_str() {
+                "file" => {
+                    total_files += 1;
+                    total_size_bytes += node.size_bytes;
+
+                    // Track file types by extension
+                    if let Some(ext) = node.path.rsplit('.').next() {
+                        if ext.len() < node.path.len() {
+                            *file_types.entry(ext.to_string()).or_insert(0) += 1;
+                        }
+                    }
+
+                    // Track language distribution
+                    if let Some(lang) = node.language {
+                        *language_distribution.entry(lang).or_insert(0) += 1;
+                    }
+                }
+                "directory" => {
+                    total_directories += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let output = GetWorkspaceStatsOutput {
+            workspace_id: workspace_id.to_string(),
+            path: input.path,
+            total_files,
+            total_directories,
+            total_size_bytes,
+            file_types,
+            language_distribution,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.vfs.create_symlink
+// =============================================================================
+
+pub struct VfsCreateSymlinkTool {
+    ctx: VfsContext,
+}
+
+impl VfsCreateSymlinkTool {
+    pub fn new(ctx: VfsContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CreateSymlinkInput {
+    path: String,
+    target: String,
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct CreateSymlinkOutput {
+    node_id: String,
+    path: String,
+    target: String,
+}
+
+#[async_trait]
+impl Tool for VfsCreateSymlinkTool {
+    fn name(&self) -> &str {
+        "cortex.vfs.create_symlink"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Creates a symbolic link in the virtual filesystem")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(CreateSymlinkInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: CreateSymlinkInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = input
+            .workspace_id
+            .as_ref()
+            .map(|s| Uuid::parse_str(s))
+            .transpose()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("workspace_id is required".to_string()))?;
+
+        let path = VirtualPath::new(&input.path)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid path: {}", e)))?;
+
+        info!("Creating symlink: {} -> {} in workspace {}", path, input.target, workspace_id);
+
+        // Create symlink using VFS
+        self.ctx
+            .vfs
+            .create_symlink(&workspace_id, &path, &input.target)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to create symlink: {}", e)))?;
+
+        let node = self
+            .ctx
+            .vfs
+            .metadata(&workspace_id, &path)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get created symlink: {}", e)))?;
+
+        let output = CreateSymlinkOutput {
+            node_id: node.id.to_string(),
+            path: path.to_string(),
+            target: input.target,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.vfs.batch_create_files
+// =============================================================================
+
+pub struct VfsBatchCreateFilesTool {
+    ctx: VfsContext,
+}
+
+impl VfsBatchCreateFilesTool {
+    pub fn new(ctx: VfsContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct BatchCreateFilesInput {
+    workspace_id: Option<String>,
+    files: Vec<FileToCreate>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct FileToCreate {
+    path: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct BatchCreateFilesOutput {
+    created: Vec<FileCreationResult>,
+    total_created: usize,
+    total_failed: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+struct FileCreationResult {
+    path: String,
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[async_trait]
+impl Tool for VfsBatchCreateFilesTool {
+    fn name(&self) -> &str {
+        "cortex.vfs.batch_create_files"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Creates multiple files atomically in a single operation")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(BatchCreateFilesInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: BatchCreateFilesInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let workspace_id = input
+            .workspace_id
+            .as_ref()
+            .map(|s| Uuid::parse_str(s))
+            .transpose()
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?
+            .ok_or_else(|| ToolError::ExecutionFailed("workspace_id is required".to_string()))?;
+
+        info!("Batch creating {} files in workspace {}", input.files.len(), workspace_id);
+
+        let mut results = Vec::new();
+        let mut total_created = 0;
+        let mut total_failed = 0;
+
+        for file_spec in input.files {
+            let path_result = VirtualPath::new(&file_spec.path);
+
+            match path_result {
+                Ok(path) => {
+                    // Write file
+                    let content_bytes = file_spec.content.as_bytes();
+                    match self.ctx.vfs.write_file(&workspace_id, &path, content_bytes).await {
+                        Ok(_) => {
+                            // Get node ID
+                            let node_id = match self.ctx.vfs.metadata(&workspace_id, &path).await {
+                                Ok(node) => Some(node.id.to_string()),
+                                Err(_) => None,
+                            };
+
+                            results.push(FileCreationResult {
+                                path: file_spec.path,
+                                success: true,
+                                node_id,
+                                error: None,
+                            });
+                            total_created += 1;
+                        }
+                        Err(e) => {
+                            results.push(FileCreationResult {
+                                path: file_spec.path,
+                                success: false,
+                                node_id: None,
+                                error: Some(e.to_string()),
+                            });
+                            total_failed += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    results.push(FileCreationResult {
+                        path: file_spec.path,
+                        success: false,
+                        node_id: None,
+                        error: Some(format!("Invalid path: {}", e)),
+                    });
+                    total_failed += 1;
+                }
+            }
+        }
+
+        let output = BatchCreateFilesOutput {
+            created: results,
+            total_created,
+            total_failed,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
