@@ -2,8 +2,17 @@ import axios, { type AxiosInstance } from 'axios';
 
 // ----------------------------------------------------------------------
 
-const AXON_API_URL = import.meta.env.VITE_AXON_API_URL || 'http://127.0.0.1:9090/api/v1';
-const AXON_API_KEY = import.meta.env.VITE_AXON_API_KEY || 'axon-dev-key-change-in-production';
+const AXON_API_URL = import.meta.env.VITE_AXON_API_URL;
+const AXON_API_KEY = import.meta.env.VITE_AXON_API_KEY;
+
+// Validate required environment variables
+if (!AXON_API_URL) {
+  throw new Error('VITE_AXON_API_URL environment variable is required');
+}
+
+if (!AXON_API_KEY) {
+  throw new Error('VITE_AXON_API_KEY environment variable is required');
+}
 
 // ----------------------------------------------------------------------
 
