@@ -90,16 +90,21 @@ async fn list_workspaces(
     // Convert to API response format
     let workspace_responses: Vec<WorkspaceResponse> = workspaces
         .into_iter()
-        .map(|ws| WorkspaceResponse {
-            id: ws.id,
-            name: ws.name,
-            workspace_type: ws.workspace_type(),
-            source_type: ws.source_type(),
-            namespace: ws.namespace,
-            source_path: ws.source_path(),
-            read_only: ws.read_only,
-            created_at: ws.created_at,
-            updated_at: ws.updated_at,
+        .map(|ws| {
+            let workspace_type = ws.workspace_type();
+            let source_type = ws.source_type();
+            let source_path = ws.source_path();
+            WorkspaceResponse {
+                id: ws.id,
+                name: ws.name,
+                workspace_type,
+                source_type,
+                namespace: ws.namespace,
+                source_path,
+                read_only: ws.read_only,
+                created_at: ws.created_at,
+                updated_at: ws.updated_at,
+            }
         })
         .collect();
 
@@ -151,13 +156,16 @@ async fn get_workspace(
         .ok_or_else(|| ApiError::NotFound(format!("Workspace {} not found", workspace_id)))?;
 
     // Convert to API response format
+    let workspace_type = workspace.workspace_type();
+    let source_type = workspace.source_type();
+    let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type(),
-        source_type: workspace.source_type(),
+        workspace_type,
+        source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path(),
+        source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -210,13 +218,16 @@ async fn create_workspace(
     let workspace_id = workspace.id.clone();
 
     // Convert to API response format
+    let workspace_type = workspace.workspace_type();
+    let source_type = workspace.source_type();
+    let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type(),
-        source_type: workspace.source_type(),
+        workspace_type,
+        source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path(),
+        source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -310,13 +321,16 @@ async fn update_workspace(
         })?;
 
     // Convert to API response format
+    let workspace_type = workspace.workspace_type();
+    let source_type = workspace.source_type();
+    let source_path = workspace.source_path();
     let workspace_response = WorkspaceResponse {
         id: workspace.id,
         name: workspace.name,
-        workspace_type: workspace.workspace_type(),
-        source_type: workspace.source_type(),
+        workspace_type,
+        source_type,
         namespace: workspace.namespace,
-        source_path: workspace.source_path(),
+        source_path,
         read_only: workspace.read_only,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,

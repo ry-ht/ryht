@@ -40,13 +40,45 @@ use crate::services::workspace::{WorkspaceDetails, CreateWorkspaceRequest as Ser
 
 impl ToApiResponse<WorkspaceResponse> for WorkspaceDetails {
     fn to_api_response(self) -> WorkspaceResponse {
+        // Extract workspace_type from metadata
+        let workspace_type = self.metadata
+            .get("workspace_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("mixed")
+            .to_string();
+
+        // Extract source_type from first sync source
+        let source_type = if self.sync_sources.is_empty() {
+            "local".to_string()
+        } else {
+            match &self.sync_sources[0].source {
+                cortex_vfs::SyncSourceType::LocalPath { .. } => "local".to_string(),
+                cortex_vfs::SyncSourceType::GitHub { .. } => "github".to_string(),
+                cortex_vfs::SyncSourceType::Git { .. } => "git".to_string(),
+                cortex_vfs::SyncSourceType::SshRemote { .. } => "ssh".to_string(),
+                cortex_vfs::SyncSourceType::S3 { .. } => "s3".to_string(),
+                cortex_vfs::SyncSourceType::CrossWorkspace { .. } => "cross_workspace".to_string(),
+                cortex_vfs::SyncSourceType::HttpUrl { .. } => "http".to_string(),
+            }
+        };
+
+        // Extract source_path from first local sync source
+        let source_path = self.sync_sources.iter()
+            .find_map(|source| {
+                if let cortex_vfs::SyncSourceType::LocalPath { path, .. } = &source.source {
+                    Some(path.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            });
+
         WorkspaceResponse {
             id: self.id,
             name: self.name,
-            workspace_type: self.workspace_type,
-            source_type: self.source_type,
+            workspace_type,
+            source_type,
             namespace: self.namespace,
-            source_path: self.source_path,
+            source_path,
             read_only: self.read_only,
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -58,8 +90,10 @@ impl ToServiceRequest<ServiceCreateRequest> for ApiCreateRequest {
     fn to_service_request(self) -> ServiceCreateRequest {
         ServiceCreateRequest {
             name: self.name,
-            workspace_type: self.workspace_type,
+            workspace_type: Some(self.workspace_type),
             source_path: self.source_path,
+            sync_sources: None, // Will be created from source_path by service layer
+            metadata: None, // Will be created from workspace_type by service layer
             read_only: Some(false), // Default to read-write
         }
     }

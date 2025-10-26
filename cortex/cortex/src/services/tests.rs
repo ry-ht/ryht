@@ -19,7 +19,8 @@ mod tests {
         connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy},
         ConnectionManager,
     };
-    use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType};
+    use cortex_vfs::{VirtualFileSystem, VirtualPath, WorkspaceType, SourceType, SyncSource, SyncSourceType, SyncSourceStatus};
+    use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;
     use uuid::Uuid;
@@ -63,16 +64,20 @@ mod tests {
         let workspace_id = Uuid::new_v4();
         let now = Utc::now();
 
+        // Create metadata with workspace type
+        let mut metadata = HashMap::new();
+        metadata.insert("workspace_type".to_string(), serde_json::json!("code"));
+
         let workspace = cortex_vfs::Workspace {
             id: workspace_id,
             name: "test-workspace".to_string(),
-            workspace_type: WorkspaceType::Code,
-            source_type: SourceType::Local,
             namespace: format!("ws_{}", workspace_id.to_string().replace('-', "_")),
-            source_path: None,
+            sync_sources: vec![], // No sync sources for test workspace
+            metadata,
             read_only: false,
             parent_workspace: None,
             fork_metadata: None,
+            dependencies: vec![],
             created_at: now,
             updated_at: now,
         };

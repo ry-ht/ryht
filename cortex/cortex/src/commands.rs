@@ -10,8 +10,10 @@ use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBManager};
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
-    VirtualPath, VNode, Workspace, WorkspaceType, SourceType,
+    VirtualPath, VNode, Workspace, WorkspaceType, SourceType, SyncSource, SyncSourceType,
+    SyncSourceStatus,
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -87,16 +89,35 @@ pub async fn init_workspace(
 
     // Create workspace in VFS
     let workspace_id = Uuid::new_v4();
+
+    // Create metadata with workspace type
+    let mut metadata = HashMap::new();
+    metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type.as_str()));
+
+    // Create sync source for local path
+    let sync_sources = vec![SyncSource {
+        id: Uuid::new_v4(),
+        source: SyncSourceType::LocalPath {
+            path: workspace_path.clone(),
+            watch: false,
+        },
+        read_only: false,
+        priority: 100,
+        last_sync: Some(chrono::Utc::now()),
+        status: SyncSourceStatus::Synced,
+        metadata: HashMap::new(),
+    }];
+
     let workspace = Workspace {
         id: workspace_id,
         name: name.clone(),
-        workspace_type,
-        source_type: SourceType::Local,
         namespace: format!("workspace_{}", workspace_id),
-        source_path: Some(workspace_path.clone()),
+        sync_sources,
+        metadata,
         read_only: false,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -137,16 +158,21 @@ pub async fn workspace_create(name: String, workspace_type: WorkspaceType) -> Re
     let vfs = VirtualFileSystem::new(storage.clone());
 
     let workspace_id = Uuid::new_v4();
+
+    // Create metadata with workspace type
+    let mut metadata = HashMap::new();
+    metadata.insert("workspace_type".to_string(), serde_json::json!(workspace_type.as_str()));
+
     let workspace = Workspace {
         id: workspace_id,
         name: name.clone(),
-        workspace_type,
-        source_type: SourceType::Local,
         namespace: format!("workspace_{}", workspace_id),
-        source_path: None,
+        sync_sources: vec![], // No sync sources for virtual workspace
+        metadata,
         read_only: false,
         parent_workspace: None,
         fork_metadata: None,
+        dependencies: vec![],
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
@@ -198,9 +224,7 @@ pub async fn workspace_list(format: OutputFormat) -> Result<()> {
 
             let mut table_with_rows = table;
             for ws in &workspaces {
-                let path_str = ws.source_path
-                    .as_ref()
-                    .map(|p| p.display().to_string())
+                let path_str = ws.source_path()
                     .unwrap_or_else(|| "N/A".to_string());
 
                 let created = format_relative_time(&ws.created_at);
@@ -208,7 +232,7 @@ pub async fn workspace_list(format: OutputFormat) -> Result<()> {
                 table_with_rows = table_with_rows.row(vec![
                     ws.id.to_string(),
                     ws.name.clone(),
-                    format!("{:?}", ws.workspace_type),
+                    ws.workspace_type(),
                     created,
                     path_str,
                 ]);
@@ -516,9 +540,9 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
                 output::info("No projects found");
             } else {
                 for ws in &workspaces {
-                    println!("  {} - {} ({:?})", ws.name, ws.id, ws.workspace_type);
-                    if let Some(path) = &ws.source_path {
-                        println!("    Path: {}", path.display());
+                    println!("  {} - {} ({})", ws.name, ws.id, ws.workspace_type());
+                    if let Some(path) = ws.source_path() {
+                        println!("    Path: {}", path);
                     }
                     println!("    Namespace: {}", ws.namespace);
                     println!();

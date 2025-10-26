@@ -264,8 +264,8 @@ pub async fn export_workspace(
         "workspace": {
             "id": workspace.id.to_string(),
             "name": workspace.name,
-            "type": format!("{:?}", workspace.workspace_type),
-            "source": format!("{:?}", workspace.source_type),
+            "type": workspace.workspace_type(),
+            "source": workspace.source_type(),
             "created_at": workspace.created_at.to_rfc3339(),
             "updated_at": workspace.updated_at.to_rfc3339(),
         },

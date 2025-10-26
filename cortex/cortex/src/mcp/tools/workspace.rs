@@ -295,8 +295,10 @@ impl Tool for WorkspaceCreateTool {
         use crate::services::workspace::CreateWorkspaceRequest;
         let create_request = CreateWorkspaceRequest {
             name: workspace.name.clone(),
-            workspace_type: workspace_type.clone(),
+            workspace_type: Some(workspace_type.clone()),
             source_path: Some(root_path.display().to_string()),
+            sync_sources: None, // Service layer will create from source_path
+            metadata: None, // Service layer will create from workspace_type
             read_only: Some(workspace.read_only),
         };
         self.ctx.workspace_service.create_workspace(create_request).await
@@ -460,12 +462,15 @@ impl Tool for WorkspaceGetTool {
             None
         };
 
+        let workspace_type = workspace.workspace_type();
+        let source_type = workspace.source_type();
+        let root_path = workspace.source_path();
         let output = GetOutput {
             workspace_id: workspace.id.clone(),
             name: workspace.name,
-            workspace_type: workspace.workspace_type(),
-            source_type: workspace.source_type(),
-            root_path: workspace.source_path(),
+            workspace_type,
+            source_type,
+            root_path,
             read_only: workspace.read_only,
             created_at: workspace.created_at.to_rfc3339(),
             updated_at: workspace.updated_at.to_rfc3339(),
