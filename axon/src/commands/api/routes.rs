@@ -3,7 +3,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{get, post, delete, put},
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -57,18 +57,18 @@ pub fn create_routes(state: AppState) -> Router {
 
         // Agent management
         .route("/agents", get(list_agents).post(create_agent))
-        .route("/agents/:id", get(get_agent).delete(delete_agent).put(update_agent))
-        .route("/agents/:id/pause", post(pause_agent))
-        .route("/agents/:id/resume", post(resume_agent))
-        .route("/agents/:id/restart", post(restart_agent))
-        .route("/agents/:id/logs", get(get_agent_logs))
+        .route("/agents/{id}", get(get_agent).delete(delete_agent).put(update_agent))
+        .route("/agents/{id}/pause", post(pause_agent))
+        .route("/agents/{id}/resume", post(resume_agent))
+        .route("/agents/{id}/restart", post(restart_agent))
+        .route("/agents/{id}/logs", get(get_agent_logs))
 
         // Workflow management
         .route("/workflows", get(list_workflows).post(run_workflow))
-        .route("/workflows/:id", get(get_workflow).delete(cancel_workflow))
-        .route("/workflows/:id/cancel", post(cancel_workflow))
-        .route("/workflows/:id/pause", post(pause_workflow))
-        .route("/workflows/:id/resume", post(resume_workflow))
+        .route("/workflows/{id}", get(get_workflow).delete(cancel_workflow))
+        .route("/workflows/{id}/cancel", post(cancel_workflow))
+        .route("/workflows/{id}/pause", post(pause_workflow))
+        .route("/workflows/{id}/resume", post(resume_workflow))
 
         // Monitoring and metrics
         .route("/metrics", get(get_metrics))

@@ -50,5 +50,17 @@ export const paths = {
       five: `${ROOTS.DASHBOARD}/group/five`,
       six: `${ROOTS.DASHBOARD}/group/six`,
     },
+    agents: {
+      root: `${ROOTS.DASHBOARD}/agents`,
+      list: `${ROOTS.DASHBOARD}/agents`,
+      create: `${ROOTS.DASHBOARD}/agents/create`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/agents/${id}`,
+    },
+    workflows: {
+      root: `${ROOTS.DASHBOARD}/workflows`,
+      list: `${ROOTS.DASHBOARD}/workflows`,
+      create: `${ROOTS.DASHBOARD}/workflows/create`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/workflows/${id}`,
+    },
   },
 };

@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Request logging middleware
 pub async fn logging(
@@ -103,27 +103,28 @@ pub async fn auth(
     let auth_header = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
 
     if let Some(auth_header) = auth_header {
         // Support both "Bearer" and "ApiKey" formats
         let api_key = if auth_header.starts_with("Bearer ") {
-            auth_header.trim_start_matches("Bearer ")
+            auth_header.trim_start_matches("Bearer ").to_string()
         } else if auth_header.starts_with("ApiKey ") {
-            auth_header.trim_start_matches("ApiKey ")
+            auth_header.trim_start_matches("ApiKey ").to_string()
         } else {
             auth_header
         };
 
-        if let Some(user_id) = validator.validate(api_key).await {
+        if let Some(user_id) = validator.validate(&api_key).await {
             let auth_user = AuthUser {
                 user_id: user_id.clone(),
-                api_key: api_key.to_string(),
+                api_key: api_key.clone(),
             };
 
             debug!(user_id = %user_id, "User authenticated");
 
-            req.extensions_mut().insert(ApiKey(api_key.to_string()));
+            req.extensions_mut().insert(ApiKey(api_key));
             req.extensions_mut().insert(auth_user);
 
             return Ok(next.run(req).await);
@@ -152,23 +153,24 @@ pub async fn optional_auth(
     let auth_header = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
 
     if let Some(auth_header) = auth_header {
         let api_key = if auth_header.starts_with("Bearer ") {
-            auth_header.trim_start_matches("Bearer ")
+            auth_header.trim_start_matches("Bearer ").to_string()
         } else if auth_header.starts_with("ApiKey ") {
-            auth_header.trim_start_matches("ApiKey ")
+            auth_header.trim_start_matches("ApiKey ").to_string()
         } else {
             auth_header
         };
 
-        if let Some(user_id) = validator.validate(api_key).await {
+        if let Some(user_id) = validator.validate(&api_key).await {
             let auth_user = AuthUser {
                 user_id,
-                api_key: api_key.to_string(),
+                api_key: api_key.clone(),
             };
-            req.extensions_mut().insert(ApiKey(api_key.to_string()));
+            req.extensions_mut().insert(ApiKey(api_key));
             req.extensions_mut().insert(auth_user);
         }
     }

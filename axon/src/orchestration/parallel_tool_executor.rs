@@ -18,7 +18,7 @@
 //! - Automatic parallelization based on dependency analysis
 //! - Respects max_concurrent_tools limit
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;

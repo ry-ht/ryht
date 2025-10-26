@@ -858,7 +858,7 @@ impl LeadAgent {
                 reason: format!("Failed to send task to worker: {}", e)
             })?;
 
-        // Create message envelope for the request
+        // Create message envelope for the result request
         let envelope = MessageEnvelope {
             message_id: uuid::Uuid::new_v4().to_string(),
             correlation_id: Some(delegation.task_id.clone()),
@@ -868,10 +868,9 @@ impl LeadAgent {
             topic: None,
             session_id: handle.session_id.clone(),
             workspace_id: handle.workspace_id.clone(),
-            payload: Message::Query {
-                query_id: delegation.task_id.clone(),
-                query_text: format!("get_task_result:{}", delegation.task_id),
-                filters: serde_json::json!({
+            payload: Message::Custom {
+                message_type: "get_task_result".to_string(),
+                data: serde_json::json!({
                     "action": "get_task_result",
                     "task_id": delegation.task_id,
                 }),
@@ -879,6 +878,9 @@ impl LeadAgent {
             timestamp: chrono::Utc::now(),
             expires_at: None,
             priority: 5,
+            attempt_count: 0,
+            max_attempts: 3,
+            metadata: std::collections::HashMap::new(),
         };
 
         // Wait for result via coordinator
@@ -892,7 +894,18 @@ impl LeadAgent {
                 reason: format!("Failed to receive task result: {}", e)
             })?;
 
-        Ok(response)
+        // Extract the result from the response message
+        match response.payload {
+            Message::TaskComplete { result, .. } => Ok(result),
+            Message::TaskFailed { error, .. } => Err(OrchestrationError::ExecutionFailed {
+                reason: format!("Task failed: {}", error)
+            }),
+            Message::Custom { data, .. } => Ok(data),
+            _ => Ok(serde_json::json!({
+                "status": "pending",
+                "task_id": delegation.task_id
+            }))
+        }
     }
 
     // ========================================================================

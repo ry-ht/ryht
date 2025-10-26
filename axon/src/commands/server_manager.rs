@@ -139,13 +139,13 @@ impl ServerManager {
         }
 
         // Redirect stdout/stderr to log file
-        let log_file = tokio::fs::OpenOptions::new()
+        // We need to use std::fs::File for Stdio, not tokio::fs::File
+        let log_file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&config.log_file)
-            .await?;
+            .open(&config.log_file)?;
 
-        cmd.stdout(Stdio::from(log_file.try_clone().await?));
+        cmd.stdout(Stdio::from(log_file.try_clone()?));
         cmd.stderr(Stdio::from(log_file));
         cmd.stdin(Stdio::null());
 
@@ -274,7 +274,7 @@ impl ServerManager {
     fn is_process_alive(&self, pid: u32) -> bool {
         #[cfg(unix)]
         {
-            use nix::sys::signal::{kill, Signal};
+            use nix::sys::signal::kill;
             use nix::unistd::Pid;
 
             // Send signal 0 to check if process exists (null signal doesn't kill the process)

@@ -249,7 +249,7 @@ async fn send_events(
                     };
 
                     if let Ok(json) = serde_json::to_string(&message) {
-                        if let Err(e) = sender.send(Message::Text(json)).await {
+                        if let Err(e) = sender.send(Message::Text(json.into())).await {
                             error!("Failed to send message to {}: {}", connection_id, e);
                             break;
                         }

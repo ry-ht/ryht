@@ -2,11 +2,11 @@ import { Helmet } from 'react-helmet-async';
 
 import { CONFIG } from 'src/global-config';
 
-import { AxonOverview } from 'src/sections/overview/axon-overview';
+import { AgentListView } from 'src/sections/agent';
 
 // ----------------------------------------------------------------------
 
-const metadata = { title: `Dashboard - ${CONFIG.appName}` };
+const metadata = { title: `Agents - ${CONFIG.appName}` };
 
 export default function Page() {
   return (
@@ -15,7 +15,7 @@ export default function Page() {
         <title>{metadata.title}</title>
       </Helmet>
 
-      <AxonOverview />
+      <AgentListView />
     </>
   );
 }

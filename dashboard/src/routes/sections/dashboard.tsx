@@ -21,6 +21,14 @@ const PageFour = lazy(() => import('src/pages/dashboard/four'));
 const PageFive = lazy(() => import('src/pages/dashboard/five'));
 const PageSix = lazy(() => import('src/pages/dashboard/six'));
 
+// Agent pages
+const AgentListPage = lazy(() => import('src/pages/dashboard/agents/list'));
+const AgentCreatePage = lazy(() => import('src/pages/dashboard/agents/create'));
+
+// Workflow pages
+const WorkflowListPage = lazy(() => import('src/pages/dashboard/workflows/list'));
+const WorkflowCreatePage = lazy(() => import('src/pages/dashboard/workflows/create'));
+
 // ----------------------------------------------------------------------
 
 function SuspenseOutlet() {
@@ -52,6 +60,20 @@ export const dashboardRoutes: RouteObject[] = [
           { element: <PageFour />, index: true },
           { path: 'five', element: <PageFive /> },
           { path: 'six', element: <PageSix /> },
+        ],
+      },
+      {
+        path: 'agents',
+        children: [
+          { element: <AgentListPage />, index: true },
+          { path: 'create', element: <AgentCreatePage /> },
+        ],
+      },
+      {
+        path: 'workflows',
+        children: [
+          { element: <WorkflowListPage />, index: true },
+          { path: 'create', element: <WorkflowCreatePage /> },
         ],
       },
     ],

@@ -1,6 +1,6 @@
 //! Agent Runtime Manager - manages agent lifecycles and execution
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use crate::agents::{AgentConfig, AgentType, AgentInfo, AgentStatus, AgentId};
 use std::collections::HashMap;
 use std::path::PathBuf;

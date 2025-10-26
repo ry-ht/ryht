@@ -63,6 +63,24 @@ export const navData: NavSectionProps['data'] = [
     ],
   },
   /**
+   * Axon Multi-Agent System
+   */
+  {
+    subheader: 'Multi-Agent System',
+    items: [
+      {
+        title: 'Agents',
+        path: paths.dashboard.agents.root,
+        icon: ICONS.user,
+      },
+      {
+        title: 'Workflows',
+        path: paths.dashboard.workflows.root,
+        icon: ICONS.kanban,
+      },
+    ],
+  },
+  /**
    * Management
    */
   {
@@ -71,7 +89,7 @@ export const navData: NavSectionProps['data'] = [
       {
         title: 'Group',
         path: paths.dashboard.group.root,
-        icon: ICONS.user,
+        icon: ICONS.folder,
         children: [
           { title: 'Four', path: paths.dashboard.group.root },
           { title: 'Five', path: paths.dashboard.group.five },

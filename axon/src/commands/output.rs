@@ -1,6 +1,6 @@
 //! Output formatting utilities for CLI
 
-use comfy_table::{presets::UTF8_FULL, Cell, Color, Table};
+use comfy_table::{presets::UTF8_FULL, Cell, Table};
 use console::{style, Emoji};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};

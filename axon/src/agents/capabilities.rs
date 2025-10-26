@@ -64,6 +64,7 @@ pub enum Capability {
 
     // Specialized
     Refactoring,
+    Debugging,
     DebuggingAssistance,
     SecurityAudit,
     ComplianceCheck,
@@ -117,6 +118,7 @@ impl Capability {
             Self::TechnicalWriting => "Write technical documentation",
 
             Self::Refactoring => "Refactor and improve code",
+            Self::Debugging => "Debug and fix issues",
             Self::DebuggingAssistance => "Assist with debugging",
             Self::SecurityAudit => "Perform security audits",
             Self::ComplianceCheck => "Check compliance with standards",
@@ -170,6 +172,7 @@ impl Capability {
             | Self::TechnicalWriting => CapabilityCategory::Communication,
 
             Self::Refactoring
+            | Self::Debugging
             | Self::DebuggingAssistance
             | Self::SecurityAudit
             | Self::ComplianceCheck => CapabilityCategory::Specialized,

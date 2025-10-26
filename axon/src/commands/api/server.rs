@@ -6,7 +6,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
@@ -61,26 +60,22 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
         .allow_headers(Any)
         .max_age(Duration::from_secs(3600));
 
-    // Create trace layer for detailed logging
-    let trace_layer = TraceLayer::new_for_http()
-        .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-        .on_response(DefaultOnResponse::new().level(Level::INFO));
-
     // Create API routes with middleware
     let api_routes = routes::create_routes(app_state)
+        .layer(middleware::from_fn({
+            let validator = api_key_validator.clone();
+            move |req, next| {
+                let validator = validator.clone();
+                api_middleware::optional_auth(validator, req, next)
+            }
+        }))
+        .layer(middleware::from_fn(api_middleware::logging))
         .layer(
-            ServiceBuilder::new()
-                .layer(cors.clone())
-                .layer(trace_layer)
-                .layer(middleware::from_fn(api_middleware::logging))
-                .layer(middleware::from_fn({
-                    let validator = api_key_validator.clone();
-                    move |req, next| {
-                        let validator = validator.clone();
-                        api_middleware::optional_auth(validator, req, next)
-                    }
-                })),
-        );
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO))
+        )
+        .layer(cors.clone());
 
     // Create WebSocket routes
     let ws_routes = websocket::websocket_routes(ws_manager.clone());
@@ -99,7 +94,7 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     info!("API documentation: http://{}/api/v1/", addr);
 
     // Print API key information
-    if let Ok(api_key) = std::env::var("AXON_API_KEY") {
+    if let Ok(_api_key) = std::env::var("AXON_API_KEY") {
         info!("Using custom API key from AXON_API_KEY environment variable");
     } else {
         info!("Using default API key: axon-dev-key-change-in-production");

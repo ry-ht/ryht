@@ -11,11 +11,8 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tracing::{info, error, warn, debug};
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use tracing::info;
 use serde_json::json;
 
 use crate::agents::AgentType;
@@ -379,11 +376,11 @@ pub async fn workflow_validate(workflow: PathBuf) -> Result<()> {
 }
 
 // Server commands
-pub async fn server_start(host: String, port: u16, workers: Option<usize>) -> Result<()> {
+pub async fn server_start(host: String, port: u16, _workers: Option<usize>) -> Result<()> {
     info!("Starting API server on {}:{}", host, port);
 
     // Fork a new process for the server
-    let mut cmd = Command::new(std::env::current_exe()?)
+    let cmd = Command::new(std::env::current_exe()?)
         .arg("internal-server-run")
         .arg("--host")
         .arg(&host)
@@ -825,13 +822,13 @@ pub async fn interactive_mode(mode: String) -> Result<()> {
                 .default("my-workspace".into())
                 .interact_text()?;
 
-            let model = Select::new()
+            let _model = Select::new()
                 .with_prompt("Default model")
                 .items(&["gpt-4", "gpt-3.5-turbo", "claude-2", "llama-2"])
                 .default(0)
                 .interact()?;
 
-            let enable_cortex = Confirm::new()
+            let _enable_cortex = Confirm::new()
                 .with_prompt("Enable Cortex cognitive memory?")
                 .default(true)
                 .interact()?;
