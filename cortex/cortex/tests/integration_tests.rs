@@ -21,7 +21,7 @@ fn setup_test_env() -> TempDir {
 
 #[tokio::test]
 async fn test_config_operations() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let _temp = setup_test_env();
 
@@ -44,7 +44,7 @@ async fn test_config_operations() {
 
 #[tokio::test]
 async fn test_config_save_load() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let temp = setup_test_env();
     let config_path = temp.path().join("test_config.toml");
@@ -75,7 +75,7 @@ async fn test_config_env_overrides() {
     }
 
     // Load config with env overrides
-    let config = cortex_cli::config::CortexConfig::load().unwrap();
+    let config = cortex::config::CortexConfig::load().unwrap();
 
     assert_eq!(config.database.namespace, "env_namespace");
     assert_eq!(config.database.pool_size, 20);
@@ -91,7 +91,7 @@ async fn test_config_env_overrides() {
 
 #[test]
 fn test_output_formatting() {
-    use cortex_cli::output::{format_bytes, format_duration};
+    use cortex::output::{format_bytes, format_duration};
     use std::time::Duration;
 
     // Test byte formatting
@@ -109,7 +109,7 @@ fn test_output_formatting() {
 
 #[test]
 fn test_table_builder() {
-    use cortex_cli::output::TableBuilder;
+    use cortex::output::TableBuilder;
 
     let table = TableBuilder::new()
         .header(vec!["Name", "Age", "City"])
@@ -122,7 +122,7 @@ fn test_table_builder() {
 
 #[tokio::test]
 async fn test_init_workspace_creation() {
-    use cortex_cli::commands::init_workspace;
+    use cortex::commands::init_workspace;
     use cortex_vfs::WorkspaceType;
 
     let temp = setup_test_env();
@@ -142,7 +142,7 @@ async fn test_init_workspace_creation() {
 
 #[tokio::test]
 async fn test_config_get_invalid_key() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let config = CortexConfig::default();
     assert_eq!(config.get("invalid.key"), None);
@@ -150,7 +150,7 @@ async fn test_config_get_invalid_key() {
 
 #[tokio::test]
 async fn test_config_set_invalid_value() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let mut config = CortexConfig::default();
 
@@ -165,7 +165,7 @@ async fn test_config_set_invalid_value() {
 
 #[test]
 fn test_output_format_from_flag() {
-    use cortex_cli::output::OutputFormat;
+    use cortex::output::OutputFormat;
 
     assert_eq!(OutputFormat::from_flag(true, false), OutputFormat::Json);
     assert_eq!(OutputFormat::from_flag(false, true), OutputFormat::Plain);
@@ -238,7 +238,7 @@ fn test_cli_help() {
 #[tokio::test]
 #[ignore] // Requires running SurrealDB
 async fn test_db_start_stop() {
-    use cortex_cli::commands::{db_start, db_status, db_stop};
+    use cortex::commands::{db_start, db_status, db_stop};
 
     // Start database
     let result = db_start(None, None).await;
@@ -256,8 +256,8 @@ async fn test_db_start_stop() {
 #[tokio::test]
 #[ignore] // Requires database setup
 async fn test_workspace_create_list() {
-    use cortex_cli::commands::{workspace_create, workspace_list};
-    use cortex_cli::output::OutputFormat;
+    use cortex::commands::{workspace_create, workspace_list};
+    use cortex::output::OutputFormat;
     use cortex_vfs::WorkspaceType;
 
     // Create workspace
@@ -272,8 +272,8 @@ async fn test_workspace_create_list() {
 #[tokio::test]
 #[ignore] // Requires database setup
 async fn test_ingest_and_search() {
-    use cortex_cli::commands::{ingest_path, search_memory};
-    use cortex_cli::output::OutputFormat;
+    use cortex::commands::{ingest_path, search_memory};
+    use cortex::output::OutputFormat;
     use std::path::PathBuf;
 
     let temp = setup_test_env();
@@ -298,8 +298,8 @@ async fn test_ingest_and_search() {
 #[tokio::test]
 #[ignore] // Requires database setup
 async fn test_stats() {
-    use cortex_cli::commands::show_stats;
-    use cortex_cli::output::OutputFormat;
+    use cortex::commands::show_stats;
+    use cortex::output::OutputFormat;
 
     let result = show_stats(OutputFormat::Json).await;
     assert!(result.is_ok() || result.is_err()); // May fail without database
@@ -308,8 +308,8 @@ async fn test_stats() {
 #[tokio::test]
 #[ignore] // Requires database setup
 async fn test_agent_operations() {
-    use cortex_cli::commands::{agent_create, agent_delete, agent_list};
-    use cortex_cli::output::OutputFormat;
+    use cortex::commands::{agent_create, agent_delete, agent_list};
+    use cortex::output::OutputFormat;
 
     // Create agent
     let result = agent_create("test_agent".to_string(), "general".to_string()).await;
@@ -325,7 +325,7 @@ async fn test_agent_operations() {
 #[tokio::test]
 #[ignore] // Requires database setup
 async fn test_memory_operations() {
-    use cortex_cli::commands::{memory_consolidate, memory_forget};
+    use cortex::commands::{memory_consolidate, memory_forget};
 
     // Consolidate
     let result = memory_consolidate(Some("default".to_string())).await;
@@ -340,7 +340,7 @@ async fn test_memory_operations() {
 
 #[test]
 fn test_export_json() {
-    use cortex_cli::export::{export_json, ExportFormat};
+    use cortex::export::{export_json, ExportFormat};
     use serde_json::json;
 
     let data = json!({
@@ -355,7 +355,7 @@ fn test_export_json() {
 
 #[test]
 fn test_export_csv() {
-    use cortex_cli::export::export_csv;
+    use cortex::export::export_csv;
     use serde_json::json;
 
     let data = json!([
@@ -372,7 +372,7 @@ fn test_export_csv() {
 
 #[test]
 fn test_export_yaml() {
-    use cortex_cli::export::export_yaml;
+    use cortex::export::export_yaml;
     use serde_json::json;
 
     let data = json!({
@@ -387,7 +387,7 @@ fn test_export_yaml() {
 
 #[test]
 fn test_export_markdown() {
-    use cortex_cli::export::export_markdown;
+    use cortex::export::export_markdown;
     use serde_json::json;
 
     let data = json!([
@@ -403,7 +403,7 @@ fn test_export_markdown() {
 
 #[test]
 fn test_export_format_detection() {
-    use cortex_cli::export::ExportFormat;
+    use cortex::export::ExportFormat;
 
     assert_eq!(ExportFormat::from_extension("json"), Some(ExportFormat::Json));
     assert_eq!(ExportFormat::from_extension("csv"), Some(ExportFormat::Csv));
@@ -413,7 +413,7 @@ fn test_export_format_detection() {
 
 #[tokio::test]
 async fn test_doctor_configuration_check() {
-    use cortex_cli::doctor;
+    use cortex::doctor;
 
     // This should not panic
     let _result = doctor::run_diagnostics(false).await;
@@ -421,7 +421,7 @@ async fn test_doctor_configuration_check() {
 
 #[tokio::test]
 async fn test_testing_module() {
-    use cortex_cli::testing::{TestResult, TestSuiteResults};
+    use cortex::testing::{TestResult, TestSuiteResults};
 
     // Create mock test results
     let results = TestSuiteResults {
@@ -454,7 +454,7 @@ async fn test_testing_module() {
 
 #[test]
 fn test_interactive_session_creation() {
-    use cortex_cli::interactive::InteractiveSession;
+    use cortex::interactive::InteractiveSession;
 
     let session = InteractiveSession::new();
     // Just verify it can be created without panicking
@@ -463,7 +463,7 @@ fn test_interactive_session_creation() {
 
 #[test]
 fn test_workflow_progress() {
-    use cortex_cli::interactive::WorkflowProgress;
+    use cortex::interactive::WorkflowProgress;
 
     let steps = vec![
         "Step 1".to_string(),
@@ -478,7 +478,7 @@ fn test_workflow_progress() {
 
 #[test]
 fn test_menu_creation() {
-    use cortex_cli::interactive::Menu;
+    use cortex::interactive::Menu;
 
     let _menu = Menu::new("Test Menu")
         .add_item("Option 1", Some("Description".to_string()))
@@ -490,7 +490,7 @@ fn test_menu_creation() {
 
 #[tokio::test]
 async fn test_doctor_quick_health_check() {
-    use cortex_cli::doctor;
+    use cortex::doctor;
 
     // Should return without panicking
     let result = doctor::quick_health_check().await;
@@ -499,7 +499,7 @@ async fn test_doctor_quick_health_check() {
 
 #[test]
 fn test_diagnostic_status() {
-    use cortex_cli::doctor::{DiagnosticResult, DiagnosticStatus};
+    use cortex::doctor::{DiagnosticResult, DiagnosticStatus};
 
     let result = DiagnosticResult {
         check_name: "Test".to_string(),
@@ -515,7 +515,7 @@ fn test_diagnostic_status() {
 
 #[test]
 fn test_benchmark_result_creation() {
-    use cortex_cli::testing::BenchmarkResult;
+    use cortex::testing::BenchmarkResult;
 
     let result = BenchmarkResult {
         name: "Test Benchmark".to_string(),
@@ -531,7 +531,7 @@ fn test_benchmark_result_creation() {
 
 #[tokio::test]
 async fn test_config_validation() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let config = CortexConfig::default();
 
@@ -544,7 +544,7 @@ async fn test_config_validation() {
 
 #[test]
 fn test_config_merge() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let mut base = CortexConfig::default();
     base.database.namespace = "test1".to_string();
@@ -557,7 +557,7 @@ fn test_config_merge() {
 
 #[test]
 fn test_export_to_all_formats() {
-    use cortex_cli::export::{export_csv, export_json, export_markdown, export_yaml};
+    use cortex::export::{export_csv, export_json, export_markdown, export_yaml};
     use serde_json::json;
 
     let data = json!([
@@ -573,7 +573,7 @@ fn test_export_to_all_formats() {
 
 #[tokio::test]
 async fn test_error_handling() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     // Test invalid config operations
     let mut config = CortexConfig::default();
@@ -587,7 +587,7 @@ async fn test_error_handling() {
 
 #[test]
 fn test_table_builder_functionality() {
-    use cortex_cli::output::TableBuilder;
+    use cortex::output::TableBuilder;
 
     let table = TableBuilder::new()
         .header(vec!["Col1", "Col2", "Col3"])
@@ -600,7 +600,7 @@ fn test_table_builder_functionality() {
 
 #[test]
 fn test_format_utilities() {
-    use cortex_cli::output::{format_bytes, format_duration};
+    use cortex::output::{format_bytes, format_duration};
     use std::time::Duration;
 
     // Test byte formatting
@@ -617,7 +617,7 @@ fn test_format_utilities() {
 
 #[tokio::test]
 async fn test_full_config_lifecycle() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
 
     let temp = setup_test_env();
     let config_path = temp.path().join("test_config.toml");
@@ -648,7 +648,7 @@ async fn test_full_config_lifecycle() {
 
 #[test]
 fn test_csv_escaping() {
-    use cortex_cli::export::export_csv;
+    use cortex::export::export_csv;
     use serde_json::json;
 
     let data = json!([
@@ -664,7 +664,7 @@ fn test_csv_escaping() {
 
 #[tokio::test]
 async fn test_concurrent_operations() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
     use tokio::task;
 
     let _temp = setup_test_env();
@@ -687,7 +687,7 @@ async fn test_concurrent_operations() {
 
 #[test]
 fn test_output_format_conversions() {
-    use cortex_cli::output::OutputFormat;
+    use cortex::output::OutputFormat;
 
     let json = OutputFormat::Json;
     let human = OutputFormat::Human;
@@ -701,7 +701,7 @@ fn test_output_format_conversions() {
 
 #[tokio::test]
 async fn test_memory_safety() {
-    use cortex_cli::config::CortexConfig;
+    use cortex::config::CortexConfig;
     use std::sync::Arc;
 
     let config = Arc::new(CortexConfig::default());

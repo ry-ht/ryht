@@ -13,7 +13,7 @@
 //! - Performance measurement
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_nav::CodeGetSignatureTool;
+use cortex::mcp::tools::code_nav::CodeGetSignatureTool;
 use cortex_core::types::Parameter;
 use mcp_sdk::prelude::*;
 use serde_json::json;

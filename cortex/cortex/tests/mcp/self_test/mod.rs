@@ -42,7 +42,7 @@
 //! cargo test --test phase3_manipulation -- --ignored --nocapture
 //!
 //! # Run all phases
-//! cargo test --package cortex-cli self_test -- --ignored --nocapture
+//! cargo test --package cortex self_test -- --ignored --nocapture
 //! ```
 //!
 //! The `--nocapture` flag is recommended to see the detailed progress reports.

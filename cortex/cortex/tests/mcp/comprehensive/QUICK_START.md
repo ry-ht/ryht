@@ -14,7 +14,7 @@
 export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
 
 # Run all tests
-cd cortex/cortex-cli
+cd cortex/cortex
 cargo test --test rust_development_tests -- --nocapture
 
 # Run single test

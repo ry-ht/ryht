@@ -13,8 +13,8 @@
 //! - Search documentation by meaning
 
 use crate::mcp::utils::{TestHarness, ToolResultAssertions};
-use cortex_cli::mcp::tools::vfs::*;
-use cortex_cli::mcp::tools::semantic_search::*;
+use cortex::mcp::tools::vfs::*;
+use cortex::mcp::tools::semantic_search::*;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::time::Instant;

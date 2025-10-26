@@ -184,7 +184,7 @@ This test suite (`rust_development_tests.rs`) provides exhaustive tests that sim
 
 ```bash
 export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
-cd cortex/cortex-cli
+cd cortex/cortex
 cargo test --test rust_development_tests -- --nocapture
 ```
 

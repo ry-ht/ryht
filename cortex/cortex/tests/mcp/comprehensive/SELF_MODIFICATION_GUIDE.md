@@ -295,7 +295,7 @@ Each test has specific success criteria:
 
 ### 1. Real Source Code
 These tests load Cortex's **actual source code**, not mock data. They work with:
-- Real Rust files from cortex-cli, cortex-vfs, cortex-code-analysis, etc.
+- Real Rust files from cortex, cortex-vfs, cortex-code-analysis, etc.
 - Real tree-sitter AST parsing
 - Real semantic graph construction
 
@@ -471,9 +471,9 @@ cargo test --test '*' self_modification --no-run
 
 ### File Locations
 
-- **Test Suite**: `/cortex/cortex-cli/tests/mcp/comprehensive/self_modification_tests.rs`
-- **This Guide**: `/cortex/cortex-cli/tests/mcp/comprehensive/SELF_MODIFICATION_GUIDE.md`
-- **Module Index**: `/cortex/cortex-cli/tests/mcp/comprehensive/mod.rs`
+- **Test Suite**: `/cortex/cortex/tests/mcp/comprehensive/self_modification_tests.rs`
+- **This Guide**: `/cortex/cortex/tests/mcp/comprehensive/SELF_MODIFICATION_GUIDE.md`
+- **Module Index**: `/cortex/cortex/tests/mcp/comprehensive/mod.rs`
 
 ### Related Documentation
 

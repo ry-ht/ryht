@@ -35,7 +35,7 @@ use std::time::Instant;
 
 /// Expected crates in the cortex workspace
 const EXPECTED_CRATES: &[&str] = &[
-    "cortex-cli",
+    "cortex",
     "cortex-core",
     "cortex-ingestion",
     "cortex-memory",
@@ -296,7 +296,7 @@ impl IngestionReport {
 
 /// Get the cortex workspace root directory
 fn get_cortex_root() -> PathBuf {
-    // Use CARGO_MANIFEST_DIR to get the cortex-cli directory,
+    // Use CARGO_MANIFEST_DIR to get the cortex directory,
     // then navigate up to the workspace root
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR not set");
@@ -635,7 +635,7 @@ mod quick_tests {
         assert!(root.exists(), "Workspace root should exist");
 
         // Check that expected directories exist
-        let expected_dirs = ["cortex-cli", "cortex-core", "cortex-storage"];
+        let expected_dirs = ["cortex", "cortex-core", "cortex-storage"];
         for dir in &expected_dirs {
             let dir_path = root.join(dir);
             assert!(

@@ -234,7 +234,7 @@ async fn test_todo_implementation_completeness() {
     ];
 
     for tool in advanced_tools {
-        let tool_path = cortex_root.join("cortex-cli/src/mcp/tools").join(tool);
+        let tool_path = cortex_root.join("cortex/src/mcp/tools").join(tool);
         let implemented = tool_path.exists();
 
         report.add_check(

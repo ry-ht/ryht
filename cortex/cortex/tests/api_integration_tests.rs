@@ -104,7 +104,7 @@ async fn setup_test_database() -> TempDir {
 
 /// Helper to start test server on a random port
 async fn start_test_server() -> (tokio::task::JoinHandle<()>, String, TempDir) {
-    use cortex_cli::api::server::{RestApiServer, ServerConfig};
+    use cortex::api::server::{RestApiServer, ServerConfig};
 
     let temp_dir = setup_test_database().await;
 

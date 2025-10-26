@@ -1,4 +1,4 @@
-//! Qdrant command implementations for cortex-cli
+//! Qdrant command implementations for cortex
 
 use crate::output::{self, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};

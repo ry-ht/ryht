@@ -81,7 +81,7 @@ docker-compose ps
 # Using the setup script
 ./scripts/setup-qdrant.sh
 
-# OR using cortex-cli
+# OR using cortex
 cargo build --release
 ./target/release/cortex qdrant init
 
@@ -103,7 +103,7 @@ cargo build --release
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   Application Layer                      │
-│                    (cortex-cli)                          │
+│                    (cortex)                          │
 └─────────────────────────────────────────────────────────┘
                            │
         ┌──────────────────┼──────────────────┐

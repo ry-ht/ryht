@@ -57,7 +57,7 @@ fn create_memory_config() -> DatabaseConfig {
 
 /// Expected Cortex crates
 const EXPECTED_CRATES: &[&str] = &[
-    "cortex-cli",
+    "cortex",
     "cortex-core",
     "cortex-ingestion",
     "cortex-memory",
@@ -372,7 +372,7 @@ async fn test_load_all_cortex_crates() {
     // Step 7: Verify loaded files
     println!("\n[7/7] Verifying VFS contents...");
     // Query VFS to check files were loaded
-    let sample_path = VirtualPath::new("cortex-cli/src/main.rs").ok();
+    let sample_path = VirtualPath::new("cortex/src/main.rs").ok();
     if let Some(path) = sample_path {
         if let Ok(_content) = vfs.read_file(&workspace_id, &path).await {
             println!("  ✓ Sample file readable from VFS");

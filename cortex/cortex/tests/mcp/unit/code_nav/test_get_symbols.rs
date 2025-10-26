@@ -12,7 +12,7 @@
 //! - Performance measurement
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_nav::CodeGetSymbolsTool;
+use cortex::mcp::tools::code_nav::CodeGetSymbolsTool;
 use cortex_core::types::Visibility;
 use mcp_sdk::prelude::*;
 use serde_json::json;

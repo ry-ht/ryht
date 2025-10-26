@@ -22,8 +22,8 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use cortex_cli::{commands, output, OutputFormat};
-use cortex_cli::qdrant_commands;
+use cortex::{commands, output, OutputFormat};
+use cortex::qdrant_commands;
 use cortex_vfs::{FlushScope, WorkspaceType};
 use std::path::PathBuf;
 use std::process;
@@ -807,17 +807,17 @@ async fn run() -> Result<()> {
 
         Commands::Doctor(doctor_cmd) => match doctor_cmd {
             DoctorCommands::Check { fix } => {
-                use cortex_cli::doctor;
+                use cortex::doctor;
                 let results = doctor::run_diagnostics(fix).await?;
 
                 // Exit with error code if there are failures
-                let has_failures = results.iter().any(|r| r.status == cortex_cli::doctor::DiagnosticStatus::Fail);
+                let has_failures = results.iter().any(|r| r.status == cortex::doctor::DiagnosticStatus::Fail);
                 if has_failures {
                     std::process::exit(1);
                 }
             }
             DoctorCommands::Health => {
-                use cortex_cli::doctor;
+                use cortex::doctor;
                 let healthy = doctor::quick_health_check().await?;
                 if !healthy {
                     std::process::exit(1);
@@ -827,7 +827,7 @@ async fn run() -> Result<()> {
 
         Commands::Test(test_cmd) => match test_cmd {
             TestCommands::All => {
-                use cortex_cli::testing;
+                use cortex::testing;
                 let results = testing::run_all_tests().await?;
                 testing::print_test_results(&results, format)?;
 
@@ -836,12 +836,12 @@ async fn run() -> Result<()> {
                 }
             }
             TestCommands::Benchmark => {
-                use cortex_cli::testing;
+                use cortex::testing;
                 let results = testing::run_benchmarks().await?;
                 testing::print_benchmark_results(&results, format)?;
             }
             TestCommands::Component { component } => {
-                use cortex_cli::testing;
+                use cortex::testing;
                 let results = testing::run_component_tests(&component).await?;
                 testing::print_test_results(&results, format)?;
 
@@ -883,19 +883,19 @@ async fn run() -> Result<()> {
 
             match export_cmd {
                 ExportCommands::Workspace { workspace, output, format: fmt } => {
-                    use cortex_cli::export;
+                    use cortex::export;
                     let export_format = export::ExportFormat::from_extension(&fmt)
                         .unwrap_or(export::ExportFormat::Json);
                     export::export_workspace(storage, &workspace, &output, export_format).await?;
                 }
                 ExportCommands::Episodes { workspace, output, format: fmt, limit } => {
-                    use cortex_cli::export;
+                    use cortex::export;
                     let export_format = export::ExportFormat::from_extension(&fmt)
                         .unwrap_or(export::ExportFormat::Json);
                     export::export_episodes(storage, workspace, &output, export_format, limit).await?;
                 }
                 ExportCommands::Stats { output, format: fmt } => {
-                    use cortex_cli::export;
+                    use cortex::export;
                     let export_format = export::ExportFormat::from_extension(&fmt)
                         .unwrap_or(export::ExportFormat::Json);
                     export::export_stats(storage, &output, export_format).await?;
@@ -948,20 +948,20 @@ async fn run() -> Result<()> {
         Commands::Interactive { mode } => {
             match mode.as_str() {
                 "wizard" => {
-                    use cortex_cli::interactive;
+                    use cortex::interactive;
                     let config = interactive::workspace_setup_wizard().await?;
                     commands::workspace_create(config.name, config.workspace_type).await?;
                 }
                 "search" => {
-                    use cortex_cli::interactive;
+                    use cortex::interactive;
                     interactive::interactive_search().await?;
                 }
                 "health" => {
-                    use cortex_cli::interactive;
+                    use cortex::interactive;
                     interactive::interactive_health_check().await?;
                 }
                 "menu" | _ => {
-                    use cortex_cli::interactive;
+                    use cortex::interactive;
                     let menu = interactive::Menu::new("Cortex Main Menu")
                         .add_item("Create Workspace", Some("Set up a new workspace".to_string()))
                         .add_item("Run Diagnostics", Some("Check system health".to_string()))
@@ -1016,10 +1016,10 @@ fn init_logging(verbose: bool) {
     use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
     let filter = if verbose {
-        EnvFilter::new("cortex=debug,cortex_cli=debug,info")
+        EnvFilter::new("cortex=debug,info")
     } else {
         EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("cortex=info,cortex_cli=info,warn"))
+            .unwrap_or_else(|_| EnvFilter::new("cortex=info,warn"))
     };
 
     tracing_subscriber::registry()

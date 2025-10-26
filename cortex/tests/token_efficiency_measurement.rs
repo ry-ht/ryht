@@ -371,7 +371,7 @@ fn scenario_12_cross_crate_change() -> Scenario {
     - cortex-storage: 8 locations
     - cortex-mcp: 15 locations
     - cortex-vfs: 6 locations
-    - cortex-cli: 4 locations
+    - cortex: 4 locations
     Total: 45 updates
     "#;
     let cortex_tokens = TokenCounter::count(cross_crate_op) + 500; // + update payload

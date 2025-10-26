@@ -34,7 +34,7 @@ use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
-use cortex_cli::mcp::tools::{
+use cortex::mcp::tools::{
     workspace::WorkspaceContext,
     vfs::VfsContext,
     code_nav::CodeNavContext,
@@ -911,8 +911,8 @@ async fn test_cross_tool_integration_workflow() {
     let workspace_id = harness.create_cortex_workspace().await
         .expect("Failed to create workspace");
 
-    let _files = harness.load_cortex_subset(workspace_id, &["cortex-cli"]).await
-        .expect("Failed to load cortex-cli");
+    let _files = harness.load_cortex_subset(workspace_id, &["cortex"]).await
+        .expect("Failed to load cortex");
 
     println!("[Phase 1: Navigation] Finding target code...");
     println!("[Phase 2: Manipulation] Modifying code structure...");

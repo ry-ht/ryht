@@ -11,7 +11,7 @@
 //! - Token efficiency measurements
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_manipulation::ExtractFunctionTool;
+use cortex::mcp::tools::code_manipulation::ExtractFunctionTool;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 

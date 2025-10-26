@@ -393,7 +393,7 @@ main() {
     # Print next steps
     log_info "Next steps:"
     echo "  1. Verify collections: curl http://${QDRANT_HOST}:${QDRANT_PORT}/collections"
-    echo "  2. Start ingesting vectors using cortex-cli"
+    echo "  2. Start ingesting vectors using cortex"
     echo "  3. Monitor metrics: http://${QDRANT_HOST}:${QDRANT_PORT}/metrics"
     echo "  4. Access Grafana dashboards for monitoring"
     echo ""

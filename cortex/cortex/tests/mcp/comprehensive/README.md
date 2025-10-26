@@ -447,7 +447,7 @@ cargo test test_semantic_search_scale -- --ignored --nocapture
 export PATH=/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin:$PATH
 
 # Run all materialization, correctness, and stress tests
-cd /Users/taaliman/projects/luxquant/ry-ht/ryht/cortex/cortex-cli
+cd /Users/taaliman/projects/luxquant/ry-ht/ryht/cortex/cortex
 cargo test --test '*' comprehensive -- --ignored --nocapture
 
 # Or run individually

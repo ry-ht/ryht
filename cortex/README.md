@@ -14,7 +14,7 @@ Cortex is organized as a Rust workspace with multiple crates:
 - **cortex-ingestion**: Document ingestion and processing
 - **cortex-memory**: Cognitive memory systems (episodic, semantic, working)
 - **cortex-mcp**: MCP server for LLM integration
-- **cortex-cli**: Command-line interface
+- **cortex**: Command-line interface
 
 ## Features
 
@@ -43,7 +43,7 @@ cargo run --bin cortex -- serve
 
 ## Configuration
 
-Configuration is managed through TOML files. See `cortex-cli/src/config.rs` for details.
+Configuration is managed through TOML files. See `cortex/src/config.rs` for details.
 
 ## Development
 

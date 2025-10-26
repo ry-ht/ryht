@@ -50,7 +50,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "cortex-ingestion",
     "cortex-code-analysis",
     "cortex-mcp",
-    "cortex-cli",
+    "cortex",
 ];
 
 // Conservative estimates based on current codebase

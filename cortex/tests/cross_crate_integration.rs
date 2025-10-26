@@ -8,7 +8,7 @@
 //! 4. cortex-memory + cortex-semantic: Episodes embedded and searchable
 //! 5. cortex-ingestion + cortex-semantic: Documents chunked and embedded
 //! 6. cortex-mcp + ALL: Tools integrate with all systems
-//! 7. cortex-cli + ALL: CLI commands work correctly
+//! 7. cortex + ALL: CLI commands work correctly
 //!
 //! Each test verifies proper data flow, error handling, and API compatibility
 //! between crates.

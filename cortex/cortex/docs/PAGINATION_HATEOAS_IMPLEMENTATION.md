@@ -300,28 +300,28 @@ GET /api/v3/workspaces/ws-123/files?cursor=eyJ...&limit=20
 
 ## Files Modified
 
-1. **`cortex-cli/src/api/types.rs`**
+1. **`cortex/src/api/types.rs`**
    - Added `PaginationInfo`, `HateoasLinks`, `PaginationParams`, `CursorData`
    - Updated `ApiResponse` with optional pagination and links fields
    - Updated `FileListRequest` and `CodeUnitListRequest` with cursor support
    - Added `success_with_pagination()` helper method
 
-2. **`cortex-cli/src/api/pagination.rs`** (NEW)
+2. **`cortex/src/api/pagination.rs`** (NEW)
    - Cursor encoding/decoding functions
    - Pagination info builder
    - LinkBuilder with resource-specific link generators
    - Comprehensive test suite
 
-3. **`cortex-cli/src/api/mod.rs`**
+3. **`cortex/src/api/mod.rs`**
    - Added pagination module export
    - Exported new types and LinkBuilder
 
-4. **`cortex-cli/src/api/routes/workspaces.rs`**
+4. **`cortex/src/api/routes/workspaces.rs`**
    - Updated `list_workspaces()` with cursor-based pagination
    - Updated `get_workspace()` with HATEOAS links
    - Database queries now support cursor filtering
 
-5. **`cortex-cli/src/api/routes/vfs.rs`**
+5. **`cortex/src/api/routes/vfs.rs`**
    - Updated `list_files()` with cursor-based pagination
    - Maintained backward compatibility with offset-based pagination
    - Conditional response format based on pagination method
@@ -436,6 +436,6 @@ curl "http://localhost:8080/api/v3/workspaces/ws-123/files?file_type=file&limit=
 
 ## References
 
-- API Response Format Specification: `cortex-cli/docs/api-response-format.md`
-- Implementation Code: `cortex-cli/src/api/pagination.rs`
-- Type Definitions: `cortex-cli/src/api/types.rs`
+- API Response Format Specification: `cortex/docs/api-response-format.md`
+- Implementation Code: `cortex/src/api/pagination.rs`
+- Type Definitions: `cortex/src/api/types.rs`

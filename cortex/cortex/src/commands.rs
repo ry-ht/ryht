@@ -1563,7 +1563,7 @@ async fn get_latest_qdrant_release() -> Result<serde_json::Value> {
     let client = reqwest::Client::new();
     let response = client
         .get("https://api.github.com/repos/qdrant/qdrant/releases/latest")
-        .header("User-Agent", "cortex-cli")
+        .header("User-Agent", "cortex")
         .send()
         .await
         .context("Failed to fetch Qdrant release information")?;

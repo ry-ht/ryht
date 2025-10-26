@@ -19,7 +19,7 @@ Production-ready command-line interface for the Cortex cognitive memory system.
 
 ```bash
 # Build from source
-cd cortex/cortex-cli
+cd cortex/cortex
 cargo build --release
 
 # The binary will be at: target/release/cortex

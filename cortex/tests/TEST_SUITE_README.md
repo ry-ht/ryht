@@ -293,7 +293,7 @@ When adding new MCP tools:
 
 ## References
 
-- [Cortex MCP Tools Specification](../cortex-cli/src/mcp/tools/mod.rs)
+- [Cortex MCP Tools Specification](../cortex/src/mcp/tools/mod.rs)
 - [VFS Documentation](../cortex-vfs/README.md)
 - [Parser Documentation](../cortex-code-analysis/README.md)
 - [Token Efficiency Analysis](../TOKEN_EFFICIENCY_ANALYSIS.md)

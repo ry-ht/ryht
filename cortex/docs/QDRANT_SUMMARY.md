@@ -95,8 +95,8 @@ cortex qdrant migrate           # Migrate data
 ```
 
 Implementation:
-- **cortex-cli/src/main.rs**: Command definitions
-- **cortex-cli/src/qdrant_commands.rs**: Full command implementations
+- **cortex/src/main.rs**: Command definitions
+- **cortex/src/qdrant_commands.rs**: Full command implementations
 - Support for multiple output formats (human, json, plain)
 - Comprehensive error handling
 - Progress indicators and detailed logging
@@ -337,9 +337,9 @@ config/grafana/dashboards/qdrant-overview.json
 ### Code (3 files)
 ```
 cortex-storage/src/qdrant.rs
-cortex-cli/src/qdrant_commands.rs
-cortex-cli/src/lib.rs (updated)
-cortex-cli/src/main.rs (updated)
+cortex/src/qdrant_commands.rs
+cortex/src/lib.rs (updated)
+cortex/src/main.rs (updated)
 cortex-storage/src/lib.rs (updated)
 ```
 

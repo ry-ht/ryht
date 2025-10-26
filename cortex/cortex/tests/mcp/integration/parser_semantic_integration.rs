@@ -12,9 +12,9 @@
 //! - Update code → re-index → verify updated semantics
 
 use crate::mcp::utils::{TestHarness, ToolResultAssertions};
-use cortex_cli::mcp::tools::vfs::*;
-use cortex_cli::mcp::tools::semantic_search::*;
-use cortex_cli::mcp::tools::dependency_analysis::*;
+use cortex::mcp::tools::vfs::*;
+use cortex::mcp::tools::semantic_search::*;
+use cortex::mcp::tools::dependency_analysis::*;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::time::Instant;

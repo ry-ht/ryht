@@ -11,7 +11,7 @@
 //! - Error handling (invalid names, name conflicts)
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_manipulation::RenameUnitTool;
+use cortex::mcp::tools::code_manipulation::RenameUnitTool;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 

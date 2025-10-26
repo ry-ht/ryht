@@ -4,7 +4,7 @@
 
 Comprehensive testing infrastructure for Cortex MCP tools with 2,298 lines of production-ready code across 5 core modules plus documentation.
 
-**Location**: `cortex/cortex-cli/tests/mcp/utils/`
+**Location**: `cortex/cortex/tests/mcp/utils/`
 
 ## Files
 

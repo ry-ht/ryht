@@ -11,7 +11,7 @@
 //! - Error handling (invalid types, conflicting names)
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_manipulation::AddParameterTool;
+use cortex::mcp::tools::code_manipulation::AddParameterTool;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 

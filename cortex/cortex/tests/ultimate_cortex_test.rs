@@ -9,7 +9,7 @@
 //!
 //! This is the ultimate proof that Cortex can handle complex, real-world codebases.
 
-use cortex_cli::mcp::server::CortexMcpServer;
+use cortex::mcp::server::CortexMcpServer;
 use cortex_vfs::VirtualFileSystem;
 // DISABLED: Module doesn't exist - use cortex_core::analysis::dependency_graph::DependencyGraph;
 // DISABLED: Module doesn't exist - use cortex_core::code_intelligence::semantic_search::SemanticSearch;
@@ -207,7 +207,7 @@ async fn phase1_project_ingestion(ctx: &mut TestContext) -> Result<()> {
     let cortex_path = Path::new(CORTEX_PROJECT_ROOT);
 
     let crates = vec![
-        "cortex-cli",
+        "cortex",
         "cortex-core",
         "cortex-memory",
         "cortex-vfs",
@@ -1183,10 +1183,10 @@ mod tests {
     println!("   ✓ Added calculate_file_hash function with tests");
 
     // Modification 2: Refactor a complex function
-    println!("\n[2/7] Refactoring complex function in cortex-cli...");
+    println!("\n[2/7] Refactoring complex function in cortex...");
     ctx.call_tool("refactor_extract_function", json!({
         "workspace_id": ctx.workspace_id,
-        "file_path": "/cortex-cli/src/main.rs",
+        "file_path": "/cortex/src/main.rs",
         "start_line": 50,
         "end_line": 70,
         "function_name": "initialize_logging",

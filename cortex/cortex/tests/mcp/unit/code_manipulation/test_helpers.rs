@@ -50,7 +50,7 @@ impl CodeManipulationFixture {
     }
 
     /// Get the code manipulation context
-    pub fn context(&self) -> cortex_cli::mcp::tools::code_manipulation::CodeManipulationContext {
+    pub fn context(&self) -> cortex::mcp::tools::code_manipulation::CodeManipulationContext {
         self.harness.code_manipulation_context()
     }
 

@@ -32,7 +32,7 @@ If cortex can load, parse, index, and query its own source code - finding functi
 **Run Command:**
 ```bash
 cd cortex
-cargo test --package cortex-cli --test phase1_ingestion -- --ignored --nocapture
+cargo test --package cortex --test phase1_ingestion -- --ignored --nocapture
 ```
 
 ### Phase 2: Deep Analysis and Navigation ✅ (Implemented)
@@ -56,7 +56,7 @@ cargo test --package cortex-cli --test phase1_ingestion -- --ignored --nocapture
 **Run Command:**
 ```bash
 cd cortex
-cargo test --package cortex-cli --test phase2_navigation -- --ignored --nocapture
+cargo test --package cortex --test phase2_navigation -- --ignored --nocapture
 ```
 
 ### Phase 3: Code Manipulation ✅ (Implemented)
@@ -87,7 +87,7 @@ cargo test --package cortex-cli --test phase2_navigation -- --ignored --nocaptur
 **Run Command:**
 ```bash
 cd cortex
-cargo test --package cortex-cli --test phase3_manipulation -- --ignored --nocapture
+cargo test --package cortex --test phase3_manipulation -- --ignored --nocapture
 ```
 
 **Why This Matters:**
@@ -97,7 +97,7 @@ This is the ultimate proof that cortex's code manipulation tools work correctly.
 
 ### Quick Test (without actual ingestion)
 ```bash
-cargo test --package cortex-cli self_test::
+cargo test --package cortex self_test::
 ```
 
 This runs the lightweight validation tests (workspace detection, etc.)
@@ -106,19 +106,19 @@ This runs the lightweight validation tests (workspace detection, etc.)
 
 **Run all phases sequentially:**
 ```bash
-cargo test --package cortex-cli self_test -- --ignored --nocapture --test-threads=1
+cargo test --package cortex self_test -- --ignored --nocapture --test-threads=1
 ```
 
 **Run individual phases:**
 ```bash
 # Phase 1: Ingestion
-cargo test --package cortex-cli --test phase1_ingestion -- --ignored --nocapture
+cargo test --package cortex --test phase1_ingestion -- --ignored --nocapture
 
 # Phase 2: Navigation
-cargo test --package cortex-cli --test phase2_navigation -- --ignored --nocapture
+cargo test --package cortex --test phase2_navigation -- --ignored --nocapture
 
 # Phase 3: Manipulation
-cargo test --package cortex-cli --test phase3_manipulation -- --ignored --nocapture
+cargo test --package cortex --test phase3_manipulation -- --ignored --nocapture
 ```
 
 **Options explained:**
@@ -148,7 +148,7 @@ STARTING PHASE 1: COMPLETE CORTEX SELF-INGESTION
 
 [4/9] Detecting cortex crates...
   ✓ Found 8 crates:
-    - cortex-cli
+    - cortex
     - cortex-core
     - cortex-ingestion
     - cortex-memory
@@ -219,7 +219,7 @@ Total Units:          1234
 --- CRATE DETECTION ---
 Expected Crates:      8
 Found Crates:         8 (100.0%)
-  ✓ cortex-cli
+  ✓ cortex
   ✓ cortex-core
   ✓ cortex-ingestion
   ✓ cortex-memory

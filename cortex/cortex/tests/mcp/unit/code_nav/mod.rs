@@ -28,7 +28,7 @@ pub use test_helpers::*;
 
 /// Common test helpers and fixtures for code navigation tests
 mod test_helpers {
-    use cortex_cli::mcp::tools::code_nav::CodeNavContext;
+    use cortex::mcp::tools::code_nav::CodeNavContext;
     use cortex_core::id::CortexId;
     use cortex_core::types::{
         CodeUnit, CodeUnitType, Language, Visibility, Parameter, Complexity, CodeUnitStatus,

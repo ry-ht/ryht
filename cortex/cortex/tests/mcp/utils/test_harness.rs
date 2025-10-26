@@ -102,14 +102,14 @@ impl TestHarness {
     }
 
     /// Create a test context for workspace tools
-    pub fn workspace_context(&self) -> cortex_cli::mcp::tools::workspace::WorkspaceContext {
-        cortex_cli::mcp::tools::workspace::WorkspaceContext::new(self.storage.clone())
+    pub fn workspace_context(&self) -> cortex::mcp::tools::workspace::WorkspaceContext {
+        cortex::mcp::tools::workspace::WorkspaceContext::new(self.storage.clone())
             .expect("Failed to create workspace context")
     }
 
     /// Create a test context for VFS tools
-    pub fn vfs_context(&self) -> cortex_cli::mcp::tools::vfs::VfsContext {
-        cortex_cli::mcp::tools::vfs::VfsContext::new(
+    pub fn vfs_context(&self) -> cortex::mcp::tools::vfs::VfsContext {
+        cortex::mcp::tools::vfs::VfsContext::new(
             self.storage.clone(),
             self.vfs.clone(),
             self.loader.clone(),
@@ -118,16 +118,16 @@ impl TestHarness {
     }
 
     /// Create a test context for code navigation tools
-    pub fn code_nav_context(&self) -> cortex_cli::mcp::tools::code_nav::CodeNavContext {
-        cortex_cli::mcp::tools::code_nav::CodeNavContext::new(
+    pub fn code_nav_context(&self) -> cortex::mcp::tools::code_nav::CodeNavContext {
+        cortex::mcp::tools::code_nav::CodeNavContext::new(
             self.storage.clone(),
             self.vfs.clone(),
         )
     }
 
     /// Create a test context for code manipulation tools
-    pub fn code_manipulation_context(&self) -> cortex_cli::mcp::tools::code_manipulation::CodeManipulationContext {
-        cortex_cli::mcp::tools::code_manipulation::CodeManipulationContext::new(
+    pub fn code_manipulation_context(&self) -> cortex::mcp::tools::code_manipulation::CodeManipulationContext {
+        cortex::mcp::tools::code_manipulation::CodeManipulationContext::new(
             self.storage.clone(),
             self.vfs.clone(),
             self.parser.clone(),
@@ -135,15 +135,15 @@ impl TestHarness {
     }
 
     /// Create a test context for semantic search tools
-    pub async fn semantic_search_context(&self) -> cortex_cli::mcp::tools::semantic_search::SemanticSearchContext {
-        cortex_cli::mcp::tools::semantic_search::SemanticSearchContext::new(
+    pub async fn semantic_search_context(&self) -> cortex::mcp::tools::semantic_search::SemanticSearchContext {
+        cortex::mcp::tools::semantic_search::SemanticSearchContext::new(
             self.storage.clone()
         ).await.unwrap()
     }
 
     /// Create a test context for dependency analysis tools
-    pub fn dependency_context(&self) -> cortex_cli::mcp::tools::dependency_analysis::DependencyContext {
-        cortex_cli::mcp::tools::dependency_analysis::DependencyContext::new(
+    pub fn dependency_context(&self) -> cortex::mcp::tools::dependency_analysis::DependencyContext {
+        cortex::mcp::tools::dependency_analysis::DependencyContext::new(
             self.storage.clone(),
             self.vfs.clone(),
         )

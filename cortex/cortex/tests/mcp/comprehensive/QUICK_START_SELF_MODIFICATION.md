@@ -111,7 +111,7 @@ Each test has specific success criteria:
 ### Tests fail to compile
 ```bash
 # Make sure you're in the right directory
-cd /Users/taaliman/projects/luxquant/ry-ht/ryht/cortex/cortex-cli
+cd /Users/taaliman/projects/luxquant/ry-ht/ryht/cortex/cortex
 
 # Try building first
 cargo build --tests
@@ -153,7 +153,7 @@ This is the **ultimate validation** of Cortex's capabilities.
 
 ---
 
-**File**: `/cortex/cortex-cli/tests/mcp/comprehensive/self_modification_tests.rs`
+**File**: `/cortex/cortex/tests/mcp/comprehensive/self_modification_tests.rs`
 **Lines**: 1,772
 **Tests**: 8
 **Status**: ✓ Ready to run

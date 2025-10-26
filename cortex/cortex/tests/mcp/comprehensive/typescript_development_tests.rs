@@ -31,7 +31,7 @@ use cortex_vfs::{
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType
 };
 use cortex_memory::SemanticMemorySystem;
-use cortex_cli::mcp::tools;
+use cortex::mcp::tools;
 use mcp_sdk::{Tool, ToolContext};
 use serde_json::{json, Value};
 use std::collections::HashMap;

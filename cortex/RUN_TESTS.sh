@@ -46,7 +46,7 @@ echo "Unit and Integration Tests"
 echo "=================================="
 echo ""
 
-for crate in cortex-core cortex-storage cortex-vfs cortex-ingestion cortex-memory cortex-semantic cortex-mcp cortex-cli; do
+for crate in cortex-core cortex-storage cortex-vfs cortex-ingestion cortex-memory cortex-semantic cortex-mcp cortex; do
     if run_crate_tests $crate; then
         :
     else

@@ -12,8 +12,8 @@
 //! - Multi-language parsing across VFS
 
 use crate::mcp::utils::{TestHarness, ToolResultAssertions};
-use cortex_cli::mcp::tools::vfs::*;
-use cortex_cli::mcp::tools::code_nav::*;
+use cortex::mcp::tools::vfs::*;
+use cortex::mcp::tools::code_nav::*;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::time::Instant;

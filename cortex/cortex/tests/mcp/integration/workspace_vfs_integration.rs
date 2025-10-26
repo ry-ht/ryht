@@ -13,8 +13,8 @@
 //! - Concurrent operations across workspaces
 
 use crate::mcp::utils::{TestHarness, ToolResultAssertions};
-use cortex_cli::mcp::tools::workspace::*;
-use cortex_cli::mcp::tools::vfs::*;
+use cortex::mcp::tools::workspace::*;
+use cortex::mcp::tools::vfs::*;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 use std::time::Instant;

@@ -11,7 +11,7 @@
 //! - Performance measurement
 
 use super::test_helpers::*;
-use cortex_cli::mcp::tools::code_nav::CodeGetCallHierarchyTool;
+use cortex::mcp::tools::code_nav::CodeGetCallHierarchyTool;
 use mcp_sdk::prelude::*;
 use serde_json::json;
 

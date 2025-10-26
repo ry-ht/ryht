@@ -42,7 +42,7 @@ run:
 	cargo run --bin cortex -- --help
 
 install:
-	cargo install --path cortex-cli
+	cargo install --path cortex
 
 # Development helpers
 dev-check: fmt clippy test

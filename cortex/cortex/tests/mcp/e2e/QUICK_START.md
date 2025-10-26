@@ -8,8 +8,8 @@ These are **end-to-end workflow tests** that simulate real development tasks usi
 
 ### Run All E2E Tests
 ```bash
-cd /path/to/cortex/cortex-cli
-cargo test --package cortex-cli --test '*' e2e:: -- --nocapture
+cd /path/to/cortex/cortex
+cargo test --package cortex --test '*' e2e:: -- --nocapture
 ```
 
 ### Run Individual Workflows

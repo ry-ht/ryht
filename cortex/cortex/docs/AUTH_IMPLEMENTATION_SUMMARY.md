@@ -6,7 +6,7 @@ Successfully implemented JWT authentication, WebSocket support for real-time upd
 
 ## Changes Made
 
-### 1. Dependencies Added (`cortex-cli/Cargo.toml`)
+### 1. Dependencies Added (`cortex/Cargo.toml`)
 
 ```toml
 # HTTP and networking
@@ -18,7 +18,7 @@ jsonwebtoken = { version = "10.1.0", default-features = false, features = ["rust
 bcrypt = "0.17.1"
 ```
 
-### 2. Authentication Routes (`cortex-cli/src/api/routes/auth.rs`)
+### 2. Authentication Routes (`cortex/src/api/routes/auth.rs`)
 
 Implemented complete authentication system:
 
@@ -55,7 +55,7 @@ Implemented complete authentication system:
 1. Replace `ctx.storage.get()` with `ctx.storage.acquire()` (lines 145, 235, 304, 342, 367)
 2. Update `ApiResponse::success(data)` to `ApiResponse::success(data, request_id, duration_ms)` (lines 207, 275, 328, 354, 381)
 
-### 3. Authentication Middleware (`cortex-cli/src/api/middleware/auth.rs`)
+### 3. Authentication Middleware (`cortex/src/api/middleware/auth.rs`)
 
 Enhanced middleware with:
 
@@ -74,7 +74,7 @@ Enhanced middleware with:
 **Known Issues to Fix:**
 1. Add lifetime parameter to `from_request_parts` implementation to match trait (line 215)
 
-### 4. WebSocket Module (`cortex-cli/src/api/websocket.rs`)
+### 4. WebSocket Module (`cortex/src/api/websocket.rs`)
 
 Complete WebSocket implementation for real-time updates:
 
@@ -103,7 +103,7 @@ channels::user(user_id)
 channels::system_alerts()
 ```
 
-### 5. Rate Limiting (`cortex-cli/src/api/middleware/rate_limit.rs`)
+### 5. Rate Limiting (`cortex/src/api/middleware/rate_limit.rs`)
 
 Implemented tiered rate limiting:
 
@@ -120,7 +120,7 @@ Implemented tiered rate limiting:
 - Automatic cleanup of expired entries
 - Comprehensive error messages
 
-### 6. Database Schema (`cortex-cli/src/api/db_schema.rs`)
+### 6. Database Schema (`cortex/src/api/db_schema.rs`)
 
 Database tables for authentication:
 
@@ -161,7 +161,7 @@ pub struct AuthConfig {
 - `JWT_SECRET` - Override JWT secret key
 - All existing Cortex env vars supported
 
-### 8. Server Integration (`cortex-cli/src/api/server.rs`)
+### 8. Server Integration (`cortex/src/api/server.rs`)
 
 Updated REST API server:
 
@@ -222,7 +222,7 @@ WebSocket:
 
 ### Critical Fixes Needed:
 
-1. **Auth Routes** (`cortex-cli/src/api/routes/auth.rs`):
+1. **Auth Routes** (`cortex/src/api/routes/auth.rs`):
    ```rust
    // Change from:
    let conn = ctx.storage.get().await
@@ -235,7 +235,7 @@ WebSocket:
    Json(ApiResponse::success(response, request_id, duration_ms))
    ```
 
-2. **Auth Middleware** (`cortex-cli/src/api/middleware/auth.rs`):
+2. **Auth Middleware** (`cortex/src/api/middleware/auth.rs`):
    ```rust
    // Fix FromRequestParts implementation
    #[async_trait]
@@ -359,25 +359,25 @@ max_sessions_per_user = 5
 
 ## Files Created
 
-1. `/cortex-cli/src/api/routes/auth.rs` - Authentication routes
-2. `/cortex-cli/src/api/middleware/rate_limit.rs` - Rate limiting
-3. `/cortex-cli/src/api/websocket.rs` - WebSocket support
-4. `/cortex-cli/src/api/db_schema.rs` - Database schema
+1. `/cortex/src/api/routes/auth.rs` - Authentication routes
+2. `/cortex/src/api/middleware/rate_limit.rs` - Rate limiting
+3. `/cortex/src/api/websocket.rs` - WebSocket support
+4. `/cortex/src/api/db_schema.rs` - Database schema
 
 ## Files Modified
 
-1. `/cortex-cli/Cargo.toml` - Added dependencies
-2. `/cortex-cli/src/api/mod.rs` - Export new modules
-3. `/cortex-cli/src/api/routes/mod.rs` - Export auth routes
-4. `/cortex-cli/src/api/middleware/mod.rs` - Export rate limiting
-5. `/cortex-cli/src/api/middleware/auth.rs` - Enhanced auth middleware
-6. `/cortex-cli/src/api/server.rs` - Integrated all new features
+1. `/cortex/Cargo.toml` - Added dependencies
+2. `/cortex/src/api/mod.rs` - Export new modules
+3. `/cortex/src/api/routes/mod.rs` - Export auth routes
+4. `/cortex/src/api/middleware/mod.rs` - Export rate limiting
+5. `/cortex/src/api/middleware/auth.rs` - Enhanced auth middleware
+6. `/cortex/src/api/server.rs` - Integrated all new features
 7. `/cortex-core/src/config.rs` - Added AuthConfig
 
 ## Next Steps
 
 1. Apply the critical fixes listed above
-2. Test compilation with `cargo build --package cortex-cli`
+2. Test compilation with `cargo build --package cortex`
 3. Start the server and test authentication flows
 4. Add authentication middleware to protected routes
 5. Implement additional security features as needed

@@ -82,7 +82,7 @@ use cortex_vfs::{
     FileIngestionPipeline, Workspace, WorkspaceType, SourceType
 };
 use cortex_memory::SemanticMemorySystem;
-use cortex_cli::mcp::tools::{
+use cortex::mcp::tools::{
     workspace::WorkspaceContext,
     vfs::VfsContext,
     code_nav::CodeNavContext,
@@ -260,7 +260,7 @@ impl SelfModificationHarness {
     async fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-        // Find cortex root (go up from cortex-cli to cortex workspace)
+        // Find cortex root (go up from cortex to cortex workspace)
         let cortex_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("Failed to get parent directory")
@@ -446,8 +446,8 @@ async fn test_cortex_adds_new_tool_to_itself() {
     println!("\n[Phase 1/7] Loading Cortex MCP tools source code...");
     let phase_start = Instant::now();
 
-    let files_loaded = harness.load_cortex_crates(&["cortex-cli"]).await
-        .expect("Failed to load cortex-cli");
+    let files_loaded = harness.load_cortex_crates(&["cortex"]).await
+        .expect("Failed to load cortex");
 
     let phase_duration = phase_start.elapsed().as_millis();
     metrics.record_phase(

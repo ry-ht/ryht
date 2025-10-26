@@ -27,7 +27,7 @@
 //! cargo test --test rust_development_tests -- --ignored --nocapture
 //! ```
 
-use cortex_cli::mcp::tools::{
+use cortex::mcp::tools::{
     ai_assisted::*,
     architecture_analysis::*,
     code_manipulation::*,

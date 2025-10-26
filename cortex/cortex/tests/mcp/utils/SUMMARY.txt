@@ -3,7 +3,7 @@ MCP TOOLS TEST INFRASTRUCTURE - IMPLEMENTATION SUMMARY
 ================================================================================
 
 Created: 2025-10-23
-Location: cortex/cortex-cli/tests/mcp/utils/
+Location: cortex/cortex/tests/mcp/utils/
 
 FILES CREATED:
 1. mod.rs (18 lines)

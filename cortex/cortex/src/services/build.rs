@@ -258,10 +258,10 @@ impl BuildService {
                 // Add mock artifacts
                 job.artifacts = vec![
                     BuildArtifact {
-                        name: "cortex-cli".to_string(),
+                        name: "cortex".to_string(),
                         artifact_type: "binary".to_string(),
                         size_bytes: 15_234_567,
-                        url: format!("/artifacts/{}/cortex-cli", job_id),
+                        url: format!("/artifacts/{}/cortex", job_id),
                         hash: Some("sha256:abc123...".to_string()),
                     },
                 ];

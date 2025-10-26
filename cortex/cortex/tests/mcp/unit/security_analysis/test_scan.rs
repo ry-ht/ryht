@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use cortex_cli::mcp::tools::security_analysis::{SecurityAnalysisContext, SecurityScanTool};
+    use cortex::mcp::tools::security_analysis::{SecurityAnalysisContext, SecurityScanTool};
     use cortex_storage::ConnectionManager;
     use mcp_sdk::prelude::*;
     use serde_json::json;

@@ -30,7 +30,7 @@ async fn example_workspace_creation_with_assertions() {
 
     // Get workspace context
     let ctx = harness.workspace_context();
-    let tool = cortex_cli::mcp::tools::workspace::WorkspaceCreateTool::new(ctx);
+    let tool = cortex::mcp::tools::workspace::WorkspaceCreateTool::new(ctx);
 
     // Execute tool
     let input = json!({

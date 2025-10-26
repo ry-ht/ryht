@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use cortex_cli::mcp::tools::security_analysis::{
+    use cortex::mcp::tools::security_analysis::{
         SecurityAnalysisContext, SecurityGenerateReportTool,
     };
     use cortex_storage::ConnectionManager;

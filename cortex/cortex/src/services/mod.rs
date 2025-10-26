@@ -1,4 +1,4 @@
-//! Unified service layer for cortex-cli
+//! Unified service layer for cortex
 //!
 //! This module provides a shared service layer that eliminates duplication
 //! between API and MCP modules. Each service encapsulates common business logic

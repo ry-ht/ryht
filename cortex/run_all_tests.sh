@@ -337,7 +337,7 @@ declare -a UNIT_TEST_PACKAGES=(
     "cortex-ingestion"
     "cortex-semantic"
     "cortex-code-analysis"
-    "cortex-cli"
+    "cortex"
 )
 
 # Individual package integration tests
@@ -359,18 +359,18 @@ declare -a INTEGRATION_TESTS=(
     "cortex-semantic:integration_tests"
     "cortex-semantic:test_semantic_search_e2e"
 
-    # cortex-cli integration tests
-    "cortex-cli:api_integration_tests"
-    "cortex-cli:comprehensive_tests"
-    "cortex-cli:integration_tests"
-    "cortex-cli:mcp_integration_tests"
-    "cortex-cli:mcp_tools_unit_tests"
-    "cortex-cli:test_db_commands"
+    # cortex integration tests
+    "cortex:api_integration_tests"
+    "cortex:comprehensive_tests"
+    "cortex:integration_tests"
+    "cortex:mcp_integration_tests"
+    "cortex:mcp_tools_unit_tests"
+    "cortex:test_db_commands"
 )
 
 # Long-running integration tests
 declare -a LONG_RUNNING_TESTS=(
-    "cortex-cli:ultimate_cortex_test"
+    "cortex:ultimate_cortex_test"
 )
 
 # Workspace-level integration tests

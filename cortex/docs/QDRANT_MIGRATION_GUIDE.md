@@ -324,7 +324,7 @@ import_jsonl_to_qdrant('export.jsonl', 'code_vectors', batch_size=500)
 #### Using CLI (Coming Soon)
 
 ```bash
-# Using cortex-cli migration command
+# Using cortex migration command
 cortex qdrant migrate \
   --source export.jsonl \
   --target code_vectors \

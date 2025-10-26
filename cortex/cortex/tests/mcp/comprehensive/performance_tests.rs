@@ -38,7 +38,7 @@ use cortex_code_analysis::CodeParser;
 use cortex_storage::{ConnectionManager, DatabaseConfig};
 use cortex_vfs::{VirtualFileSystem, ExternalProjectLoader, MaterializationEngine, FileIngestionPipeline, Workspace, WorkspaceType, SourceType};
 use cortex_memory::SemanticMemorySystem;
-use cortex_cli::mcp::tools::{
+use cortex::mcp::tools::{
     workspace::WorkspaceContext,
     vfs::VfsContext,
     code_nav::CodeNavContext,
@@ -702,7 +702,7 @@ async fn test_memory_usage_analysis() {
 
     // Load large project (CLI with all dependencies)
     let _ = harness.loader
-        .import_project(&harness.cortex_root.join("cortex-cli"), &Default::default())
+        .import_project(&harness.cortex_root.join("cortex"), &Default::default())
         .await;
 
     let (vfs, semantic, db) = harness.estimate_memory_usage();
@@ -811,7 +811,7 @@ async fn test_scale_performance() {
     let scales = vec![
         ("Small (cortex-core)", "cortex-core"),
         ("Medium (cortex-vfs)", "cortex-vfs"),
-        ("Large (cortex-cli)", "cortex-cli"),
+        ("Large (cortex)", "cortex"),
     ];
 
     for (scale_name, crate_name) in scales {

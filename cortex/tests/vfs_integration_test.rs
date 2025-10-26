@@ -231,10 +231,10 @@ async fn test_vfs_load_cortex_project() -> Result<()> {
 
     // CLI modules
     let cli_files = vec![
-        ("cortex-cli/src/main.rs", "fn main() { println!(\"Cortex\"); }"),
-        ("cortex-cli/src/commands.rs", "// CLI commands"),
-        ("cortex-cli/src/mcp/mod.rs", "// MCP server"),
-        ("cortex-cli/src/mcp/tools/mod.rs", "// MCP tools"),
+        ("cortex/src/main.rs", "fn main() { println!(\"Cortex\"); }"),
+        ("cortex/src/commands.rs", "// CLI commands"),
+        ("cortex/src/mcp/mod.rs", "// MCP server"),
+        ("cortex/src/mcp/tools/mod.rs", "// MCP tools"),
     ];
 
     // Tests
@@ -268,7 +268,7 @@ async fn test_vfs_load_cortex_project() -> Result<()> {
 
     // Verify specific files
     assert!(env.file_exists("cortex-core/src/lib.rs").await);
-    assert!(env.file_exists("cortex-cli/src/main.rs").await);
+    assert!(env.file_exists("cortex/src/main.rs").await);
     assert!(env.file_exists("tests/test_vfs.rs").await);
 
     println!("  ✓ Performance: {:.2} files/sec", all_files.len() as f64 / elapsed.as_secs_f64());

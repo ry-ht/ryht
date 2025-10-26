@@ -11,7 +11,7 @@ members = [
     "cortex/cortex-memory",
     "cortex/cortex-semantic",
     "cortex/cortex-code-analysis",
-    "cortex/cortex-cli",
+    "cortex/cortex",
 ]
 
 [workspace.package]
