@@ -48,6 +48,25 @@ A neural-inspired memory architecture with semantic understanding, temporal cont
 cargo build --release
 ```
 
+### Build and Copy to dist/ (Recommended)
+Build all binaries and copy them to `dist/` directory:
+
+```bash
+# Using bash script (release mode)
+./build-and-copy.sh release
+
+# Or debug mode
+./build-and-copy.sh debug
+
+# Using cargo-make (requires: cargo install cargo-make)
+cargo make dist          # Release binaries
+cargo make dist-debug    # Debug binaries
+```
+
+Binaries will be available in `dist/`:
+- `dist/cortex` - Cortex CLI and server
+- `dist/axon` - Axon orchestration system
+
 ### Run Axon (Multi-Agent Dashboard)
 ```bash
 cd axon

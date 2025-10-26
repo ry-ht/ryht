@@ -1,0 +1,78 @@
+# Makefile.toml for cargo-make
+# Usage: cargo make <task>
+
+[config]
+default_to_workspace = false
+
+[env]
+DIST_DIR = "dist"
+
+[tasks.clean-dist]
+description = "Clean dist directory"
+script = '''
+#!/usr/bin/env bash
+rm -rf ${DIST_DIR}
+mkdir -p ${DIST_DIR}
+echo "✓ Cleaned ${DIST_DIR}/"
+'''
+
+[tasks.build-release]
+description = "Build all binaries in release mode"
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.build-debug]
+description = "Build all binaries in debug mode"
+command = "cargo"
+args = ["build"]
+
+[tasks.copy-binaries-release]
+description = "Copy release binaries to dist/"
+dependencies = ["build-release"]
+script = '''
+#!/usr/bin/env bash
+set -e
+
+mkdir -p ${DIST_DIR}
+
+# Copy binaries
+for binary in cortex axon dashboard; do
+    if [ -f "target/release/${binary}" ]; then
+        cp "target/release/${binary}" "${DIST_DIR}/"
+        echo "✓ Copied ${binary} (release)"
+    fi
+done
+
+ls -lh ${DIST_DIR}/
+'''
+
+[tasks.copy-binaries-debug]
+description = "Copy debug binaries to dist/"
+dependencies = ["build-debug"]
+script = '''
+#!/usr/bin/env bash
+set -e
+
+mkdir -p ${DIST_DIR}
+
+# Copy binaries
+for binary in cortex axon dashboard; do
+    if [ -f "target/debug/${binary}" ]; then
+        cp "target/debug/${binary}" "${DIST_DIR}/"
+        echo "✓ Copied ${binary} (debug)"
+    fi
+done
+
+ls -lh ${DIST_DIR}/
+'''
+
+[tasks.dist]
+description = "Build and copy release binaries to dist/ (default)"
+dependencies = ["clean-dist", "copy-binaries-release"]
+
+[tasks.dist-debug]
+description = "Build and copy debug binaries to dist/"
+dependencies = ["clean-dist", "copy-binaries-debug"]
+
+[tasks.default]
+alias = "dist"
