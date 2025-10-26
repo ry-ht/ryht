@@ -106,11 +106,14 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Parse socket address
     let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
 
-    info!("API Server listening on http://{}", addr);
-    info!("WebSocket endpoint: ws://{}/api/v1/ws", addr);
-    info!("API documentation: http://{}/api/v1/", addr);
+    info!("Axon API Server starting...");
+    info!("  Listening: http://{}", addr);
+    info!("  API:       http://{}/api/v1/", addr);
+    info!("  WebSocket: ws://{}/api/v1/ws", addr);
     if has_dashboard {
-        info!("Dashboard UI: http://{}/", addr);
+        info!("  Dashboard: http://{}/", addr);
+    } else {
+        info!("  Dashboard: Not available (run ./build-and-copy.sh to deploy)");
     }
 
     // Print API key information
