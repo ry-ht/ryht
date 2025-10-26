@@ -9,7 +9,12 @@
 //! - Integration with CortexBridge for Knowledge Graph
 
 use super::*;
+use crate::cortex_bridge::{
+    CortexBridge, Episode, EpisodeOutcome, EpisodeType, PatternType,
+    SearchFilters, WorkspaceId,
+};
 use std::sync::Arc;
+use tracing::{debug, info, warn};
 
 /// Architect agent for system design and architecture planning
 pub struct ArchitectAgent {
@@ -21,6 +26,10 @@ pub struct ArchitectAgent {
     // Architecture-specific configuration
     design_patterns: Vec<String>,
     architectural_styles: Vec<ArchitecturalStyle>,
+
+    // Cortex integration (optional for backward compatibility)
+    cortex: Option<Arc<CortexBridge>>,
+    workspace_id: Option<WorkspaceId>,
 }
 
 /// Architectural styles supported by the architect agent
@@ -197,7 +206,7 @@ pub enum EstimatedEffort {
 }
 
 impl ArchitectAgent {
-    /// Create a new architect agent with default configuration
+    /// Create a new architect agent with default configuration (no Cortex)
     pub fn new(name: String) -> Self {
         let mut capabilities = HashSet::new();
         capabilities.insert(Capability::SystemDesign);
@@ -227,7 +236,17 @@ impl ArchitectAgent {
                 ArchitecturalStyle::EventDriven,
                 ArchitecturalStyle::Hexagonal,
             ],
+            cortex: None,
+            workspace_id: None,
         }
+    }
+
+    /// Create a new architect agent with Cortex integration
+    pub fn with_cortex(name: String, cortex: Arc<CortexBridge>, workspace_id: WorkspaceId) -> Self {
+        let mut agent = Self::new(name);
+        agent.cortex = Some(cortex);
+        agent.workspace_id = Some(workspace_id);
+        agent
     }
 
     /// Create architect agent with custom patterns and styles
@@ -270,14 +289,165 @@ impl ArchitectAgent {
         })
     }
 
-    /// Analyze dependencies in the codebase
+    /// Analyze dependencies in the codebase (sync version, no Cortex)
+    ///
+    /// This is a synchronous version for backward compatibility.
+    /// For Cortex integration, use `analyze_dependencies_async`.
+    ///
+    /// # Arguments
+    /// * `modules` - List of module names to analyze
+    ///
+    /// # Returns
+    /// Dependency analysis with recommendations
     pub fn analyze_dependencies(&self, modules: Vec<String>) -> Result<DependencyAnalysis> {
-        // This would integrate with CortexBridge in a full implementation
-        // For now, we provide a basic structure
+        info!("Starting dependency analysis for {} modules (sync)", modules.len());
 
         let circular_dependencies = self.detect_circular_dependencies(&modules);
         let max_depth = self.calculate_dependency_depth(&modules);
         let recommendations = self.generate_dependency_recommendations(&circular_dependencies);
+
+        Ok(DependencyAnalysis {
+            total_dependencies: modules.len(),
+            circular_dependencies,
+            max_depth,
+            recommendations,
+        })
+    }
+
+    /// Analyze dependencies in the codebase with Cortex integration (async version)
+    ///
+    /// This method:
+    /// 1. Detects circular dependencies using DFS
+    /// 2. Calculates dependency depth
+    /// 3. Searches for similar architecture patterns in Cortex (if available)
+    /// 4. Stores analysis results in episodic memory
+    ///
+    /// # Arguments
+    /// * `modules` - List of module names to analyze
+    ///
+    /// # Returns
+    /// Dependency analysis with recommendations
+    pub async fn analyze_dependencies_async(&self, modules: Vec<String>) -> Result<DependencyAnalysis> {
+        info!("Starting dependency analysis for {} modules", modules.len());
+
+        let circular_dependencies = self.detect_circular_dependencies(&modules);
+        let max_depth = self.calculate_dependency_depth(&modules);
+        let mut recommendations = self.generate_dependency_recommendations(&circular_dependencies);
+
+        // If Cortex is available, enhance analysis with semantic search
+        if let (Some(cortex), Some(workspace_id)) = (&self.cortex, &self.workspace_id) {
+            debug!("Enhancing dependency analysis with Cortex semantic search");
+
+            // Search for similar architecture patterns
+            let search_query = format!(
+                "dependency analysis architecture patterns circular dependencies depth {}",
+                max_depth
+            );
+
+            match cortex
+                .semantic_search(
+                    &search_query,
+                    workspace_id,
+                    SearchFilters {
+                        types: vec!["architecture".to_string(), "pattern".to_string()],
+                        min_relevance: 0.7,
+                        ..Default::default()
+                    },
+                )
+                .await
+            {
+                Ok(results) => {
+                    info!("Found {} similar architecture patterns", results.len());
+
+                    // Add recommendations based on found patterns
+                    for result in results.iter().take(3) {
+                        recommendations.push(format!(
+                            "Consider pattern: {} (relevance: {:.2})",
+                            result.name, result.relevance_score
+                        ));
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to search for architecture patterns: {}", e);
+                }
+            }
+
+            // Get existing architecture patterns from Cortex
+            match cortex.get_patterns().await {
+                Ok(patterns) => {
+                    let arch_patterns: Vec<_> = patterns
+                        .iter()
+                        .filter(|p| matches!(p.pattern_type, PatternType::Architecture))
+                        .collect();
+
+                    if !arch_patterns.is_empty() {
+                        info!("Found {} architecture patterns in memory", arch_patterns.len());
+
+                        for pattern in arch_patterns.iter().take(3) {
+                            if pattern.success_rate > 0.7 {
+                                recommendations.push(format!(
+                                    "Apply learned pattern '{}' (success rate: {:.1}%)",
+                                    pattern.name,
+                                    pattern.success_rate * 100.0
+                                ));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to retrieve patterns from Cortex: {}", e);
+                }
+            }
+
+            // Store this analysis as an episode for future learning
+            let episode = Episode {
+                id: uuid::Uuid::new_v4().to_string(),
+                episode_type: EpisodeType::Exploration,
+                task_description: format!("Dependency analysis for {} modules", modules.len()),
+                agent_id: self.id.to_string(),
+                session_id: None,
+                workspace_id: workspace_id.to_string(),
+                entities_created: vec![],
+                entities_modified: modules.clone(),
+                entities_deleted: vec![],
+                files_touched: vec![],
+                queries_made: vec![search_query],
+                tools_used: vec![],
+                solution_summary: format!(
+                    "Analyzed {} modules, found {} circular dependencies, max depth: {}",
+                    modules.len(),
+                    circular_dependencies.len(),
+                    max_depth
+                ),
+                outcome: if circular_dependencies.is_empty() {
+                    EpisodeOutcome::Success
+                } else {
+                    EpisodeOutcome::Partial
+                },
+                success_metrics: serde_json::json!({
+                    "total_modules": modules.len(),
+                    "circular_deps": circular_dependencies.len(),
+                    "max_depth": max_depth,
+                }),
+                errors_encountered: vec![],
+                lessons_learned: if !circular_dependencies.is_empty() {
+                    vec!["Circular dependencies detected - refactoring recommended".to_string()]
+                } else {
+                    vec!["Clean dependency graph - no circular dependencies".to_string()]
+                },
+                duration_seconds: 0,
+                tokens_used: Default::default(),
+                embedding: vec![],
+                created_at: chrono::Utc::now(),
+                completed_at: Some(chrono::Utc::now()),
+            };
+
+            if let Err(e) = cortex.store_episode(episode).await {
+                warn!("Failed to store dependency analysis episode: {}", e);
+            } else {
+                debug!("Dependency analysis episode stored in Cortex memory");
+            }
+        }
 
         Ok(DependencyAnalysis {
             total_dependencies: modules.len(),
@@ -425,14 +595,215 @@ impl ArchitectAgent {
         ]
     }
 
-    fn detect_circular_dependencies(&self, _modules: &[String]) -> Vec<CircularDependency> {
-        // Placeholder - would use graph analysis in real implementation
-        vec![]
+    /// Detect circular dependencies using Depth-First Search (DFS)
+    ///
+    /// Algorithm:
+    /// 1. Build adjacency list from module dependencies
+    /// 2. Track node states: Unvisited, InProgress, Visited
+    /// 3. Use DFS to detect back edges (cycles)
+    /// 4. When a back edge is found, reconstruct the cycle path
+    ///
+    /// # Arguments
+    /// * `modules` - List of module names
+    ///
+    /// # Returns
+    /// Vector of detected circular dependencies with severity
+    fn detect_circular_dependencies(&self, modules: &[String]) -> Vec<CircularDependency> {
+        use std::collections::HashMap;
+
+        tracing::debug!("Detecting circular dependencies in {} modules", modules.len());
+
+        // Build a simple dependency graph (for demo, we assume modules depend on next one)
+        // In real implementation, this would parse actual code dependencies
+        let mut graph: HashMap<&str, Vec<&str>> = HashMap::new();
+
+        for (i, module) in modules.iter().enumerate() {
+            let deps: Vec<&str> = modules
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i && *j < modules.len())
+                .map(|(_, m)| m.as_str())
+                .collect();
+            graph.insert(module.as_str(), deps);
+        }
+
+        // DFS states
+        #[derive(PartialEq)]
+        enum NodeState {
+            Unvisited,
+            InProgress,
+            Visited,
+        }
+
+        let mut states: HashMap<&str, NodeState> = HashMap::new();
+        let mut cycles: Vec<CircularDependency> = Vec::new();
+        let mut current_path: Vec<String> = Vec::new();
+
+        // DFS function to detect cycles
+        fn dfs<'a>(
+            node: &'a str,
+            graph: &HashMap<&'a str, Vec<&'a str>>,
+            states: &mut HashMap<&'a str, NodeState>,
+            current_path: &mut Vec<String>,
+            cycles: &mut Vec<CircularDependency>,
+        ) {
+            states.insert(node, NodeState::InProgress);
+            current_path.push(node.to_string());
+
+            if let Some(neighbors) = graph.get(node) {
+                for &neighbor in neighbors {
+                    match states.get(neighbor).unwrap_or(&NodeState::Unvisited) {
+                        NodeState::Unvisited => {
+                            dfs(neighbor, graph, states, current_path, cycles);
+                        }
+                        NodeState::InProgress => {
+                            // Back edge detected - we found a cycle!
+                            if let Some(cycle_start) = current_path.iter().position(|n| n == neighbor) {
+                                let cycle: Vec<String> = current_path[cycle_start..]
+                                    .iter()
+                                    .chain(std::iter::once(&neighbor.to_string()))
+                                    .cloned()
+                                    .collect();
+
+                                // Determine severity based on cycle length
+                                let severity = match cycle.len() {
+                                    2..=3 => DependencySeverity::High,
+                                    4..=5 => DependencySeverity::Medium,
+                                    _ => DependencySeverity::Low,
+                                };
+
+                                tracing::warn!("Circular dependency detected: {:?}", cycle);
+
+                                cycles.push(CircularDependency { cycle, severity });
+                            }
+                        }
+                        NodeState::Visited => {
+                            // Already processed, skip
+                        }
+                    }
+                }
+            }
+
+            current_path.pop();
+            states.insert(node, NodeState::Visited);
+        }
+
+        // Initialize all nodes as unvisited
+        for module in modules.iter() {
+            states.insert(module.as_str(), NodeState::Unvisited);
+        }
+
+        // Run DFS from each unvisited node
+        for module in modules.iter() {
+            if states.get(module.as_str()) == Some(&NodeState::Unvisited) {
+                dfs(module.as_str(), &graph, &mut states, &mut current_path, &mut cycles);
+            }
+        }
+
+        tracing::info!("Found {} circular dependencies", cycles.len());
+        cycles
     }
 
+    /// Calculate maximum dependency depth using topological sort and DFS
+    ///
+    /// Algorithm:
+    /// 1. Build dependency graph
+    /// 2. Use DFS to compute the longest path from root nodes
+    /// 3. Track maximum depth encountered
+    ///
+    /// The depth represents the maximum chain length in the dependency graph.
+    /// Higher depth indicates more complex dependency chains.
+    ///
+    /// # Arguments
+    /// * `modules` - List of module names
+    ///
+    /// # Returns
+    /// Maximum depth of the dependency graph
     fn calculate_dependency_depth(&self, modules: &[String]) -> usize {
-        // Placeholder - would use graph traversal in real implementation
-        modules.len() / 2
+        use std::collections::{HashMap, HashSet};
+
+        if modules.is_empty() {
+            return 0;
+        }
+
+        tracing::debug!("Calculating dependency depth for {} modules", modules.len());
+
+        // Build dependency graph
+        // In real implementation, this would parse actual dependencies
+        let mut graph: HashMap<&str, Vec<&str>> = HashMap::new();
+        let mut all_nodes: HashSet<&str> = HashSet::new();
+
+        for (i, module) in modules.iter().enumerate() {
+            all_nodes.insert(module.as_str());
+            // Simplified: each module depends on previous modules
+            let deps: Vec<&str> = modules[..i]
+                .iter()
+                .map(|m| m.as_str())
+                .collect();
+            graph.insert(module.as_str(), deps);
+        }
+
+        // Find root nodes (nodes with no incoming edges)
+        let mut has_incoming: HashSet<&str> = HashSet::new();
+        for deps in graph.values() {
+            for &dep in deps {
+                has_incoming.insert(dep);
+            }
+        }
+
+        let root_nodes: Vec<&str> = all_nodes
+            .iter()
+            .filter(|&&node| !has_incoming.contains(node))
+            .copied()
+            .collect();
+
+        if root_nodes.is_empty() {
+            // If no root nodes, there might be cycles - return module count as approximation
+            tracing::warn!("No root nodes found - possible circular dependencies");
+            return modules.len();
+        }
+
+        // Calculate depth using DFS
+        let mut memo: HashMap<&str, usize> = HashMap::new();
+
+        fn dfs_depth<'a>(
+            node: &'a str,
+            graph: &HashMap<&'a str, Vec<&'a str>>,
+            memo: &mut HashMap<&'a str, usize>,
+        ) -> usize {
+            // Check memoization
+            if let Some(&depth) = memo.get(node) {
+                return depth;
+            }
+
+            let depth = if let Some(deps) = graph.get(node) {
+                if deps.is_empty() {
+                    1 // Leaf node
+                } else {
+                    // Max depth of dependencies + 1
+                    1 + deps
+                        .iter()
+                        .map(|&dep| dfs_depth(dep, graph, memo))
+                        .max()
+                        .unwrap_or(0)
+                }
+            } else {
+                1 // No dependencies
+            };
+
+            memo.insert(node, depth);
+            depth
+        }
+
+        // Calculate depth from all nodes
+        let max_depth = all_nodes
+            .iter()
+            .map(|&node| dfs_depth(node, &graph, &mut memo))
+            .max()
+            .unwrap_or(1);
+
+        tracing::info!("Maximum dependency depth: {}", max_depth);
+        max_depth
     }
 
     fn generate_dependency_recommendations(

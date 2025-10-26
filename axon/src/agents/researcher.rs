@@ -9,8 +9,12 @@
 //! - Integration with CortexBridge for semantic search
 
 use super::*;
+use crate::cortex_bridge::{
+    CortexBridge, SearchFilters, WorkspaceId, UnitFilters,
+};
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
+use tracing::{debug, info, warn};
 
 /// Researcher agent for information gathering and analysis
 pub struct ResearcherAgent {
@@ -22,6 +26,10 @@ pub struct ResearcherAgent {
     // Research-specific configuration
     search_strategies: Vec<SearchStrategy>,
     information_sources: Vec<InformationSource>,
+
+    // Cortex integration (optional for backward compatibility)
+    cortex: Option<Arc<CortexBridge>>,
+    workspace_id: Option<WorkspaceId>,
 }
 
 /// Search strategy for information retrieval
@@ -268,7 +276,7 @@ pub struct ComparisonDimension {
 }
 
 impl ResearcherAgent {
-    /// Create a new researcher agent with default configuration
+    /// Create a new researcher agent with default configuration (no Cortex)
     pub fn new(name: String) -> Self {
         let mut capabilities = HashSet::new();
         capabilities.insert(Capability::InformationRetrieval);
@@ -291,7 +299,17 @@ impl ResearcherAgent {
                 InformationSource::Documentation,
                 InformationSource::KnowledgeBase,
             ],
+            cortex: None,
+            workspace_id: None,
         }
+    }
+
+    /// Create a new researcher agent with Cortex integration
+    pub fn with_cortex(name: String, cortex: Arc<CortexBridge>, workspace_id: WorkspaceId) -> Self {
+        let mut agent = Self::new(name);
+        agent.cortex = Some(cortex);
+        agent.workspace_id = Some(workspace_id);
+        agent
     }
 
     /// Create researcher agent with custom strategies
@@ -306,13 +324,22 @@ impl ResearcherAgent {
         agent
     }
 
-    /// Conduct research on a topic
+    /// Conduct research on a topic (sync version, no Cortex)
+    ///
+    /// This is a synchronous version for backward compatibility.
+    /// For Cortex integration, use `research_async`.
     pub fn research(&self, query: ResearchQuery) -> Result<ResearchReport> {
+        info!("Starting research for query: {} (sync)", query.query);
+
         // Select appropriate search strategy
         let strategy = self.select_strategy(&query);
 
-        // Gather information from various sources
-        let raw_findings = self.gather_information(&query, &strategy)?;
+        // Use basic findings without Cortex
+        let raw_findings = vec![RawFinding {
+            content: format!("Finding for: {}", query.query),
+            source: "local".to_string(),
+            relevance: 0.7,
+        }];
 
         // Filter and validate information
         let validated_findings = self.validate_information(raw_findings, query.quality_threshold);
@@ -331,6 +358,48 @@ impl ResearcherAgent {
 
         // Identify related topics
         let related_topics = self.identify_related_topics(&query, &key_findings);
+
+        Ok(ResearchReport {
+            query: query.query.clone(),
+            summary,
+            key_findings,
+            sources: self.get_consulted_sources(),
+            confidence,
+            recommendations,
+            related_topics,
+            created_at: Utc::now(),
+        })
+    }
+
+    /// Conduct research on a topic with Cortex integration (async version)
+    pub async fn research_async(&self, query: ResearchQuery) -> Result<ResearchReport> {
+        info!("Starting research for query: {}", query.query);
+
+        // Select appropriate search strategy
+        let strategy = self.select_strategy(&query);
+
+        // Gather information from various sources (now async)
+        let raw_findings = self.gather_information(&query, &strategy).await?;
+
+        // Filter and validate information
+        let validated_findings = self.validate_information(raw_findings, query.quality_threshold);
+
+        // Analyze and synthesize findings
+        let key_findings = self.synthesize_findings(validated_findings);
+
+        // Calculate confidence before moving key_findings
+        let confidence = self.calculate_confidence(&key_findings);
+
+        // Generate summary before moving key_findings
+        let summary = self.generate_summary(&key_findings);
+
+        // Generate recommendations
+        let recommendations = self.generate_recommendations(&key_findings);
+
+        // Identify related topics
+        let related_topics = self.identify_related_topics(&query, &key_findings);
+
+        info!("Research completed with {} findings", key_findings.len());
 
         Ok(ResearchReport {
             query: query.query.clone(),
@@ -434,19 +503,192 @@ impl ResearcherAgent {
         }
     }
 
-    fn gather_information(
+    /// Gather information using CortexBridge semantic search
+    ///
+    /// This method implements real integration with Cortex:
+    /// 1. Uses semantic_search for finding relevant code and documentation
+    /// 2. Filters results by relevance threshold
+    /// 3. Applies different search strategies (BroadKeyword, Semantic, etc.)
+    /// 4. Returns findings with sources and relevance scores
+    ///
+    /// # Arguments
+    /// * `query` - Research query with parameters
+    /// * `strategy` - Search strategy to apply
+    ///
+    /// # Returns
+    /// Vector of raw findings with relevance scores
+    async fn gather_information(
         &self,
         query: &ResearchQuery,
-        _strategy: &SearchStrategy,
+        strategy: &SearchStrategy,
     ) -> Result<Vec<RawFinding>> {
-        // Placeholder - would integrate with CortexBridge for semantic search
-        Ok(vec![
-            RawFinding {
+        let mut findings = Vec::new();
+
+        info!("Gathering information for query: {}", query.query);
+        debug!("Using strategy: {:?}", strategy);
+
+        // If Cortex is available, use it for semantic search
+        if let (Some(cortex), Some(workspace_id)) = (&self.cortex, &self.workspace_id) {
+            // Configure search filters based on strategy
+            let filters = match strategy {
+                SearchStrategy::Semantic => SearchFilters {
+                    types: vec![
+                        "function".to_string(),
+                        "class".to_string(),
+                        "module".to_string(),
+                        "interface".to_string(),
+                    ],
+                    min_relevance: query.quality_threshold,
+                    ..Default::default()
+                },
+                SearchStrategy::BroadKeyword => SearchFilters {
+                    types: vec![],
+                    min_relevance: query.quality_threshold * 0.8, // Lower threshold for broad search
+                    ..Default::default()
+                },
+                SearchStrategy::DomainExpert => SearchFilters {
+                    types: vec!["class".to_string(), "interface".to_string()],
+                    min_relevance: query.quality_threshold * 1.1, // Higher threshold for expert search
+                    ..Default::default()
+                },
+                SearchStrategy::Citation => SearchFilters {
+                    types: vec!["documentation".to_string(), "comment".to_string()],
+                    min_relevance: query.quality_threshold,
+                    ..Default::default()
+                },
+                SearchStrategy::TrendingTopics => SearchFilters {
+                    types: vec![],
+                    min_relevance: query.quality_threshold * 0.9,
+                    ..Default::default()
+                },
+            };
+
+            // Perform semantic search
+            match cortex
+                .semantic_search(&query.query, workspace_id, filters)
+                .await
+            {
+                Ok(results) => {
+                    info!("Found {} results from Cortex semantic search", results.len());
+
+                    // Convert search results to findings
+                    for result in results.into_iter().take(query.max_results) {
+                        // Filter by relevance threshold
+                        if result.relevance_score >= query.quality_threshold {
+                            findings.push(RawFinding {
+                                content: format!(
+                                    "{}\n\nFile: {}\nSignature: {}\nSnippet:\n{}",
+                                    result.name,
+                                    result.file,
+                                    result.signature,
+                                    result.snippet
+                                ),
+                                source: result.file.clone(),
+                                relevance: result.relevance_score,
+                            });
+                        }
+                    }
+
+                    debug!("Filtered to {} findings above threshold", findings.len());
+                }
+                Err(e) => {
+                    warn!("Cortex semantic search failed: {}", e);
+                    // Fall back to basic finding
+                    findings.push(RawFinding {
+                        content: format!("Finding for: {} (fallback mode)", query.query),
+                        source: "fallback".to_string(),
+                        relevance: 0.5,
+                    });
+                }
+            }
+
+            // If strategy is Semantic or DomainExpert, also search episodes for similar research
+            if matches!(strategy, SearchStrategy::Semantic | SearchStrategy::DomainExpert) {
+                match cortex.search_episodes(&query.query, 5).await {
+                    Ok(episodes) => {
+                        info!("Found {} related episodes", episodes.len());
+
+                        for episode in episodes {
+                            // Extract insights from previous research
+                            if !episode.lessons_learned.is_empty() {
+                                let lessons = episode.lessons_learned.join("; ");
+                                findings.push(RawFinding {
+                                    content: format!(
+                                        "Previous research insight: {}\nSummary: {}",
+                                        lessons, episode.solution_summary
+                                    ),
+                                    source: format!("episode:{}", episode.id),
+                                    relevance: 0.8, // High relevance for learned knowledge
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Failed to search episodes: {}", e);
+                    }
+                }
+            }
+
+            // For TrendingTopics strategy, get code units to analyze patterns
+            if matches!(strategy, SearchStrategy::TrendingTopics) {
+                match cortex
+                    .get_code_units(
+                        workspace_id,
+                        UnitFilters {
+                            unit_type: None,
+                            language: None,
+                            visibility: Some("public".to_string()),
+                        },
+                    )
+                    .await
+                {
+                    Ok(units) => {
+                        info!("Retrieved {} code units for trend analysis", units.len());
+
+                        // Analyze unit types distribution for trends
+                        let mut type_counts: HashMap<String, usize> = HashMap::new();
+                        for unit in units.iter().take(100) {
+                            *type_counts.entry(unit.unit_type.clone()).or_insert(0) += 1;
+                        }
+
+                        let trend_summary = type_counts
+                            .iter()
+                            .map(|(t, c)| format!("{}: {}", t, c))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        findings.push(RawFinding {
+                            content: format!(
+                                "Code trends analysis: {}\nTotal units analyzed: {}",
+                                trend_summary,
+                                units.len()
+                            ),
+                            source: "trend_analysis".to_string(),
+                            relevance: 0.75,
+                        });
+                    }
+                    Err(e) => {
+                        debug!("Failed to get code units: {}", e);
+                    }
+                }
+            }
+        } else {
+            // No Cortex - use placeholder finding
+            debug!("No Cortex available, using placeholder finding");
+            findings.push(RawFinding {
                 content: format!("Finding for: {}", query.query),
-                source: "knowledge_base".to_string(),
-                relevance: 0.85,
-            },
-        ])
+                source: "local".to_string(),
+                relevance: 0.7,
+            });
+        }
+
+        if findings.is_empty() {
+            warn!("No findings gathered for query: {}", query.query);
+        } else {
+            info!("Gathered {} findings", findings.len());
+        }
+
+        Ok(findings)
     }
 
     fn validate_information(&self, findings: Vec<RawFinding>, threshold: f32) -> Vec<RawFinding> {
