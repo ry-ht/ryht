@@ -1,6 +1,6 @@
 //! REST API Server implementation
 
-use super::middleware::{cors_layer, options_handler, RequestLogger, RateLimiter};
+use super::middleware::{cors_layer, RequestLogger, RateLimiter};
 use super::routes::{
     auth::AuthContext,
     build::BuildContext,
@@ -23,7 +23,7 @@ use crate::services::{
     WorkspaceService,
 };
 use anyhow::{Context, Result};
-use axum::{body::Body, extract::DefaultBodyLimit, middleware, Router, routing::options};
+use axum::{body::Body, extract::DefaultBodyLimit, middleware, Router};
 use cortex_core::config::GlobalConfig;
 use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig};
@@ -371,16 +371,18 @@ impl RestApiServer {
             }));
 
         // Combine all routes with global middleware
-        // Add catch-all OPTIONS handler for CORS preflight requests
-        // CORS layer must be applied directly (not in ServiceBuilder) to process OPTIONS
+        // NOTE: Testing middleware layers individually to find deadlock source
+        // TEST 3: CORS + TimeoutLayer + DefaultBodyLimit
         Router::new()
-            .route("/{*path}", options(options_handler)) // Handle OPTIONS for all paths (Axum 0.8 syntax)
             .merge(public_routes)
             .merge(protected_routes)
             .merge(ws_routes)
-            .layer(cors_layer()) // CORS layer applied directly to handle preflight
-            .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
-            .layer(TimeoutLayer::new(Duration::from_secs(30)))
+            .layer(
+                ServiceBuilder::new()
+                    .layer(cors_layer())
+                    .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+                    .layer(TimeoutLayer::new(Duration::from_secs(30)))
+            )
     }
 
     /// Creates storage connection manager from configuration
