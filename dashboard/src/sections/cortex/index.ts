@@ -6,3 +6,6 @@ export * from './document-list-view';
 export * from './document-view';
 export * from './document-create-view';
 export * from './memory-search-view';
+export * from './memory-episodes-view';
+export * from './memory-patterns-view';
+export * from './memory-consolidation-view';

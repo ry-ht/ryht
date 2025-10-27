@@ -115,12 +115,31 @@ export interface DocumentSection {
   updated_at: string;
 }
 
+export type DocumentLinkType =
+  | 'Reference'
+  | 'Related'
+  | 'Prerequisite'
+  | 'Next'
+  | 'Previous'
+  | 'Parent'
+  | 'Child'
+  | 'External'
+  | 'ApiReference'
+  | 'Example';
+
+export type LinkTargetType = 'Document' | 'CodeUnit' | 'ExternalUrl';
+
 export interface DocumentLink {
   id: string;
   source_document_id: string;
-  link_type: string;
-  target: string;
+  link_type: DocumentLinkType;
+  target_type: LinkTargetType;
+  target_id: string;
+  target_title?: string;
+  target_url?: string;
+  description?: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface DocumentVersion {
@@ -129,6 +148,8 @@ export interface DocumentVersion {
   version: string;
   author: string;
   message: string;
+  content_snapshot?: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -297,4 +318,52 @@ export interface SystemStats {
   code_units_count: number;
   files_count: number;
   total_storage: number;
+}
+
+// =============================================================================
+// Memory Episodes & Patterns Types
+// =============================================================================
+
+export type EpisodeType = 'Task' | 'Pattern' | 'Decision' | 'Error' | 'Success' | 'General';
+
+export interface MemoryEpisode {
+  id: string;
+  episode_type: EpisodeType;
+  content: string;
+  importance: number; // 0-1 score
+  context?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  patterns?: string[]; // Related pattern IDs
+}
+
+export interface LearnedPattern {
+  id: string;
+  name: string;
+  description: string;
+  pattern_type: string;
+  occurrences: number;
+  confidence: number; // 0-1 score
+  examples?: Array<{
+    code?: string;
+    language?: string;
+    description?: string;
+  }>;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  last_seen: string;
+}
+
+export interface ConsolidationResult {
+  id: string;
+  episodes_processed: number;
+  patterns_extracted: number;
+  memories_decayed: number;
+  duplicates_merged: number;
+  duration_ms: number;
+  started_at: string;
+  completed_at: string;
+  status: 'completed' | 'failed' | 'in_progress';
+  error?: string;
 }
