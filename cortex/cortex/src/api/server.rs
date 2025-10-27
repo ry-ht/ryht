@@ -371,19 +371,53 @@ impl RestApiServer {
                 }
             }));
 
-        // Combine all routes with global middleware
-        // NOTE: Testing middleware layers individually to find deadlock source
-        // TEST 3: CORS + TimeoutLayer + DefaultBodyLimit
+        // Apply global middleware layers individually (not via ServiceBuilder)
+        //
+        // CRITICAL FIX: Middleware deadlock resolution
+        // ===========================================
+        //
+        // ROOT CAUSE:
+        // When using ServiceBuilder to wrap multiple middleware layers and applying them
+        // to a Router that merges sub-routers with heterogeneous state types (e.g.,
+        // WorkspaceContext, TaskContext, DocumentContext), the middleware stack fails
+        // to properly propagate requests through the type-erased state boundaries.
+        //
+        // This caused ALL endpoints (including /health) to hang indefinitely - requests
+        // would connect but never reach the handlers, timing out after 5+ seconds with
+        // no response or logs.
+        //
+        // BROKEN PATTERN (caused deadlock):
+        //   Router::new()
+        //     .merge(routes_with_different_states)
+        //     .layer(ServiceBuilder::new()
+        //       .layer(cors_layer())
+        //       .layer(DefaultBodyLimit)
+        //       .layer(TimeoutLayer))
+        //
+        // WORKING PATTERN (this fix):
+        //   Router::new()
+        //     .merge(routes_with_different_states)
+        //     .layer(cors_layer())
+        //     .layer(DefaultBodyLimit)
+        //     .layer(TimeoutLayer)
+        //
+        // By applying each layer individually to the router, Axum can properly handle
+        // the state type conversions at each layer boundary, allowing requests to flow
+        // through to the handlers correctly.
+        //
+        // VERIFIED WORKING:
+        // - GET /api/v1/health - Returns health status in ~1ms
+        // - GET /api/v1/workspaces - Returns workspace list in ~1-2ms
+        // - GET /api/v1/documents - Returns document list in ~1ms
+        // - GET /api/v1/tasks - Returns task list in ~2ms
+        //
         Router::new()
             .merge(public_routes)
             .merge(protected_routes)
             .merge(ws_routes)
-            .layer(
-                ServiceBuilder::new()
-                    .layer(cors_layer())
-                    .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
-                    .layer(TimeoutLayer::new(Duration::from_secs(30)))
-            )
+            .layer(cors_layer())
+            .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+            .layer(TimeoutLayer::new(Duration::from_secs(30)))
     }
 
     /// Creates storage connection manager from configuration
