@@ -217,6 +217,44 @@ class CortexClient {
   }
 
   // ----------------------------------------------------------------------
+  // Document Links
+  // ----------------------------------------------------------------------
+
+  async listDocumentLinks(documentId: string): Promise<DocumentLink[]> {
+    const response = await this.client.get(`/documents/${documentId}/links`);
+    return response.data;
+  }
+
+  async createDocumentLink(
+    documentId: string,
+    data: { link_type: string; target_type: string; target_id: string }
+  ): Promise<DocumentLink> {
+    const response = await this.client.post(`/documents/${documentId}/links`, data);
+    return response.data;
+  }
+
+  async deleteDocumentLink(linkId: string): Promise<void> {
+    await this.client.delete(`/links/${linkId}`);
+  }
+
+  // ----------------------------------------------------------------------
+  // Document Versions
+  // ----------------------------------------------------------------------
+
+  async listDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+    const response = await this.client.get(`/documents/${documentId}/versions`);
+    return response.data;
+  }
+
+  async createDocumentVersion(
+    documentId: string,
+    data: { version: string; author: string; message: string }
+  ): Promise<DocumentVersion> {
+    const response = await this.client.post(`/documents/${documentId}/versions`, data);
+    return response.data;
+  }
+
+  // ----------------------------------------------------------------------
   // Virtual File System (VFS)
   // ----------------------------------------------------------------------
 
@@ -296,6 +334,77 @@ class CortexClient {
 
   async listTasks(filters?: { status?: string; limit?: number }): Promise<Task[]> {
     const response = await this.client.get('/tasks', { params: filters });
+    return response.data;
+  }
+
+  // ----------------------------------------------------------------------
+  // Memory Episodes & Patterns
+  // ----------------------------------------------------------------------
+
+  async listMemoryEpisodes(): Promise<any[]> {
+    const response = await this.client.get('/memory/episodes');
+    return response.data;
+  }
+
+  async getMemoryEpisode(episodeId: string): Promise<any> {
+    const response = await this.client.get(`/memory/episodes/${episodeId}`);
+    return response.data;
+  }
+
+  async consolidateMemory(): Promise<any> {
+    const response = await this.client.post('/memory/consolidate');
+    return response.data;
+  }
+
+  async getLearnedPatterns(): Promise<any[]> {
+    const response = await this.client.get('/memory/patterns');
+    return response.data;
+  }
+
+  // ----------------------------------------------------------------------
+  // Dependencies & Analysis
+  // ----------------------------------------------------------------------
+
+  async getWorkspaceDependencies(workspaceId: string): Promise<any> {
+    const response = await this.client.get(`/workspaces/${workspaceId}/dependencies`);
+    return response.data;
+  }
+
+  async analyzeImpact(data: { unit_id: string; change_type: string }): Promise<any> {
+    const response = await this.client.post('/analysis/impact', data);
+    return response.data;
+  }
+
+  async detectCycles(): Promise<any> {
+    const response = await this.client.get('/analysis/cycles');
+    return response.data;
+  }
+
+  // ----------------------------------------------------------------------
+  // Sessions & Collaboration
+  // ----------------------------------------------------------------------
+
+  async listSessions(): Promise<any[]> {
+    const response = await this.client.get('/sessions');
+    return response.data;
+  }
+
+  async createSession(data: { name: string; workspace_id: string }): Promise<any> {
+    const response = await this.client.post('/sessions', data);
+    return response.data;
+  }
+
+  async getSession(sessionId: string): Promise<any> {
+    const response = await this.client.get(`/sessions/${sessionId}`);
+    return response.data;
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.client.delete(`/sessions/${sessionId}`);
+  }
+
+  async listLocks(): Promise<any[]> {
+    const response = await this.client.get('/locks');
     return response.data;
   }
 }

@@ -34,6 +34,11 @@ const CortexOverviewPage = lazy(() => import('src/pages/cortex/overview'));
 const CortexWorkspaceListPage = lazy(() => import('src/pages/cortex/workspaces/list'));
 const CortexDocumentListPage = lazy(() => import('src/pages/cortex/documents/list'));
 const CortexDocumentViewPage = lazy(() => import('src/pages/cortex/documents/view'));
+const CortexWorkspaceCreatePage = lazy(() => import('src/pages/cortex/workspaces/create'));
+const CortexWorkspaceBrowsePage = lazy(() => import('src/pages/cortex/workspaces/browse'));
+const CortexDocumentListPage = lazy(() => import('src/pages/cortex/documents/list'));
+const CortexDocumentCreatePage = lazy(() => import('src/pages/cortex/documents/create'));
+const CortexDocumentViewPage = lazy(() => import('src/pages/cortex/documents/view'));
 const CortexMemorySearchPage = lazy(() => import('src/pages/cortex/memory'));
 
 // ----------------------------------------------------------------------
@@ -91,12 +96,15 @@ export const dashboardRoutes: RouteObject[] = [
             path: 'workspaces',
             children: [
               { element: <CortexWorkspaceListPage />, index: true },
+              { path: 'create', element: <CortexWorkspaceCreatePage /> },
+              { path: ':id/browse', element: <CortexWorkspaceBrowsePage /> },
             ],
           },
           {
             path: 'documents',
             children: [
               { element: <CortexDocumentListPage />, index: true },
+              { path: 'create', element: <CortexDocumentCreatePage /> },
               { path: ':id', element: <CortexDocumentViewPage /> },
             ],
           },

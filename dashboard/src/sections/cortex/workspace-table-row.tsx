@@ -18,9 +18,10 @@ type Props = {
   onSelectRow: () => void;
   onDeleteRow: () => void;
   onIndexRow: () => void;
+  onBrowseFiles: () => void;
 };
 
-export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onIndexRow }: Props) {
+export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onIndexRow, onBrowseFiles }: Props) {
   const popover = usePopover();
 
   return (
@@ -55,7 +56,12 @@ export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onI
         onClose={popover.onClose}
         slotProps={{ arrow: { placement: 'right-top' } }}
       >
-        <MenuItem onClick={onIndexRow}>
+        <MenuItem onClick={() => { onBrowseFiles(); popover.onClose(); }}>
+          <Iconify icon="solar:folder-open-bold" />
+          Browse Files
+        </MenuItem>
+
+        <MenuItem onClick={() => { onIndexRow(); popover.onClose(); }}>
           <Iconify icon="solar:refresh-bold" />
           Re-index
         </MenuItem>

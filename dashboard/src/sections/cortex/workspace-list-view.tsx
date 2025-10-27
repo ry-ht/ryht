@@ -1,5 +1,6 @@
 import type { ChangeEvent } from 'react';
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -50,6 +51,7 @@ const TABLE_HEAD = [
 
 export function WorkspaceListView() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
 
   const table = useTable();
@@ -116,6 +118,13 @@ export function WorkspaceListView() {
       }
     },
     [enqueueSnackbar]
+  );
+
+  const handleBrowseFiles = useCallback(
+    (id: string) => {
+      navigate(`/dashboard/cortex/workspaces/${id}/browse`);
+    },
+    [navigate]
   );
 
   const handleFilters = useCallback(
@@ -201,6 +210,7 @@ export function WorkspaceListView() {
                     onSelectRow={() => table.onSelectRow(row.id)}
                     onDeleteRow={() => handleDeleteRow(row.id)}
                     onIndexRow={() => handleIndexWorkspace(row.id)}
+                    onBrowseFiles={() => handleBrowseFiles(row.id)}
                   />
                 ))}
 
