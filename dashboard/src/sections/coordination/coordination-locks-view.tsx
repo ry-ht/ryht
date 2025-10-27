@@ -14,10 +14,9 @@ import LinearProgress from '@mui/material/LinearProgress';
 import { cortexFetcher } from 'src/lib/cortex-client';
 
 import { Label } from 'src/components/label';
-import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { TableHeadCustom, TableNoData } from 'src/components/table';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 

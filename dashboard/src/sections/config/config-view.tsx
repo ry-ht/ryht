@@ -18,9 +18,16 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
+interface AxonConfig {
+  workspace_name?: string;
+  workspace_path?: string;
+}
+
+// ----------------------------------------------------------------------
+
 export function ConfigView() {
   const { showSnackbar } = useSnackbar();
-  const { data: config, isLoading } = useSWR(axonEndpoints.config, axonFetcher);
+  const { data: config, isLoading } = useSWR<AxonConfig>(axonEndpoints.config, axonFetcher);
 
   const [axonSettings, setAxonSettings] = useState({
     workspace_name: '',

@@ -35,9 +35,7 @@ const QUALITY_METRICS = [
 ];
 
 export function CodeQualityView() {
-  const getMetricColor = (metric: typeof QUALITY_METRICS[0]) => {
-    return metric.color as any;
-  };
+  const getMetricColor = (metric: typeof QUALITY_METRICS[0]) => metric.color as any;
 
   const overallScore = Math.round(
     QUALITY_METRICS.reduce((sum, m) => {

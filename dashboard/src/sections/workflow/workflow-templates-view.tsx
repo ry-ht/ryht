@@ -104,7 +104,7 @@ export function WorkflowTemplatesView() {
 
         <Grid container spacing={2}>
           {WORKFLOW_TEMPLATES.map((template) => (
-            <Grid item xs={12} md={6} lg={4} key={template.id}>
+            <Grid size={{ xs: 12, md: 6, lg: 4 }} key={template.id}>
               <Card
                 sx={{
                   p: 2.5,
@@ -173,7 +173,7 @@ export function WorkflowTemplatesView() {
                     </Typography>
                     <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
                       {template.requiredAgents.map((agent) => (
-                        <Label key={agent} variant="soft" size="small">
+                        <Label key={agent} variant="soft">
                           {agent}
                         </Label>
                       ))}

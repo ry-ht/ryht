@@ -107,7 +107,7 @@ export function MemoryWorkingView() {
 
         <Card sx={{ p: 3 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <Stack spacing={1} alignItems="center" sx={{ p: 2, bgcolor: 'background.neutral', borderRadius: 2 }}>
                 <Typography variant="h3">{items.length}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -115,7 +115,7 @@ export function MemoryWorkingView() {
                 </Typography>
               </Stack>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <Stack spacing={1} alignItems="center" sx={{ p: 2, bgcolor: 'background.neutral', borderRadius: 2 }}>
                 <Typography variant="h3">{items.filter((i) => i.type === 'task').length}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -123,7 +123,7 @@ export function MemoryWorkingView() {
                 </Typography>
               </Stack>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <Stack spacing={1} alignItems="center" sx={{ p: 2, bgcolor: 'background.neutral', borderRadius: 2 }}>
                 <Typography variant="h3">{items.filter((i) => i.type === 'context').length}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -131,7 +131,7 @@ export function MemoryWorkingView() {
                 </Typography>
               </Stack>
             </Grid>
-            <Grid item xs={12} md={3}>
+            <Grid size={{ xs: 12, md: 3 }}>
               <Stack spacing={1} alignItems="center" sx={{ p: 2, bgcolor: 'background.neutral', borderRadius: 2 }}>
                 <Typography variant="h3">{7 - items.length}</Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -146,7 +146,7 @@ export function MemoryWorkingView() {
           {items
             .sort((a, b) => a.priority - b.priority)
             .map((item, index) => (
-              <Grid item xs={12} key={item.id}>
+              <Grid size={{ xs: 12 }} key={item.id}>
                 <Card sx={{ p: 2.5 }}>
                   <Stack direction="row" spacing={2} alignItems="flex-start">
                     <Box

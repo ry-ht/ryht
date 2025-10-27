@@ -14,14 +14,31 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
+interface AxonMetrics {
+  avg_response_time_ms?: number;
+  request_rate?: number;
+  error_rate?: number;
+}
+
+interface AxonStatus {
+  active_agents?: number;
+  running_workflows?: number;
+  total_tasks_executed?: number;
+  system_uptime_seconds?: number;
+  memory_usage_mb?: number;
+  cpu_usage_percent?: number;
+}
+
+// ----------------------------------------------------------------------
+
 export function MonitoringMetricsView() {
-  const { data: metrics, isLoading: metricsLoading } = useSWR(
+  const { data: metrics, isLoading: metricsLoading } = useSWR<AxonMetrics>(
     axonEndpoints.metrics,
     axonFetcher,
     { refreshInterval: 5000 }
   );
 
-  const { data: status, isLoading: statusLoading } = useSWR(
+  const { data: status, isLoading: statusLoading } = useSWR<AxonStatus>(
     axonEndpoints.status,
     axonFetcher,
     { refreshInterval: 5000 }
@@ -177,10 +194,14 @@ export function MonitoringMetricsView() {
                   <Typography
                     variant="subtitle2"
                     color={
-                      metrics?.error_rate > 5 ? 'error.main' : metrics?.error_rate > 1 ? 'warning.main' : 'success.main'
+                      metrics?.error_rate !== undefined && metrics.error_rate > 5
+                        ? 'error.main'
+                        : metrics?.error_rate !== undefined && metrics.error_rate > 1
+                        ? 'warning.main'
+                        : 'success.main'
                     }
                   >
-                    {metrics?.error_rate ? `${metrics.error_rate.toFixed(2)}%` : 'N/A'}
+                    {metrics?.error_rate !== undefined ? `${metrics.error_rate.toFixed(2)}%` : 'N/A'}
                   </Typography>
                 </Stack>
               </Stack>

@@ -10,13 +10,13 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
 
+import { getAgentStatusColor } from 'src/utils/status-colors';
+
 import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-
-import { getAgentStatusColor } from 'src/utils/status-colors';
 
 // ----------------------------------------------------------------------
 

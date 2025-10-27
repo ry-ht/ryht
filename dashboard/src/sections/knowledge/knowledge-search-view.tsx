@@ -29,7 +29,6 @@ export function KnowledgeSearchView() {
       const searchResults = await cortexClient.search({
         query,
         limit: 20,
-        types: ['document', 'code_unit', 'memory'],
       });
       setResults(searchResults);
     } catch (error) {

@@ -16,14 +16,32 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
+interface AxonHealthResponse {
+  version?: string;
+  status?: string;
+  active_agents?: number;
+  running_workflows?: number;
+  uptime_seconds?: number;
+  websocket_connections?: number;
+}
+
+interface CortexHealthResponse {
+  version?: string;
+  status?: string;
+  memory_usage_mb?: number;
+  active_tasks?: number;
+}
+
+// ----------------------------------------------------------------------
+
 export function MonitoringHealthView() {
-  const { data: axonHealth, isLoading: axonLoading } = useSWR(
+  const { data: axonHealth, isLoading: axonLoading } = useSWR<AxonHealthResponse>(
     axonEndpoints.health,
     axonFetcher,
     { refreshInterval: 10000 }
   );
 
-  const { data: cortexHealth, isLoading: cortexLoading } = useSWR(
+  const { data: cortexHealth, isLoading: cortexLoading } = useSWR<CortexHealthResponse>(
     cortexEndpoints.health,
     cortexFetcher,
     { refreshInterval: 10000 }

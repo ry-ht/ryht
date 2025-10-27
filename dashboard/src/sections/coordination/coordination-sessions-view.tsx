@@ -48,7 +48,7 @@ export function CoordinationSessionsView() {
 
         <Grid container spacing={2}>
           {sessions.map((session: any) => (
-            <Grid item xs={12} md={6} key={session.id}>
+            <Grid size={{ xs: 12, md: 6 }} key={session.id}>
               <Card sx={{ p: 2.5 }}>
                 <Stack spacing={2}>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
