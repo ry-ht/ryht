@@ -134,13 +134,18 @@ impl AuthService {
             updated_at: now,
         };
 
-        // Save to database
+        // Save to database using raw query with JSON serialization
+        // This ensures proper datetime handling with SurrealDB SCHEMAFULL tables
         let conn = self.storage.acquire().await?;
 
-        // Use direct struct serialization instead of JSON
+        let user_json = serde_json::to_string(&user)?;
+        let query = format!("CREATE users:`{}` CONTENT {}", user_id, user_json);
+
+        conn.connection().query(&query).await?;
+
+        // Retrieve the created user
         let created_user: Option<User> = conn.connection()
-            .create(("users", user_id.clone()))
-            .content(user)
+            .select(("users", user_id.as_str()))
             .await?;
 
         let created_user = created_user.ok_or_else(|| anyhow!("Failed to create user"))?;
@@ -192,10 +197,15 @@ impl AuthService {
         }
         user.updated_at = Utc::now();
 
-        // Update in database
+        // Update in database using raw query with JSON serialization
+        let user_json = serde_json::to_string(&user)?;
+        let query = format!("UPDATE users:`{}` CONTENT {}", user_id, user_json);
+
+        conn.connection().query(&query).await?;
+
+        // Retrieve the updated user
         let updated_user: Option<User> = conn.connection()
-            .update(("users", user_id))
-            .content(user)
+            .select(("users", user_id))
             .await?;
 
         let updated_user = updated_user.ok_or_else(|| anyhow!("Failed to update user"))?;
@@ -265,9 +275,15 @@ impl AuthService {
 
         let conn = self.storage.acquire().await?;
 
+        // Use raw query with JSON serialization for proper datetime handling
+        let session_json = serde_json::to_string(&session)?;
+        let query = format!("CREATE sessions:`{}` CONTENT {}", session_id, session_json);
+
+        conn.connection().query(&query).await?;
+
+        // Retrieve the created session
         let created_session: Option<Session> = conn.connection()
-            .create(("sessions", session_id.clone()))
-            .content(session)
+            .select(("sessions", session_id.as_str()))
             .await?;
 
         let created_session = created_session.ok_or_else(|| anyhow!("Failed to create session"))?;
@@ -481,11 +497,11 @@ impl AuthService {
             expires_at,
         };
 
-        // Insert into blacklist (ignore if already exists due to unique index)
-        let result = conn.connection()
-            .create::<Option<RevokedToken>>(("revoked_tokens", blacklist_id))
-            .content(revoked_token)
-            .await;
+        // Insert into blacklist using raw query (ignore if already exists due to unique index)
+        let revoked_json = serde_json::to_string(&revoked_token)?;
+        let query = format!("CREATE revoked_tokens:`{}` CONTENT {}", blacklist_id, revoked_json);
+
+        let result = conn.connection().query(&query).await;
 
         match result {
             Ok(_) => {
@@ -611,10 +627,11 @@ impl AuthService {
 
         let conn = self.storage.acquire().await?;
 
-        let _: Option<ApiKeyRecord> = conn.connection()
-            .create(("api_keys", key_id.clone()))
-            .content(api_key_record)
-            .await?;
+        // Use raw query with JSON serialization for proper datetime handling
+        let api_key_json = serde_json::to_string(&api_key_record)?;
+        let query = format!("CREATE api_keys:`{}` CONTENT {}", key_id, api_key_json);
+
+        conn.connection().query(&query).await?;
 
         info!("API key created: {} ({})", name, key_id);
 
