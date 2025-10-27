@@ -143,6 +143,16 @@ fn default_granularity() -> String {
     "day".to_string()
 }
 
+/// System statistics response
+#[derive(Debug, Serialize)]
+pub struct SystemStats {
+    pub workspaces_count: usize,
+    pub documents_count: usize,
+    pub code_units_count: usize,
+    pub files_count: usize,
+    pub total_storage: i64,
+}
+
 /// Create dashboard routes
 pub fn dashboard_routes(context: DashboardContext) -> Router {
     Router::new()
@@ -150,6 +160,7 @@ pub fn dashboard_routes(context: DashboardContext) -> Router {
         .route("/api/v1/dashboard/activity", get(get_activity))
         .route("/api/v1/dashboard/metrics", get(get_metrics))
         .route("/api/v1/dashboard/health", get(get_health))
+        .route("/api/v1/system/stats", get(get_system_stats))
         .with_state(context)
 }
 
@@ -672,4 +683,88 @@ async fn get_health(
     let duration = start.elapsed().as_millis() as u64;
 
     Ok(Json(ApiResponse::success(health, request_id, duration)))
+}
+
+/// GET /api/v1/system/stats - Get basic system statistics
+async fn get_system_stats(
+    State(ctx): State<DashboardContext>,
+) -> ApiResult<Json<ApiResponse<SystemStats>>> {
+    let request_id = Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    let conn = ctx.storage.acquire().await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Count workspaces
+    let workspace_query = "SELECT * FROM workspace";
+    let mut workspace_response = conn.connection()
+        .query(workspace_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let workspaces: Vec<serde_json::Value> = workspace_response.take(0)
+        .unwrap_or_default();
+    let workspaces_count = workspaces.len();
+
+    // Count documents
+    let document_query = "SELECT * FROM document";
+    let mut document_response = conn.connection()
+        .query(document_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let documents: Vec<serde_json::Value> = document_response.take(0)
+        .unwrap_or_default();
+    let documents_count = documents.len();
+
+    // Count code units
+    let unit_query = "SELECT * FROM code_unit";
+    let mut unit_response = conn.connection()
+        .query(unit_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let units: Vec<serde_json::Value> = unit_response.take(0)
+        .unwrap_or_default();
+    let code_units_count = units.len();
+
+    // Count files (vnodes that are not directories)
+    let vnode_query = "SELECT * FROM vnode WHERE is_directory = false";
+    let mut vnode_response = conn.connection()
+        .query(vnode_query)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    #[derive(Deserialize)]
+    struct VNodeRecord {
+        #[serde(default)]
+        size_bytes: i64,
+    }
+
+    let vnodes: Vec<VNodeRecord> = vnode_response.take(0)
+        .unwrap_or_default();
+
+    let files_count = vnodes.len();
+    let total_storage: i64 = vnodes.iter().map(|v| v.size_bytes).sum();
+
+    let stats = SystemStats {
+        workspaces_count,
+        documents_count,
+        code_units_count,
+        files_count,
+        total_storage,
+    };
+
+    tracing::debug!(
+        workspaces = workspaces_count,
+        documents = documents_count,
+        code_units = code_units_count,
+        files = files_count,
+        storage = total_storage,
+        "Retrieved system stats"
+    );
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok(Json(ApiResponse::success(stats, request_id, duration)))
 }

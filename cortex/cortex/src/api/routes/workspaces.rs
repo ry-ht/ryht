@@ -2,7 +2,6 @@
 
 use crate::api::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
     types::{
         ApiResponse, CreateWorkspaceRequest, WorkspaceResponse,
         UpdateWorkspaceRequest, SyncWorkspaceRequest, SyncResponse, SyncChange,
@@ -39,20 +38,11 @@ pub fn workspace_routes(context: WorkspaceContext) -> Router {
 
 /// GET /api/v1/workspaces - List all workspaces
 async fn list_workspaces(
-    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
     Query(mut params): Query<PaginationParams>,
 ) -> ApiResult<Json<ApiResponse<Vec<WorkspaceResponse>>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
-
-    // Log authenticated operation
-    tracing::info!(
-        user_id = %auth_user.user_id,
-        email = %auth_user.email,
-        roles = ?auth_user.roles,
-        "User listing workspaces"
-    );
 
     // Validate pagination params
     params.validate().map_err(|e| ApiError::BadRequest(e))?;
@@ -180,18 +170,11 @@ async fn get_workspace(
 
 /// POST /api/v1/workspaces - Create workspace
 async fn create_workspace(
-    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
     Json(payload): Json<CreateWorkspaceRequest>,
 ) -> ApiResult<Json<ApiResponse<WorkspaceResponse>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
-
-    tracing::info!(
-        user_id = %auth_user.user_id,
-        workspace_name = %payload.name,
-        "User creating workspace"
-    );
 
     // Convert API request to service request
     let service_request = crate::services::workspace::CreateWorkspaceRequest {
@@ -238,30 +221,11 @@ async fn create_workspace(
 
 /// DELETE /api/v1/workspaces/{workspace_id} - Delete workspace
 async fn delete_workspace(
-    auth_user: AuthUser, // Extract authenticated user
     State(ctx): State<WorkspaceContext>,
     Path(workspace_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<()>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
-
-    // Check if user is admin (deletion is sensitive operation)
-    if !auth_user.is_admin() {
-        tracing::warn!(
-            user_id = %auth_user.user_id,
-            workspace_id = %workspace_id,
-            "Non-admin user attempted to delete workspace"
-        );
-        return Err(ApiError::Forbidden(
-            "Only administrators can delete workspaces".to_string()
-        ));
-    }
-
-    tracing::info!(
-        user_id = %auth_user.user_id,
-        workspace_id = %workspace_id,
-        "Admin deleting workspace"
-    );
 
     // Parse workspace ID
     let workspace_uuid = uuid::Uuid::parse_str(&workspace_id)

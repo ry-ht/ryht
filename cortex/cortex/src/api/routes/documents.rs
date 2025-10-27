@@ -2,7 +2,6 @@
 
 use crate::api::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
     types::{ApiResponse, PaginationParams},
     pagination::{LinkBuilder, build_pagination_info, generate_next_cursor},
 };
@@ -61,17 +60,11 @@ pub fn document_routes(context: DocumentContext) -> Router {
 
 /// GET /api/v1/documents - List all documents
 async fn list_documents(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Query(params): Query<ListDocumentsQuery>,
 ) -> ApiResult<Json<ApiResponse<Vec<DocumentResponseItem>>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
-
-    tracing::info!(
-        user_id = %auth_user.user_id,
-        "User listing documents"
-    );
 
     let filters = ListDocumentFilters {
         status: params.status.as_ref().and_then(|s| parse_status(s).ok()),
@@ -112,18 +105,11 @@ async fn list_documents(
 
 /// POST /api/v1/documents - Create document
 async fn create_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Json(payload): Json<CreateDocumentPayload>,
 ) -> ApiResult<Json<ApiResponse<DocumentResponse>>> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
-
-    tracing::info!(
-        user_id = %auth_user.user_id,
-        title = %payload.title,
-        "User creating document"
-    );
 
     let request = CreateDocumentRequest {
         title: payload.title,
@@ -133,7 +119,7 @@ async fn create_document(
         parent_id: payload.parent_id.as_ref().and_then(|id| CortexId::from_str(id).ok()),
         tags: payload.tags,
         keywords: payload.keywords,
-        author: Some(auth_user.email),
+        author: None,
         language: payload.language,
         workspace_id: payload.workspace_id,
         metadata: payload.metadata,
@@ -177,7 +163,6 @@ async fn create_document(
 
 /// GET /api/v1/documents/:id - Get document
 async fn get_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DocumentResponse>>> {
@@ -226,7 +211,6 @@ async fn get_document(
 
 /// PUT /api/v1/documents/:id - Update document
 async fn update_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
     Json(payload): Json<UpdateDocumentPayload>,
@@ -285,7 +269,6 @@ async fn update_document(
 
 /// DELETE /api/v1/documents/:id - Delete document
 async fn delete_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DeleteResponse>>> {
@@ -315,7 +298,6 @@ async fn delete_document(
 
 /// POST /api/v1/documents/{id}/publish - Publish document
 async fn publish_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DocumentResponse>>> {
@@ -363,7 +345,6 @@ async fn publish_document(
 
 /// POST /api/v1/documents/{id}/archive - Archive document
 async fn archive_document(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DocumentResponse>>> {
@@ -411,7 +392,6 @@ async fn archive_document(
 
 /// GET /api/v1/documents/search - Search documents
 async fn search_documents(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Query(params): Query<SearchDocumentsQuery>,
 ) -> ApiResult<Json<ApiResponse<Vec<DocumentResponseItem>>>> {
@@ -456,7 +436,6 @@ async fn search_documents(
 
 /// GET /api/v1/documents/{id}/sections - List sections
 async fn list_sections(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<Vec<SectionResponse>>>> {
@@ -498,7 +477,6 @@ async fn list_sections(
 
 /// POST /api/v1/documents/{id}/sections - Create section
 async fn create_section(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
     Json(payload): Json<CreateSectionPayload>,
@@ -546,7 +524,6 @@ async fn create_section(
 
 /// PUT /api/v1/sections/:id - Update section
 async fn update_section(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
     Json(payload): Json<UpdateSectionPayload>,
@@ -592,7 +569,6 @@ async fn update_section(
 
 /// DELETE /api/v1/sections/:id - Delete section
 async fn delete_section(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DeleteResponse>>> {
@@ -626,7 +602,6 @@ async fn delete_section(
 
 /// GET /api/v1/documents/{id}/links - List links
 async fn list_links(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<Vec<LinkResponse>>>> {
@@ -664,7 +639,6 @@ async fn list_links(
 
 /// POST /api/v1/documents/{id}/links - Create link
 async fn create_link(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
     Json(payload): Json<CreateLinkPayload>,
@@ -712,7 +686,6 @@ async fn create_link(
 
 /// DELETE /api/v1/links/:id - Delete link
 async fn delete_link(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<DeleteResponse>>> {
@@ -746,7 +719,6 @@ async fn delete_link(
 
 /// GET /api/v1/documents/{id}/versions - List versions
 async fn list_versions(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<Vec<VersionResponse>>>> {
@@ -785,7 +757,6 @@ async fn list_versions(
 
 /// POST /api/v1/documents/{id}/versions - Create version
 async fn create_version(
-    auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
     Path(id): Path<String>,
     Json(payload): Json<CreateVersionPayload>,
@@ -798,7 +769,7 @@ async fn create_version(
 
     let request = CreateVersionRequest {
         version: payload.version,
-        author: payload.author.unwrap_or_else(|| auth_user.email.clone()),
+        author: payload.author.unwrap_or_else(|| "system".to_string()),
         message: payload.message,
     };
 

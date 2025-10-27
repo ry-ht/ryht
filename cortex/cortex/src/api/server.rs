@@ -332,15 +332,19 @@ impl RestApiServer {
         };
 
         // Build public routes (no authentication required)
+        // Single-operator mode: workspaces, documents, and tasks are public
         let public_routes = Router::new()
             .merge(super::routes::health_routes(app_state))
-            .merge(super::routes::public_auth_routes(auth_context.clone()));
+            .merge(super::routes::public_auth_routes(auth_context.clone()))
+            .merge(super::routes::workspace_routes(workspace_context))
+            .merge(super::routes::document_routes(document_context))
+            .merge(super::routes::task_routes(task_context))
+            .merge(super::routes::dashboard_routes(dashboard_context));
 
         // Build protected routes (authentication required)
         let auth_state_clone = auth_state.clone();
         let protected_routes = Router::new()
             .merge(super::routes::protected_auth_routes(auth_context))
-            .merge(super::routes::workspace_routes(workspace_context))
             .merge(super::routes::vfs_routes(vfs_context))
             .merge(super::routes::session_routes(session_context))
             .merge(super::routes::search_routes(search_context))
@@ -348,10 +352,7 @@ impl RestApiServer {
             .merge(super::routes::code_unit_routes(code_unit_context))
             .merge(super::routes::dependency_routes(dependency_context))
             .merge(super::routes::build_routes(build_context))
-            .merge(super::routes::dashboard_routes(dashboard_context))
-            .merge(super::routes::task_routes(task_context))
             .merge(super::routes::export_routes(export_context))
-            .merge(super::routes::document_routes(document_context))
             .route_layer(middleware::from_fn(move |req, next| {
                 let auth_state = auth_state_clone.clone();
                 async move {
