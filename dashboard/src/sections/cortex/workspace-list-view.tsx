@@ -22,12 +22,10 @@ import { useSnackbar } from 'src/components/snackbar';
 import {
   useTable,
   emptyRows,
-  rowInRange,
   TableNoData,
   TableEmptyRows,
   TableHeadCustom,
   TableSelectedAction,
-  TablePaginationCustom,
 } from 'src/components/table';
 
 import useSWR, { mutate } from 'swr';
@@ -46,6 +44,11 @@ const TABLE_HEAD = [
   { id: 'updated_at', label: 'Updated' },
   { id: '', width: 88 },
 ];
+
+// Helper function to get rows for current page
+function rowInRange<T>(array: T[], page: number, rowsPerPage: number): T[] {
+  return array.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+}
 
 // ----------------------------------------------------------------------
 
@@ -123,6 +126,13 @@ export function WorkspaceListView() {
   const handleBrowseFiles = useCallback(
     (id: string) => {
       navigate(`/dashboard/cortex/workspaces/${id}/browse`);
+    },
+    [navigate]
+  );
+
+  const handleViewDetails = useCallback(
+    (id: string) => {
+      navigate(`/dashboard/cortex/workspaces/${id}`);
     },
     [navigate]
   );
@@ -211,6 +221,7 @@ export function WorkspaceListView() {
                     onDeleteRow={() => handleDeleteRow(row.id)}
                     onIndexRow={() => handleIndexWorkspace(row.id)}
                     onBrowseFiles={() => handleBrowseFiles(row.id)}
+                    onViewDetails={() => handleViewDetails(row.id)}
                   />
                 ))}
 
@@ -229,13 +240,13 @@ export function WorkspaceListView() {
           </Scrollbar>
         </TableContainer>
 
-        <TablePaginationCustom
+        <TablePagination
+          component="div"
           page={table.page}
-          dense={table.dense}
           count={dataFiltered.length}
           rowsPerPage={table.rowsPerPage}
           onPageChange={table.onChangePage}
-          onChangeDense={table.onChangeDense}
+          rowsPerPageOptions={[5, 10, 25]}
           onRowsPerPageChange={table.onChangeRowsPerPage}
         />
       </Card>

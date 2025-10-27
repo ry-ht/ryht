@@ -19,9 +19,10 @@ type Props = {
   onDeleteRow: () => void;
   onIndexRow: () => void;
   onBrowseFiles: () => void;
+  onViewDetails?: () => void;
 };
 
-export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onIndexRow, onBrowseFiles }: Props) {
+export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onIndexRow, onBrowseFiles, onViewDetails }: Props) {
   const popover = usePopover();
 
   return (
@@ -56,6 +57,13 @@ export function WorkspaceTableRow({ row, selected, onSelectRow, onDeleteRow, onI
         onClose={popover.onClose}
         slotProps={{ arrow: { placement: 'right-top' } }}
       >
+        {onViewDetails && (
+          <MenuItem onClick={() => { onViewDetails(); popover.onClose(); }}>
+            <Iconify icon="solar:eye-bold" />
+            View Details
+          </MenuItem>
+        )}
+
         <MenuItem onClick={() => { onBrowseFiles(); popover.onClose(); }}>
           <Iconify icon="solar:folder-open-bold" />
           Browse Files
