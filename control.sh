@@ -3,7 +3,7 @@
 set -e
 
 # Set PATH to include cargo and standard utilities
-export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -73,26 +73,33 @@ build_rust() {
     fi
 
     print_info "Build profile: $PROFILE"
-    print_info "Target directory: $TARGET_DIR"
-
-    echo ""
-    $BUILD_CMD
 
     # Create dist directory
     mkdir -p "$DIST_DIR"
 
-    # Copy binaries
-    echo ""
-    print_info "Copying binaries to dist/"
+    # Build Cortex
+    print_info "Building Cortex..."
+    cd "$PROJECT_ROOT/cortex/cortex"
+    $BUILD_CMD
+    if [ -f "$TARGET_DIR/cortex" ]; then
+        cp "$TARGET_DIR/cortex" "$DIST_DIR/"
+        print_success "Cortex built and copied"
+    else
+        print_error "Cortex binary not found"
+    fi
 
-    for binary in "cortex" "axon"; do
-        if [ -f "$TARGET_DIR/$binary" ]; then
-            cp "$TARGET_DIR/$binary" "$DIST_DIR/"
-            print_success "Copied $binary"
-        else
-            print_warning "Binary $binary not found"
-        fi
-    done
+    # Build Axon
+    print_info "Building Axon..."
+    cd "$PROJECT_ROOT/axon"
+    $BUILD_CMD
+    if [ -f "$TARGET_DIR/axon" ]; then
+        cp "$TARGET_DIR/axon" "$DIST_DIR/"
+        print_success "Axon built and copied"
+    else
+        print_error "Axon binary not found"
+    fi
+
+    cd "$PROJECT_ROOT"
 }
 
 build_dashboard() {
@@ -107,7 +114,7 @@ build_dashboard() {
 
     if [ ! -d "node_modules" ]; then
         print_info "Installing dependencies..."
-        npm install
+        npm install --legacy-peer-deps
     fi
 
     print_info "Building dashboard..."
