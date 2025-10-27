@@ -1,3 +1,4 @@
+import type { Breakpoint } from '@mui/material/styles';
 import type { HealthResponse as AxonHealthResponse } from 'src/types/axon';
 import type { HealthResponse as CortexHealthResponse } from 'src/types/cortex';
 
@@ -20,11 +21,20 @@ import { axonWebSocket } from 'src/lib/axon-websocket';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { useSettingsContext } from 'src/components/settings';
 
 // ----------------------------------------------------------------------
 
-export function Footer() {
+export type FooterProps = {
+  layoutQuery?: Breakpoint;
+};
+
+export function Footer({ layoutQuery = 'lg' }: FooterProps) {
   const theme = useTheme();
+  const settings = useSettingsContext();
+
+  const isNavMini = settings.state.navLayout === 'mini';
+  const isNavVertical = isNavMini || settings.state.navLayout === 'vertical';
   const [currentTime, setCurrentTime] = useState(new Date());
   const [wsConnected, setWsConnected] = useState(false);
 
@@ -117,8 +127,18 @@ export function Footer() {
         backdropFilter: 'blur(8px)',
         borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
         zIndex: theme.zIndex.appBar - 1,
-        transition: theme.transitions.create(['background-color', 'border-color'], {
-          duration: theme.transitions.duration.shorter,
+        transition: theme.transitions.create(
+          ['background-color', 'border-color', 'padding-left'],
+          {
+            easing: 'var(--layout-transition-easing)',
+            duration: 'var(--layout-transition-duration)',
+          }
+        ),
+        // Adapt to sidebar layout - same logic as the sidebarContainer
+        ...(isNavVertical && {
+          [theme.breakpoints.up(layoutQuery)]: {
+            pl: isNavMini ? 'var(--layout-nav-mini-width)' : 'var(--layout-nav-vertical-width)',
+          },
         }),
       }}
     >

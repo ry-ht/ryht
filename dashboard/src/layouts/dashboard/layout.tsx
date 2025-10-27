@@ -21,10 +21,8 @@ import { NavVertical } from './nav-vertical';
 import { Footer } from '../components/footer';
 import { NavHorizontal } from './nav-horizontal';
 import { Searchbar } from '../components/searchbar';
-import { _workspaces } from '../nav-config-workspace';
 import { MenuButton } from '../components/menu-button';
 import { SettingsButton } from '../components/settings-button';
-import { WorkspacesPopover } from '../components/workspaces-popover';
 import { navData as dashboardNavData } from '../nav-config-dashboard';
 import { dashboardLayoutVars, dashboardNavColorVars } from './css-vars';
 import { NotificationsDrawer } from '../components/notifications-drawer';
@@ -127,12 +125,6 @@ export function DashboardLayout({
           {isNavHorizontal && (
             <VerticalDivider sx={{ [theme.breakpoints.up(layoutQuery)]: { display: 'flex' } }} />
           )}
-
-          {/** @slot Workspace popover */}
-          <WorkspacesPopover
-            data={_workspaces}
-            sx={{ ...(isNavHorizontal && { color: 'var(--layout-nav-text-primary-color)' }) }}
-          />
         </>
       ),
       rightArea: (
@@ -177,7 +169,7 @@ export function DashboardLayout({
     />
   );
 
-  const renderFooter = () => <Footer />;
+  const renderFooter = () => <Footer layoutQuery={layoutQuery} />;
 
   const renderMain = () => (
     <MainSection {...slotProps?.main} sx={{ pb: 6, ...slotProps?.main?.sx }}>
