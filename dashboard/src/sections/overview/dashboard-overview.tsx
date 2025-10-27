@@ -298,13 +298,13 @@ export function DashboardOverview() {
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2">CPU Usage</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {axonSystemStatus.cpu_usage_percent.toFixed(1)}%
+                        {(axonSystemStatus.cpu_usage_percent || 0).toFixed(1)}%
                       </Typography>
                     </Stack>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2">Memory Usage</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {axonSystemStatus.memory_usage_mb.toFixed(0)} MB
+                        {(axonSystemStatus.memory_usage_mb || 0).toFixed(0)} MB
                       </Typography>
                     </Stack>
                   </Stack>
