@@ -104,6 +104,25 @@ class AxonClient {
     return response.data;
   }
 
+  async getAgentMetrics(id: string) {
+    const response = await this.client.get(`/agents/${id}/metrics`);
+    return response.data;
+  }
+
+  async getAgentMetricsTimeSeries(id: string, range = 3600) {
+    const response = await this.client.get(`/agents/${id}/metrics/timeseries`, {
+      params: { range },
+    });
+    return response.data;
+  }
+
+  async bulkAgentAction(action: 'pause' | 'resume' | 'restart', agentIds: string[]) {
+    const response = await this.client.post(`/agents/bulk/${action}`, {
+      agent_ids: agentIds,
+    });
+    return response.data;
+  }
+
   // ----------------------------------------------------------------------
   // Workflow Management
   // ----------------------------------------------------------------------
@@ -136,6 +155,61 @@ class AxonClient {
 
   async resumeWorkflow(id: string) {
     await this.client.post(`/workflows/${id}/resume`);
+  }
+
+  // ----------------------------------------------------------------------
+  // Task Management
+  // ----------------------------------------------------------------------
+
+  async listTasks() {
+    const response = await this.client.get('/tasks');
+    return response.data;
+  }
+
+  async getTask(id: string) {
+    const response = await this.client.get(`/tasks/${id}`);
+    return response.data;
+  }
+
+  async createTask(data: {
+    title: string;
+    description?: string;
+    priority: string;
+    assigned_agents?: string[];
+    estimated_hours?: number;
+    tags?: string[];
+    dependencies?: string[];
+    spec_reference?: string;
+  }) {
+    const response = await this.client.post('/tasks', data);
+    return response.data;
+  }
+
+  async updateTask(id: string, data: {
+    title?: string;
+    description?: string;
+    status?: string;
+    priority?: string;
+    assigned_agents?: string[];
+    progress?: number;
+    estimated_hours?: number;
+    actual_hours?: number;
+    tags?: string[];
+    dependencies?: string[];
+    spec_reference?: string;
+    completion_notes?: string;
+  }) {
+    const response = await this.client.put(`/tasks/${id}`, data);
+    return response.data;
+  }
+
+  async deleteTask(id: string) {
+    await this.client.delete(`/tasks/${id}`);
+  }
+
+  async getTaskActivities(id: string) {
+    const response = await this.client.get(`/tasks/${id}/activities`);
+    return response.data;
   }
 
   // ----------------------------------------------------------------------
@@ -201,10 +275,17 @@ export const axonEndpoints = {
     list: '/agents',
     details: (id: string) => `/agents/${id}`,
     logs: (id: string) => `/agents/${id}/logs`,
+    metrics: (id: string) => `/agents/${id}/metrics`,
+    metricsTimeSeries: (id: string) => `/agents/${id}/metrics/timeseries`,
   },
   workflows: {
     list: '/workflows',
     details: (id: string) => `/workflows/${id}`,
+  },
+  tasks: {
+    list: '/tasks',
+    details: (id: string) => `/tasks/${id}`,
+    activities: (id: string) => `/tasks/${id}/activities`,
   },
   metrics: '/metrics',
   telemetry: '/telemetry',

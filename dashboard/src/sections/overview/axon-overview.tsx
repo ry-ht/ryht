@@ -1,7 +1,8 @@
-import type { AgentInfo, SystemStatus, WorkflowInfo, HealthResponse } from 'src/types/axon';
+import type { AgentInfo, SystemStatus, WorkflowInfo, HealthResponse, SystemMetrics } from 'src/types/axon';
 
 import useSWR from 'swr';
 import { useState, useEffect } from 'react';
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -13,6 +14,7 @@ import Button from '@mui/material/Button';
 import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
+import CardContent from '@mui/material/CardContent';
 
 import { getAgentStatusColor, getWorkflowStatusColor } from 'src/utils/status-colors';
 
@@ -25,8 +27,21 @@ import { AnimateCountUp } from 'src/components/animate';
 
 // ----------------------------------------------------------------------
 
+const COLORS = {
+  primary: '#1976d2',
+  success: '#4caf50',
+  warning: '#ff9800',
+  error: '#f44336',
+  info: '#2196f3',
+};
+
+const PIE_COLORS = ['#1976d2', '#4caf50', '#ff9800', '#f44336', '#9c27b0'];
+
+// ----------------------------------------------------------------------
+
 export function AxonOverview() {
   const [wsConnected, setWsConnected] = useState(false);
+  const [metricsHistory, setMetricsHistory] = useState<SystemMetrics[]>([]);
 
   // Fetch health status
   const { data: health } = useSWR<HealthResponse>(
@@ -70,8 +85,68 @@ export function AxonOverview() {
     };
   }, []);
 
+  // Update metrics history
+  useEffect(() => {
+    if (systemStatus && agents.length > 0) {
+      const idleAgents = agents.filter((a: AgentInfo) => a.status === 'Idle').length;
+      const busyAgents = agents.filter((a: AgentInfo) => a.status === 'Working').length;
+      const pausedAgents = agents.filter((a: AgentInfo) => a.status === 'Paused').length;
+      const failedAgents = agents.filter((a: AgentInfo) => a.status === 'Failed').length;
+
+      const pendingWorkflows = workflows.filter((w: WorkflowInfo) => w.status === 'Pending').length;
+      const runningWorkflows = workflows.filter((w: WorkflowInfo) => w.status === 'Running').length;
+      const completedWorkflows = workflows.filter((w: WorkflowInfo) => w.status === 'Completed').length;
+      const failedWorkflows = workflows.filter((w: WorkflowInfo) => w.status === 'Failed').length;
+
+      const newMetric: SystemMetrics = {
+        timestamp: new Date().toISOString(),
+        total_agents: agents.length,
+        idle_agents: idleAgents,
+        busy_agents: busyAgents,
+        paused_agents: pausedAgents,
+        failed_agents: failedAgents,
+        total_workflows: workflows.length,
+        pending_workflows: pendingWorkflows,
+        running_workflows: runningWorkflows,
+        completed_workflows: completedWorkflows,
+        failed_workflows: failedWorkflows,
+        cpu_usage_percent: systemStatus.cpu_usage_percent || 0,
+        memory_usage_mb: systemStatus.memory_usage_mb || 0,
+        total_memory_mb: 8192, // Mock value
+        request_rate: 0, // Mock value
+        error_rate: 0, // Mock value
+        avg_latency_ms: 0, // Mock value
+      };
+
+      setMetricsHistory((prev) => {
+        const updated = [...prev, newMetric];
+        // Keep only last 20 data points
+        return updated.slice(-20);
+      });
+    }
+  }, [systemStatus, agents, workflows]);
+
   const runningWorkflows = workflows.filter((w: WorkflowInfo) => w.status === 'Running').length;
   const activeAgents = agents.filter((a: AgentInfo) => a.status === 'Working' || a.status === 'Idle').length;
+
+  // Calculate agent status distribution
+  const agentStatusData = [
+    { name: 'Idle', value: agents.filter((a) => a.status === 'Idle').length },
+    { name: 'Working', value: agents.filter((a) => a.status === 'Working').length },
+    { name: 'Paused', value: agents.filter((a) => a.status === 'Paused').length },
+    { name: 'Failed', value: agents.filter((a) => a.status === 'Failed').length },
+  ].filter((item) => item.value > 0);
+
+  // Calculate workflow status distribution
+  const workflowStatusData = [
+    { name: 'Pending', value: workflows.filter((w) => w.status === 'Pending').length },
+    { name: 'Running', value: workflows.filter((w) => w.status === 'Running').length },
+    { name: 'Completed', value: workflows.filter((w) => w.status === 'Completed').length },
+    { name: 'Failed', value: workflows.filter((w) => w.status === 'Failed').length },
+  ].filter((item) => item.value > 0);
+
+  const hasAlerts = agents.filter((a) => a.status === 'Failed').length > 0 ||
+                    workflows.filter((w) => w.status === 'Failed').length > 0;
 
   return (
     <Box>
@@ -91,6 +166,18 @@ export function AxonOverview() {
           </Label>
         </Stack>
       </Box>
+
+      {hasAlerts && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2">System Alerts</Typography>
+          <Typography variant="body2">
+            {agents.filter((a) => a.status === 'Failed').length > 0 &&
+              `${agents.filter((a) => a.status === 'Failed').length} agent(s) failed. `}
+            {workflows.filter((w) => w.status === 'Failed').length > 0 &&
+              `${workflows.filter((w) => w.status === 'Failed').length} workflow(s) failed.`}
+          </Typography>
+        </Alert>
+      )}
 
       <Grid container spacing={3}>
         {/* System Overview Cards */}
@@ -162,6 +249,132 @@ export function AxonOverview() {
           </Card>
         </Grid>
 
+        {/* System Resource Metrics */}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title="System Resources" />
+            <CardContent>
+              <Stack spacing={3}>
+                <Box>
+                  <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                    <Typography variant="body2">CPU Usage</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {systemStatus?.cpu_usage_percent?.toFixed(1) || 0}%
+                    </Typography>
+                  </Stack>
+                  <LinearProgress
+                    variant="determinate"
+                    value={systemStatus?.cpu_usage_percent || 0}
+                    color={systemStatus?.cpu_usage_percent! > 80 ? 'error' : systemStatus?.cpu_usage_percent! > 60 ? 'warning' : 'primary'}
+                  />
+                </Box>
+                <Box>
+                  <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                    <Typography variant="body2">Memory Usage</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {systemStatus?.memory_usage_mb?.toFixed(0) || 0} MB
+                    </Typography>
+                  </Stack>
+                  <LinearProgress
+                    variant="determinate"
+                    value={((systemStatus?.memory_usage_mb || 0) / 8192) * 100}
+                    color={systemStatus?.memory_usage_mb! > 6500 ? 'error' : systemStatus?.memory_usage_mb! > 5000 ? 'warning' : 'primary'}
+                  />
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Performance Metrics Over Time */}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title="CPU & Memory Trends" />
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={metricsHistory}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="timestamp"
+                    tickFormatter={(value) => new Date(value).toLocaleTimeString()}
+                    fontSize={12}
+                  />
+                  <YAxis fontSize={12} />
+                  <Tooltip
+                    labelFormatter={(value) => new Date(value).toLocaleString()}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line
+                    type="monotone"
+                    dataKey="cpu_usage_percent"
+                    stroke={COLORS.primary}
+                    name="CPU %"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="memory_usage_mb"
+                    stroke={COLORS.success}
+                    name="Memory (MB)"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Agent Status Distribution */}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title="Agent Status Distribution" />
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={agentStatusData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(entry) => `${entry.name}: ${entry.value}`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {agentStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Workflow Status Distribution */}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title="Workflow Status Distribution" />
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={workflowStatusData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="value" fill={COLORS.primary}>
+                    {workflowStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+
         {/* Recent Agents */}
         <Grid size={{ xs: 12, md: 6 }}>
           <Card>
@@ -222,7 +435,13 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
         p: 2,
         borderRadius: 1,
         border: (theme) => `1px solid ${theme.palette.divider}`,
+        '&:hover': {
+          bgcolor: 'action.hover',
+          cursor: 'pointer',
+        },
       }}
+      component="a"
+      href={`/dashboard/agents/${agent.id}`}
     >
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" noWrap>

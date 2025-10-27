@@ -16,6 +16,10 @@ export type AgentStatus = 'Idle' | 'Working' | 'Paused' | 'Failed' | 'ShuttingDo
 
 export type WorkflowStatus = 'Pending' | 'Running' | 'Completed' | 'Failed' | 'Cancelled';
 
+export type TaskStatus = 'Pending' | 'InProgress' | 'Blocked' | 'Done' | 'Cancelled';
+
+export type TaskPriority = 'Critical' | 'High' | 'Medium' | 'Low';
+
 export type Capability =
   | 'CodeGeneration'
   | 'CodeReview'
@@ -241,4 +245,131 @@ export interface UpdateConfigRequest {
 export interface ValidateConfigResponse {
   valid: boolean;
   errors: string[];
+}
+
+// ----------------------------------------------------------------------
+// Task Management Types
+// ----------------------------------------------------------------------
+
+export interface TaskInfo {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigned_agents: string[];
+  progress: number;
+  estimated_hours?: number;
+  actual_hours?: number;
+  tags: string[];
+  dependencies: string[];
+  spec_reference?: string;
+  completion_notes?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface CreateTaskRequest {
+  title: string;
+  description?: string;
+  priority: TaskPriority;
+  assigned_agents?: string[];
+  estimated_hours?: number;
+  tags?: string[];
+  dependencies?: string[];
+  spec_reference?: string;
+}
+
+export interface UpdateTaskRequest {
+  title?: string;
+  description?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  assigned_agents?: string[];
+  progress?: number;
+  estimated_hours?: number;
+  actual_hours?: number;
+  tags?: string[];
+  dependencies?: string[];
+  spec_reference?: string;
+  completion_notes?: string;
+}
+
+export interface TaskActivity {
+  id: string;
+  task_id: string;
+  action: string;
+  description: string;
+  user: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+// ----------------------------------------------------------------------
+// Extended Metrics Types
+// ----------------------------------------------------------------------
+
+export interface AgentMetricsData {
+  agent_id: string;
+  agent_name: string;
+  tasks_completed: number;
+  tasks_failed: number;
+  success_rate: number;
+  avg_response_time_ms: number;
+  cpu_usage_percent: number;
+  memory_usage_mb: number;
+  tokens_used: number;
+  estimated_cost: number;
+  uptime_seconds: number;
+  last_updated: string;
+}
+
+export interface AgentMetricsTimeSeries {
+  timestamp: string;
+  tasks_completed: number;
+  response_time_ms: number;
+  cpu_percent: number;
+  memory_mb: number;
+  error_count: number;
+}
+
+export interface TelemetryEndpoint {
+  endpoint: string;
+  method: string;
+  total_requests: number;
+  success_rate: number;
+  avg_response_time_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  error_count: number;
+}
+
+export interface SystemMetrics {
+  timestamp: string;
+  total_agents: number;
+  idle_agents: number;
+  busy_agents: number;
+  paused_agents: number;
+  failed_agents: number;
+  total_workflows: number;
+  pending_workflows: number;
+  running_workflows: number;
+  completed_workflows: number;
+  failed_workflows: number;
+  cpu_usage_percent: number;
+  memory_usage_mb: number;
+  total_memory_mb: number;
+  request_rate: number;
+  error_rate: number;
+  avg_latency_ms: number;
+}
+
+export interface AgentLogEntry {
+  timestamp: string;
+  level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+  message: string;
+  context?: Record<string, any>;
 }
