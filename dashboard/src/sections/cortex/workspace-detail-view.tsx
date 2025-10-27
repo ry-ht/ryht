@@ -1,36 +1,34 @@
-import { useCallback } from 'react';
+import type { Workspace, WorkspaceStats } from 'src/types/cortex';
+
+import useSWR, { mutate } from 'swr';
+import { useState , useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import LinearProgress from '@mui/material/LinearProgress';
-import Alert from '@mui/material/Alert';
 import Tab from '@mui/material/Tab';
-import TabContext from '@mui/lab/TabContext';
-import TabList from '@mui/lab/TabList';
-import TabPanel from '@mui/lab/TabPanel';
+import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
 import List from '@mui/material/List';
+import TabList from '@mui/lab/TabList';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import TabPanel from '@mui/lab/TabPanel';
+import Button from '@mui/material/Button';
+import TabContext from '@mui/lab/TabContext';
+import { alpha } from '@mui/material/styles';
 import ListItem from '@mui/material/ListItem';
+import Typography from '@mui/material/Typography';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import { alpha } from '@mui/material/styles';
+import LinearProgress from '@mui/material/LinearProgress';
 
 import { fData } from 'src/utils/format-number';
 import { fDateTime } from 'src/utils/format-time';
 
+import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
+
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
-
-import useSWR, { mutate } from 'swr';
-import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { Workspace, WorkspaceStats } from 'src/types/cortex';
-import { useState } from 'react';
 
 // ----------------------------------------------------------------------
 
@@ -155,8 +153,8 @@ export function WorkspaceDetailView() {
 
       {/* Workspace Info Card */}
       <Card sx={{ p: 3, mb: 3 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
             <Stack spacing={2}>
               <Box>
                 <Typography variant="overline" color="text.secondary">
@@ -201,8 +199,8 @@ export function WorkspaceDetailView() {
                 </Box>
               )}
             </Stack>
-          </Grid>
-          <Grid item xs={12} md={4}>
+          </Box>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(4/12*100% - 16px)" } }}>
             <Stack spacing={2}>
               {workspace.language && (
                 <Box>
@@ -227,14 +225,14 @@ export function WorkspaceDetailView() {
                 <Typography variant="body2">{fDateTime(workspace.updated_at)}</Typography>
               </Box>
             </Stack>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Card>
 
       {/* Stats Cards */}
       {stats && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap", mb: 3 }}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", sm: "calc(6/12*100% - 16px)", md: "calc(3/12*100% - 16px)" } }}>
             <Card sx={{ p: 3 }}>
               <Stack spacing={1}>
                 <Stack direction="row" alignItems="center" spacing={1}>
@@ -262,9 +260,9 @@ export function WorkspaceDetailView() {
                 </Typography>
               </Stack>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", sm: "calc(6/12*100% - 16px)", md: "calc(3/12*100% - 16px)" } }}>
             <Card sx={{ p: 3 }}>
               <Stack spacing={1}>
                 <Stack direction="row" alignItems="center" spacing={1}>
@@ -292,9 +290,9 @@ export function WorkspaceDetailView() {
                 </Typography>
               </Stack>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", sm: "calc(6/12*100% - 16px)", md: "calc(3/12*100% - 16px)" } }}>
             <Card sx={{ p: 3 }}>
               <Stack spacing={1}>
                 <Stack direction="row" alignItems="center" spacing={1}>
@@ -322,9 +320,9 @@ export function WorkspaceDetailView() {
                 </Typography>
               </Stack>
             </Card>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6} md={3}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", sm: "calc(6/12*100% - 16px)", md: "calc(3/12*100% - 16px)" } }}>
             <Card sx={{ p: 3 }}>
               <Stack spacing={1}>
                 <Stack direction="row" alignItems="center" spacing={1}>
@@ -354,8 +352,8 @@ export function WorkspaceDetailView() {
                 </Typography>
               </Stack>
             </Card>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       )}
 
       {/* Tabs */}
@@ -372,8 +370,8 @@ export function WorkspaceDetailView() {
           </Box>
 
           <TabPanel value="overview">
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(6/12*100% - 16px)" } }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>
                   Quick Actions
                 </Typography>
@@ -415,9 +413,9 @@ export function WorkspaceDetailView() {
                     Re-index Workspace
                   </Button>
                 </Stack>
-              </Grid>
+              </Box>
 
-              <Grid item xs={12} md={6}>
+              <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(6/12*100% - 16px)" } }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>
                   Workspace Metadata
                 </Typography>
@@ -440,8 +438,8 @@ export function WorkspaceDetailView() {
                     No metadata available
                   </Typography>
                 )}
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </TabPanel>
 
           <TabPanel value="files">

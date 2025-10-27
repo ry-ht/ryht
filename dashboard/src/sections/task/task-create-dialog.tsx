@@ -1,23 +1,18 @@
-import type { TaskPriority } from 'src/types/axon';
+import type { TaskInfo, AgentInfo } from 'src/types/axon';
 
 import useSWR from 'swr';
+import { z as zod } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z as zod } from 'zod';
 
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Dialog from '@mui/material/Dialog';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import LoadingButton from '@mui/lab/LoadingButton';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
-import Autocomplete from '@mui/material/Autocomplete';
 
 import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
@@ -48,10 +43,10 @@ type TaskCreateDialogProps = {
 
 export function TaskCreateDialog({ open, onClose, onSuccess }: TaskCreateDialogProps) {
   // Fetch agents for assignment
-  const { data: agents = [] } = useSWR(axonEndpoints.agents.list, axonFetcher);
+  const { data: agents = [] } = useSWR<AgentInfo[]>(axonEndpoints.agents.list, axonFetcher);
 
   // Fetch existing tasks for dependencies
-  const { data: tasks = [] } = useSWR(axonEndpoints.tasks.list, axonFetcher);
+  const { data: tasks = [] } = useSWR<TaskInfo[]>(axonEndpoints.tasks.list, axonFetcher);
 
   const defaultValues: TaskFormValues = {
     title: '',
@@ -134,7 +129,7 @@ export function TaskCreateDialog({ open, onClose, onSuccess }: TaskCreateDialogP
               name="assigned_agents"
               label="Assign Agents"
               multiple
-              options={agents.map((agent: any) => agent.name)}
+              options={agents.map((agent) => agent.name)}
               placeholder="Select agents"
               ChipProps={{ size: 'small' }}
             />
@@ -161,9 +156,9 @@ export function TaskCreateDialog({ open, onClose, onSuccess }: TaskCreateDialogP
               name="dependencies"
               label="Dependencies"
               multiple
-              options={tasks.map((task: any) => task.id)}
+              options={tasks.map((task) => task.id)}
               getOptionLabel={(option) => {
-                const task = tasks.find((t: any) => t.id === option);
+                const task = tasks.find((t) => t.id === option);
                 return task ? `${task.title} (${task.id})` : option;
               }}
               placeholder="Select dependent tasks"

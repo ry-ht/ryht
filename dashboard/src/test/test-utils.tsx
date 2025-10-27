@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
-import { render, RenderOptions } from '@testing-library/react';
+import type { RenderOptions } from '@testing-library/react';
+
 import { BrowserRouter } from 'react-router';
+import { render } from '@testing-library/react';
 
 // ----------------------------------------------------------------------
 // Custom render function with providers

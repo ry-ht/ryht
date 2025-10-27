@@ -1,41 +1,42 @@
-import { useState, useCallback, useMemo } from 'react';
+import type { CodeUnit } from 'src/types/cortex';
+
+import useSWR from 'swr';
 import { useParams, useNavigate } from 'react-router';
+import { useMemo, useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import List from '@mui/material/List';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import Dialog from '@mui/material/Dialog';
+import Divider from '@mui/material/Divider';
+import { alpha } from '@mui/material/styles';
+import MenuItem from '@mui/material/MenuItem';
 import ListItem from '@mui/material/ListItem';
-import ListItemButton from '@mui/material/ListItemButton';
+import TextField from '@mui/material/TextField';
+import Accordion from '@mui/material/Accordion';
+import Typography from '@mui/material/Typography';
+import InputLabel from '@mui/material/InputLabel';
+import IconButton from '@mui/material/IconButton';
+import FormControl from '@mui/material/FormControl';
+import DialogTitle from '@mui/material/DialogTitle';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Divider from '@mui/material/Divider';
+import InputAdornment from '@mui/material/InputAdornment';
+import ListItemButton from '@mui/material/ListItemButton';
 import LinearProgress from '@mui/material/LinearProgress';
-import IconButton from '@mui/material/IconButton';
-import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
-import { alpha } from '@mui/material/styles';
+
+import { cortexFetcher } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
-
-import useSWR from 'swr';
-import { cortexClient, cortexFetcher } from 'src/lib/cortex-client';
-import type { CodeUnit } from 'src/types/cortex';
 
 // ----------------------------------------------------------------------
 
@@ -175,9 +176,7 @@ export function CodeUnitsView() {
     return colorMap[type] || 'default';
   };
 
-  const getComplexityLevel = (complexity: number) => {
-    return COMPLEXITY_LEVELS.find((level) => complexity >= level.min && complexity <= level.max);
-  };
+  const getComplexityLevel = (complexity: number) => COMPLEXITY_LEVELS.find((level) => complexity >= level.min && complexity <= level.max);
 
   const calculateComplexity = (unit: CodeUnit): number => {
     // Simple heuristic based on line count and signature

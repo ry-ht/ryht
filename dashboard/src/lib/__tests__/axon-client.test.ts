@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import axios from 'axios';
+import { it, vi, expect, describe, afterEach, beforeEach } from 'vitest';
 
 // ----------------------------------------------------------------------
 // Mock axios before importing AxonClient

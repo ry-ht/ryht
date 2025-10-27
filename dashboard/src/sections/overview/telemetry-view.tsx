@@ -1,31 +1,31 @@
-import type { TelemetryEndpoint, TelemetryData } from 'src/types/axon';
+import type { TelemetryData, TelemetryEndpoint } from 'src/types/axon';
 
 import useSWR from 'swr';
 import { useState } from 'react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Bar, Line, Cell, XAxis, YAxis, Legend, Tooltip, BarChart, LineChart, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import Table from '@mui/material/Table';
+import Stack from '@mui/material/Stack';
+import Select from '@mui/material/Select';
+import TableRow from '@mui/material/TableRow';
+import MenuItem from '@mui/material/MenuItem';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import CardHeader from '@mui/material/CardHeader';
+import InputLabel from '@mui/material/InputLabel';
 import CardContent from '@mui/material/CardContent';
 import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import Stack from '@mui/material/Stack';
+import TableContainer from '@mui/material/TableContainer';
 
 import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
-import { AnimateCountUp } from 'src/components/animate';
 import { Iconify } from 'src/components/iconify';
+import { AnimateCountUp } from 'src/components/animate';
 
 // ----------------------------------------------------------------------
 

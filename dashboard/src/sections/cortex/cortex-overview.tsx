@@ -1,12 +1,13 @@
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-
-import { MetricCard } from 'src/sections/overview/components/metric-card';
+import type { SystemStats, HealthResponse } from 'src/types/cortex';
 
 import useSWR from 'swr';
+
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+
 import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { HealthResponse, SystemStats } from 'src/types/cortex';
+
+import { MetricCard } from 'src/sections/overview/components/metric-card';
 
 export function CortexOverview() {
   const { data: health } = useSWR<HealthResponse>(
@@ -31,18 +32,26 @@ export function CortexOverview() {
         <MetricCard
           title="Workspaces"
           value={stats?.workspaces_count || 0}
+          icon="solar:folder-with-files-bold"
+          color="primary"
         />
         <MetricCard
           title="Documents"
           value={stats?.documents_count || 0}
+          icon="solar:document-text-bold"
+          color="info"
         />
         <MetricCard
           title="Code Units"
           value={stats?.code_units_count || 0}
+          icon="solar:code-bold"
+          color="warning"
         />
         <MetricCard
-          title="Status"
-          value={health?.status === 'healthy' ? 'Healthy' : 'Unhealthy'}
+          title="Services"
+          value={health?.services ? Object.keys(health.services).length : 0}
+          icon="solar:database-bold"
+          color={health?.status === 'healthy' ? 'success' : 'error'}
         />
       </Box>
     </>

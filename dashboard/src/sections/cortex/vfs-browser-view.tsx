@@ -1,47 +1,47 @@
-import { useState, useCallback, useMemo } from 'react';
+import type { VfsEntry, DirectoryListing } from 'src/types/cortex';
+
+import useSWR, { mutate } from 'swr';
 import { useParams } from 'react-router';
+import { useMemo, useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Breadcrumbs from '@mui/material/Breadcrumbs';
 import Link from '@mui/material/Link';
 import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import IconButton from '@mui/material/IconButton';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import MenuItem from '@mui/material/MenuItem';
+import Menu from '@mui/material/Menu';
+import Stack from '@mui/material/Stack';
+import Dialog from '@mui/material/Dialog';
 import Select from '@mui/material/Select';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
-import Grid from '@mui/material/Grid';
-import Menu from '@mui/material/Menu';
 import Tooltip from '@mui/material/Tooltip';
+import ListItem from '@mui/material/ListItem';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
+import Breadcrumbs from '@mui/material/Breadcrumbs';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import ToggleButton from '@mui/material/ToggleButton';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import ListItemButton from '@mui/material/ListItemButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 
 import { fData } from 'src/utils/format-number';
 import { fDateTime } from 'src/utils/format-time';
 
+import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
+
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
 import { useSnackbar } from 'src/components/snackbar';
-
-import useSWR, { mutate } from 'swr';
-import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { DirectoryListing, VfsEntry } from 'src/types/cortex';
 
 // ----------------------------------------------------------------------
 
@@ -90,9 +90,7 @@ export function VfsBrowserView() {
   // File Type Detection
   // ----------------------------------------------------------------------
 
-  const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toLowerCase() || '';
-  };
+  const getFileExtension = (filename: string) => filename.split('.').pop()?.toLowerCase() || '';
 
   const getFileCategory = (entry: VfsEntry): FileTypeFilter => {
     if (entry.file_type === 'directory') return 'directory';
@@ -319,9 +317,7 @@ export function VfsBrowserView() {
     return iconMap[ext] || 'solar:file-bold-duotone';
   };
 
-  const isMarkdown = (filename: string) => {
-    return filename.endsWith('.md') || filename.endsWith('.markdown');
-  };
+  const isMarkdown = (filename: string) => filename.endsWith('.md') || filename.endsWith('.markdown');
 
   const isTextFile = (entry: VfsEntry) => {
     const ext = getFileExtension(entry.name);
@@ -399,9 +395,9 @@ export function VfsBrowserView() {
   );
 
   const renderFileGrid = () => (
-    <Grid container spacing={2} sx={{ mt: 1 }}>
+    <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mt: 1 }}>
       {filteredEntries.map((entry) => (
-        <Grid item xs={12} sm={6} md={4} lg={3} key={entry.id}>
+        <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", sm: "calc(50% - 8px)", md: "calc(33.33% - 8px)", lg: "calc(25% - 8px)" } }} key={entry.id}>
           <Card
             sx={{
               p: 2,
@@ -442,9 +438,9 @@ export function VfsBrowserView() {
               )}
             </Stack>
           </Card>
-        </Grid>
+        </Box>
       ))}
-    </Grid>
+    </Box>
   );
 
   // ----------------------------------------------------------------------
@@ -599,7 +595,7 @@ export function VfsBrowserView() {
           <Iconify icon="solar:eye-bold-duotone" sx={{ mr: 1 }} />
           {contextMenuEntry?.file_type === 'directory' ? 'Open' : 'View'}
         </MenuItem>
-        {contextMenuEntry?.file_type !== 'directory' && isTextFile(contextMenuEntry) && (
+        {contextMenuEntry?.file_type !== 'directory' && contextMenuEntry && isTextFile(contextMenuEntry) && (
           <MenuItem onClick={handleDownloadFile}>
             <Iconify icon="solar:download-bold-duotone" sx={{ mr: 1 }} />
             Download

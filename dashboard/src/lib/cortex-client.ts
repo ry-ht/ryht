@@ -1,30 +1,29 @@
-import axios, { type AxiosInstance } from 'axios';
-
 import type {
-  ApiResponse,
-  CodeUnit,
-  CreateDocumentRequest,
-  CreateWorkspaceRequest,
-  DirectoryListing,
-  Document,
-  DocumentLink,
-  DocumentSection,
-  DocumentStats,
-  DocumentTree,
-  DocumentVersion,
-  HealthResponse,
-  MemoryQuery,
-  MemorySearchResult,
-  SearchRequest,
-  SearchResult,
-  SystemStats,
   Task,
-  UpdateDocumentRequest,
-  UpdateWorkspaceRequest,
+  CodeUnit,
+  Document,
   VfsEntry,
   Workspace,
+  MemoryQuery,
+  SystemStats,
+  DocumentLink,
+  DocumentTree,
+  SearchResult,
+  DocumentStats,
+  SearchRequest,
+  HealthResponse,
   WorkspaceStats,
+  DocumentSection,
+  DocumentVersion,
+  DirectoryListing,
+  MemorySearchResult,
+  CreateDocumentRequest,
+  UpdateDocumentRequest,
+  CreateWorkspaceRequest,
+  UpdateWorkspaceRequest,
 } from 'src/types/cortex';
+
+import axios, { type AxiosInstance } from 'axios';
 
 // ----------------------------------------------------------------------
 

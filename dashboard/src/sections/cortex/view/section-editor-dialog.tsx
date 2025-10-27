@@ -1,22 +1,23 @@
+import type { DocumentSection } from 'src/types/cortex';
+
 import { useState, useEffect } from 'react';
 
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import MenuItem from '@mui/material/MenuItem';
-import Stack from '@mui/material/Stack';
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-
-import { useSnackbar } from 'src/components/snackbar';
-import { Markdown } from 'src/components/markdown';
+import Stack from '@mui/material/Stack';
+import Dialog from '@mui/material/Dialog';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 
 import { cortexClient } from 'src/lib/cortex-client';
-import type { DocumentSection } from 'src/types/cortex';
+
+import { Markdown } from 'src/components/markdown';
+import { useSnackbar } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 

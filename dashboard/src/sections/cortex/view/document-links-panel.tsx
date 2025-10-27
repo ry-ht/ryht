@@ -1,20 +1,20 @@
+import type { DocumentLink, DocumentLinkType } from 'src/types/cortex';
+
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
-import Grid from '@mui/material/Grid';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
+import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import type { DocumentLink, DocumentLinkType } from 'src/types/cortex';
 
 import { LinkEditorDialog } from './link-editor-dialog';
 
@@ -206,16 +206,16 @@ export function DocumentLinksPanel({
           No links found. {editMode && 'Click "Add Link" to create one.'}
         </Alert>
       ) : (
-        <Grid container spacing={3}>
-          <Grid xs={12} md={6}>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(6/12*100% - 16px)" } }}>
             {/* Navigation Links */}
             {groupedLinks.Previous && renderLinkGroup('Previous', groupedLinks.Previous)}
             {groupedLinks.Next && renderLinkGroup('Next', groupedLinks.Next)}
             {groupedLinks.Parent && renderLinkGroup('Parent', groupedLinks.Parent)}
             {groupedLinks.Child && renderLinkGroup('Child', groupedLinks.Child)}
-          </Grid>
+          </Box>
 
-          <Grid xs={12} md={6}>
+          <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(6/12*100% - 16px)" } }}>
             {/* Content Links */}
             {groupedLinks.Reference && renderLinkGroup('Reference', groupedLinks.Reference)}
             {groupedLinks.Related && renderLinkGroup('Related', groupedLinks.Related)}
@@ -223,8 +223,8 @@ export function DocumentLinksPanel({
             {groupedLinks.ApiReference && renderLinkGroup('ApiReference', groupedLinks.ApiReference)}
             {groupedLinks.Example && renderLinkGroup('Example', groupedLinks.Example)}
             {groupedLinks.External && renderLinkGroup('External', groupedLinks.External)}
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       )}
 
       <LinkEditorDialog

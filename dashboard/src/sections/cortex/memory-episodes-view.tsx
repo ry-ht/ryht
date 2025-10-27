@@ -1,31 +1,32 @@
-import { useState, useCallback, useEffect } from 'react';
+import type { EpisodeType, MemoryEpisode } from 'src/types/cortex';
+
 import useSWR from 'swr';
+import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import Select from '@mui/material/Select';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
 import Collapse from '@mui/material/Collapse';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Divider from '@mui/material/Divider';
-import LinearProgress from '@mui/material/LinearProgress';
-import TextField from '@mui/material/TextField';
-import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
 import Pagination from '@mui/material/Pagination';
-import Button from '@mui/material/Button';
+import CardContent from '@mui/material/CardContent';
+import FormControl from '@mui/material/FormControl';
+import LinearProgress from '@mui/material/LinearProgress';
+import CircularProgress from '@mui/material/CircularProgress';
+
+import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import type { MemoryEpisode, EpisodeType } from 'src/types/cortex';
 
 // ----------------------------------------------------------------------
 

@@ -1,20 +1,19 @@
+import { mutate } from 'swr';
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+
+import { cortexClient , cortexEndpoints } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import { mutate } from 'swr';
-import { cortexEndpoints } from 'src/lib/cortex-client';
 
 type FormValues = {
   name: string;

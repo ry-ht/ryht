@@ -1,24 +1,25 @@
-import { useState } from 'react';
+import type { ConsolidationResult } from 'src/types/cortex';
+
 import useSWR from 'swr';
+import { useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Divider from '@mui/material/Divider';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import CardContent from '@mui/material/CardContent';
 import LinearProgress from '@mui/material/LinearProgress';
-
-import { Iconify } from 'src/components/iconify';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { cortexClient } from 'src/lib/cortex-client';
-import type { ConsolidationResult } from 'src/types/cortex';
+
+import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 

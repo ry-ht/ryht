@@ -1,12 +1,11 @@
-import type { WorkflowStatusDetail, WorkflowTask } from 'src/types/axon';
+import type { WorkflowTask, WorkflowStatusDetail } from 'src/types/axon';
 
 import useSWR, { mutate } from 'swr';
-import { useState, useCallback } from 'react';
 import { useParams } from 'react-router';
+import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -19,12 +18,13 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
-import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 import { getWorkflowStatusColor } from 'src/utils/status-colors';
+
+import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
 
 // import { WorkflowVisualizer } from './workflow-visualizer';
 
@@ -146,8 +146,8 @@ export function WorkflowDetailView() {
         </Stack>
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
+      <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+        <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Workflow Information */}
             <Card sx={{ p: 3 }}>
@@ -222,9 +222,9 @@ export function WorkflowDetailView() {
               </Stack>
             </Card>
           </Stack>
-        </Grid>
+        </Box>
 
-        <Grid item xs={12} md={4}>
+        <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(4/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Metadata */}
             <Card sx={{ p: 3 }}>
@@ -310,8 +310,8 @@ export function WorkflowDetailView() {
               </Stack>
             </Card>
           </Stack>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
 
       <CustomPopover
         open={popover.open}
@@ -332,12 +332,13 @@ export function WorkflowDetailView() {
           </>
         )}
 
-        {workflow.status === 'Paused' && (
+        {/* Paused status not supported in WorkflowStatus type */}
+        {/* {workflow.status === 'Paused' && (
           <MenuItem onClick={handleResumeWorkflow}>
             <Iconify icon="solar:play-circle-bold" />
             Resume Workflow
           </MenuItem>
-        )}
+        )} */}
       </CustomPopover>
     </>
   );

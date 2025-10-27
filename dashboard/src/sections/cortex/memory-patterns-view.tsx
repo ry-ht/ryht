@@ -1,34 +1,35 @@
-import { useState, useCallback, useEffect } from 'react';
+import type { LearnedPattern } from 'src/types/cortex';
+
 import useSWR from 'swr';
+import { useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Divider from '@mui/material/Divider';
-import LinearProgress from '@mui/material/LinearProgress';
-import TextField from '@mui/material/TextField';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import Paper from '@mui/material/Paper';
+import Select from '@mui/material/Select';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import InputLabel from '@mui/material/InputLabel';
+import CardContent from '@mui/material/CardContent';
+import FormControl from '@mui/material/FormControl';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Paper from '@mui/material/Paper';
+import LinearProgress from '@mui/material/LinearProgress';
+import CircularProgress from '@mui/material/CircularProgress';
+
+import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import type { LearnedPattern } from 'src/types/cortex';
 
 // ----------------------------------------------------------------------
 

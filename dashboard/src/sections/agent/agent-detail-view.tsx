@@ -1,27 +1,27 @@
-import type { AgentInfo, AgentMetricsData, AgentMetricsTimeSeries, AgentLogEntry } from 'src/types/axon';
+import type { AgentInfo, AgentLogEntry, AgentMetricsData, AgentMetricsTimeSeries } from 'src/types/axon';
 
 import useSWR, { mutate } from 'swr';
-import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useState, useEffect, useCallback } from 'react';
+import { Line, Area, XAxis, YAxis, Legend, Tooltip, LineChart, AreaChart, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
+import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
-import TextField from '@mui/material/TextField';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import Paper from '@mui/material/Paper';
-import Divider from '@mui/material/Divider';
+import CardContent from '@mui/material/CardContent';
+import FormControl from '@mui/material/FormControl';
 
 import { getAgentStatusColor } from 'src/utils/status-colors';
 

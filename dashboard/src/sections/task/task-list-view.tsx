@@ -11,15 +11,16 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import FormControl from '@mui/material/FormControl';
 import LinearProgress from '@mui/material/LinearProgress';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
+import { getTaskStatusColor, getTaskPriorityColor } from 'src/utils/status-colors';
+
 import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
-import { getTaskPriorityColor, getTaskStatusColor } from 'src/utils/status-colors';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';

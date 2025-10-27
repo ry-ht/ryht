@@ -1,20 +1,21 @@
+import type { DocumentSection } from 'src/types/cortex';
+
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
+import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
 import { useSnackbar } from 'src/components/snackbar';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import type { DocumentSection } from 'src/types/cortex';
 
 import { SectionEditorDialog } from './section-editor-dialog';
 

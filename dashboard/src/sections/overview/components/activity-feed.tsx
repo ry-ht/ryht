@@ -1,5 +1,5 @@
-import type { AgentInfo, WorkflowInfo } from 'src/types/axon';
 import type { Document, Workspace } from 'src/types/cortex';
+import type { AgentInfo, WorkflowInfo } from 'src/types/axon';
 
 import { useState } from 'react';
 
@@ -8,16 +8,15 @@ import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 
-import { Iconify } from 'src/components/iconify';
 import { Label } from 'src/components/label';
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
+import { Iconify } from 'src/components/iconify';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
 
 // ----------------------------------------------------------------------
 

@@ -1,27 +1,26 @@
+import type { DocumentVersion } from 'src/types/cortex';
+
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import Timeline from '@mui/lab/Timeline';
+import Button from '@mui/material/Button';
+import TimelineDot from '@mui/lab/TimelineDot';
 import TimelineItem from '@mui/lab/TimelineItem';
+import Typography from '@mui/material/Typography';
+import TimelineContent from '@mui/lab/TimelineContent';
 import TimelineSeparator from '@mui/lab/TimelineSeparator';
 import TimelineConnector from '@mui/lab/TimelineConnector';
-import TimelineContent from '@mui/lab/TimelineContent';
-import TimelineDot from '@mui/lab/TimelineDot';
 import TimelineOppositeContent from '@mui/lab/TimelineOppositeContent';
 
 import { fDateTime } from 'src/utils/format-time';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
-
-import type { DocumentVersion } from 'src/types/cortex';
 
 import { VersionEditorDialog } from './version-editor-dialog';
 import { VersionCompareDialog } from './version-compare-dialog';
@@ -192,7 +191,7 @@ export function DocumentVersionsPanel({
 
       {versions.length === 0 ? (
         <Alert severity="info">
-          No versions found. Click "Create Version" to save the current state.
+          No versions found. Click &ldquo;Create Version&rdquo; to save the current state.
         </Alert>
       ) : (
         <Timeline position="right">

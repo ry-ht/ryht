@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { it, vi, expect, describe, afterEach, beforeEach } from 'vitest';
+
 import { AxonWebSocket } from '../axon-websocket';
 
 // ----------------------------------------------------------------------

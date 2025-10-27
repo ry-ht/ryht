@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import axios from 'axios';
-import { signInWithPassword, signUp, signOut } from '../action';
+import { it, vi, expect, describe, afterEach, beforeEach } from 'vitest';
+
 import { setSession } from '../utils';
+import { signUp, signOut, signInWithPassword } from '../action';
 
 // ----------------------------------------------------------------------
 // Mock dependencies

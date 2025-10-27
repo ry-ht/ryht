@@ -1,14 +1,13 @@
 import type { WorkflowTask } from 'src/types/axon';
 
-import { useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
+import { useRef, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
-import { getWorkflowStatusColor } from 'src/utils/status-colors';
 
 // ----------------------------------------------------------------------
 

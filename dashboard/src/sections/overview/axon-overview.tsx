@@ -1,8 +1,8 @@
-import type { AgentInfo, SystemStatus, WorkflowInfo, HealthResponse, SystemMetrics } from 'src/types/axon';
+import type { AgentInfo, SystemStatus, WorkflowInfo, SystemMetrics, HealthResponse } from 'src/types/axon';
 
 import useSWR from 'swr';
 import { useState, useEffect } from 'react';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Bar, Pie, Line, Cell, XAxis, YAxis, Legend, Tooltip, BarChart, PieChart, LineChart, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -13,8 +13,8 @@ import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
-import LinearProgress from '@mui/material/LinearProgress';
 import CardContent from '@mui/material/CardContent';
+import LinearProgress from '@mui/material/LinearProgress';
 
 import { getAgentStatusColor, getWorkflowStatusColor } from 'src/utils/status-colors';
 
@@ -265,7 +265,7 @@ export function AxonOverview() {
                   <LinearProgress
                     variant="determinate"
                     value={systemStatus?.cpu_usage_percent || 0}
-                    color={systemStatus?.cpu_usage_percent! > 80 ? 'error' : systemStatus?.cpu_usage_percent! > 60 ? 'warning' : 'primary'}
+                    color={(systemStatus?.cpu_usage_percent ?? 0) > 80 ? 'error' : (systemStatus?.cpu_usage_percent ?? 0) > 60 ? 'warning' : 'primary'}
                   />
                 </Box>
                 <Box>
@@ -278,7 +278,7 @@ export function AxonOverview() {
                   <LinearProgress
                     variant="determinate"
                     value={((systemStatus?.memory_usage_mb || 0) / 8192) * 100}
-                    color={systemStatus?.memory_usage_mb! > 6500 ? 'error' : systemStatus?.memory_usage_mb! > 5000 ? 'warning' : 'primary'}
+                    color={(systemStatus?.memory_usage_mb ?? 0) > 6500 ? 'error' : (systemStatus?.memory_usage_mb ?? 0) > 5000 ? 'warning' : 'primary'}
                   />
                 </Box>
               </Stack>

@@ -1,11 +1,11 @@
 import type { Document } from 'src/types/cortex';
 
+import Chip from '@mui/material/Chip';
 import MenuItem from '@mui/material/MenuItem';
 import TableRow from '@mui/material/TableRow';
 import Checkbox from '@mui/material/Checkbox';
 import TableCell from '@mui/material/TableCell';
 import IconButton from '@mui/material/IconButton';
-import Chip from '@mui/material/Chip';
 
 import { fDateTime } from 'src/utils/format-time';
 

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import axios from 'axios';
-import { jwtDecode, isValidToken, setSession } from '../utils';
+import { it, vi, expect, describe, afterEach, beforeEach } from 'vitest';
+
 import { JWT_STORAGE_KEY } from '../constant';
+import { jwtDecode, setSession, isValidToken } from '../utils';
 
 // ----------------------------------------------------------------------
 // Mock dependencies

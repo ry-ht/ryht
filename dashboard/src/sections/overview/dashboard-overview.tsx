@@ -2,15 +2,15 @@ import type {
   AgentInfo,
   SystemStatus,
   WorkflowInfo,
-  HealthResponse as AxonHealthResponse,
   WebSocketEvent,
+  HealthResponse as AxonHealthResponse,
 } from 'src/types/axon';
 import type {
-  Workspace,
+  Task,
   Document,
+  Workspace,
   SystemStats as CortexSystemStats,
   HealthResponse as CortexHealthResponse,
-  Task,
 } from 'src/types/cortex';
 
 import useSWR from 'swr';
@@ -24,9 +24,9 @@ import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import { useTheme } from '@mui/material/styles';
 import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
-import { alpha, useTheme } from '@mui/material/styles';
 
 import { axonWebSocket } from 'src/lib/axon-websocket';
 import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';

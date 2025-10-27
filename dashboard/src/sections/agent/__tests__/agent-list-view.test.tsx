@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from 'src/test/test-utils';
-import { AgentListView } from '../agent-list-view';
+import { it, vi, expect, describe, beforeEach } from 'vitest';
+
 import * as axonClient from 'src/lib/axon-client';
+import { render, screen, waitFor, fireEvent } from 'src/test/test-utils';
+
+import { AgentListView } from '../agent-list-view';
 
 // ----------------------------------------------------------------------
 // Mock dependencies
@@ -109,7 +111,7 @@ const mockAgents = [
 // ----------------------------------------------------------------------
 
 describe('AgentListView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
 
     // Mock SWR to return our mock data

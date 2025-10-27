@@ -1,24 +1,24 @@
-import { useState, useEffect } from 'react';
+import type { DocumentVersion } from 'src/types/cortex';
 
+import useSWR from 'swr';
+
+import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
 import Dialog from '@mui/material/Dialog';
+import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Button from '@mui/material/Button';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
-import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { fDateTime } from 'src/utils/format-time';
 
-import { useSnackbar } from 'src/components/snackbar';
-
-import useSWR from 'swr';
 import { cortexFetcher } from 'src/lib/cortex-client';
-import type { DocumentVersion } from 'src/types/cortex';
+
+import { useSnackbar } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 

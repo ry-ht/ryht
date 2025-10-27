@@ -1,33 +1,35 @@
+import type { Dayjs } from 'dayjs';
+import type { EpisodeType, MemorySearchResult } from 'src/types/cortex';
+
 import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
-import Divider from '@mui/material/Divider';
-import LinearProgress from '@mui/material/LinearProgress';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import Select from '@mui/material/Select';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import InputLabel from '@mui/material/InputLabel';
 import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
+import LinearProgress from '@mui/material/LinearProgress';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import CircularProgress from '@mui/material/CircularProgress';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+
+import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
-
-import { cortexClient } from 'src/lib/cortex-client';
-import type { MemorySearchResult, EpisodeType } from 'src/types/cortex';
 
 // ----------------------------------------------------------------------
 
@@ -53,8 +55,8 @@ export function MemorySearchView() {
   // Filters
   const [episodeTypeFilter, setEpisodeTypeFilter] = useState<EpisodeType | 'all'>('all');
   const [minImportance, setMinImportance] = useState<number>(0);
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Dayjs | null>(null);
+  const [endDate, setEndDate] = useState<Dayjs | null>(null);
 
   // Detail modal
   const [selectedResult, setSelectedResult] = useState<MemorySearchResult | null>(null);
@@ -79,11 +81,11 @@ export function MemorySearchView() {
       }
 
       if (startDate) {
-        filters.start_date = startDate.toISOString();
+        filters.start_date = startDate.toDate().toISOString();
       }
 
       if (endDate) {
-        filters.end_date = endDate.toISOString();
+        filters.end_date = endDate.toDate().toISOString();
       }
 
       const data = await cortexClient.searchMemory({
@@ -133,7 +135,7 @@ export function MemorySearchView() {
   };
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDateFns}>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Box sx={{ p: 3 }}>
         <Typography variant="h4" sx={{ mb: 3 }}>
           Memory Search
@@ -337,7 +339,7 @@ export function MemorySearchView() {
         {!isSearching && !error && results.length === 0 && query && (
           <Card sx={{ p: 3 }}>
             <Typography variant="body2" color="text.secondary" align="center">
-              No results found for "{query}"
+              No results found for &ldquo;{query}&rdquo;
             </Typography>
           </Card>
         )}

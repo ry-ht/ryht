@@ -1,5 +1,8 @@
-import { useState, useCallback } from 'react';
+import type { Document } from 'src/types/cortex';
+
+import useSWR, { mutate } from 'swr';
 import { useNavigate } from 'react-router';
+import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -8,9 +11,9 @@ import Button from '@mui/material/Button';
 import TableBody from '@mui/material/TableBody';
 import Typography from '@mui/material/Typography';
 import TableContainer from '@mui/material/TableContainer';
-import Chip from '@mui/material/Chip';
+import TablePagination from '@mui/material/TablePagination';
 
-import { fDateTime } from 'src/utils/format-time';
+import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
@@ -23,11 +26,7 @@ import {
   TableHeadCustom,
   TableSelectedAction,
 } from 'src/components/table';
-import TablePagination from '@mui/material/TablePagination';
 
-import useSWR, { mutate } from 'swr';
-import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { Document } from 'src/types/cortex';
 import { DocumentTableRow } from './document-table-row';
 import { DocumentTableToolbar } from './document-table-toolbar';
 

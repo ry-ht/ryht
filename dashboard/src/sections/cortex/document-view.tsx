@@ -1,29 +1,30 @@
-import { useParams, useNavigate } from 'react-router';
+import type { Document, DocumentLink, DocumentSection, DocumentVersion } from 'src/types/cortex';
+
+import useSWR from 'swr';
 import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router';
 
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
 import Tab from '@mui/material/Tab';
+import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
 import Tabs from '@mui/material/Tabs';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 
 import { fDateTime } from 'src/utils/format-time';
+
+import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
 import { useSnackbar } from 'src/components/snackbar';
 
-import useSWR from 'swr';
-import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { Document, DocumentSection, DocumentLink, DocumentVersion } from 'src/types/cortex';
-
-import { DocumentSectionsPanel } from './view/document-sections-panel';
 import { DocumentLinksPanel } from './view/document-links-panel';
+import { DocumentSectionsPanel } from './view/document-sections-panel';
 import { DocumentVersionsPanel } from './view/document-versions-panel';
 
 // ----------------------------------------------------------------------

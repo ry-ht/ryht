@@ -1,31 +1,29 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import useSWR from 'swr';
+// Import mermaid for graph rendering
+import mermaid from 'mermaid';
 import { useParams, useNavigate } from 'react-router';
+import { useRef, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Alert from '@mui/material/Alert';
-import LinearProgress from '@mui/material/LinearProgress';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
 import { alpha } from '@mui/material/styles';
+import MenuItem from '@mui/material/MenuItem';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import ToggleButton from '@mui/material/ToggleButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+
+import { cortexFetcher } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
-
-import useSWR from 'swr';
-import { cortexClient, cortexFetcher } from 'src/lib/cortex-client';
-
-// Import mermaid for graph rendering
-import mermaid from 'mermaid';
 
 // ----------------------------------------------------------------------
 
@@ -160,9 +158,7 @@ export function DependencyGraphView() {
     return dotCode;
   }, []);
 
-  const generateJsonGraph = useCallback((data: DependencyGraph) => {
-    return JSON.stringify(data, null, 2);
-  }, []);
+  const generateJsonGraph = useCallback((data: DependencyGraph) => JSON.stringify(data, null, 2), []);
 
   // ----------------------------------------------------------------------
   // Render Mermaid Graph

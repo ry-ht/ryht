@@ -1,6 +1,6 @@
-import { CONFIG } from 'src/global-config';
-
 import { useDocumentTitle } from 'src/hooks/use-document-title';
+
+import { CONFIG } from 'src/global-config';
 
 import { DependencyGraphView } from 'src/sections/cortex/dependency-graph-view';
 

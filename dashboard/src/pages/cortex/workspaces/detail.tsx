@@ -1,6 +1,6 @@
-import { CONFIG } from 'src/global-config';
-
 import { useDocumentTitle } from 'src/hooks/use-document-title';
+
+import { CONFIG } from 'src/global-config';
 
 import { WorkspaceDetailView } from 'src/sections/cortex/workspace-detail-view';
 

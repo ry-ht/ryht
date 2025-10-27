@@ -1,12 +1,11 @@
-import type { TaskInfo, TaskStatus, TaskPriority, TaskActivity } from 'src/types/axon';
+import type { TaskInfo, AgentInfo, TaskStatus, TaskPriority, TaskActivity } from 'src/types/axon';
 
 import useSWR, { mutate } from 'swr';
-import { useState, useCallback } from 'react';
 import { useParams } from 'react-router';
+import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Grid from '@mui/material/Grid';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
@@ -15,17 +14,18 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import InputLabel from '@mui/material/InputLabel';
 import LoadingButton from '@mui/lab/LoadingButton';
 import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import Autocomplete from '@mui/material/Autocomplete';
 import LinearProgress from '@mui/material/LinearProgress';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
+import { getTaskStatusColor, getTaskPriorityColor } from 'src/utils/status-colors';
+
 import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
-import { getTaskPriorityColor, getTaskStatusColor } from 'src/utils/status-colors';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
@@ -55,10 +55,10 @@ export function TaskDetailView() {
   );
 
   // Fetch agents for assignment
-  const { data: agents = [] } = useSWR(axonEndpoints.agents.list, axonFetcher);
+  const { data: agents = [] } = useSWR<AgentInfo[]>(axonEndpoints.agents.list, axonFetcher);
 
   // Fetch tasks for dependencies
-  const { data: tasks = [] } = useSWR(axonEndpoints.tasks.list, axonFetcher);
+  const { data: tasks = [] } = useSWR<TaskInfo[]>(axonEndpoints.tasks.list, axonFetcher);
 
   const handleEdit = useCallback(() => {
     if (task) {
@@ -160,8 +160,8 @@ export function TaskDetailView() {
         </Stack>
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
+      <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+        <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Task Information */}
             <Card sx={{ p: 3 }}>
@@ -298,9 +298,9 @@ export function TaskDetailView() {
               </Stack>
             </Card>
           </Stack>
-        </Grid>
+        </Box>
 
-        <Grid item xs={12} md={4}>
+        <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(4/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Status & Priority */}
             <Card sx={{ p: 3 }}>
@@ -375,8 +375,8 @@ export function TaskDetailView() {
                   multiple
                   value={editedTask.assigned_agents || task.assigned_agents}
                   onChange={(_, value) => setEditedTask({ ...editedTask, assigned_agents: value })}
-                  options={agents.map((agent: any) => agent.name)}
-                  renderInput={(params) => <TextField {...params} label="Assigned Agents" />}
+                  options={agents.map((agent) => agent.name)}
+                  renderInput={(inputParams) => <TextField {...inputParams} label="Assigned Agents" />}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (
                       <Chip {...getTagProps({ index })} key={option} label={option} size="small" />
@@ -461,7 +461,7 @@ export function TaskDetailView() {
                   value={editedTask.tags || task.tags}
                   onChange={(_, value) => setEditedTask({ ...editedTask, tags: value })}
                   options={[]}
-                  renderInput={(params) => <TextField {...params} label="Tags" />}
+                  renderInput={(inputParams) => <TextField {...inputParams} label="Tags" />}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (
                       <Chip {...getTagProps({ index })} key={option} label={option} size="small" />
@@ -492,12 +492,12 @@ export function TaskDetailView() {
                   multiple
                   value={editedTask.dependencies || task.dependencies}
                   onChange={(_, value) => setEditedTask({ ...editedTask, dependencies: value })}
-                  options={tasks.filter((t: any) => t.id !== task.id).map((t: any) => t.id)}
+                  options={tasks.filter((t) => t.id !== task.id).map((t) => t.id)}
                   getOptionLabel={(option) => {
-                    const t = tasks.find((task: any) => task.id === option);
+                    const t = tasks.find((t2) => t2.id === option);
                     return t ? `${t.title} (${t.id})` : option;
                   }}
-                  renderInput={(params) => <TextField {...params} label="Dependencies" />}
+                  renderInput={(inputParams) => <TextField {...inputParams} label="Dependencies" />}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (
                       <Chip {...getTagProps({ index })} key={option} label={option} size="small" />
@@ -596,8 +596,8 @@ export function TaskDetailView() {
               </Stack>
             </Card>
           </Stack>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </>
   );
 }

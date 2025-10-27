@@ -1,6 +1,6 @@
-import { CONFIG } from 'src/global-config';
-
 import { useDocumentTitle } from 'src/hooks/use-document-title';
+
+import { CONFIG } from 'src/global-config';
 
 import { AgentDetailView } from 'src/sections/agent/agent-detail-view';
 
