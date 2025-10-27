@@ -7,9 +7,11 @@ import type {
   CreateWorkspaceRequest,
   DirectoryListing,
   Document,
+  DocumentLink,
   DocumentSection,
   DocumentStats,
   DocumentTree,
+  DocumentVersion,
   HealthResponse,
   MemoryQuery,
   MemorySearchResult,
@@ -433,6 +435,8 @@ export const cortexEndpoints = {
     tree: (id: string) => `/api/v1/documents/${id}/tree`,
     stats: (id: string) => `/api/v1/documents/${id}/stats`,
     sections: (id: string) => `/api/v1/documents/${id}/sections`,
+    links: (id: string) => `/api/v1/documents/${id}/links`,
+    versions: (id: string) => `/api/v1/documents/${id}/versions`,
   },
   vfs: {
     list: (workspaceId: string, path: string) =>

@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
+import { useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -8,6 +9,8 @@ import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 
 import { fDateTime } from 'src/utils/format-time';
 
@@ -17,7 +20,11 @@ import { useSnackbar } from 'src/components/snackbar';
 
 import useSWR from 'swr';
 import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
-import type { Document } from 'src/types/cortex';
+import type { Document, DocumentSection, DocumentLink, DocumentVersion } from 'src/types/cortex';
+
+import { DocumentSectionsPanel } from './view/document-sections-panel';
+import { DocumentLinksPanel } from './view/document-links-panel';
+import { DocumentVersionsPanel } from './view/document-versions-panel';
 
 // ----------------------------------------------------------------------
 
@@ -27,10 +34,30 @@ export function DocumentView() {
   const { enqueueSnackbar } = useSnackbar();
 
   const documentId = params.id as string;
+  const [activeTab, setActiveTab] = useState(0);
+  const [editMode, setEditMode] = useState(false);
 
   // Fetch document
-  const { data: document, isLoading, error } = useSWR<Document>(
+  const { data: document, isLoading, error, mutate } = useSWR<Document>(
     documentId ? cortexEndpoints.documents.get(documentId) : null,
+    cortexFetcher
+  );
+
+  // Fetch sections
+  const { data: sections = [], mutate: mutateSections } = useSWR<DocumentSection[]>(
+    documentId ? cortexEndpoints.documents.sections(documentId) : null,
+    cortexFetcher
+  );
+
+  // Fetch links
+  const { data: links = [], mutate: mutateLinks } = useSWR<DocumentLink[]>(
+    documentId ? cortexEndpoints.documents.links(documentId) : null,
+    cortexFetcher
+  );
+
+  // Fetch versions
+  const { data: versions = [], mutate: mutateVersions } = useSWR<DocumentVersion[]>(
+    documentId ? cortexEndpoints.documents.versions(documentId) : null,
     cortexFetcher
   );
 
@@ -86,6 +113,14 @@ export function DocumentView() {
     );
   }
 
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
+
+  const handleToggleEditMode = () => {
+    setEditMode(!editMode);
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Button
@@ -114,8 +149,12 @@ export function DocumentView() {
           </Box>
 
           <Stack direction="row" spacing={1}>
+            <IconButton onClick={handleToggleEditMode} color={editMode ? 'primary' : 'default'}>
+              <Iconify icon={editMode ? 'solar:eye-bold' : 'solar:pen-bold'} />
+            </IconButton>
+
             <IconButton onClick={handleEdit}>
-              <Iconify icon="solar:pen-bold" />
+              <Iconify icon="solar:settings-bold" />
             </IconButton>
 
             {document.status !== 'Published' && (
@@ -161,16 +200,53 @@ export function DocumentView() {
 
         <Divider sx={{ mb: 3 }} />
 
-        {/* Content */}
-        <Box sx={{
-          '& pre': {
-            borderRadius: 1,
-            p: 2,
-            bgcolor: 'background.neutral'
-          }
-        }}>
-          <Markdown content={document.content} />
-        </Box>
+        {/* Tabs */}
+        <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 3 }}>
+          <Tab label="Content" />
+          <Tab label={`Sections (${sections.length})`} />
+          <Tab label={`Links (${links.length})`} />
+          <Tab label={`Versions (${versions.length})`} />
+        </Tabs>
+
+        {/* Tab Panels */}
+        {activeTab === 0 && (
+          <Box sx={{
+            '& pre': {
+              borderRadius: 1,
+              p: 2,
+              bgcolor: 'background.neutral'
+            }
+          }}>
+            <Markdown content={document.content} />
+          </Box>
+        )}
+
+        {activeTab === 1 && (
+          <DocumentSectionsPanel
+            documentId={documentId}
+            sections={sections}
+            onRefresh={mutateSections}
+            editMode={editMode}
+          />
+        )}
+
+        {activeTab === 2 && (
+          <DocumentLinksPanel
+            documentId={documentId}
+            links={links}
+            onRefresh={mutateLinks}
+            editMode={editMode}
+          />
+        )}
+
+        {activeTab === 3 && (
+          <DocumentVersionsPanel
+            documentId={documentId}
+            versions={versions}
+            onRefresh={mutateVersions}
+            currentVersion={document.version}
+          />
+        )}
       </Card>
     </Box>
   );
