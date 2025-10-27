@@ -47,23 +47,21 @@ const ICONS = {
 
 export const navData: NavSectionProps['data'] = [
   /**
-   * Overview
+   * System Overview
    */
   {
     subheader: 'Overview',
     items: [
       {
-        title: 'One',
+        title: 'Dashboard',
         path: paths.dashboard.root,
         icon: ICONS.dashboard,
-        info: <Label>v{CONFIG.appVersion}</Label>,
+        info: <Label color="info">RyHt</Label>,
       },
-      { title: 'Two', path: paths.dashboard.two, icon: ICONS.ecommerce },
-      { title: 'Three', path: paths.dashboard.three, icon: ICONS.analytics },
     ],
   },
   /**
-   * Axon Multi-Agent System
+   * Multi-Agent System (Axon)
    */
   {
     subheader: 'Multi-Agent System',
@@ -72,62 +70,128 @@ export const navData: NavSectionProps['data'] = [
         title: 'Agents',
         path: paths.dashboard.agents.root,
         icon: ICONS.user,
+        children: [
+          { title: 'All Agents', path: paths.dashboard.agents.list },
+          { title: 'Create Agent', path: paths.dashboard.agents.create },
+          { title: 'Orchestrator', path: paths.dashboard.agents.byType('orchestrator') },
+          { title: 'Developer', path: paths.dashboard.agents.byType('developer') },
+          { title: 'Reviewer', path: paths.dashboard.agents.byType('reviewer') },
+          { title: 'Tester', path: paths.dashboard.agents.byType('tester') },
+          { title: 'Documenter', path: paths.dashboard.agents.byType('documenter') },
+          { title: 'Architect', path: paths.dashboard.agents.byType('architect') },
+          { title: 'Researcher', path: paths.dashboard.agents.byType('researcher') },
+          { title: 'Optimizer', path: paths.dashboard.agents.byType('optimizer') },
+        ],
       },
       {
         title: 'Workflows',
         path: paths.dashboard.workflows.root,
         icon: ICONS.kanban,
+        children: [
+          { title: 'All Workflows', path: paths.dashboard.workflows.list },
+          { title: 'Create Workflow', path: paths.dashboard.workflows.create },
+          { title: 'Templates', path: paths.dashboard.workflows.templates },
+        ],
       },
       {
         title: 'Tasks',
         path: paths.dashboard.tasks.root,
         icon: ICONS.label,
       },
+      {
+        title: 'Coordination',
+        path: paths.dashboard.coordination.root,
+        icon: ICONS.chat,
+        children: [
+          { title: 'Messages', path: paths.dashboard.coordination.messages },
+          { title: 'Sessions', path: paths.dashboard.coordination.sessions },
+          { title: 'Locks', path: paths.dashboard.coordination.locks },
+        ],
+      },
     ],
   },
   /**
-   * Cortex Cognitive System
+   * Cognitive System (Cortex)
    */
   {
     subheader: 'Cognitive System',
     items: [
       {
-        title: 'Cortex Overview',
-        path: '/cortex',
+        title: 'Memory',
+        path: paths.dashboard.memory.root,
         icon: ICONS.analytics,
+        children: [
+          { title: 'Working Memory', path: paths.dashboard.memory.working },
+          { title: 'Episodic Memory', path: paths.dashboard.memory.episodic },
+          { title: 'Semantic Memory', path: paths.dashboard.memory.semantic },
+          { title: 'Patterns', path: paths.dashboard.memory.patterns },
+          { title: 'Consolidation', path: paths.dashboard.memory.consolidation },
+        ],
       },
       {
         title: 'Workspaces',
-        path: '/cortex/workspaces',
+        path: paths.dashboard.workspaces.root,
         icon: ICONS.folder,
+        children: [
+          { title: 'All Workspaces', path: paths.dashboard.workspaces.list },
+          { title: 'Create Workspace', path: paths.dashboard.workspaces.create },
+        ],
       },
       {
-        title: 'Documents',
-        path: '/cortex/documents',
+        title: 'Code Intelligence',
+        path: paths.dashboard.code.root,
         icon: ICONS.file,
+        children: [
+          { title: 'Code Analysis', path: paths.dashboard.code.analysis },
+          { title: 'Dependencies', path: paths.dashboard.code.dependencies },
+          { title: 'Quality Metrics', path: paths.dashboard.code.quality },
+          { title: 'VFS Browser', path: paths.dashboard.code.vfs },
+        ],
       },
       {
-        title: 'Memory Search',
-        path: '/cortex/memory',
-        icon: ICONS.chat,
+        title: 'Knowledge Base',
+        path: paths.dashboard.knowledge.root,
+        icon: ICONS.course,
+        children: [
+          { title: 'Documents', path: paths.dashboard.knowledge.documents },
+          { title: 'Semantic Search', path: paths.dashboard.knowledge.search },
+        ],
       },
     ],
   },
   /**
-   * Management
+   * Monitoring & Analytics
    */
   {
-    subheader: 'Management',
+    subheader: 'Monitoring',
     items: [
       {
-        title: 'Group',
-        path: paths.dashboard.group.root,
-        icon: ICONS.folder,
-        children: [
-          { title: 'Four', path: paths.dashboard.group.root },
-          { title: 'Five', path: paths.dashboard.group.five },
-          { title: 'Six', path: paths.dashboard.group.six },
-        ],
+        title: 'Real-time Metrics',
+        path: paths.dashboard.monitoring.metrics,
+        icon: ICONS.banking,
+      },
+      {
+        title: 'Logs & Events',
+        path: paths.dashboard.monitoring.logs,
+        icon: ICONS.blog,
+      },
+      {
+        title: 'System Health',
+        path: paths.dashboard.monitoring.health,
+        icon: ICONS.tour,
+      },
+    ],
+  },
+  /**
+   * Configuration
+   */
+  {
+    subheader: 'Settings',
+    items: [
+      {
+        title: 'Configuration',
+        path: paths.dashboard.config.root,
+        icon: ICONS.params,
       },
     ],
   },

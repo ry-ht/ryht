@@ -153,9 +153,6 @@ export function DashboardOverview() {
     <>
       <CustomBreadcrumbs
         heading="Dashboard"
-        links={[
-          { name: 'Dashboard' },
-        ]}
         action={
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip

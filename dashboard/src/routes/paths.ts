@@ -42,29 +42,74 @@ export const paths = {
   // DASHBOARD
   dashboard: {
     root: ROOTS.DASHBOARD,
-    two: `${ROOTS.DASHBOARD}/two`,
-    three: `${ROOTS.DASHBOARD}/three`,
-    group: {
-      root: `${ROOTS.DASHBOARD}/group`,
-      five: `${ROOTS.DASHBOARD}/group/five`,
-      six: `${ROOTS.DASHBOARD}/group/six`,
-    },
+    // Multi-Agent System (Axon)
     agents: {
       root: `${ROOTS.DASHBOARD}/agents`,
       list: `${ROOTS.DASHBOARD}/agents`,
       create: `${ROOTS.DASHBOARD}/agents/create`,
       details: (id: string) => `${ROOTS.DASHBOARD}/agents/${id}`,
+      byType: (type: string) => `${ROOTS.DASHBOARD}/agents/type/${type}`,
     },
     workflows: {
       root: `${ROOTS.DASHBOARD}/workflows`,
       list: `${ROOTS.DASHBOARD}/workflows`,
       create: `${ROOTS.DASHBOARD}/workflows/create`,
+      templates: `${ROOTS.DASHBOARD}/workflows/templates`,
       details: (id: string) => `${ROOTS.DASHBOARD}/workflows/${id}`,
     },
     tasks: {
       root: `${ROOTS.DASHBOARD}/tasks`,
       list: `${ROOTS.DASHBOARD}/tasks`,
       details: (id: string) => `${ROOTS.DASHBOARD}/tasks/${id}`,
+    },
+    coordination: {
+      root: `${ROOTS.DASHBOARD}/coordination`,
+      messages: `${ROOTS.DASHBOARD}/coordination/messages`,
+      sessions: `${ROOTS.DASHBOARD}/coordination/sessions`,
+      locks: `${ROOTS.DASHBOARD}/coordination/locks`,
+    },
+    // Cognitive System (Cortex)
+    memory: {
+      root: `${ROOTS.DASHBOARD}/memory`,
+      working: `${ROOTS.DASHBOARD}/memory/working`,
+      episodic: `${ROOTS.DASHBOARD}/memory/episodic`,
+      semantic: `${ROOTS.DASHBOARD}/memory/semantic`,
+      patterns: `${ROOTS.DASHBOARD}/memory/patterns`,
+      consolidation: `${ROOTS.DASHBOARD}/memory/consolidation`,
+    },
+    workspaces: {
+      root: `${ROOTS.DASHBOARD}/workspaces`,
+      list: `${ROOTS.DASHBOARD}/workspaces`,
+      create: `${ROOTS.DASHBOARD}/workspaces/create`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}`,
+      browse: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/browse`,
+      codeUnits: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/code-units`,
+      dependencies: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/dependencies`,
+    },
+    code: {
+      root: `${ROOTS.DASHBOARD}/code`,
+      analysis: `${ROOTS.DASHBOARD}/code/analysis`,
+      dependencies: `${ROOTS.DASHBOARD}/code/dependencies`,
+      quality: `${ROOTS.DASHBOARD}/code/quality`,
+      vfs: `${ROOTS.DASHBOARD}/code/vfs`,
+    },
+    knowledge: {
+      root: `${ROOTS.DASHBOARD}/knowledge`,
+      documents: `${ROOTS.DASHBOARD}/knowledge/documents`,
+      search: `${ROOTS.DASHBOARD}/knowledge/search`,
+      createDocument: `${ROOTS.DASHBOARD}/knowledge/documents/create`,
+      documentDetails: (id: string) => `${ROOTS.DASHBOARD}/knowledge/documents/${id}`,
+    },
+    // Monitoring & Analytics
+    monitoring: {
+      root: `${ROOTS.DASHBOARD}/monitoring`,
+      metrics: `${ROOTS.DASHBOARD}/monitoring/metrics`,
+      logs: `${ROOTS.DASHBOARD}/monitoring/logs`,
+      health: `${ROOTS.DASHBOARD}/monitoring/health`,
+    },
+    // Configuration
+    config: {
+      root: `${ROOTS.DASHBOARD}/config`,
     },
   },
 };
