@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 
 import { CONFIG } from 'src/global-config';
 
-import { AxonOverview } from 'src/sections/overview/axon-overview';
+import { DashboardOverview } from 'src/sections/overview/dashboard-overview';
 
 // ----------------------------------------------------------------------
 
@@ -15,7 +15,7 @@ export default function Page() {
         <title>{metadata.title}</title>
       </Helmet>
 
-      <AxonOverview />
+      <DashboardOverview />
     </>
   );
 }
