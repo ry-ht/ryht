@@ -71,8 +71,15 @@ impl AuthService {
         let user = users.first()
             .ok_or_else(|| anyhow!("Invalid email or password"))?;
 
-        // Verify password
-        let valid = verify(password, &user.password_hash)?;
+        // Verify password (CPU-bound, must run in blocking thread)
+        let password_hash = user.password_hash.clone();
+        let password_owned = password.to_string();
+        let valid = tokio::task::spawn_blocking(move || {
+            verify(&password_owned, &password_hash)
+        })
+        .await
+        .map_err(|e| anyhow!("Password verification failed: {}", e))??;
+
         if !valid {
             warn!("Failed authentication attempt for user: {}", email);
             return Err(anyhow!("Invalid email or password"));
@@ -108,8 +115,12 @@ impl AuthService {
     ) -> Result<User> {
         info!("Creating new user: {}", email);
 
-        // Hash password
-        let password_hash = hash(&password, DEFAULT_COST)?;
+        // Hash password (CPU-bound, must run in blocking thread)
+        let password_hash = tokio::task::spawn_blocking(move || {
+            hash(&password, DEFAULT_COST)
+        })
+        .await
+        .map_err(|e| anyhow!("Password hashing failed: {}", e))??;
 
         let user_id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -125,16 +136,18 @@ impl AuthService {
 
         // Save to database
         let conn = self.storage.acquire().await?;
-        let user_json = serde_json::to_value(&user)?;
 
-        let _: Option<serde_json::Value> = conn.connection()
+        // Use direct struct serialization instead of JSON
+        let created_user: Option<User> = conn.connection()
             .create(("users", user_id.clone()))
-            .content(user_json)
+            .content(user)
             .await?;
+
+        let created_user = created_user.ok_or_else(|| anyhow!("Failed to create user"))?;
 
         info!("User created: {} ({})", email, user_id);
 
-        Ok(user)
+        Ok(created_user)
     }
 
     /// Get user by ID
@@ -167,7 +180,12 @@ impl AuthService {
             user.email = email;
         }
         if let Some(password) = updates.password {
-            user.password_hash = hash(&password, DEFAULT_COST)?;
+            // Hash password (CPU-bound, must run in blocking thread)
+            user.password_hash = tokio::task::spawn_blocking(move || {
+                hash(&password, DEFAULT_COST)
+            })
+            .await
+            .map_err(|e| anyhow!("Password hashing failed: {}", e))??;
         }
         if let Some(roles) = updates.roles {
             user.roles = roles;
@@ -175,15 +193,16 @@ impl AuthService {
         user.updated_at = Utc::now();
 
         // Update in database
-        let user_json = serde_json::to_value(&user)?;
-        let _: Option<User> = conn.connection()
+        let updated_user: Option<User> = conn.connection()
             .update(("users", user_id))
-            .content(user_json)
+            .content(user)
             .await?;
+
+        let updated_user = updated_user.ok_or_else(|| anyhow!("Failed to update user"))?;
 
         info!("User updated: {}", user_id);
 
-        Ok(user)
+        Ok(updated_user)
     }
 
     /// Delete user
@@ -245,16 +264,17 @@ impl AuthService {
         };
 
         let conn = self.storage.acquire().await?;
-        let session_json = serde_json::to_value(&session)?;
 
-        let _: Option<serde_json::Value> = conn.connection()
+        let created_session: Option<Session> = conn.connection()
             .create(("sessions", session_id.clone()))
-            .content(session_json)
+            .content(session)
             .await?;
+
+        let created_session = created_session.ok_or_else(|| anyhow!("Failed to create session"))?;
 
         debug!("Session created: {}", session_id);
 
-        Ok(session)
+        Ok(created_session)
     }
 
     /// Update session with refresh token
@@ -461,12 +481,10 @@ impl AuthService {
             expires_at,
         };
 
-        let token_json = serde_json::to_value(&revoked_token)?;
-
         // Insert into blacklist (ignore if already exists due to unique index)
         let result = conn.connection()
             .create::<Option<RevokedToken>>(("revoked_tokens", blacklist_id))
-            .content(token_json)
+            .content(revoked_token)
             .await;
 
         match result {
@@ -569,8 +587,13 @@ impl AuthService {
         let key_id = Uuid::new_v4().to_string();
         let api_key = format!("cortex_{}", Uuid::new_v4().simple());
 
-        // Hash the API key for storage
-        let key_hash = hash(&api_key, DEFAULT_COST)?;
+        // Hash the API key for storage (CPU-bound, must run in blocking thread)
+        let api_key_clone = api_key.clone();
+        let key_hash = tokio::task::spawn_blocking(move || {
+            hash(&api_key_clone, DEFAULT_COST)
+        })
+        .await
+        .map_err(|e| anyhow!("API key hashing failed: {}", e))??;
 
         let now = Utc::now();
         let expires_at = expires_in_days.map(|days| now + Duration::days(days));
@@ -587,11 +610,10 @@ impl AuthService {
         };
 
         let conn = self.storage.acquire().await?;
-        let key_json = serde_json::to_value(&api_key_record)?;
 
-        let _: Option<serde_json::Value> = conn.connection()
+        let _: Option<ApiKeyRecord> = conn.connection()
             .create(("api_keys", key_id.clone()))
-            .content(key_json)
+            .content(api_key_record)
             .await?;
 
         info!("API key created: {} ({})", name, key_id);
@@ -622,9 +644,19 @@ impl AuthService {
 
         let api_keys: Vec<ApiKeyRecord> = result.take(0)?;
 
-        // Find matching key by hash comparison
+        // Find matching key by hash comparison (CPU-bound, must run in blocking thread)
+        let key_owned = key.to_string();
         for key_record in api_keys {
-            if verify(key, &key_record.key_hash).unwrap_or(false) {
+            let key_hash = key_record.key_hash.clone();
+            let key_clone = key_owned.clone();
+
+            let is_valid = tokio::task::spawn_blocking(move || {
+                verify(&key_clone, &key_hash).unwrap_or(false)
+            })
+            .await
+            .unwrap_or(false);
+
+            if is_valid {
                 // Update last used time
                 let query = "UPDATE api_keys SET last_used = $time WHERE id = $id";
                 conn.connection()

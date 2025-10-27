@@ -17,7 +17,7 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
-use tracing::{info, warn, Level};
+use tracing::{debug, info, warn, Level};
 
 use super::{auth_proxy, middleware as api_middleware, routes, websocket};
 use crate::commands::{config::AxonConfig, runtime_manager::AgentRuntimeManager};
@@ -28,9 +28,11 @@ async fn spa_fallback_handler(
     req: Request<Body>,
 ) -> Response {
     let path = req.uri().path();
+    debug!("SPA fallback handler called for path: {}", path);
 
     // If path starts with /api/, return 404
     if path.starts_with("/api/") {
+        debug!("Path starts with /api/, returning 404");
         return (StatusCode::NOT_FOUND, "Not found").into_response();
     }
 
@@ -43,8 +45,11 @@ async fn spa_fallback_handler(
         dashboard_path.join(clean_path)
     };
 
+    debug!("Trying to serve file: {:?}", file_path);
+
     // Check if the file exists
     if file_path.exists() && file_path.is_file() {
+        debug!("File exists, serving: {:?}", file_path);
         // File exists, try to serve it
         match tokio::fs::read(&file_path).await {
             Ok(content) => {
@@ -77,7 +82,9 @@ async fn spa_fallback_handler(
     }
 
     // File not found, serve index.html for SPA routing
+    debug!("File not found, falling back to index.html");
     let index_path = dashboard_path.join("index.html");
+    debug!("Index path: {:?}", index_path);
     match tokio::fs::read_to_string(&index_path).await {
         Ok(content) => (
             StatusCode::OK,
@@ -171,9 +178,14 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     let dashboard_path = std::path::PathBuf::from("./dashboard");
     let has_dashboard = dashboard_path.exists() && dashboard_path.is_dir();
 
+    info!("Checking for dashboard at: {:?}", dashboard_path.canonicalize().unwrap_or(dashboard_path.clone()));
+    info!("Dashboard exists: {}, is_dir: {}", dashboard_path.exists(), dashboard_path.is_dir());
+
     if !has_dashboard {
         warn!("Dashboard directory not found at ./dashboard");
         warn!("Run build script to copy dashboard files: ./build-and-copy.sh release");
+    } else {
+        info!("Dashboard directory found, will serve static files");
     }
 
     // Combine all routes
