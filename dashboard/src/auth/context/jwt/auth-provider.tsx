@@ -33,7 +33,9 @@ export function AuthProvider({ children }: Props) {
 
         const res = await axios.get(endpoints.auth.me);
 
-        const { user } = res.data;
+        // Cortex API returns: { success, data: { id, email, roles, ... }, ... }
+        const responseData = res.data.data || res.data;
+        const user = responseData.user || responseData;
 
         setState({ user: { ...user, accessToken }, loading: false });
       } else {

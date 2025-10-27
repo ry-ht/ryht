@@ -16,7 +16,6 @@ import { GuestGuard } from 'src/auth/guard';
  *************************************** */
 const Jwt = {
   SignInPage: lazy(() => import('src/pages/auth/jwt/sign-in')),
-  SignUpPage: lazy(() => import('src/pages/auth/jwt/sign-up')),
 };
 
 const authJwt = {
@@ -28,16 +27,6 @@ const authJwt = {
         <GuestGuard>
           <AuthCenteredLayout>
             <Jwt.SignInPage />
-          </AuthCenteredLayout>
-        </GuestGuard>
-      ),
-    },
-    {
-      path: 'sign-up',
-      element: (
-        <GuestGuard>
-          <AuthCenteredLayout>
-            <Jwt.SignUpPage />
           </AuthCenteredLayout>
         </GuestGuard>
       ),

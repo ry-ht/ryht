@@ -39,6 +39,7 @@ pub struct RuntimeConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CortexConfig {
     pub enabled: bool,
+    pub api_url: Option<String>,
     pub mcp_server_url: Option<String>,
     pub workspace: Option<String>,
 }
@@ -61,6 +62,7 @@ impl Default for AxonConfig {
             },
             cortex: CortexConfig {
                 enabled: true,
+                api_url: Some(String::from("http://127.0.0.1:8080")),
                 mcp_server_url: None,
                 workspace: None,
             },

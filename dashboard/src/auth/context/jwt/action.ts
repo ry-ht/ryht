@@ -25,7 +25,9 @@ export const signInWithPassword = async ({ email, password }: SignInParams): Pro
 
     const res = await axios.post(endpoints.auth.signIn, params);
 
-    const { accessToken } = res.data;
+    // Cortex API returns: { success, data: { access_token, refresh_token, ... }, ... }
+    const responseData = res.data.data || res.data;
+    const accessToken = responseData.access_token || responseData.accessToken;
 
     if (!accessToken) {
       throw new Error('Access token not found in response');

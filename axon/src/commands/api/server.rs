@@ -1,20 +1,93 @@
 //! REST API Server implementation
 
 use anyhow::Result;
-use axum::{middleware, Router};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+    middleware,
+    response::{IntoResponse, Response},
+    Router,
+};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::ServeDir,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
 use tracing::{info, warn, Level};
 
-use super::{middleware as api_middleware, routes, websocket};
+use super::{auth_proxy, middleware as api_middleware, routes, websocket};
 use crate::commands::{config::AxonConfig, runtime_manager::AgentRuntimeManager};
+
+/// SPA fallback handler - serves index.html for all non-API routes
+async fn spa_fallback_handler(
+    dashboard_path: PathBuf,
+    req: Request<Body>,
+) -> Response {
+    let path = req.uri().path();
+
+    // If path starts with /api/, return 404
+    if path.starts_with("/api/") {
+        return (StatusCode::NOT_FOUND, "Not found").into_response();
+    }
+
+    // Build the file path from the request path
+    let file_path = if path == "/" {
+        dashboard_path.join("index.html")
+    } else {
+        // Remove leading slash and join with dashboard path
+        let clean_path = path.trim_start_matches('/');
+        dashboard_path.join(clean_path)
+    };
+
+    // Check if the file exists
+    if file_path.exists() && file_path.is_file() {
+        // File exists, try to serve it
+        match tokio::fs::read(&file_path).await {
+            Ok(content) => {
+                // Determine content type from file extension
+                let content_type = match file_path.extension().and_then(|s| s.to_str()) {
+                    Some("html") => "text/html; charset=utf-8",
+                    Some("css") => "text/css; charset=utf-8",
+                    Some("js") => "application/javascript; charset=utf-8",
+                    Some("json") => "application/json",
+                    Some("png") => "image/png",
+                    Some("jpg") | Some("jpeg") => "image/jpeg",
+                    Some("svg") => "image/svg+xml",
+                    Some("woff") => "font/woff",
+                    Some("woff2") => "font/woff2",
+                    Some("webp") => "image/webp",
+                    _ => "application/octet-stream",
+                };
+
+                return (
+                    StatusCode::OK,
+                    [("content-type", content_type)],
+                    content,
+                )
+                    .into_response();
+            }
+            Err(_) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Error reading file").into_response();
+            }
+        }
+    }
+
+    // File not found, serve index.html for SPA routing
+    let index_path = dashboard_path.join("index.html");
+    match tokio::fs::read_to_string(&index_path).await {
+        Ok(content) => (
+            StatusCode::OK,
+            [("content-type", "text/html; charset=utf-8")],
+            content,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Dashboard not found").into_response(),
+    }
+}
 
 /// Run the REST API server (blocking)
 pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Result<()> {
@@ -29,7 +102,7 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     let config = AxonConfig::load()?;
 
     // Create runtime manager
-    let runtime = Arc::new(RwLock::new(AgentRuntimeManager::new(config)?));
+    let runtime = Arc::new(RwLock::new(AgentRuntimeManager::new(config.clone())?));
 
     // Create WebSocket manager
     let ws_manager = websocket::WsManager::new();
@@ -81,6 +154,19 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Create WebSocket routes
     let ws_routes = websocket::websocket_routes(ws_manager.clone());
 
+    // Create auth proxy routes (forward to Cortex)
+    let cortex_api_url = config.cortex.api_url
+        .clone()
+        .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
+
+    let auth_proxy_state = auth_proxy::AuthProxyState::new(cortex_api_url.clone());
+    let auth_routes = Router::new()
+        .fallback(auth_proxy::proxy_auth)
+        .with_state(auth_proxy_state)
+        .layer(cors.clone());
+
+    info!("Auth proxy configured: /api/v1/auth/* -> {}", cortex_api_url);
+
     // Check if dashboard directory exists
     let dashboard_path = std::path::PathBuf::from("./dashboard");
     let has_dashboard = dashboard_path.exists() && dashboard_path.is_dir();
@@ -93,12 +179,17 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Combine all routes
     let mut app = Router::new()
         .nest("/api/v1", api_routes)
-        .nest("/api/v1", ws_routes);
+        .nest("/api/v1", ws_routes)
+        .nest("/api/v1/auth", auth_routes);
 
-    // Serve dashboard static files if directory exists
+    // Serve dashboard static files if directory exists with SPA fallback
     if has_dashboard {
-        info!("Serving dashboard from ./dashboard");
-        app = app.fallback_service(ServeDir::new(&dashboard_path));
+        info!("Serving dashboard from ./dashboard (with SPA routing)");
+        let dashboard_path_clone = dashboard_path.clone();
+        app = app.fallback(move |req| {
+            let path = dashboard_path_clone.clone();
+            spa_fallback_handler(path, req)
+        });
     } else {
         app = app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not found") });
     }

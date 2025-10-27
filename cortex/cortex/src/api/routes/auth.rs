@@ -58,6 +58,14 @@ pub struct UserInfo {
     pub created_at: chrono::DateTime<Utc>,
 }
 
+/// Register request
+#[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub email: String,
+    pub password: String,
+    pub roles: Option<Vec<String>>,
+}
+
 /// Refresh token request
 #[derive(Debug, Deserialize)]
 pub struct RefreshTokenRequest {
@@ -81,6 +89,49 @@ pub struct ApiKeyResponse {
     pub scopes: Vec<String>,
     pub expires_at: Option<chrono::DateTime<Utc>>,
     pub created_at: chrono::DateTime<Utc>,
+}
+
+/// POST /api/v1/auth/register - User registration
+async fn register(
+    State(ctx): State<AuthContext>,
+    Json(req): Json<RegisterRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let request_id = Uuid::new_v4().to_string();
+    let start = Instant::now();
+
+    // Create user with default or provided roles
+    let roles = req.roles.unwrap_or_else(|| vec!["user".to_string()]);
+
+    // Save password before it's moved
+    let password = req.password.clone();
+
+    let user = ctx.auth_service
+        .create_user(req.email.clone(), req.password, roles)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Generate tokens for immediate login
+    let authenticated = ctx.auth_service
+        .authenticate_user(&req.email, &password)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let response = LoginResponse {
+        access_token: authenticated.access_token,
+        refresh_token: authenticated.refresh_token,
+        token_type: authenticated.token_type,
+        expires_in: authenticated.expires_in,
+        user: UserInfo {
+            id: user.id,
+            email: user.email,
+            roles: user.roles,
+            created_at: user.created_at,
+        },
+    };
+
+    let duration = start.elapsed().as_millis() as u64;
+
+    Ok((StatusCode::CREATED, Json(ApiResponse::success(response, request_id, duration))))
 }
 
 /// POST /api/v1/auth/login - User login
@@ -244,6 +295,7 @@ async fn me(
 /// Create authentication routes
 pub fn auth_routes(ctx: AuthContext) -> Router {
     Router::new()
+        .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/refresh", post(refresh_token))
         .route("/api/v1/auth/logout", post(logout))
