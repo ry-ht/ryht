@@ -65,43 +65,76 @@ build_all() {
 }
 
 start_axon() {
-    print_info "Starting Axon..."
+    print_info "Starting Axon server..."
     if [ ! -f "$DIST_DIR/axon" ]; then
         print_error "Axon binary not found. Run './control.sh build' first"
         exit 1
     fi
     cd "$DIST_DIR"
     export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-    nohup ./axon > "$LOG_DIR/axon.log" 2>&1 &
-    echo $! > "$DIST_DIR/axon.pid"
-    sleep 1
-    if kill -0 $(cat "$DIST_DIR/axon.pid") 2>/dev/null; then
-        print_success "Axon started (PID: $(cat "$DIST_DIR/axon.pid"))"
-        print_info "Logs: $LOG_DIR/axon.log"
-    else
-        print_error "Axon failed to start. Check $LOG_DIR/axon.log"
-        exit 1
-    fi
+    ./axon server start > "$LOG_DIR/axon.log" 2>&1 &
+
+    # Wait for server to start and check health
+    sleep 3
+    for i in 1 2 3 4 5; do
+        if curl -s http://127.0.0.1:3000/api/v1/health >/dev/null 2>&1; then
+            # Extract PID from process list
+            local pid=$(ps aux | grep "axon internal-server-run" | grep -v grep | awk '{print $2}' | head -1)
+            if [ -n "$pid" ]; then
+                echo $pid > "$DIST_DIR/axon.pid"
+                print_success "Axon server started (PID: $pid)"
+                print_info "Logs: $LOG_DIR/axon.log"
+                print_info "API: http://localhost:3000"
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+
+    print_error "Axon failed to start. Check $LOG_DIR/axon.log"
+    exit 1
 }
 
 start_cortex() {
-    print_info "Starting Cortex..."
+    print_info "Starting Cortex server..."
     if [ ! -f "$DIST_DIR/cortex" ]; then
         print_error "Cortex binary not found. Run './control.sh build' first"
         exit 1
     fi
     cd "$DIST_DIR"
     export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-    nohup ./cortex > "$LOG_DIR/cortex.log" 2>&1 &
-    echo $! > "$DIST_DIR/cortex.pid"
-    sleep 1
-    if kill -0 $(cat "$DIST_DIR/cortex.pid") 2>/dev/null; then
-        print_success "Cortex started (PID: $(cat "$DIST_DIR/cortex.pid"))"
-        print_info "Logs: $LOG_DIR/cortex.log"
-    else
-        print_error "Cortex failed to start. Check $LOG_DIR/cortex.log"
-        exit 1
+    ./cortex server start > "$LOG_DIR/cortex.log" 2>&1 &
+
+    # Wait for server to start and check health (cortex needs more time)
+    print_info "Waiting for Cortex to initialize..."
+    sleep 5
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        if curl -s http://127.0.0.1:8080/api/v1/health >/dev/null 2>&1; then
+            # Extract PID from process list
+            local pid=$(ps aux | grep "cortex internal-server-run" | grep -v grep | awk '{print $2}' | head -1)
+            if [ -n "$pid" ]; then
+                echo $pid > "$DIST_DIR/cortex.pid"
+                print_success "Cortex server started (PID: $pid)"
+                print_info "Logs: $LOG_DIR/cortex.log"
+                print_info "API: http://localhost:8080"
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+
+    # Check if process exists even if health check failed
+    local pid=$(ps aux | grep "cortex internal-server-run" | grep -v grep | awk '{print $2}' | head -1)
+    if [ -n "$pid" ]; then
+        echo $pid > "$DIST_DIR/cortex.pid"
+        print_warning "Cortex server started but health check timed out (PID: $pid)"
+        print_info "Server may still be initializing. Check logs: $LOG_DIR/cortex.log"
+        print_info "API: http://localhost:8080"
+        return 0
     fi
+
+    print_error "Cortex failed to start. Check $LOG_DIR/cortex.log"
+    return 1
 }
 
 start_dashboard_dev() {
@@ -153,9 +186,18 @@ stop_service() {
 }
 
 stop_all() {
+    print_info "Stopping all services..."
+
+    # Stop by PID file
     stop_service "axon"
     stop_service "cortex"
     stop_service "dashboard"
+
+    # Kill any remaining server processes
+    pkill -f "axon internal-server-run" 2>/dev/null && print_info "Killed remaining axon processes"
+    pkill -f "cortex internal-server-run" 2>/dev/null && print_info "Killed remaining cortex processes"
+
+    print_success "All services stopped"
 }
 
 status_all() {
@@ -200,12 +242,32 @@ dev() {
     print_info "Starting development environment..."
     stop_all
     print_info "Starting all services in development mode..."
+
+    # Start Axon (required)
     start_axon
     sleep 2
+
+    # Start Cortex (optional - may fail if dependencies not ready)
+    set +e  # Don't exit on error
     start_cortex
+    cortex_status=$?
+    set -e
+
+    if [ $cortex_status -ne 0 ]; then
+        print_warning "Cortex failed to start - continuing without it"
+        print_info "You can start Cortex manually later with: ./control.sh start cortex"
+    fi
+
     sleep 2
+
+    # Start Dashboard (required)
     start_dashboard_dev
+
     print_success "Development environment started!"
+    print_info "Axon API: http://localhost:3000"
+    if [ $cortex_status -eq 0 ]; then
+        print_info "Cortex API: http://localhost:8080"
+    fi
     print_info "Dashboard: http://localhost:5173"
     print_info "View logs: ./control.sh logs [axon|cortex|dashboard]"
 }
