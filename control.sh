@@ -191,7 +191,6 @@ stop_all() {
     # Stop by PID file
     stop_service "axon"
     stop_service "cortex"
-    stop_service "dashboard"
 
     # Kill any remaining server processes
     pkill -f "axon internal-server-run" 2>/dev/null && print_info "Killed remaining axon processes"
@@ -201,14 +200,22 @@ stop_all() {
 }
 
 status_all() {
-    for svc in axon cortex dashboard; do
+    print_info "Service status:"
+    for svc in axon cortex; do
         local pid_file="$DIST_DIR/${svc}.pid"
         if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-            print_success "$svc running (PID: $(cat "$pid_file"))"
+            print_success "  $svc running (PID: $(cat "$pid_file"))"
         else
-            print_info "$svc not running"
+            print_info "  $svc not running"
         fi
     done
+
+    # Check if dashboard is built
+    if [ -d "$DIST_DIR/dashboard" ]; then
+        print_success "  dashboard built (served via Axon at http://localhost:3000)"
+    else
+        print_warning "  dashboard not built (run './control.sh build' first)"
+    fi
 }
 
 logs() {
@@ -241,9 +248,19 @@ clean() {
 dev() {
     print_info "Starting development environment..."
     stop_all
+
+    # Check if dashboard build exists, if not - build it
+    if [ ! -d "$DIST_DIR/dashboard" ]; then
+        print_warning "Dashboard build not found, building..."
+        cd "$DASHBOARD_DIR" && npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"
+        rm -rf "$DIST_DIR/dashboard"
+        cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
+        print_success "Dashboard built and copied to $DIST_DIR/dashboard"
+    fi
+
     print_info "Starting all services in development mode..."
 
-    # Start Axon (required)
+    # Start Axon (serves dashboard at / and API at /api/v1)
     start_axon
     sleep 2
 
@@ -258,18 +275,16 @@ dev() {
         print_info "You can start Cortex manually later with: ./control.sh start cortex"
     fi
 
-    sleep 2
-
-    # Start Dashboard (required)
-    start_dashboard_dev
-
     print_success "Development environment started!"
-    print_info "Axon API: http://localhost:3000"
+    print_info ""
+    print_info "🚀 Access points:"
+    print_info "   Dashboard:  http://localhost:3000"
+    print_info "   Axon API:   http://localhost:3000/api/v1"
     if [ $cortex_status -eq 0 ]; then
-        print_info "Cortex API: http://localhost:8080"
+        print_info "   Cortex API: http://localhost:8080/api/v1"
     fi
-    print_info "Dashboard: http://localhost:5173"
-    print_info "View logs: ./control.sh logs [axon|cortex|dashboard]"
+    print_info ""
+    print_info "📝 View logs: ./control.sh logs [axon|cortex]"
 }
 
 case "${1:-}" in
@@ -281,26 +296,30 @@ case "${1:-}" in
         case "${2:-all}" in
             axon) start_axon ;;
             cortex) start_cortex ;;
-            dashboard)
-                if [ "${3:-dev}" = "prod" ]; then
-                    start_dashboard_prod
-                else
-                    start_dashboard_dev
-                fi
-                ;;
             all)
+                # Check if dashboard build exists
+                if [ ! -d "$DIST_DIR/dashboard" ]; then
+                    print_warning "Dashboard build not found, building..."
+                    cd "$DASHBOARD_DIR" && npm run build
+                    rm -rf "$DIST_DIR/dashboard"
+                    cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
+                    print_success "Dashboard built"
+                fi
+
                 start_axon
                 sleep 2
+                set +e
                 start_cortex
-                sleep 2
-                if [ "${3:-dev}" = "prod" ]; then
-                    start_dashboard_prod
-                else
-                    start_dashboard_dev
-                fi
+                set -e
+
+                print_info ""
+                print_info "🚀 Services started:"
+                print_info "   Dashboard:  http://localhost:3000"
+                print_info "   Axon API:   http://localhost:3000/api/v1"
+                print_info "   Cortex API: http://localhost:8080/api/v1"
                 ;;
             *)
-                print_error "Unknown service: ${2}"
+                print_error "Unknown service: ${2} (available: axon, cortex, all)"
                 exit 1
                 ;;
         esac
