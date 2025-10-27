@@ -128,7 +128,7 @@ export function DashboardLayout({
         </>
       ),
       rightArea: (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.75 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {/** @slot Searchbar */}
           <Searchbar data={navData} />
 
@@ -172,7 +172,7 @@ export function DashboardLayout({
   const renderFooter = () => <Footer layoutQuery={layoutQuery} />;
 
   const renderMain = () => (
-    <MainSection {...slotProps?.main} sx={{ pb: 6, ...slotProps?.main?.sx }}>
+    <MainSection {...slotProps?.main} sx={slotProps?.main?.sx}>
       {children}
     </MainSection>
   );
