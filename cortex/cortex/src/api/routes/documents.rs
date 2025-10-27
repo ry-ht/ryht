@@ -35,23 +35,23 @@ pub fn document_routes(context: DocumentContext) -> Router {
         .route("/api/v1/documents", get(list_documents))
         .route("/api/v1/documents", post(create_document))
         .route("/api/v1/documents/search", get(search_documents))
-        .route("/api/v1/documents/:id", get(get_document))
-        .route("/api/v1/documents/:id", put(update_document))
-        .route("/api/v1/documents/:id", delete(delete_document))
-        .route("/api/v1/documents/:id/publish", post(publish_document))
-        .route("/api/v1/documents/:id/archive", post(archive_document))
+        .route("/api/v1/documents/{id}", get(get_document))
+        .route("/api/v1/documents/{id}", put(update_document))
+        .route("/api/v1/documents/{id}", delete(delete_document))
+        .route("/api/v1/documents/{id}/publish", post(publish_document))
+        .route("/api/v1/documents/{id}/archive", post(archive_document))
         // Section management
-        .route("/api/v1/documents/:id/sections", get(list_sections))
-        .route("/api/v1/documents/:id/sections", post(create_section))
-        .route("/api/v1/sections/:id", put(update_section))
-        .route("/api/v1/sections/:id", delete(delete_section))
+        .route("/api/v1/documents/{id}/sections", get(list_sections))
+        .route("/api/v1/documents/{id}/sections", post(create_section))
+        .route("/api/v1/sections/{id}", put(update_section))
+        .route("/api/v1/sections/{id}", delete(delete_section))
         // Link management
-        .route("/api/v1/documents/:id/links", get(list_links))
-        .route("/api/v1/documents/:id/links", post(create_link))
-        .route("/api/v1/links/:id", delete(delete_link))
+        .route("/api/v1/documents/{id}/links", get(list_links))
+        .route("/api/v1/documents/{id}/links", post(create_link))
+        .route("/api/v1/links/{id}", delete(delete_link))
         // Version management
-        .route("/api/v1/documents/:id/versions", get(list_versions))
-        .route("/api/v1/documents/:id/versions", post(create_version))
+        .route("/api/v1/documents/{id}/versions", get(list_versions))
+        .route("/api/v1/documents/{id}/versions", post(create_version))
         .with_state(context)
 }
 
@@ -313,7 +313,7 @@ async fn delete_document(
     Ok(Json(response))
 }
 
-/// POST /api/v1/documents/:id/publish - Publish document
+/// POST /api/v1/documents/{id}/publish - Publish document
 async fn publish_document(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -361,7 +361,7 @@ async fn publish_document(
     Ok(Json(response))
 }
 
-/// POST /api/v1/documents/:id/archive - Archive document
+/// POST /api/v1/documents/{id}/archive - Archive document
 async fn archive_document(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -454,7 +454,7 @@ async fn search_documents(
 // Section Handlers
 // =============================================================================
 
-/// GET /api/v1/documents/:id/sections - List sections
+/// GET /api/v1/documents/{id}/sections - List sections
 async fn list_sections(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -496,7 +496,7 @@ async fn list_sections(
     Ok(Json(response))
 }
 
-/// POST /api/v1/documents/:id/sections - Create section
+/// POST /api/v1/documents/{id}/sections - Create section
 async fn create_section(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -624,7 +624,7 @@ async fn delete_section(
 // Link Handlers
 // =============================================================================
 
-/// GET /api/v1/documents/:id/links - List links
+/// GET /api/v1/documents/{id}/links - List links
 async fn list_links(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -662,7 +662,7 @@ async fn list_links(
     Ok(Json(response))
 }
 
-/// POST /api/v1/documents/:id/links - Create link
+/// POST /api/v1/documents/{id}/links - Create link
 async fn create_link(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -744,7 +744,7 @@ async fn delete_link(
 // Version Handlers
 // =============================================================================
 
-/// GET /api/v1/documents/:id/versions - List versions
+/// GET /api/v1/documents/{id}/versions - List versions
 async fn list_versions(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
@@ -783,7 +783,7 @@ async fn list_versions(
     Ok(Json(response))
 }
 
-/// POST /api/v1/documents/:id/versions - Create version
+/// POST /api/v1/documents/{id}/versions - Create version
 async fn create_version(
     auth_user: AuthUser,
     State(ctx): State<DocumentContext>,
