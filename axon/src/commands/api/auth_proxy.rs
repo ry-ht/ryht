@@ -44,11 +44,20 @@ pub async fn proxy_auth(
     let path = uri.path();
     let query = uri.query().unwrap_or("");
 
+    // When nested under /api/v1/auth, axum strips the prefix
+    // So we need to rebuild the full path for Cortex
+    // If path doesn't start with /api/v1/auth, prepend it
+    let full_path = if path.starts_with("/api/v1/auth") {
+        path.to_string()
+    } else {
+        format!("/api/v1/auth{}", path)
+    };
+
     // Build target URL
     let target_url = if query.is_empty() {
-        format!("{}{}", proxy_state.cortex_url, path)
+        format!("{}{}", proxy_state.cortex_url, full_path)
     } else {
-        format!("{}{}?{}", proxy_state.cortex_url, path, query)
+        format!("{}{}?{}", proxy_state.cortex_url, full_path, query)
     };
 
     debug!("Proxying auth request: {} {} -> {}", method, path, target_url);
