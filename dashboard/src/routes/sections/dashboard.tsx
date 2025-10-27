@@ -29,6 +29,10 @@ const AgentCreatePage = lazy(() => import('src/pages/dashboard/agents/create'));
 const WorkflowListPage = lazy(() => import('src/pages/dashboard/workflows/list'));
 const WorkflowCreatePage = lazy(() => import('src/pages/dashboard/workflows/create'));
 
+// Cortex pages
+const CortexOverviewPage = lazy(() => import('src/pages/cortex/overview'));
+const CortexWorkspaceListPage = lazy(() => import('src/pages/cortex/workspaces/list'));
+
 // ----------------------------------------------------------------------
 
 function SuspenseOutlet() {
@@ -74,6 +78,18 @@ export const dashboardRoutes: RouteObject[] = [
         children: [
           { element: <WorkflowListPage />, index: true },
           { path: 'create', element: <WorkflowCreatePage /> },
+        ],
+      },
+      {
+        path: 'cortex',
+        children: [
+          { element: <CortexOverviewPage />, index: true },
+          {
+            path: 'workspaces',
+            children: [
+              { element: <CortexWorkspaceListPage />, index: true },
+            ],
+          },
         ],
       },
     ],

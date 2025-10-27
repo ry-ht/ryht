@@ -81,6 +81,24 @@ export const navData: NavSectionProps['data'] = [
     ],
   },
   /**
+   * Cortex Cognitive System
+   */
+  {
+    subheader: 'Cognitive System',
+    items: [
+      {
+        title: 'Cortex Overview',
+        path: '/dashboard/cortex',
+        icon: ICONS.analytics,
+      },
+      {
+        title: 'Workspaces',
+        path: '/dashboard/cortex/workspaces',
+        icon: ICONS.folder,
+      },
+    ],
+  },
+  /**
    * Management
    */
   {
