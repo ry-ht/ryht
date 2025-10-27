@@ -98,7 +98,7 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Serve dashboard static files if directory exists
     if has_dashboard {
         info!("Serving dashboard from ./dashboard");
-        app = app.nest_service("/", ServeDir::new(&dashboard_path));
+        app = app.fallback_service(ServeDir::new(&dashboard_path));
     } else {
         app = app.fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not found") });
     }
