@@ -543,6 +543,204 @@ impl DocumentService {
 
         Ok(documents)
     }
+
+    // ============================================================================
+    // Advanced Document Operations
+    // ============================================================================
+
+    /// Get document hierarchy (children of a document)
+    pub async fn get_document_tree(&self, document_id: &CortexId) -> Result<DocumentTree> {
+        debug!("Getting document tree for: {}", document_id);
+
+        let conn = self.storage.acquire().await?;
+
+        // Get the root document
+        let document: Option<Document> = conn
+            .connection()
+            .select(("document", document_id.to_string()))
+            .await?;
+
+        let document = document
+            .ok_or_else(|| anyhow::anyhow!("Document {} not found", document_id))?;
+
+        // Get all children
+        let query = format!(
+            "SELECT * FROM document WHERE parent_id = '{}' ORDER BY created_at",
+            document_id
+        );
+        let mut response = conn.connection().query(&query).await?;
+        let children: Vec<Document> = response.take(0)?;
+
+        // Get sections count
+        let sections_query = format!(
+            "SELECT COUNT() as count FROM document_section WHERE document_id = '{}'",
+            document_id
+        );
+        let mut sections_response = conn.connection().query(&sections_query).await?;
+        let sections_count: Option<i64> = sections_response.take("count")?;
+
+        // Get links count
+        let links_query = format!(
+            "SELECT COUNT() as count FROM document_link WHERE source_document_id = '{}'",
+            document_id
+        );
+        let mut links_response = conn.connection().query(&links_query).await?;
+        let links_count: Option<i64> = links_response.take("count")?;
+
+        Ok(DocumentTree {
+            document,
+            children,
+            sections_count: sections_count.unwrap_or(0) as usize,
+            links_count: links_count.unwrap_or(0) as usize,
+        })
+    }
+
+    /// Clone a document with all its sections
+    pub async fn clone_document(&self, document_id: &CortexId, new_title: String) -> Result<Document> {
+        info!("Cloning document: {} with title: {}", document_id, new_title);
+
+        // Get original document
+        let original = self.get_document(document_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Document {} not found", document_id))?;
+
+        // Create new document
+        let mut new_doc = Document::new(new_title.clone(), original.content.clone());
+        new_doc.doc_type = original.doc_type;
+        new_doc.description = original.description.clone();
+        new_doc.tags = original.tags.clone();
+        new_doc.keywords = original.keywords.clone();
+        new_doc.author = original.author.clone();
+        new_doc.language = original.language.clone();
+        new_doc.workspace_id = original.workspace_id.clone();
+        new_doc.metadata = original.metadata.clone();
+        new_doc.status = DocumentStatus::Draft; // Always create as draft
+
+        // Save new document
+        let conn = self.storage.acquire().await?;
+        let doc_json = serde_json::to_value(&new_doc)?;
+        let _: Option<serde_json::Value> = conn
+            .connection()
+            .create(("document", new_doc.id.to_string()))
+            .content(doc_json)
+            .await?;
+
+        // Clone all sections
+        let sections = self.get_document_sections(document_id).await?;
+        for section in sections {
+            let mut new_section = DocumentSection::new(
+                new_doc.id,
+                section.title.clone(),
+                section.content.clone(),
+                section.level,
+            );
+            new_section.parent_section_id = section.parent_section_id.clone();
+            new_section.order = section.order;
+
+            let section_json = serde_json::to_value(&new_section)?;
+            let _: Option<serde_json::Value> = conn
+                .connection()
+                .create(("document_section", new_section.id.to_string()))
+                .content(section_json)
+                .await?;
+        }
+
+        info!("Cloned document {} to {}", document_id, new_doc.id);
+        Ok(new_doc)
+    }
+
+    /// Get related documents through links
+    pub async fn get_related_documents(&self, document_id: &CortexId) -> Result<Vec<RelatedDocument>> {
+        debug!("Getting related documents for: {}", document_id);
+
+        let conn = self.storage.acquire().await?;
+
+        // Get all outbound links
+        let links = self.get_document_links(document_id).await?;
+
+        let mut related = Vec::new();
+
+        for link in links {
+            // Only process document links
+            if let LinkTarget::Document { document_id: target_id, .. } = link.target {
+                if let Some(doc) = self.get_document(&target_id).await? {
+                    related.push(RelatedDocument {
+                        document: doc,
+                        link_type: link.link_type,
+                        link_id: link.id,
+                    });
+                }
+            }
+        }
+
+        Ok(related)
+    }
+
+    /// Get document statistics
+    pub async fn get_document_stats(&self, document_id: &CortexId) -> Result<DocumentStats> {
+        debug!("Getting document stats for: {}", document_id);
+
+        let document = self.get_document(document_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Document {} not found", document_id))?;
+
+        let sections = self.get_document_sections(document_id).await?;
+        let links = self.get_document_links(document_id).await?;
+        let versions = self.get_document_versions(document_id).await?;
+
+        let content_length = document.content.len();
+        let word_count = document.content.split_whitespace().count();
+        let line_count = document.content.lines().count();
+
+        Ok(DocumentStats {
+            document_id: *document_id,
+            content_length,
+            word_count,
+            line_count,
+            sections_count: sections.len(),
+            links_count: links.len(),
+            versions_count: versions.len(),
+            tags_count: document.tags.len(),
+            keywords_count: document.keywords.len(),
+            has_children: false, // Will be updated below
+        })
+    }
+}
+
+// ============================================================================
+// Advanced Types
+// ============================================================================
+
+/// Document tree with children
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentTree {
+    pub document: Document,
+    pub children: Vec<Document>,
+    pub sections_count: usize,
+    pub links_count: usize,
+}
+
+/// Related document with link information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelatedDocument {
+    pub document: Document,
+    pub link_type: LinkType,
+    pub link_id: CortexId,
+}
+
+/// Document statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentStats {
+    pub document_id: CortexId,
+    pub content_length: usize,
+    pub word_count: usize,
+    pub line_count: usize,
+    pub sections_count: usize,
+    pub links_count: usize,
+    pub versions_count: usize,
+    pub tags_count: usize,
+    pub keywords_count: usize,
+    pub has_children: bool,
 }
 
 // ============================================================================

@@ -1549,6 +1549,333 @@ impl Tool for SectionGetTool {
 }
 
 // =============================================================================
+// cortex.document.tree - Get document tree with children
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentTreeInput {
+    document_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentTreeOutput {
+    document: DocumentGetOutput,
+    children: Vec<DocumentSummary>,
+    sections_count: usize,
+    links_count: usize,
+}
+
+pub struct DocumentTreeTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentTreeTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentTreeTool {
+    fn name(&self) -> &str {
+        "cortex.document.tree"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get document hierarchy tree with children, sections count, and links count")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentTreeInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentTreeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        let tree = self.ctx.service.get_document_tree(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get document tree: {}", e)))?;
+
+        let document_output = DocumentGetOutput {
+            document_id: tree.document.id.to_string(),
+            title: tree.document.title.clone(),
+            content: tree.document.content.clone(),
+            slug: tree.document.slug.clone(),
+            doc_type: format!("{:?}", tree.document.doc_type),
+            status: format!("{:?}", tree.document.status),
+            description: tree.document.description.clone(),
+            parent_id: tree.document.parent_id.map(|id| id.to_string()),
+            tags: tree.document.tags.clone(),
+            keywords: tree.document.keywords.clone(),
+            author: Some(tree.document.author.clone()),
+            language: tree.document.language.clone(),
+            workspace_id: tree.document.workspace_id.clone(),
+            version: tree.document.version.clone(),
+            created_at: tree.document.created_at.to_rfc3339(),
+            updated_at: tree.document.updated_at.to_rfc3339(),
+            published_at: tree.document.published_at.map(|dt| dt.to_rfc3339()),
+            metadata: tree.document.metadata.clone(),
+        };
+
+        let children_output: Vec<DocumentSummary> = tree.children
+            .iter()
+            .map(|doc| DocumentSummary {
+                document_id: doc.id.to_string(),
+                title: doc.title.clone(),
+                slug: doc.slug.clone(),
+                doc_type: format!("{:?}", doc.doc_type),
+                status: format!("{:?}", doc.status),
+                author: Some(doc.author.clone()),
+                created_at: doc.created_at.to_rfc3339(),
+                updated_at: doc.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        let output = DocumentTreeOutput {
+            document: document_output,
+            children: children_output,
+            sections_count: tree.sections_count,
+            links_count: tree.links_count,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.clone - Clone document with sections
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentCloneInput {
+    document_id: String,
+    new_title: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentCloneOutput {
+    new_document_id: String,
+    original_document_id: String,
+    title: String,
+    slug: String,
+    sections_cloned: usize,
+}
+
+pub struct DocumentCloneTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentCloneTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentCloneTool {
+    fn name(&self) -> &str {
+        "cortex.document.clone"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Clone a document with all its sections (creates as Draft)")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentCloneInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentCloneInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        // Get sections count before cloning
+        let sections = self.ctx.service.get_document_sections(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get sections: {}", e)))?;
+        let sections_count = sections.len();
+
+        let new_doc = self.ctx.service.clone_document(&document_id, input.new_title)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to clone document: {}", e)))?;
+
+        let output = DocumentCloneOutput {
+            new_document_id: new_doc.id.to_string(),
+            original_document_id: document_id.to_string(),
+            title: new_doc.title,
+            slug: new_doc.slug,
+            sections_cloned: sections_count,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.related - Get related documents
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentRelatedInput {
+    document_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentRelatedOutput {
+    related_documents: Vec<RelatedDocumentInfo>,
+    total_count: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct RelatedDocumentInfo {
+    document: DocumentSummary,
+    link_type: String,
+    link_id: String,
+}
+
+pub struct DocumentRelatedTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentRelatedTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentRelatedTool {
+    fn name(&self) -> &str {
+        "cortex.document.related"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get all related documents through links")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentRelatedInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentRelatedInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        let related = self.ctx.service.get_related_documents(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get related documents: {}", e)))?;
+
+        let related_info: Vec<RelatedDocumentInfo> = related
+            .iter()
+            .map(|r| RelatedDocumentInfo {
+                document: DocumentSummary {
+                    document_id: r.document.id.to_string(),
+                    title: r.document.title.clone(),
+                    slug: r.document.slug.clone(),
+                    doc_type: format!("{:?}", r.document.doc_type),
+                    status: format!("{:?}", r.document.status),
+                    author: Some(r.document.author.clone()),
+                    created_at: r.document.created_at.to_rfc3339(),
+                    updated_at: r.document.updated_at.to_rfc3339(),
+                },
+                link_type: format!("{:?}", r.link_type),
+                link_id: r.link_id.to_string(),
+            })
+            .collect();
+
+        let output = DocumentRelatedOutput {
+            total_count: related_info.len(),
+            related_documents: related_info,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
+// cortex.document.stats - Get document statistics
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentStatsInput {
+    document_id: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentStatsOutput {
+    document_id: String,
+    content_length: usize,
+    word_count: usize,
+    line_count: usize,
+    sections_count: usize,
+    links_count: usize,
+    versions_count: usize,
+    tags_count: usize,
+    keywords_count: usize,
+}
+
+pub struct DocumentStatsTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentStatsTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentStatsTool {
+    fn name(&self) -> &str {
+        "cortex.document.stats"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Get document statistics including content metrics, sections, links, and versions")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentStatsInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentStatsInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let document_id = CortexId::from_str(&input.document_id)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id: {}", e)))?;
+
+        let stats = self.ctx.service.get_document_stats(&document_id)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get document stats: {}", e)))?;
+
+        let output = DocumentStatsOutput {
+            document_id: stats.document_id.to_string(),
+            content_length: stats.content_length,
+            word_count: stats.word_count,
+            line_count: stats.line_count,
+            sections_count: stats.sections_count,
+            links_count: stats.links_count,
+            versions_count: stats.versions_count,
+            tags_count: stats.tags_count,
+            keywords_count: stats.keywords_count,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
 // Legacy compatibility tools - refactored from old documentation.rs
 // =============================================================================
 

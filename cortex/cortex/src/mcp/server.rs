@@ -292,7 +292,7 @@ impl CortexMcpServer {
             .tool(ValidateContractsTool::new(test_ctx.clone()))
             .tool(ValidateDependenciesTool::new(test_ctx.clone()))
             .tool(ValidateStyleTool::new(test_ctx.clone()))
-            // Documentation Tools (21)
+            // Documentation Tools (25)
             // Document CRUD
             .tool(DocumentCreateTool::new(doc_ctx.clone()))
             .tool(DocumentGetTool::new(doc_ctx.clone()))
@@ -312,8 +312,13 @@ impl CortexMcpServer {
             .tool(LinkCreateTool::new(doc_ctx.clone()))
             .tool(LinkListTool::new(doc_ctx.clone()))
             .tool(LinkDeleteTool::new(doc_ctx.clone()))
-            // Search
+            // Search & Discovery
             .tool(DocumentSearchTool::new(doc_ctx.clone()))
+            .tool(DocumentTreeTool::new(doc_ctx.clone()))
+            .tool(DocumentRelatedTool::new(doc_ctx.clone()))
+            // Advanced Operations
+            .tool(DocumentCloneTool::new(doc_ctx.clone()))
+            .tool(DocumentStatsTool::new(doc_ctx.clone()))
             // Versioning
             .tool(VersionCreateTool::new(doc_ctx.clone()))
             .tool(VersionGetTool::new(doc_ctx.clone()))
@@ -374,7 +379,7 @@ impl CortexMcpServer {
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 187); // Total: 182 + 5 (new doc tools) = 187
+        info!("Registered {} tools", 191); // Total: 187 + 4 (advanced doc tools) = 191
 
         Ok(server)
     }
