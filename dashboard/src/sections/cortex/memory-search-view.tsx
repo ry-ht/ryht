@@ -30,6 +30,7 @@ import { cortexClient } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -137,9 +138,15 @@ export function MemorySearchView() {
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Box sx={{ p: 3 }}>
-        <Typography variant="h4" sx={{ mb: 3 }}>
-          Memory Search
-        </Typography>
+        <CustomBreadcrumbs
+          heading="Memory Search"
+          links={[
+            { name: 'Dashboard', href: '/' },
+            { name: 'Cortex', href: '/cortex' },
+            { name: 'Memory' },
+          ]}
+          sx={{ mb: 3 }}
+        />
 
         <Card sx={{ p: 3, mb: 3 }}>
           <Stack spacing={3}>

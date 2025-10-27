@@ -26,6 +26,7 @@ import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Iconify } from 'src/components/iconify';
 import { AnimateCountUp } from 'src/components/animate';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -110,24 +111,29 @@ export function TelemetryView() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          System Telemetry
-        </Typography>
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Time Range</InputLabel>
-          <Select
-            value={timeRange}
-            label="Time Range"
-            onChange={(e) => setTimeRange(e.target.value as number)}
-          >
-            <MenuItem value={300}>Last 5 minutes</MenuItem>
-            <MenuItem value={900}>Last 15 minutes</MenuItem>
-            <MenuItem value={3600}>Last hour</MenuItem>
-            <MenuItem value={86400}>Last 24 hours</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Telemetry"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Telemetry' },
+        ]}
+        action={
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Time Range</InputLabel>
+            <Select
+              value={timeRange}
+              label="Time Range"
+              onChange={(e) => setTimeRange(e.target.value as number)}
+            >
+              <MenuItem value={300}>Last 5 minutes</MenuItem>
+              <MenuItem value={900}>Last 15 minutes</MenuItem>
+              <MenuItem value={3600}>Last hour</MenuItem>
+              <MenuItem value={86400}>Last 24 hours</MenuItem>
+            </Select>
+          </FormControl>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Grid container spacing={3}>
         {/* Summary Cards */}

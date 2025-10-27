@@ -3,9 +3,10 @@ import type { SystemStats, HealthResponse } from 'src/types/cortex';
 import useSWR from 'swr';
 
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 
 import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
+
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { MetricCard } from 'src/sections/overview/components/metric-card';
 
@@ -24,9 +25,14 @@ export function CortexOverview() {
 
   return (
     <>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Cortex Cognitive System
-      </Typography>
+      <CustomBreadcrumbs
+        heading="Cortex"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex' },
+        ]}
+        sx={{ mb: 3 }}
+      />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 3 }}>
         <MetricCard

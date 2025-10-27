@@ -29,6 +29,7 @@ import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-cli
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -84,7 +85,7 @@ export function WorkspaceDetailView() {
     try {
       await cortexClient.deleteWorkspace(workspaceId);
       enqueueSnackbar('Workspace deleted successfully', 'success');
-      navigate('/dashboard/cortex/workspaces');
+      navigate('/cortex/workspaces');
     } catch (err) {
       enqueueSnackbar('Failed to delete workspace', 'error');
     }
@@ -127,7 +128,7 @@ export function WorkspaceDetailView() {
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
         <Button
           startIcon={<Iconify icon="eva:arrow-back-fill" />}
-          onClick={() => navigate('/dashboard/cortex/workspaces')}
+          onClick={() => navigate('/cortex/workspaces')}
         >
           Back
         </Button>
@@ -380,7 +381,7 @@ export function WorkspaceDetailView() {
                     variant="outlined"
                     fullWidth
                     startIcon={<Iconify icon="solar:folder-open-bold-duotone" />}
-                    onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/browse`)}
+                    onClick={() => navigate(`/cortex/workspaces/${workspaceId}/browse`)}
                     sx={{ justifyContent: 'flex-start' }}
                   >
                     Browse Files
@@ -389,7 +390,7 @@ export function WorkspaceDetailView() {
                     variant="outlined"
                     fullWidth
                     startIcon={<Iconify icon="solar:code-bold-duotone" />}
-                    onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/code-units`)}
+                    onClick={() => navigate(`/cortex/workspaces/${workspaceId}/code-units`)}
                     sx={{ justifyContent: 'flex-start' }}
                   >
                     View Code Units
@@ -398,7 +399,7 @@ export function WorkspaceDetailView() {
                     variant="outlined"
                     fullWidth
                     startIcon={<Iconify icon="solar:diagram-bold-duotone" />}
-                    onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/dependencies`)}
+                    onClick={() => navigate(`/cortex/workspaces/${workspaceId}/dependencies`)}
                     sx={{ justifyContent: 'flex-start' }}
                   >
                     View Dependencies
@@ -454,7 +455,7 @@ export function WorkspaceDetailView() {
               <Button
                 variant="contained"
                 startIcon={<Iconify icon="solar:folder-open-bold-duotone" />}
-                onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/browse`)}
+                onClick={() => navigate(`/cortex/workspaces/${workspaceId}/browse`)}
               >
                 Open File Browser
               </Button>
@@ -473,7 +474,7 @@ export function WorkspaceDetailView() {
               <Button
                 variant="contained"
                 startIcon={<Iconify icon="solar:code-bold-duotone" />}
-                onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/code-units`)}
+                onClick={() => navigate(`/cortex/workspaces/${workspaceId}/code-units`)}
               >
                 View Code Units
               </Button>
@@ -492,7 +493,7 @@ export function WorkspaceDetailView() {
               <Button
                 variant="contained"
                 startIcon={<Iconify icon="solar:diagram-bold-duotone" />}
-                onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}/dependencies`)}
+                onClick={() => navigate(`/cortex/workspaces/${workspaceId}/dependencies`)}
               >
                 View Dependencies
               </Button>

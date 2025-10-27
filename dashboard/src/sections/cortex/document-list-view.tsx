@@ -9,7 +9,6 @@ import Card from '@mui/material/Card';
 import Table from '@mui/material/Table';
 import Button from '@mui/material/Button';
 import TableBody from '@mui/material/TableBody';
-import Typography from '@mui/material/Typography';
 import TableContainer from '@mui/material/TableContainer';
 import TablePagination from '@mui/material/TablePagination';
 
@@ -18,6 +17,7 @@ import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-cli
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import {
   useTable,
   emptyRows,
@@ -85,7 +85,7 @@ export function DocumentListView() {
 
   const handleViewRow = useCallback(
     (id: string) => {
-      navigate(`/dashboard/cortex/documents/${id}`);
+      navigate(`/cortex/documents/${id}`);
     },
     [navigate]
   );
@@ -146,19 +146,24 @@ export function DocumentListView() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Documents
-        </Typography>
-
-        <Button
-          variant="contained"
-          startIcon={<Iconify icon="mingcute:add-line" />}
-          href="/dashboard/cortex/documents/create"
-        >
-          New Document
-        </Button>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Documents"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex', href: '/cortex' },
+          { name: 'Documents' },
+        ]}
+        action={
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="mingcute:add-line" />}
+            href="/cortex/documents/create"
+          >
+            New Document
+          </Button>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Card>
         <DocumentTableToolbar

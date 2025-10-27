@@ -5,7 +5,6 @@ import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import LoadingButton from '@mui/lab/LoadingButton';
 
 import { paths } from 'src/routes/paths';
@@ -15,6 +14,7 @@ import { axonClient } from 'src/lib/axon-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -98,18 +98,15 @@ export function WorkflowCreateView() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Run Workflow
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<Iconify icon="eva:arrow-ios-back-fill" />}
-          onClick={() => router.back()}
-        >
-          Back
-        </Button>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Run Workflow"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Workflows', href: '/workflows' },
+          { name: 'Create' },
+        ]}
+        sx={{ mb: 3 }}
+      />
 
       <Form methods={methods} onSubmit={onSubmit}>
         <Stack spacing={3}>

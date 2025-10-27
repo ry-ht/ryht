@@ -37,6 +37,7 @@ import { cortexFetcher } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -195,7 +196,7 @@ export function CodeUnitsView() {
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
         <Button
           startIcon={<Iconify icon="eva:arrow-back-fill" />}
-          onClick={() => navigate(`/dashboard/cortex/workspaces/${workspaceId}`)}
+          onClick={() => navigate(`/cortex/workspaces/${workspaceId}`)}
         >
           Back
         </Button>

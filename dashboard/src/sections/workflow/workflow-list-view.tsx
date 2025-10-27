@@ -24,6 +24,7 @@ import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 import {
   useTable,
@@ -98,18 +99,23 @@ export function WorkflowListView() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Workflows
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Iconify icon="mingcute:add-line" />}
-          href="/dashboard/workflows/create"
-        >
-          Run Workflow
-        </Button>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Workflows"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Workflows' },
+        ]}
+        action={
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="mingcute:add-line" />}
+            href="/workflows/create"
+          >
+            Run Workflow
+          </Button>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Card>
         <Scrollbar>
@@ -164,7 +170,7 @@ export function WorkflowListView() {
         onClose={popover.onClose}
         slotProps={{ arrow: { placement: 'right-top' } }}
       >
-        <MenuItem onClick={() => window.open(`/dashboard/workflows/${selectedWorkflow?.id}`, '_blank')}>
+        <MenuItem onClick={() => window.open(`/workflows/${selectedWorkflow?.id}`, '_blank')}>
           <Iconify icon="solar:eye-bold" />
           View Details
         </MenuItem>

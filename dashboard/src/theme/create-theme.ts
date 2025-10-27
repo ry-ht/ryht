@@ -1,4 +1,4 @@
-import type { Theme, Components } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
 import type { ThemeOptions } from './types';
 import type { SettingsState } from 'src/components/settings';
 
@@ -44,13 +44,11 @@ export const baseTheme: ThemeOptions = {
 type CreateThemeProps = {
   settingsState?: SettingsState;
   themeOverrides?: ThemeOptions;
-  localeComponents?: { components?: Components<Theme> };
 };
 
 export function createTheme({
   settingsState,
   themeOverrides = {},
-  localeComponents = {},
 }: CreateThemeProps = {}): Theme {
   // Update core theme settings (colorSchemes, typography, etc.)
   const updatedCore = settingsState ? applySettingsToTheme(baseTheme, settingsState) : baseTheme;
@@ -59,7 +57,7 @@ export function createTheme({
   const updatedComponents = settingsState ? applySettingsToComponents(settingsState) : {};
 
   // Create and return the final theme
-  const theme = createMuiTheme(updatedCore, updatedComponents, localeComponents, themeOverrides);
+  const theme = createMuiTheme(updatedCore, updatedComponents, themeOverrides);
 
   return theme;
 }

@@ -19,6 +19,7 @@ import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-cli
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import {
   useTable,
   emptyRows,
@@ -122,14 +123,14 @@ export function WorkspaceListView() {
 
   const handleBrowseFiles = useCallback(
     (id: string) => {
-      navigate(`/dashboard/cortex/workspaces/${id}/browse`);
+      navigate(`/cortex/workspaces/${id}/browse`);
     },
     [navigate]
   );
 
   const handleViewDetails = useCallback(
     (id: string) => {
-      navigate(`/dashboard/cortex/workspaces/${id}`);
+      navigate(`/cortex/workspaces/${id}`);
     },
     [navigate]
   );
@@ -150,19 +151,24 @@ export function WorkspaceListView() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Workspaces
-        </Typography>
-
-        <Button
-          variant="contained"
-          startIcon={<Iconify icon="mingcute:add-line" />}
-          href="/dashboard/cortex/workspaces/create"
-        >
-          New Workspace
-        </Button>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Workspaces"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex', href: '/cortex' },
+          { name: 'Workspaces' },
+        ]}
+        action={
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="mingcute:add-line" />}
+            href="/cortex/workspaces/create"
+          >
+            New Workspace
+          </Button>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Card>
         <WorkspaceTableToolbar

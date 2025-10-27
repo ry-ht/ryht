@@ -42,6 +42,7 @@ import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-cli
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 

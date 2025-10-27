@@ -24,6 +24,7 @@ import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { TaskCreateDialog } from './task-create-dialog';
 
@@ -94,11 +95,13 @@ export function TaskListView() {
 
   return (
     <>
-      <Box sx={{ mb: 5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" sx={{ flexGrow: 1 }}>
-            Tasks
-          </Typography>
+      <CustomBreadcrumbs
+        heading="Tasks"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Tasks' },
+        ]}
+        action={
           <Button
             variant="contained"
             startIcon={<Iconify icon="mingcute:add-line" />}
@@ -106,7 +109,11 @@ export function TaskListView() {
           >
             New Task
           </Button>
-        </Box>
+        }
+        sx={{ mb: 3 }}
+      />
+
+      <Box sx={{ mb: 5 }}>
 
         <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
           <TextField

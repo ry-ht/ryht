@@ -93,22 +93,22 @@ export const navData: NavSectionProps['data'] = [
     items: [
       {
         title: 'Cortex Overview',
-        path: '/dashboard/cortex',
+        path: '/cortex',
         icon: ICONS.analytics,
       },
       {
         title: 'Workspaces',
-        path: '/dashboard/cortex/workspaces',
+        path: '/cortex/workspaces',
         icon: ICONS.folder,
       },
       {
         title: 'Documents',
-        path: '/dashboard/cortex/documents',
+        path: '/cortex/documents',
         icon: ICONS.file,
       },
       {
         title: 'Memory Search',
-        path: '/dashboard/cortex/memory',
+        path: '/cortex/memory',
         icon: ICONS.chat,
       },
     ],

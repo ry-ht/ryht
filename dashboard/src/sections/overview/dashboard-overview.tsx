@@ -35,6 +35,7 @@ import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { AnimateCountUp } from 'src/components/animate';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { MetricCard } from './components/metric-card';
 import { ActivityFeed } from './components/activity-feed';
@@ -151,22 +152,26 @@ export function DashboardOverview() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          System Dashboard
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Chip
-            label={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
-            color={wsConnected ? 'success' : 'default'}
-            size="small"
-            icon={<Iconify icon={wsConnected ? 'eva:wifi-fill' : 'eva:wifi-off-fill'} />}
-          />
-          <Label color={overallHealth === 'healthy' ? 'success' : 'warning'}>
-            {overallHealth}
-          </Label>
-        </Stack>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Dashboard"
+        links={[
+          { name: 'Dashboard' },
+        ]}
+        action={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Chip
+              label={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
+              color={wsConnected ? 'success' : 'default'}
+              size="small"
+              icon={<Iconify icon={wsConnected ? 'eva:wifi-fill' : 'eva:wifi-off-fill'} />}
+            />
+            <Label color={overallHealth === 'healthy' ? 'success' : 'warning'}>
+              {overallHealth}
+            </Label>
+          </Stack>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Grid container spacing={3}>
         {/* System Health Section */}
@@ -187,7 +192,7 @@ export function DashboardOverview() {
             total={agents.length}
             icon="solar:users-group-rounded-bold"
             color="info"
-            href="/dashboard/agents"
+            href="/agents"
           />
         </Grid>
 
@@ -198,7 +203,7 @@ export function DashboardOverview() {
             total={workflows.length}
             icon="solar:routing-2-bold"
             color="primary"
-            href="/dashboard/workflows"
+            href="/workflows"
           />
         </Grid>
 
@@ -208,7 +213,7 @@ export function DashboardOverview() {
             value={workspaces.length}
             icon="solar:folder-with-files-bold"
             color="success"
-            href="/dashboard/cortex/workspaces"
+            href="/cortex/workspaces"
           />
         </Grid>
 
@@ -218,7 +223,7 @@ export function DashboardOverview() {
             value={documents.length}
             icon="solar:document-text-bold"
             color="warning"
-            href="/dashboard/cortex/documents"
+            href="/cortex/documents"
           />
         </Grid>
 
@@ -237,7 +242,7 @@ export function DashboardOverview() {
               action={
                 <Button
                   size="small"
-                  href="/dashboard/agents"
+                  href="/agents"
                   endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
                 >
                   View All
@@ -329,7 +334,7 @@ export function DashboardOverview() {
               action={
                 <Button
                   size="small"
-                  href="/dashboard/cortex"
+                  href="/cortex"
                   endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
                 >
                   View All

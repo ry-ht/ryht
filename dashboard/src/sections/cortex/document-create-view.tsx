@@ -9,12 +9,12 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 
 import { cortexClient , cortexEndpoints } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 const DOC_TYPES = [
   'Guide',
@@ -76,7 +76,7 @@ export function DocumentCreateView() {
 
         mutate(cortexEndpoints.documents.list);
         enqueueSnackbar('Document created successfully', 'success');
-        navigate('/dashboard/cortex/documents');
+        navigate('/cortex/documents');
       } catch (err) {
         enqueueSnackbar('Failed to create document', 'error');
       }
@@ -86,17 +86,16 @@ export function DocumentCreateView() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Button
-        startIcon={<Iconify icon="eva:arrow-back-fill" />}
-        onClick={() => navigate('/dashboard/cortex/documents')}
+      <CustomBreadcrumbs
+        heading="Create Document"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex', href: '/cortex' },
+          { name: 'Documents', href: '/cortex/documents' },
+          { name: 'Create' },
+        ]}
         sx={{ mb: 3 }}
-      >
-        Back
-      </Button>
-
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Create New Document
-      </Typography>
+      />
 
       <Card sx={{ p: 3, maxWidth: 960 }}>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -159,7 +158,7 @@ export function DocumentCreateView() {
             <Stack direction="row" spacing={2} justifyContent="flex-end">
               <Button
                 variant="outlined"
-                onClick={() => navigate('/dashboard/cortex/documents')}
+                onClick={() => navigate('/cortex/documents')}
               >
                 Cancel
               </Button>

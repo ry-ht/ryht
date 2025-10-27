@@ -32,6 +32,7 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 import {
   useTable,
@@ -189,18 +190,23 @@ export function AgentListView() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Agents
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Iconify icon="mingcute:add-line" />}
-          href="/dashboard/agents/create"
-        >
-          Create Agent
-        </Button>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Agents"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Agents' },
+        ]}
+        action={
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="mingcute:add-line" />}
+            href="/agents/create"
+          >
+            Create Agent
+          </Button>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Card>
         <Box sx={{ p: 3 }}>
@@ -371,7 +377,7 @@ export function AgentListView() {
       >
         <MenuItem
           component="a"
-          href={`/dashboard/agents/${selectedAgent?.id}`}
+          href={`/agents/${selectedAgent?.id}`}
         >
           <Iconify icon="solar:eye-bold" />
           View Details

@@ -17,7 +17,6 @@ import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 import CardHeader from '@mui/material/CardHeader';
 import InputLabel from '@mui/material/InputLabel';
 import CardContent from '@mui/material/CardContent';
@@ -31,6 +30,7 @@ import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
 import { AnimateCountUp } from 'src/components/animate';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -141,7 +141,7 @@ export function AgentDetailView() {
     try {
       await axonClient.deleteAgent(id!);
       showSnackbar('Agent deleted successfully', 'success');
-      navigate('/dashboard/agents');
+      navigate('/agents');
     } catch (err) {
       showSnackbar('Failed to delete agent', 'error');
     }
@@ -158,41 +158,37 @@ export function AgentDetailView() {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Box sx={{ flexGrow: 1 }}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <IconButton onClick={() => navigate('/dashboard/agents')}>
-              <Iconify icon="eva:arrow-back-fill" />
-            </IconButton>
-            <div>
-              <Typography variant="h4">{agent.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {agent.id}
-              </Typography>
-            </div>
+      <CustomBreadcrumbs
+        heading={agent.name}
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Agents', href: '/agents' },
+          { name: agent.name },
+        ]}
+        action={
+          <Stack direction="row" spacing={1}>
             <Label variant="soft" color={getAgentStatusColor(agent.status)}>
               {agent.status}
             </Label>
+            {agent.status === 'Paused' ? (
+              <Button variant="outlined" startIcon={<Iconify icon="solar:play-bold" />} onClick={handleResume}>
+                Resume
+              </Button>
+            ) : (
+              <Button variant="outlined" startIcon={<Iconify icon="solar:pause-bold" />} onClick={handlePause}>
+                Pause
+              </Button>
+            )}
+            <Button variant="outlined" startIcon={<Iconify icon="solar:restart-bold" />} onClick={handleRestart}>
+              Restart
+            </Button>
+            <Button variant="outlined" color="error" startIcon={<Iconify icon="solar:trash-bin-trash-bold" />} onClick={handleDelete}>
+              Delete
+            </Button>
           </Stack>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          {agent.status === 'Paused' ? (
-            <Button variant="outlined" startIcon={<Iconify icon="solar:play-bold" />} onClick={handleResume}>
-              Resume
-            </Button>
-          ) : (
-            <Button variant="outlined" startIcon={<Iconify icon="solar:pause-bold" />} onClick={handlePause}>
-              Pause
-            </Button>
-          )}
-          <Button variant="outlined" startIcon={<Iconify icon="solar:restart-bold" />} onClick={handleRestart}>
-            Restart
-          </Button>
-          <Button variant="outlined" color="error" startIcon={<Iconify icon="solar:trash-bin-trash-bold" />} onClick={handleDelete}>
-            Delete
-          </Button>
-        </Stack>
-      </Box>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Grid container spacing={3}>
         {/* Agent Info */}

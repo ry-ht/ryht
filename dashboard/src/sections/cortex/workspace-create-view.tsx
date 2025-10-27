@@ -14,6 +14,7 @@ import { cortexClient , cortexEndpoints } from 'src/lib/cortex-client';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 type FormValues = {
   name: string;
@@ -45,7 +46,7 @@ export function WorkspaceCreateView() {
         await cortexClient.createWorkspace(data);
         mutate(cortexEndpoints.workspaces.list);
         enqueueSnackbar('Workspace created successfully', 'success');
-        navigate('/dashboard/cortex/workspaces');
+        navigate('/cortex/workspaces');
       } catch (err) {
         enqueueSnackbar('Failed to create workspace', 'error');
       }
@@ -55,17 +56,16 @@ export function WorkspaceCreateView() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Button
-        startIcon={<Iconify icon="eva:arrow-back-fill" />}
-        onClick={() => navigate('/dashboard/cortex/workspaces')}
+      <CustomBreadcrumbs
+        heading="Create Workspace"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex', href: '/cortex' },
+          { name: 'Workspaces', href: '/cortex/workspaces' },
+          { name: 'Create' },
+        ]}
         sx={{ mb: 3 }}
-      >
-        Back
-      </Button>
-
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Create New Workspace
-      </Typography>
+      />
 
       <Card sx={{ p: 3, maxWidth: 720 }}>
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -107,7 +107,7 @@ export function WorkspaceCreateView() {
             <Stack direction="row" spacing={2} justifyContent="flex-end">
               <Button
                 variant="outlined"
-                onClick={() => navigate('/dashboard/cortex/workspaces')}
+                onClick={() => navigate('/cortex/workspaces')}
               >
                 Cancel
               </Button>

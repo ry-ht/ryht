@@ -24,6 +24,7 @@ import { axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { AnimateCountUp } from 'src/components/animate';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -150,22 +151,27 @@ export function AxonOverview() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Axon Multi-Agent System
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Chip
-            label={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
-            color={wsConnected ? 'success' : 'default'}
-            size="small"
-            icon={<Iconify icon={wsConnected ? 'eva:wifi-fill' : 'eva:wifi-off-fill'} />}
-          />
-          <Label color={health?.status === 'healthy' ? 'success' : 'error'}>
-            {health?.status || 'Unknown'}
-          </Label>
-        </Stack>
-      </Box>
+      <CustomBreadcrumbs
+        heading="Axon"
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Axon' },
+        ]}
+        action={
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Chip
+              label={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
+              color={wsConnected ? 'success' : 'default'}
+              size="small"
+              icon={<Iconify icon={wsConnected ? 'eva:wifi-fill' : 'eva:wifi-off-fill'} />}
+            />
+            <Label color={health?.status === 'healthy' ? 'success' : 'error'}>
+              {health?.status || 'Unknown'}
+            </Label>
+          </Stack>
+        }
+        sx={{ mb: 3 }}
+      />
 
       {hasAlerts && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -381,7 +387,7 @@ export function AxonOverview() {
             <CardHeader
               title="Recent Agents"
               action={
-                <Button size="small" href="/dashboard/agents">
+                <Button size="small" href="/agents">
                   View All
                 </Button>
               }
@@ -403,7 +409,7 @@ export function AxonOverview() {
             <CardHeader
               title="Recent Workflows"
               action={
-                <Button size="small" href="/dashboard/workflows">
+                <Button size="small" href="/workflows">
                   View All
                 </Button>
               }
@@ -441,7 +447,7 @@ function AgentCard({ agent }: { agent: AgentInfo }) {
         },
       }}
       component="a"
-      href={`/dashboard/agents/${agent.id}`}
+      href={`/agents/${agent.id}`}
     >
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography variant="subtitle2" noWrap>

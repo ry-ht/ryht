@@ -29,6 +29,7 @@ import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
@@ -116,11 +117,15 @@ export function TaskDetailView() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Task Details
-        </Typography>
-        <Stack direction="row" spacing={2}>
+      <CustomBreadcrumbs
+        heading={task.title}
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Tasks', href: paths.dashboard.tasks.list },
+          { name: task.title },
+        ]}
+        action={
+          <Stack direction="row" spacing={2}>
           <Button
             variant="outlined"
             startIcon={<Iconify icon="eva:arrow-ios-back-fill" />}
@@ -157,8 +162,10 @@ export function TaskDetailView() {
               </LoadingButton>
             </>
           )}
-        </Stack>
-      </Box>
+          </Stack>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>

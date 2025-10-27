@@ -22,6 +22,7 @@ import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-cli
 import { Iconify } from 'src/components/iconify';
 import { Markdown } from 'src/components/markdown';
 import { useSnackbar } from 'src/components/snackbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { DocumentLinksPanel } from './view/document-links-panel';
 import { DocumentSectionsPanel } from './view/document-sections-panel';
@@ -63,11 +64,11 @@ export function DocumentView() {
   );
 
   const handleBack = () => {
-    navigate('/dashboard/cortex/documents');
+    navigate('/cortex/documents');
   };
 
   const handleEdit = () => {
-    navigate(`/dashboard/cortex/documents/${documentId}/edit`);
+    navigate(`/cortex/documents/${documentId}/edit`);
   };
 
   const handlePublish = async () => {
@@ -89,7 +90,7 @@ export function DocumentView() {
     try {
       await cortexClient.deleteDocument(documentId);
       enqueueSnackbar('Document deleted', 'success');
-      navigate('/dashboard/cortex/documents');
+      navigate('/cortex/documents');
     } catch (err) {
       enqueueSnackbar('Failed to delete document', 'error');
     }
@@ -124,13 +125,16 @@ export function DocumentView() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Button
-        startIcon={<Iconify icon="eva:arrow-back-fill" />}
-        onClick={handleBack}
+      <CustomBreadcrumbs
+        heading={document.title}
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Cortex', href: '/cortex' },
+          { name: 'Documents', href: '/cortex/documents' },
+          { name: document.title },
+        ]}
         sx={{ mb: 3 }}
-      >
-        Back
-      </Button>
+      />
 
       <Card sx={{ p: 3 }}>
         {/* Header */}

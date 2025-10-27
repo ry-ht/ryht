@@ -15,7 +15,6 @@ import LinearProgress from '@mui/material/LinearProgress';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 
-import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
 import { getWorkflowStatusColor } from 'src/utils/status-colors';
@@ -24,6 +23,7 @@ import { axonClient, axonFetcher, axonEndpoints } from 'src/lib/axon-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { usePopover, CustomPopover } from 'src/components/custom-popover';
 
 // import { WorkflowVisualizer } from './workflow-visualizer';
@@ -124,27 +124,29 @@ export function WorkflowDetailView() {
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 5 }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          Workflow Details
-        </Typography>
-        <Stack direction="row" spacing={2}>
-          <Button
-            variant="outlined"
-            startIcon={<Iconify icon="eva:arrow-ios-back-fill" />}
-            onClick={() => router.push(paths.dashboard.workflows.list)}
-          >
-            Back
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<Iconify icon="eva:more-vertical-fill" />}
-            onClick={popover.onOpen}
-          >
-            Actions
-          </Button>
-        </Stack>
-      </Box>
+      <CustomBreadcrumbs
+        heading={workflow.name}
+        links={[
+          { name: 'Dashboard', href: '/' },
+          { name: 'Workflows', href: '/workflows' },
+          { name: workflow.name },
+        ]}
+        action={
+          <Stack direction="row" spacing={1}>
+            <Label variant="soft" color={getWorkflowStatusColor(workflow.status)}>
+              {workflow.status}
+            </Label>
+            <Button
+              variant="outlined"
+              startIcon={<Iconify icon="eva:more-vertical-fill" />}
+              onClick={popover.onOpen}
+            >
+              Actions
+            </Button>
+          </Stack>
+        }
+        sx={{ mb: 3 }}
+      />
 
       <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
