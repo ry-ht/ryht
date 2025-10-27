@@ -160,12 +160,19 @@ impl AuthService {
             .bind(("email", user.email.clone()))
             .bind(("password_hash", user.password_hash.clone()))
             .bind(("roles", user.roles.clone()))
-            .await?;
+            .await
+            .map_err(|e| {
+                warn!("Failed to execute CREATE users query: {}", e);
+                anyhow!("Database error during user creation: {}", e)
+            })?;
 
         // Retrieve the created user from result
-        let users: Vec<User> = result.take(0)?;
+        let users: Vec<User> = result.take(0).map_err(|e| {
+            warn!("Failed to deserialize created user from database: {}", e);
+            anyhow!("Failed to deserialize user from database response: {}", e)
+        })?;
         let created_user = users.into_iter().next()
-            .ok_or_else(|| anyhow!("Failed to create user"))?;
+            .ok_or_else(|| anyhow!("User creation succeeded but no user was returned from database"))?;
 
         info!("User created: {} ({})", email, user_id);
 
@@ -292,7 +299,7 @@ impl AuthService {
             id: session_id.clone(),
             user_id: user_id.to_string(),
             refresh_token: String::new(), // Will be set later
-            ip_address: ip,
+            ip_address: ip.clone(),
             user_agent: None,
             expires_at,
             created_at: now,
@@ -301,18 +308,35 @@ impl AuthService {
 
         let conn = self.storage.acquire().await?;
 
-        // Use raw query with JSON serialization for proper datetime handling
-        let session_json = serde_json::to_string(&session)?;
-        let query = format!("CREATE sessions:`{}` CONTENT {}", session_id, session_json);
+        // Use parameterized query for SCHEMAFULL table to avoid datetime serialization issues
+        let query = "CREATE sessions SET \
+            id = $id, \
+            user_id = $user_id, \
+            refresh_token = $refresh_token, \
+            ip_address = $ip_address, \
+            user_agent = $user_agent, \
+            expires_at = $expires_at, \
+            created_at = time::now(), \
+            last_accessed = time::now() \
+            RETURN AFTER";
 
-        conn.connection().query(&query).await?;
-
-        // Retrieve the created session
-        let created_session: Option<Session> = conn.connection()
-            .select(("sessions", session_id.as_str()))
+        let mut result = conn.connection().query(query)
+            .bind(("id", session_id.clone()))
+            .bind(("user_id", user_id.to_string()))
+            .bind(("refresh_token", String::new())) // Will be updated by update_session_token
+            .bind(("ip_address", ip))
+            .bind(("user_agent", None::<String>))
+            .bind(("expires_at", expires_at))
             .await?;
 
-        let created_session = created_session.ok_or_else(|| anyhow!("Failed to create session"))?;
+        // Retrieve the created session
+        let sessions: Vec<Session> = result.take(0).map_err(|e| {
+            warn!("Failed to deserialize session from database: {}", e);
+            anyhow!("Database error during session creation: {}", e)
+        })?;
+
+        let created_session = sessions.into_iter().next()
+            .ok_or_else(|| anyhow!("Failed to create session"))?;
 
         debug!("Session created: {}", session_id);
 
@@ -648,7 +672,7 @@ impl AuthService {
             scopes: scopes.clone(),
             expires_at,
             created_at: now,
-            last_used: None,
+            last_used_at: None,
         };
 
         let conn = self.storage.acquire().await?;
@@ -700,8 +724,8 @@ impl AuthService {
             .unwrap_or(false);
 
             if is_valid {
-                // Update last used time
-                let query = "UPDATE api_keys SET last_used = $time WHERE id = $id";
+                // Update last used time (matches schema field name last_used_at)
+                let query = "UPDATE api_keys SET last_used_at = $time WHERE id = $id";
                 conn.connection()
                     .query(query)
                     .bind(("time", Utc::now()))
@@ -911,7 +935,7 @@ struct ApiKeyRecord {
     pub scopes: Vec<String>,
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
-    pub last_used: Option<DateTime<Utc>>,
+    pub last_used_at: Option<DateTime<Utc>>, // Matches schema field name
 }
 
 /// API key (with plain key - only returned on creation)
@@ -946,7 +970,7 @@ impl ApiKeyInfo {
             scopes: record.scopes,
             expires_at: record.expires_at,
             created_at: record.created_at,
-            last_used: record.last_used,
+            last_used: record.last_used_at, // Map last_used_at to last_used
         }
     }
 }

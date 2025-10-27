@@ -32,7 +32,7 @@ futures = { workspace = true }
 # HTTP and networking
 axum = { workspace = true, features = ["ws"] }
 tower = { workspace = true }
-tower-http = { workspace = true, features = ["limit", "cors", "trace"] }
+tower-http = { workspace = true, features = ["limit", "cors", "trace", "timeout"] }
 
 # CLI
 clap = { workspace = true }

@@ -32,8 +32,11 @@ pub async fn initialize_auth_schema(storage: &Arc<ConnectionManager>) -> anyhow:
         DEFINE FIELD id ON TABLE sessions TYPE string;
         DEFINE FIELD user_id ON TABLE sessions TYPE string;
         DEFINE FIELD refresh_token ON TABLE sessions TYPE string;
+        DEFINE FIELD ip_address ON TABLE sessions TYPE option<string>;
+        DEFINE FIELD user_agent ON TABLE sessions TYPE option<string>;
         DEFINE FIELD expires_at ON TABLE sessions TYPE datetime;
         DEFINE FIELD created_at ON TABLE sessions TYPE datetime DEFAULT time::now();
+        DEFINE FIELD last_accessed ON TABLE sessions TYPE datetime DEFAULT time::now();
 
         DEFINE INDEX sessions_user_idx ON TABLE sessions COLUMNS user_id;
         DEFINE INDEX sessions_token_idx ON TABLE sessions COLUMNS refresh_token;
