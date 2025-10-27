@@ -10,9 +10,10 @@ if (!AXON_API_URL) {
   throw new Error('VITE_AXON_API_URL environment variable is required');
 }
 
-if (!AXON_API_KEY) {
-  throw new Error('VITE_AXON_API_KEY environment variable is required');
-}
+// API key is optional
+// if (!AXON_API_KEY) {
+//   console.warn('VITE_AXON_API_KEY not set - API calls may be restricted');
+// }
 
 // ----------------------------------------------------------------------
 
@@ -24,12 +25,18 @@ class AxonClient {
   private client: AxiosInstance;
 
   constructor() {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add Authorization header only if API key is provided
+    if (AXON_API_KEY) {
+      headers['Authorization'] = `Bearer ${AXON_API_KEY}`;
+    }
+
     this.client = axios.create({
       baseURL: AXON_API_URL,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AXON_API_KEY}`,
-      },
+      headers,
     });
 
     // Response interceptor
