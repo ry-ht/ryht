@@ -66,7 +66,7 @@ const dashboardLayout = () => (
 
 export const dashboardRoutes: RouteObject[] = [
   {
-    path: 'dashboard',
+    path: '/',
     element: dashboardLayout(),
     children: [
       { element: <IndexPage />, index: true },
