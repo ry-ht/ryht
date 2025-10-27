@@ -24,15 +24,11 @@ const PageSix = lazy(() => import('src/pages/dashboard/six'));
 // Agent pages
 const AgentListPage = lazy(() => import('src/pages/dashboard/agents/list'));
 const AgentCreatePage = lazy(() => import('src/pages/dashboard/agents/create'));
-const AgentDetailPage = lazy(() => import('src/pages/dashboard/agents/detail'));
 
 // Workflow pages
 const WorkflowListPage = lazy(() => import('src/pages/dashboard/workflows/list'));
 const WorkflowCreatePage = lazy(() => import('src/pages/dashboard/workflows/create'));
 const WorkflowDetailPage = lazy(() => import('src/pages/dashboard/workflows/detail'));
-
-// Telemetry pages
-const TelemetryPage = lazy(() => import('src/pages/dashboard/telemetry'));
 
 // Task pages
 const TaskListPage = lazy(() => import('src/pages/dashboard/tasks/list'));
