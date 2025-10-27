@@ -32,6 +32,9 @@ const WorkflowCreatePage = lazy(() => import('src/pages/dashboard/workflows/crea
 // Cortex pages
 const CortexOverviewPage = lazy(() => import('src/pages/cortex/overview'));
 const CortexWorkspaceListPage = lazy(() => import('src/pages/cortex/workspaces/list'));
+const CortexDocumentListPage = lazy(() => import('src/pages/cortex/documents/list'));
+const CortexDocumentViewPage = lazy(() => import('src/pages/cortex/documents/view'));
+const CortexMemorySearchPage = lazy(() => import('src/pages/cortex/memory'));
 
 // ----------------------------------------------------------------------
 
@@ -90,6 +93,14 @@ export const dashboardRoutes: RouteObject[] = [
               { element: <CortexWorkspaceListPage />, index: true },
             ],
           },
+          {
+            path: 'documents',
+            children: [
+              { element: <CortexDocumentListPage />, index: true },
+              { path: ':id', element: <CortexDocumentViewPage /> },
+            ],
+          },
+          { path: 'memory', element: <CortexMemorySearchPage /> },
         ],
       },
     ],
