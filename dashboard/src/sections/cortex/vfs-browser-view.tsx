@@ -502,19 +502,21 @@ export function VfsBrowserView() {
             placeholder="Search files..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Iconify icon="eva:search-fill" />
-                </InputAdornment>
-              ),
-              endAdornment: searchQuery && (
-                <InputAdornment position="end">
-                  <IconButton onClick={() => setSearchQuery('')} edge="end" size="small">
-                    <Iconify icon="eva:close-fill" />
-                  </IconButton>
-                </InputAdornment>
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Iconify icon="eva:search-fill" />
+                  </InputAdornment>
+                ),
+                endAdornment: searchQuery && (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setSearchQuery('')} edge="end" size="small">
+                      <Iconify icon="eva:close-fill" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
             }}
           />
           <FormControl sx={{ minWidth: 200 }}>

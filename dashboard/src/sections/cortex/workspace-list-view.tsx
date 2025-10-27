@@ -150,7 +150,7 @@ export function WorkspaceListView() {
   // ----------------------------------------------------------------------
 
   return (
-    <Box sx={{ p: 3 }}>
+    <>
       <CustomBreadcrumbs
         heading="Workspaces"
         links={[
@@ -253,7 +253,7 @@ export function WorkspaceListView() {
           onRowsPerPageChange={table.onChangeRowsPerPage}
         />
       </Card>
-    </Box>
+    </>
   );
 }
 

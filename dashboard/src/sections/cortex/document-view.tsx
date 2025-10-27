@@ -124,7 +124,7 @@ export function DocumentView() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <>
       <CustomBreadcrumbs
         heading={document.title}
         links={[
@@ -253,6 +253,6 @@ export function DocumentView() {
           />
         )}
       </Card>
-    </Box>
+    </>
   );
 }

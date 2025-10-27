@@ -148,7 +148,8 @@ export function WorkflowDetailView() {
         sx={{ mb: 3 }}
       />
 
-      <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+      <Stack spacing={3}>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Workflow Information */}
@@ -313,7 +314,8 @@ export function WorkflowDetailView() {
             </Card>
           </Stack>
         </Box>
-      </Box>
+        </Box>
+      </Stack>
 
       <CustomPopover
         open={popover.open}

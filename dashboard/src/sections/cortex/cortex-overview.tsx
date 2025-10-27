@@ -3,6 +3,7 @@ import type { SystemStats, HealthResponse } from 'src/types/cortex';
 import useSWR from 'swr';
 
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 
 import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
 
@@ -34,7 +35,8 @@ export function CortexOverview() {
         sx={{ mb: 3 }}
       />
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 3 }}>
+      <Stack spacing={3}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 3 }}>
         <MetricCard
           title="Workspaces"
           value={stats?.workspaces_count || 0}
@@ -59,7 +61,8 @@ export function CortexOverview() {
           icon="solar:database-bold"
           color={health?.status === 'healthy' ? 'success' : 'error'}
         />
-      </Box>
+        </Box>
+      </Stack>
     </>
   );
 }

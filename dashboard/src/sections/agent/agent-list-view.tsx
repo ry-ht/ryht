@@ -217,8 +217,10 @@ export function AgentListView() {
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                InputProps={{
-                  startAdornment: <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled', mr: 1 }} />,
+                slotProps={{
+                  input: {
+                    startAdornment: <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled', mr: 1 }} />,
+                  },
                 }}
               />
               <FormControl sx={{ minWidth: 200 }}>

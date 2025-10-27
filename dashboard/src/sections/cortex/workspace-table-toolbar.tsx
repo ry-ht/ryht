@@ -36,12 +36,14 @@ export function WorkspaceTableToolbar({ filters, onFilters, canReset, onResetFil
         value={filters.name}
         onChange={handleFilterName}
         placeholder="Search workspaces..."
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
-            </InputAdornment>
-          ),
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
+              </InputAdornment>
+            ),
+          },
         }}
       />
 

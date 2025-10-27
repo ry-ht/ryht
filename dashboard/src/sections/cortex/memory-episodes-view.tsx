@@ -136,13 +136,15 @@ export function MemoryEpisodesView() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search episodes..."
-            InputProps={{
-              startAdornment: (
-                <Iconify
-                  icon="eva:search-fill"
-                  sx={{ color: 'text.disabled', mr: 1 }}
-                />
-              ),
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <Iconify
+                    icon="eva:search-fill"
+                    sx={{ color: 'text.disabled', mr: 1 }}
+                  />
+                ),
+              },
             }}
           />
 

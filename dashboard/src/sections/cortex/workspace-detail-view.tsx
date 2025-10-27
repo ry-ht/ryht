@@ -123,7 +123,7 @@ export function WorkspaceDetailView() {
   // ----------------------------------------------------------------------
 
   return (
-    <Box sx={{ p: 3 }}>
+    <>
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
         <Button
@@ -525,6 +525,6 @@ export function WorkspaceDetailView() {
           </TabPanel>
         </TabContext>
       </Card>
-    </Box>
+    </>
   );
 }

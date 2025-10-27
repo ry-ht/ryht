@@ -150,7 +150,7 @@ export function AxonOverview() {
                     workflows.filter((w) => w.status === 'Failed').length > 0;
 
   return (
-    <Box>
+    <>
       <CustomBreadcrumbs
         heading="Axon"
         links={[
@@ -173,7 +173,8 @@ export function AxonOverview() {
         sx={{ mb: 3 }}
       />
 
-      {hasAlerts && (
+      <Stack spacing={3}>
+        {hasAlerts && (
         <Alert severity="error" sx={{ mb: 3 }}>
           <Typography variant="subtitle2">System Alerts</Typography>
           <Typography variant="body2">
@@ -425,7 +426,8 @@ export function AxonOverview() {
           </Card>
         </Grid>
       </Grid>
-    </Box>
+      </Stack>
+    </>
   );
 }
 

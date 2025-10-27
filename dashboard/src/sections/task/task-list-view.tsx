@@ -113,16 +113,17 @@ export function TaskListView() {
         sx={{ mb: 3 }}
       />
 
-      <Box sx={{ mb: 5 }}>
-
+      <Stack spacing={3}>
         <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
           <TextField
             fullWidth
             placeholder="Search tasks..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: <Iconify icon="eva:search-fill" sx={{ mr: 1, color: 'text.disabled' }} />,
+            slotProps={{
+              input: {
+                startAdornment: <Iconify icon="eva:search-fill" sx={{ mr: 1, color: 'text.disabled' }} />,
+              },
             }}
           />
           <FormControl sx={{ minWidth: 150 }}>
@@ -155,9 +156,8 @@ export function TaskListView() {
             </Select>
           </FormControl>
         </Stack>
-      </Box>
 
-      {isLoading ? (
+        {isLoading ? (
         <LinearProgress />
       ) : (
         <Box
@@ -183,7 +183,8 @@ export function TaskListView() {
             />
           ))}
         </Box>
-      )}
+        )}
+      </Stack>
 
       <TaskCreateDialog
         open={openCreateDialog}

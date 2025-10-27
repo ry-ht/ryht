@@ -54,12 +54,14 @@ export function DocumentTableToolbar({ filters, onFilters, canReset, onResetFilt
         value={filters.search}
         onChange={handleFilterSearch}
         placeholder="Search documents..."
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
-            </InputAdornment>
-          ),
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <Iconify icon="eva:search-fill" sx={{ color: 'text.disabled' }} />
+              </InputAdornment>
+            ),
+          },
         }}
       />
 

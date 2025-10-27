@@ -158,13 +158,15 @@ export function MemorySearchView() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Search memory... (Press Enter to search)"
-              InputProps={{
-                startAdornment: (
-                  <Iconify
-                    icon="eva:search-fill"
-                    sx={{ color: 'text.disabled', mr: 1, mt: 1, alignSelf: 'flex-start' }}
-                  />
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <Iconify
+                      icon="eva:search-fill"
+                      sx={{ color: 'text.disabled', mr: 1, mt: 1, alignSelf: 'flex-start' }}
+                    />
+                  ),
+                },
               }}
             />
 

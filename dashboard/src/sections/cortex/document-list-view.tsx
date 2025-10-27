@@ -145,7 +145,7 @@ export function DocumentListView() {
   // ----------------------------------------------------------------------
 
   return (
-    <Box sx={{ p: 3 }}>
+    <>
       <CustomBreadcrumbs
         heading="Documents"
         links={[
@@ -247,7 +247,7 @@ export function DocumentListView() {
           onRowsPerPageChange={table.onChangeRowsPerPage}
         />
       </Card>
-    </Box>
+    </>
   );
 }
 

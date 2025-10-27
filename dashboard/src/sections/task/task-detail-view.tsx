@@ -167,7 +167,8 @@ export function TaskDetailView() {
         sx={{ mb: 3 }}
       />
 
-      <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+      <Stack spacing={3}>
+        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
         <Box sx={{ flex: "1 1 auto", minWidth: { xs: "100%", md: "calc(8/12*100% - 16px)" } }}>
           <Stack spacing={3}>
             {/* Task Information */}
@@ -604,7 +605,8 @@ export function TaskDetailView() {
             </Card>
           </Stack>
         </Box>
-      </Box>
+        </Box>
+      </Stack>
     </>
   );
 }

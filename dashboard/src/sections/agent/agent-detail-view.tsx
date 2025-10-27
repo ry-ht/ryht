@@ -156,8 +156,7 @@ export function AgentDetailView() {
   }
 
   return (
-    <Box>
-      {/* Header */}
+    <>
       <CustomBreadcrumbs
         heading={agent.name}
         links={[
@@ -336,8 +335,10 @@ export function AgentDetailView() {
                 placeholder="Search logs..."
                 value={logSearch}
                 onChange={(e) => setLogSearch(e.target.value)}
-                InputProps={{
-                  startAdornment: <Iconify icon="eva:search-fill" sx={{ mr: 1, color: 'text.disabled' }} />,
+                slotProps={{
+                  input: {
+                    startAdornment: <Iconify icon="eva:search-fill" sx={{ mr: 1, color: 'text.disabled' }} />,
+                  },
                 }}
               />
             </Box>
@@ -427,7 +428,7 @@ export function AgentDetailView() {
           </Card>
         </Grid>
       </Grid>
-    </Box>
+    </>
   );
 }
 

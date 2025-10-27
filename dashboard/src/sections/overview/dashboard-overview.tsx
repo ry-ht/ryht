@@ -150,8 +150,7 @@ export function DashboardOverview() {
   const overallHealth = axonHealthy && cortexHealthy ? 'healthy' : 'degraded';
 
   return (
-    <Box>
-      {/* Header */}
+    <>
       <CustomBreadcrumbs
         heading="Dashboard"
         links={[
@@ -450,7 +449,7 @@ export function DashboardOverview() {
           </Grid>
         )}
       </Grid>
-    </Box>
+    </>
   );
 }
 
