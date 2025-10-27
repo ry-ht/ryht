@@ -78,6 +78,11 @@ export const navData: NavSectionProps['data'] = [
         path: paths.dashboard.workflows.root,
         icon: ICONS.kanban,
       },
+      {
+        title: 'Tasks',
+        path: paths.dashboard.tasks.root,
+        icon: ICONS.label,
+      },
     ],
   },
   /**

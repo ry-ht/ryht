@@ -62,5 +62,10 @@ export const paths = {
       create: `${ROOTS.DASHBOARD}/workflows/create`,
       details: (id: string) => `${ROOTS.DASHBOARD}/workflows/${id}`,
     },
+    tasks: {
+      root: `${ROOTS.DASHBOARD}/tasks`,
+      list: `${ROOTS.DASHBOARD}/tasks`,
+      details: (id: string) => `${ROOTS.DASHBOARD}/tasks/${id}`,
+    },
   },
 };
