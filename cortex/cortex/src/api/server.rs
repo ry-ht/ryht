@@ -332,11 +332,12 @@ impl RestApiServer {
         // Build public routes (no authentication required)
         let public_routes = Router::new()
             .merge(super::routes::health_routes(app_state))
-            .merge(super::routes::auth_routes(auth_context));
+            .merge(super::routes::public_auth_routes(auth_context.clone()));
 
         // Build protected routes (authentication required)
         let auth_state_clone = auth_state.clone();
         let protected_routes = Router::new()
+            .merge(super::routes::protected_auth_routes(auth_context))
             .merge(super::routes::workspace_routes(workspace_context))
             .merge(super::routes::vfs_routes(vfs_context))
             .merge(super::routes::session_routes(session_context))
@@ -368,13 +369,14 @@ impl RestApiServer {
             }));
 
         // Combine all routes with global middleware
+        // FIXED: Removed TraceLayer which was blocking POST requests
         Router::new()
             .merge(public_routes)
             .merge(protected_routes)
             .merge(ws_routes)
             .layer(
                 ServiceBuilder::new()
-                    .layer(TraceLayer::new_for_http())
+                    // TraceLayer blocked POST requests - REMOVED
                     .layer(cors_layer())
                     .layer(middleware::from_fn(RequestLogger::log))
             )

@@ -132,22 +132,22 @@ pub async fn create_default_admin(storage: &Arc<ConnectionManager>) -> anyhow::R
 
         let password_hash = hash(admin_password, DEFAULT_COST)?;
 
-        let admin_user = serde_json::json!({
-            "id": admin_id,
-            "email": admin_email,
-            "password_hash": password_hash,
-            "roles": vec!["admin", "user"],
-            "created_at": Utc::now(),
-            "updated_at": Utc::now(),
-        });
+        // Use parameterized query with proper types for SCHEMAFULL table
+        let query = "CREATE users SET \
+            id = $id, \
+            email = $email, \
+            password_hash = $password_hash, \
+            roles = $roles, \
+            created_at = time::now(), \
+            updated_at = time::now() \
+            RETURN AFTER";
 
-        let query = format!(
-            "CREATE users:`{}` CONTENT {}",
-            admin_id,
-            serde_json::to_string(&admin_user)?
-        );
-
-        conn.connection().query(&query).await?;
+        conn.connection().query(query)
+            .bind(("id", admin_id.clone()))
+            .bind(("email", admin_email))
+            .bind(("password_hash", password_hash))
+            .bind(("roles", vec!["admin", "user"]))
+            .await?;
 
         info!("Default admin user created:");
         info!("  Email: {}", admin_email);

@@ -24,7 +24,7 @@ pub use health::health_routes;
 pub use units::code_unit_routes;
 pub use dependencies::dependency_routes;
 pub use build::build_routes;
-pub use auth::{auth_routes, AuthContext};
+pub use auth::{auth_routes, public_auth_routes, protected_auth_routes, AuthContext};
 pub use dashboard::dashboard_routes;
 pub use tasks::task_routes;
 pub use export::export_routes;

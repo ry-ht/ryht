@@ -134,21 +134,29 @@ impl AuthService {
             updated_at: now,
         };
 
-        // Save to database using raw query with JSON serialization
-        // This ensures proper datetime handling with SurrealDB SCHEMAFULL tables
+        // Save to database using parameterized query for proper datetime handling
         let conn = self.storage.acquire().await?;
 
-        let user_json = serde_json::to_string(&user)?;
-        let query = format!("CREATE users:`{}` CONTENT {}", user_id, user_json);
+        let query = "CREATE users SET \
+            id = $id, \
+            email = $email, \
+            password_hash = $password_hash, \
+            roles = $roles, \
+            created_at = time::now(), \
+            updated_at = time::now() \
+            RETURN AFTER";
 
-        conn.connection().query(&query).await?;
-
-        // Retrieve the created user
-        let created_user: Option<User> = conn.connection()
-            .select(("users", user_id.as_str()))
+        let mut result = conn.connection().query(query)
+            .bind(("id", user_id.clone()))
+            .bind(("email", user.email.clone()))
+            .bind(("password_hash", user.password_hash.clone()))
+            .bind(("roles", user.roles.clone()))
             .await?;
 
-        let created_user = created_user.ok_or_else(|| anyhow!("Failed to create user"))?;
+        // Retrieve the created user from result
+        let users: Vec<User> = result.take(0)?;
+        let created_user = users.into_iter().next()
+            .ok_or_else(|| anyhow!("Failed to create user"))?;
 
         info!("User created: {} ({})", email, user_id);
 
@@ -197,11 +205,20 @@ impl AuthService {
         }
         user.updated_at = Utc::now();
 
-        // Update in database using raw query with JSON serialization
-        let user_json = serde_json::to_string(&user)?;
-        let query = format!("UPDATE users:`{}` CONTENT {}", user_id, user_json);
+        // Update in database using parameterized query for proper datetime handling
+        let query = "UPDATE users SET \
+            email = $email, \
+            password_hash = $password_hash, \
+            roles = $roles, \
+            updated_at = time::now() \
+            WHERE id = $id";
 
-        conn.connection().query(&query).await?;
+        conn.connection().query(query)
+            .bind(("id", user_id.to_string()))
+            .bind(("email", user.email.clone()))
+            .bind(("password_hash", user.password_hash.clone()))
+            .bind(("roles", user.roles.clone()))
+            .await?;
 
         // Retrieve the updated user
         let updated_user: Option<User> = conn.connection()

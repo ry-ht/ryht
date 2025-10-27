@@ -292,14 +292,26 @@ async fn me(
     Ok((StatusCode::OK, Json(ApiResponse::success(user_info, request_id, duration))))
 }
 
-/// Create authentication routes
-pub fn auth_routes(ctx: AuthContext) -> Router {
+/// Create public authentication routes (no auth required)
+pub fn public_auth_routes(ctx: AuthContext) -> Router {
     Router::new()
         .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/refresh", post(refresh_token))
+        .with_state(ctx)
+}
+
+/// Create protected authentication routes (auth required)
+pub fn protected_auth_routes(ctx: AuthContext) -> Router {
+    Router::new()
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/api-key", post(create_api_key))
         .route("/api/v1/auth/me", get(me))
         .with_state(ctx)
+}
+
+/// Create authentication routes (deprecated - use public_auth_routes and protected_auth_routes)
+#[deprecated(note = "Use public_auth_routes and protected_auth_routes instead")]
+pub fn auth_routes(ctx: AuthContext) -> Router {
+    public_auth_routes(ctx)
 }
