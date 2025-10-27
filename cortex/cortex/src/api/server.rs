@@ -23,17 +23,18 @@ use crate::services::{
     WorkspaceService,
 };
 use anyhow::{Context, Result};
-use axum::{middleware, Router};
+use axum::{body::Body, extract::DefaultBodyLimit, middleware, Router};
 use cortex_core::config::GlobalConfig;
 use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig};
 use cortex_vfs::VirtualFileSystem;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tower::ServiceBuilder;
+use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{debug, info};
 
 /// REST API Server configuration
 #[derive(Debug, Clone)]
@@ -134,6 +135,7 @@ impl RestApiServer {
             .context("Failed to bind to address")?;
 
         info!("REST API server listening on http://{}", addr);
+        info!("Configuration: 10MB body limit, 30s timeout");
         info!("Available endpoints:");
         info!("");
         info!("=== PUBLIC ENDPOINTS (No Authentication) ===");
@@ -369,6 +371,8 @@ impl RestApiServer {
             }));
 
         // Combine all routes with global middleware
+        // NOTE: Testing middleware layers individually to find deadlock source
+        // TEST 3: CORS + TimeoutLayer + DefaultBodyLimit
         Router::new()
             .merge(public_routes)
             .merge(protected_routes)
@@ -376,7 +380,8 @@ impl RestApiServer {
             .layer(
                 ServiceBuilder::new()
                     .layer(cors_layer())
-                    .layer(middleware::from_fn(RequestLogger::log))
+                    .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+                    .layer(TimeoutLayer::new(Duration::from_secs(30)))
             )
     }
 

@@ -44,6 +44,8 @@ pub async fn proxy_auth(
     let path = uri.path();
     let query = uri.query().unwrap_or("");
 
+    debug!("AUTH PROXY: Received {} request to {}", method, path);
+
     // When nested under /api/v1/auth, axum strips the prefix
     // So we need to rebuild the full path for Cortex
     // If path doesn't start with /api/v1/auth, prepend it
@@ -65,11 +67,16 @@ pub async fn proxy_auth(
     // Extract headers
     let headers = req.headers().clone();
 
-    // Extract body
-    let body_bytes = match axum::body::to_bytes(req.into_body(), usize::MAX).await {
-        Ok(bytes) => bytes,
+    debug!("AUTH PROXY: Extracting request body...");
+
+    // Extract body with 10MB limit
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
+        Ok(bytes) => {
+            debug!("AUTH PROXY: Body extracted, size: {} bytes", bytes.len());
+            bytes
+        }
         Err(e) => {
-            error!("Failed to read request body: {}", e);
+            error!("AUTH PROXY: Failed to read request body: {}", e);
             return (
                 StatusCode::BAD_REQUEST,
                 "Failed to read request body"
@@ -106,12 +113,16 @@ pub async fn proxy_auth(
         }
     }
 
-    // Add body if present
+    // Add body if present with explicit Content-Length
     if !body_bytes.is_empty() {
-        proxy_req = proxy_req.body(body_bytes.to_vec());
+        let body_len = body_bytes.len();
+        proxy_req = proxy_req
+            .header("Content-Length", body_len.to_string())
+            .body(body_bytes.to_vec());
     }
 
     // Execute request
+    debug!("AUTH PROXY: Sending request to Cortex: {}", target_url);
     let proxy_response = match proxy_req.send().await {
         Ok(resp) => resp,
         Err(e) => {

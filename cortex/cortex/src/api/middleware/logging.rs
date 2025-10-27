@@ -19,12 +19,19 @@ impl RequestLogger {
         let uri = req.uri().clone();
         let request_id = uuid::Uuid::new_v4().to_string();
 
+        // Log headers for debugging
+        let content_length = req.headers()
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+
         let start = Instant::now();
 
         info!(
             request_id = %request_id,
             method = %method,
             uri = %uri,
+            content_length = %content_length,
             "Incoming request"
         );
 

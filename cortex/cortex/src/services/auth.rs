@@ -67,9 +67,18 @@ impl AuthService {
             .bind(("email", email.to_string()))
             .await?;
 
-        let users: Vec<User> = result.take(0)?;
+        debug!("Query executed, attempting to deserialize users");
+        let users: Vec<User> = result.take(0).map_err(|e| {
+            warn!("Failed to deserialize user from database: {}", e);
+            anyhow!("Database error during user lookup: {}", e)
+        })?;
+        debug!("Found {} users", users.len());
+
         let user = users.first()
-            .ok_or_else(|| anyhow!("Invalid email or password"))?;
+            .ok_or_else(|| {
+                warn!("User not found: {}", email);
+                anyhow!("Invalid email or password")
+            })?;
 
         // Verify password (CPU-bound, must run in blocking thread)
         let password_hash = user.password_hash.clone();
