@@ -292,7 +292,7 @@ impl CortexMcpServer {
             .tool(ValidateContractsTool::new(test_ctx.clone()))
             .tool(ValidateDependenciesTool::new(test_ctx.clone()))
             .tool(ValidateStyleTool::new(test_ctx.clone()))
-            // Documentation Tools (25)
+            // Documentation Tools (26)
             // Document CRUD
             .tool(DocumentCreateTool::new(doc_ctx.clone()))
             .tool(DocumentGetTool::new(doc_ctx.clone()))
@@ -318,6 +318,7 @@ impl CortexMcpServer {
             .tool(DocumentRelatedTool::new(doc_ctx.clone()))
             // Advanced Operations
             .tool(DocumentCloneTool::new(doc_ctx.clone()))
+            .tool(DocumentMergeTool::new(doc_ctx.clone()))
             .tool(DocumentStatsTool::new(doc_ctx.clone()))
             // Versioning
             .tool(VersionCreateTool::new(doc_ctx.clone()))
@@ -379,7 +380,7 @@ impl CortexMcpServer {
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 191); // Total: 187 + 4 (advanced doc tools) = 191
+        info!("Registered {} tools", 192); // Total: 191 + 1 (merge tool) = 192
 
         Ok(server)
     }

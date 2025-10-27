@@ -705,6 +705,99 @@ impl DocumentService {
             has_children: false, // Will be updated below
         })
     }
+
+    /// Merge multiple documents into one new document
+    pub async fn merge_documents(
+        &self,
+        document_ids: &[CortexId],
+        new_title: String,
+        merge_sections: bool,
+    ) -> Result<Document> {
+        info!("Merging {} documents into: {}", document_ids.len(), new_title);
+
+        if document_ids.is_empty() {
+            return Err(anyhow::anyhow!("No documents to merge"));
+        }
+
+        // Get all documents
+        let mut documents = Vec::new();
+        for doc_id in document_ids {
+            if let Some(doc) = self.get_document(doc_id).await? {
+                documents.push(doc);
+            }
+        }
+
+        if documents.is_empty() {
+            return Err(anyhow::anyhow!("No valid documents found to merge"));
+        }
+
+        // Merge content
+        let mut merged_content = String::new();
+        let mut all_tags = Vec::new();
+        let mut all_keywords = Vec::new();
+
+        for (i, doc) in documents.iter().enumerate() {
+            if i > 0 {
+                merged_content.push_str("\n\n---\n\n");
+            }
+            merged_content.push_str(&format!("# {}\n\n", doc.title));
+            merged_content.push_str(&doc.content);
+
+            all_tags.extend(doc.tags.clone());
+            all_keywords.extend(doc.keywords.clone());
+        }
+
+        // Remove duplicates
+        all_tags.sort();
+        all_tags.dedup();
+        all_keywords.sort();
+        all_keywords.dedup();
+
+        // Create merged document
+        let mut merged_doc = Document::new(new_title, merged_content);
+        merged_doc.tags = all_tags;
+        merged_doc.keywords = all_keywords;
+        merged_doc.doc_type = documents[0].doc_type;
+        merged_doc.language = documents[0].language.clone();
+        merged_doc.workspace_id = documents[0].workspace_id.clone();
+
+        // Save merged document
+        let conn = self.storage.acquire().await?;
+        let doc_json = serde_json::to_value(&merged_doc)?;
+        let _: Option<serde_json::Value> = conn
+            .connection()
+            .create(("document", merged_doc.id.to_string()))
+            .content(doc_json)
+            .await?;
+
+        // Optionally merge sections
+        if merge_sections {
+            let mut section_order = 0;
+            for doc_id in document_ids {
+                let sections = self.get_document_sections(doc_id).await?;
+                for section in sections {
+                    let mut new_section = DocumentSection::new(
+                        merged_doc.id,
+                        section.title.clone(),
+                        section.content.clone(),
+                        section.level,
+                    );
+                    new_section.order = section_order;
+                    section_order += 1;
+
+                    let section_json = serde_json::to_value(&new_section)?;
+                    let _: Option<serde_json::Value> = conn
+                        .connection()
+                        .create(("document_section", new_section.id.to_string()))
+                        .content(section_json)
+                        .await?;
+                }
+            }
+        }
+
+        info!("Merged documents into: {}", merged_doc.id);
+        Ok(merged_doc)
+    }
 }
 
 // ============================================================================

@@ -1803,6 +1803,93 @@ impl Tool for DocumentRelatedTool {
 }
 
 // =============================================================================
+// cortex.document.merge - Merge multiple documents
+// =============================================================================
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DocumentMergeInput {
+    document_ids: Vec<String>,
+    new_title: String,
+    #[serde(default)]
+    merge_sections: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DocumentMergeOutput {
+    merged_document_id: String,
+    title: String,
+    slug: String,
+    documents_merged: usize,
+    sections_merged: usize,
+}
+
+pub struct DocumentMergeTool {
+    ctx: DocumentationContext,
+}
+
+impl DocumentMergeTool {
+    pub fn new(ctx: DocumentationContext) -> Self {
+        Self { ctx }
+    }
+}
+
+#[async_trait]
+impl Tool for DocumentMergeTool {
+    fn name(&self) -> &str {
+        "cortex.document.merge"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Merge multiple documents into a single new document, optionally including all sections")
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(DocumentMergeInput)).unwrap()
+    }
+
+    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+        let input: DocumentMergeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        if input.document_ids.is_empty() {
+            return Err(ToolError::ExecutionFailed("No document IDs provided".to_string()));
+        }
+
+        let mut doc_ids = Vec::new();
+        for id_str in &input.document_ids {
+            let id = CortexId::from_str(id_str)
+                .map_err(|e| ToolError::ExecutionFailed(format!("Invalid document_id '{}': {}", id_str, e)))?;
+            doc_ids.push(id);
+        }
+
+        // Count sections before merge if needed
+        let mut total_sections = 0;
+        if input.merge_sections {
+            for doc_id in &doc_ids {
+                let sections = self.ctx.service.get_document_sections(doc_id)
+                    .await
+                    .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get sections: {}", e)))?;
+                total_sections += sections.len();
+            }
+        }
+
+        let merged_doc = self.ctx.service.merge_documents(&doc_ids, input.new_title, input.merge_sections)
+            .await
+            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to merge documents: {}", e)))?;
+
+        let output = DocumentMergeOutput {
+            merged_document_id: merged_doc.id.to_string(),
+            title: merged_doc.title,
+            slug: merged_doc.slug,
+            documents_merged: doc_ids.len(),
+            sections_merged: total_sections,
+        };
+
+        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+    }
+}
+
+// =============================================================================
 // cortex.document.stats - Get document statistics
 // =============================================================================
 
