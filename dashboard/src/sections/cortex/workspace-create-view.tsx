@@ -45,10 +45,10 @@ export function WorkspaceCreateView() {
       try {
         await cortexClient.createWorkspace(data);
         mutate(cortexEndpoints.workspaces.list);
-        enqueueSnackbar('Workspace created successfully', { variant: 'success' });
+        enqueueSnackbar('Workspace created successfully', 'success');
         navigate('/dashboard/cortex/workspaces');
       } catch (err) {
-        enqueueSnackbar('Failed to create workspace', { variant: 'error' });
+        enqueueSnackbar('Failed to create workspace', 'error');
       }
     },
     [navigate, enqueueSnackbar]

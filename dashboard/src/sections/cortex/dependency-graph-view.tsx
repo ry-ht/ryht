@@ -233,7 +233,7 @@ export function DependencyGraphView() {
           break;
         case 'png':
           // For PNG, we need to convert SVG to canvas
-          enqueueSnackbar('PNG export not yet implemented', { variant: 'info' });
+          enqueueSnackbar('PNG export not yet implemented', 'info');
           return;
         default:
           return;
@@ -247,7 +247,7 @@ export function DependencyGraphView() {
       a.click();
       window.URL.revokeObjectURL(url);
 
-      enqueueSnackbar(`Exported as ${format.toUpperCase()}`, { variant: 'success' });
+      enqueueSnackbar(`Exported as ${format.toUpperCase()}`, 'success');
       setAnchorEl(null);
     },
     [dependencies, workspaceId, generateJsonGraph, enqueueSnackbar]
@@ -273,7 +273,7 @@ export function DependencyGraphView() {
     }
 
     navigator.clipboard.writeText(content);
-    enqueueSnackbar('Copied to clipboard', { variant: 'success' });
+    enqueueSnackbar('Copied to clipboard', 'success');
   }, [dependencies, graphFormat, layoutDirection, generateMermaidGraph, generateDotGraph, generateJsonGraph, enqueueSnackbar]);
 
   // ----------------------------------------------------------------------

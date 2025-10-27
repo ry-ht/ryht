@@ -171,9 +171,9 @@ export function AgentListView() {
     </Label>
   );
 
-  const calculateHealth = (agent: AgentInfo) => {
+  const calculateHealth = (agent: AgentInfo): string => {
     const totalTasks = agent.metadata.tasks_completed + agent.metadata.tasks_failed;
-    if (totalTasks === 0) return 100;
+    if (totalTasks === 0) return 'Excellent';
     const successRate = (agent.metadata.tasks_completed / totalTasks) * 100;
     if (successRate >= 95) return 'Excellent';
     if (successRate >= 80) return 'Good';
@@ -181,7 +181,7 @@ export function AgentListView() {
     return 'Poor';
   };
 
-  const calculateSuccessRate = (agent: AgentInfo) => {
+  const calculateSuccessRate = (agent: AgentInfo): number => {
     const totalTasks = agent.metadata.tasks_completed + agent.metadata.tasks_failed;
     if (totalTasks === 0) return 0;
     return (agent.metadata.tasks_completed / totalTasks) * 100;

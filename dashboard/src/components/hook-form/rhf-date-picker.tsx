@@ -2,7 +2,6 @@ import type { Dayjs } from 'dayjs';
 import type { TimePickerProps } from '@mui/x-date-pickers/TimePicker';
 import type { DatePickerProps } from '@mui/x-date-pickers/DatePicker';
 import type { DateTimePickerProps } from '@mui/x-date-pickers/DateTimePicker';
-import type { PickersTextFieldProps } from '@mui/x-date-pickers/PickersTextField';
 
 import dayjs from 'dayjs';
 import { Controller, useFormContext } from 'react-hook-form';
@@ -24,14 +23,19 @@ function normalizeDateValue(value: DateInput): Dayjs | null {
 
 // ----------------------------------------------------------------------
 
-type PickerProps<T extends DatePickerProps | TimePickerProps | DateTimePickerProps> = T & {
+type RHFDatePickerProps = DatePickerProps<Dayjs> & {
   name: string;
-  slotProps?: T['slotProps'] & {
-    textField?: Partial<PickersTextFieldProps>;
-  };
 };
 
-export function RHFDatePicker({ name, slotProps, ...other }: PickerProps<DatePickerProps>) {
+type RHFTimePickerProps = TimePickerProps<Dayjs> & {
+  name: string;
+};
+
+type RHFDateTimePickerProps = DateTimePickerProps<Dayjs> & {
+  name: string;
+};
+
+export function RHFDatePicker({ name, slotProps, ...other }: RHFDatePickerProps) {
   const { control } = useFormContext();
 
   return (
@@ -39,8 +43,8 @@ export function RHFDatePicker({ name, slotProps, ...other }: PickerProps<DatePic
       name={name}
       control={control}
       render={({ field, fieldState: { error } }) => (
-        <DatePicker
-          {...field}
+        <DatePicker<Dayjs>
+          {...(field as any)}
           value={normalizeDateValue(field.value)}
           onChange={(newValue) => {
             if (!newValue) {
@@ -68,7 +72,7 @@ export function RHFDatePicker({ name, slotProps, ...other }: PickerProps<DatePic
 
 // ----------------------------------------------------------------------
 
-export function RHFTimePicker({ name, slotProps, ...other }: PickerProps<TimePickerProps>) {
+export function RHFTimePicker({ name, slotProps, ...other }: RHFTimePickerProps) {
   const { control } = useFormContext();
 
   return (
@@ -76,8 +80,8 @@ export function RHFTimePicker({ name, slotProps, ...other }: PickerProps<TimePic
       name={name}
       control={control}
       render={({ field, fieldState: { error } }) => (
-        <TimePicker
-          {...field}
+        <TimePicker<Dayjs>
+          {...(field as any)}
           value={normalizeDateValue(field.value)}
           onChange={(newValue) => {
             if (!newValue) {
@@ -105,7 +109,7 @@ export function RHFTimePicker({ name, slotProps, ...other }: PickerProps<TimePic
 
 // ----------------------------------------------------------------------
 
-export function RHFDateTimePicker({ name, slotProps, ...other }: PickerProps<DateTimePickerProps>) {
+export function RHFDateTimePicker({ name, slotProps, ...other }: RHFDateTimePickerProps) {
   const { control } = useFormContext();
 
   return (
@@ -113,8 +117,8 @@ export function RHFDateTimePicker({ name, slotProps, ...other }: PickerProps<Dat
       name={name}
       control={control}
       render={({ field, fieldState: { error } }) => (
-        <DateTimePicker
-          {...field}
+        <DateTimePicker<Dayjs>
+          {...(field as any)}
           value={normalizeDateValue(field.value)}
           onChange={(newValue) => {
             if (!newValue) {

@@ -60,7 +60,7 @@ export function LinkEditorDialog({ open, documentId, onClose }: LinkEditorDialog
 
   const handleSubmit = async () => {
     if (!formData.target_id.trim()) {
-      enqueueSnackbar('Target ID/URL is required', { variant: 'error' });
+      enqueueSnackbar('Target ID/URL is required', 'error');
       return;
     }
 
@@ -71,7 +71,7 @@ export function LinkEditorDialog({ open, documentId, onClose }: LinkEditorDialog
         target_type: formData.target_type,
         target_id: formData.target_id,
       });
-      enqueueSnackbar('Link created', { variant: 'success' });
+      enqueueSnackbar('Link created', 'success');
       onClose(true);
       // Reset form
       setFormData({
@@ -81,7 +81,7 @@ export function LinkEditorDialog({ open, documentId, onClose }: LinkEditorDialog
         description: '',
       });
     } catch (error) {
-      enqueueSnackbar('Failed to create link', { variant: 'error' });
+      enqueueSnackbar('Failed to create link', 'error');
     } finally {
       setLoading(false);
     }

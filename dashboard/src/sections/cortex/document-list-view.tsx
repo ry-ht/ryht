@@ -96,9 +96,9 @@ export function DocumentListView() {
       try {
         await cortexClient.deleteDocument(id);
         mutate(cortexEndpoints.documents.list);
-        enqueueSnackbar('Document deleted', { variant: 'success' });
+        enqueueSnackbar('Document deleted', 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to delete document', { variant: 'error' });
+        enqueueSnackbar('Failed to delete document', 'error');
       }
     },
     [enqueueSnackbar]
@@ -110,9 +110,9 @@ export function DocumentListView() {
         await Promise.all(table.selected.map((id) => cortexClient.deleteDocument(id)));
         mutate(cortexEndpoints.documents.list);
         table.setSelected([]);
-        enqueueSnackbar(`Deleted ${table.selected.length} documents`, { variant: 'success' });
+        enqueueSnackbar(`Deleted ${table.selected.length} documents`, 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to delete documents', { variant: 'error' });
+        enqueueSnackbar('Failed to delete documents', 'error');
       }
     },
     [table, enqueueSnackbar]
@@ -123,9 +123,9 @@ export function DocumentListView() {
       try {
         await cortexClient.publishDocument(id);
         mutate(cortexEndpoints.documents.list);
-        enqueueSnackbar('Document published', { variant: 'success' });
+        enqueueSnackbar('Document published', 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to publish document', { variant: 'error' });
+        enqueueSnackbar('Failed to publish document', 'error');
       }
     },
     [enqueueSnackbar]
@@ -169,7 +169,7 @@ export function DocumentListView() {
           onResetFilters={handleResetFilters}
         />
 
-        {notFound && <TableNoData searchQuery={filters.search} sx={{ py: 10 }} />}
+        {notFound && <TableNoData notFound={notFound} searchQuery={filters.search} sx={{ py: 10 }} />}
 
         <TableContainer sx={{ position: 'relative', overflow: 'unset' }}>
           <TableSelectedAction
@@ -224,7 +224,7 @@ export function DocumentListView() {
                 />
 
                 {isLoading && (
-                  <TableNoData searchQuery="" sx={{ py: 10 }}>
+                  <TableNoData notFound={isLoading} sx={{ py: 10 }}>
                     Loading...
                   </TableNoData>
                 )}

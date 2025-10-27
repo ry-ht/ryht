@@ -10,6 +10,7 @@ import Snackbar from '@mui/material/Snackbar';
 
 export interface SnackbarContextValue {
   showSnackbar: (message: string, severity?: AlertColor) => void;
+  enqueueSnackbar: (message: string, severity?: AlertColor) => void;
 }
 
 export const SnackbarContext = createContext<SnackbarContextValue | undefined>(undefined);
@@ -46,7 +47,7 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
   }, []);
 
   return (
-    <SnackbarContext.Provider value={{ showSnackbar }}>
+    <SnackbarContext.Provider value={{ showSnackbar, enqueueSnackbar: showSnackbar }}>
       {children}
       <Snackbar
         open={snackbar.open}

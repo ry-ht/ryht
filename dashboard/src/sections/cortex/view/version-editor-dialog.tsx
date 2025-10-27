@@ -42,12 +42,12 @@ export function VersionEditorDialog({ open, documentId, onClose }: VersionEditor
 
   const handleSubmit = async () => {
     if (!formData.version.trim()) {
-      enqueueSnackbar('Version number is required', { variant: 'error' });
+      enqueueSnackbar('Version number is required', 'error');
       return;
     }
 
     if (!formData.message.trim()) {
-      enqueueSnackbar('Message is required', { variant: 'error' });
+      enqueueSnackbar('Message is required', 'error');
       return;
     }
 
@@ -58,7 +58,7 @@ export function VersionEditorDialog({ open, documentId, onClose }: VersionEditor
         author: formData.author || 'Unknown',
         message: formData.message,
       });
-      enqueueSnackbar('Version created', { variant: 'success' });
+      enqueueSnackbar('Version created', 'success');
       onClose(true);
       // Reset form
       setFormData({
@@ -67,7 +67,7 @@ export function VersionEditorDialog({ open, documentId, onClose }: VersionEditor
         message: '',
       });
     } catch (error) {
-      enqueueSnackbar('Failed to create version', { variant: 'error' });
+      enqueueSnackbar('Failed to create version', 'error');
     } finally {
       setLoading(false);
     }

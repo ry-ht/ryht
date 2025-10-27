@@ -136,7 +136,7 @@ export function DocumentVersionsPanel({
                     size="small"
                     startIcon={<Iconify icon="eva:eye-fill" />}
                     onClick={() => {
-                      enqueueSnackbar('View version feature coming soon', { variant: 'info' });
+                      enqueueSnackbar('View version feature coming soon', 'info');
                     }}
                   >
                     View
@@ -158,7 +158,7 @@ export function DocumentVersionsPanel({
                     size="small"
                     startIcon={<Iconify icon="eva:refresh-fill" />}
                     onClick={() => {
-                      enqueueSnackbar('Restore version feature coming soon', { variant: 'info' });
+                      enqueueSnackbar('Restore version feature coming soon', 'info');
                     }}
                   >
                     Restore

@@ -78,7 +78,7 @@ export function SectionEditorDialog({
 
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
-      enqueueSnackbar('Title is required', { variant: 'error' });
+      enqueueSnackbar('Title is required', 'error');
       return;
     }
 
@@ -90,7 +90,7 @@ export function SectionEditorDialog({
           content: formData.content,
           order: formData.order,
         });
-        enqueueSnackbar('Section updated', { variant: 'success' });
+        enqueueSnackbar('Section updated', 'success');
       } else {
         await cortexClient.createSection(documentId, {
           title: formData.title,
@@ -98,11 +98,11 @@ export function SectionEditorDialog({
           level: formData.level,
           order: formData.order,
         });
-        enqueueSnackbar('Section created', { variant: 'success' });
+        enqueueSnackbar('Section created', 'success');
       }
       onClose(true);
     } catch (error) {
-      enqueueSnackbar('Failed to save section', { variant: 'error' });
+      enqueueSnackbar('Failed to save section', 'error');
     } finally {
       setLoading(false);
     }

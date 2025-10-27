@@ -72,11 +72,11 @@ export function DocumentView() {
   const handlePublish = async () => {
     try {
       await cortexClient.publishDocument(documentId);
-      enqueueSnackbar('Document published', { variant: 'success' });
+      enqueueSnackbar('Document published', 'success');
       // Refresh the document
       window.location.reload();
     } catch (err) {
-      enqueueSnackbar('Failed to publish document', { variant: 'error' });
+      enqueueSnackbar('Failed to publish document', 'error');
     }
   };
 
@@ -87,10 +87,10 @@ export function DocumentView() {
 
     try {
       await cortexClient.deleteDocument(documentId);
-      enqueueSnackbar('Document deleted', { variant: 'success' });
+      enqueueSnackbar('Document deleted', 'success');
       navigate('/dashboard/cortex/documents');
     } catch (err) {
-      enqueueSnackbar('Failed to delete document', { variant: 'error' });
+      enqueueSnackbar('Failed to delete document', 'error');
     }
   };
 

@@ -53,6 +53,7 @@
     "dayjs": "^1.11.18",
     "es-toolkit": "^1.39.10",
     "framer-motion": "^12.23.22",
+    "mermaid": "^11.12.0",
     "minimal-shared": "^1.1.0",
     "nprogress": "^0.2.0",
     "react": "^19.1.1",

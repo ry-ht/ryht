@@ -71,12 +71,12 @@ export function WorkspaceDetailView() {
   const handleIndexWorkspace = useCallback(async () => {
     try {
       await cortexClient.indexWorkspace(workspaceId);
-      enqueueSnackbar('Workspace indexing started', { variant: 'success' });
+      enqueueSnackbar('Workspace indexing started', 'success');
       setTimeout(() => {
         mutate(cortexEndpoints.workspaces.stats(workspaceId));
       }, 2000);
     } catch (err) {
-      enqueueSnackbar('Failed to start indexing', { variant: 'error' });
+      enqueueSnackbar('Failed to start indexing', 'error');
     }
   }, [workspaceId, enqueueSnackbar]);
 
@@ -85,10 +85,10 @@ export function WorkspaceDetailView() {
 
     try {
       await cortexClient.deleteWorkspace(workspaceId);
-      enqueueSnackbar('Workspace deleted successfully', { variant: 'success' });
+      enqueueSnackbar('Workspace deleted successfully', 'success');
       navigate('/dashboard/cortex/workspaces');
     } catch (err) {
-      enqueueSnackbar('Failed to delete workspace', { variant: 'error' });
+      enqueueSnackbar('Failed to delete workspace', 'error');
     }
   }, [workspaceId, navigate, enqueueSnackbar]);
 

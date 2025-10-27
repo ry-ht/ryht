@@ -242,9 +242,9 @@ export function VfsBrowserView() {
       const fullPath = currentPath === '/' ? `/${contextMenuEntry.name}` : `${currentPath}/${contextMenuEntry.name}`;
       await cortexClient.deleteFile(workspaceId, fullPath);
       mutate(cortexEndpoints.vfs.list(workspaceId, currentPath));
-      enqueueSnackbar('File deleted successfully', { variant: 'success' });
+      enqueueSnackbar('File deleted successfully', 'success');
     } catch (err) {
-      enqueueSnackbar('Failed to delete file', { variant: 'error' });
+      enqueueSnackbar('Failed to delete file', 'error');
     } finally {
       handleCloseContextMenu();
     }
@@ -266,9 +266,9 @@ export function VfsBrowserView() {
       a.click();
       window.URL.revokeObjectURL(url);
 
-      enqueueSnackbar('File downloaded', { variant: 'success' });
+      enqueueSnackbar('File downloaded', 'success');
     } catch (err) {
-      enqueueSnackbar('Failed to download file', { variant: 'error' });
+      enqueueSnackbar('Failed to download file', 'error');
     } finally {
       handleCloseContextMenu();
     }

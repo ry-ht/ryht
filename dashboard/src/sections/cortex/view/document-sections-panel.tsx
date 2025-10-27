@@ -92,10 +92,10 @@ export function DocumentSectionsPanel({
 
     try {
       await cortexClient.deleteSection(sectionId);
-      enqueueSnackbar('Section deleted', { variant: 'success' });
+      enqueueSnackbar('Section deleted', 'success');
       onRefresh();
     } catch (error) {
-      enqueueSnackbar('Failed to delete section', { variant: 'error' });
+      enqueueSnackbar('Failed to delete section', 'error');
     }
   };
 
@@ -107,10 +107,10 @@ export function DocumentSectionsPanel({
 
     try {
       await cortexClient.updateSection(sectionId, { order: newOrder });
-      enqueueSnackbar('Section moved', { variant: 'success' });
+      enqueueSnackbar('Section moved', 'success');
       onRefresh();
     } catch (error) {
-      enqueueSnackbar('Failed to move section', { variant: 'error' });
+      enqueueSnackbar('Failed to move section', 'error');
     }
   };
 

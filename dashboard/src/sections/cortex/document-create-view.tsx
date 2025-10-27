@@ -76,10 +76,10 @@ export function DocumentCreateView() {
         });
 
         mutate(cortexEndpoints.documents.list);
-        enqueueSnackbar('Document created successfully', { variant: 'success' });
+        enqueueSnackbar('Document created successfully', 'success');
         navigate('/dashboard/cortex/documents');
       } catch (err) {
-        enqueueSnackbar('Failed to create document', { variant: 'error' });
+        enqueueSnackbar('Failed to create document', 'error');
       }
     },
     [navigate, enqueueSnackbar]

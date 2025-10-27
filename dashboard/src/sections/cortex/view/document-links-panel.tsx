@@ -8,7 +8,7 @@ import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 
 import { Iconify } from 'src/components/iconify';
 import { useSnackbar } from 'src/components/snackbar';
@@ -88,10 +88,10 @@ export function DocumentLinksPanel({
 
     try {
       await cortexClient.deleteDocumentLink(linkId);
-      enqueueSnackbar('Link deleted', { variant: 'success' });
+      enqueueSnackbar('Link deleted', 'success');
       onRefresh();
     } catch (error) {
-      enqueueSnackbar('Failed to delete link', { variant: 'error' });
+      enqueueSnackbar('Failed to delete link', 'error');
     }
   };
 

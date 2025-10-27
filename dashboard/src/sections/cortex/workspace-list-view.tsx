@@ -89,9 +89,9 @@ export function WorkspaceListView() {
       try {
         await cortexClient.deleteWorkspace(id);
         mutate(cortexEndpoints.workspaces.list);
-        enqueueSnackbar('Workspace deleted successfully', { variant: 'success' });
+        enqueueSnackbar('Workspace deleted successfully', 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to delete workspace', { variant: 'error' });
+        enqueueSnackbar('Failed to delete workspace', 'error');
       }
     },
     [enqueueSnackbar]
@@ -103,9 +103,9 @@ export function WorkspaceListView() {
         await Promise.all(table.selected.map((id) => cortexClient.deleteWorkspace(id)));
         mutate(cortexEndpoints.workspaces.list);
         table.setSelected([]);
-        enqueueSnackbar(`Deleted ${table.selected.length} workspaces`, { variant: 'success' });
+        enqueueSnackbar(`Deleted ${table.selected.length} workspaces`, 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to delete workspaces', { variant: 'error' });
+        enqueueSnackbar('Failed to delete workspaces', 'error');
       }
     },
     [table, enqueueSnackbar]
@@ -115,9 +115,9 @@ export function WorkspaceListView() {
     async (id: string) => {
       try {
         await cortexClient.indexWorkspace(id);
-        enqueueSnackbar('Workspace indexing started', { variant: 'success' });
+        enqueueSnackbar('Workspace indexing started', 'success');
       } catch (err) {
-        enqueueSnackbar('Failed to start indexing', { variant: 'error' });
+        enqueueSnackbar('Failed to start indexing', 'error');
       }
     },
     [enqueueSnackbar]

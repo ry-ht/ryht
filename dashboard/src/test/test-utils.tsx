@@ -71,7 +71,7 @@ export const mockWebSocketEvent = (overrides?: Partial<any>) => ({
 // Wait utilities
 // ----------------------------------------------------------------------
 
-export const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ----------------------------------------------------------------------
 // Mock axios responses

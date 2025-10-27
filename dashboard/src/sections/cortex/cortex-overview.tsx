@@ -1,8 +1,8 @@
-import Grid from '@mui/material/Grid2';
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Stack from '@mui/material/Stack';
 
-import { AnalyticsWidgetSummary } from 'src/sections/overview/analytics-widget-summary';
-import { AnalyticsCurrentVisits } from 'src/sections/overview/analytics-current-visits';
+import { MetricCard } from 'src/sections/overview/components/metric-card';
 
 import useSWR from 'swr';
 import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
@@ -27,42 +27,24 @@ export function CortexOverview() {
         Cortex Cognitive System
       </Typography>
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <AnalyticsWidgetSummary
-            title="Workspaces"
-            total={stats?.workspaces_count || 0}
-            icon={<img alt="icon" src="/assets/icons/glass/ic-glass-bag.svg" />}
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <AnalyticsWidgetSummary
-            title="Documents"
-            total={stats?.documents_count || 0}
-            color="info"
-            icon={<img alt="icon" src="/assets/icons/glass/ic-glass-users.svg" />}
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <AnalyticsWidgetSummary
-            title="Code Units"
-            total={stats?.code_units_count || 0}
-            color="warning"
-            icon={<img alt="icon" src="/assets/icons/glass/ic-glass-buy.svg" />}
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <AnalyticsWidgetSummary
-            title="Status"
-            total={0}
-            color={health?.status === 'healthy' ? 'success' : 'error'}
-            icon={<img alt="icon" src="/assets/icons/glass/ic-glass-message.svg" />}
-          />
-        </Grid>
-      </Grid>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 3 }}>
+        <MetricCard
+          title="Workspaces"
+          value={stats?.workspaces_count || 0}
+        />
+        <MetricCard
+          title="Documents"
+          value={stats?.documents_count || 0}
+        />
+        <MetricCard
+          title="Code Units"
+          value={stats?.code_units_count || 0}
+        />
+        <MetricCard
+          title="Status"
+          value={health?.status === 'healthy' ? 'Healthy' : 'Unhealthy'}
+        />
+      </Box>
     </>
   );
 }

@@ -21,7 +21,7 @@ if (!AXON_API_URL) {
  * Axon API Client
  * Handles all communication with the Axon multi-agent system
  */
-class AxonClient {
+export class AxonClient {
   private client: AxiosInstance;
 
   constructor() {
