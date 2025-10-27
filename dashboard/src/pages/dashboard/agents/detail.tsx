@@ -1,6 +1,6 @@
-import { Helmet } from 'react-helmet-async';
-
 import { CONFIG } from 'src/global-config';
+
+import { useDocumentTitle } from 'src/hooks/use-document-title';
 
 import { AgentDetailView } from 'src/sections/agent/agent-detail-view';
 
@@ -9,13 +9,7 @@ import { AgentDetailView } from 'src/sections/agent/agent-detail-view';
 const metadata = { title: `Agent Details | Dashboard - ${CONFIG.appName}` };
 
 export default function Page() {
-  return (
-    <>
-      <Helmet>
-        <title> {metadata.title}</title>
-      </Helmet>
+  useDocumentTitle(metadata.title);
 
-      <AgentDetailView />
-    </>
-  );
+  return <AgentDetailView />;
 }

@@ -1,15 +1,9 @@
-import { Helmet } from 'react-helmet-async';
 import { CONFIG } from 'src/global-config';
+import { useDocumentTitle } from 'src/hooks/use-document-title';
 import { WorkspaceCreateView } from 'src/sections/cortex/workspace-create-view';
 
 export default function Page() {
-  return (
-    <>
-      <Helmet>
-        <title>{`Create Workspace - ${CONFIG.appName}`}</title>
-      </Helmet>
+  useDocumentTitle(`Create Workspace - ${CONFIG.appName}`);
 
-      <WorkspaceCreateView />
-    </>
-  );
+  return <WorkspaceCreateView />;
 }

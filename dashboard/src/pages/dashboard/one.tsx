@@ -1,6 +1,6 @@
-import { Helmet } from 'react-helmet-async';
-
 import { CONFIG } from 'src/global-config';
+
+import { useDocumentTitle } from 'src/hooks/use-document-title';
 
 import { DashboardOverview } from 'src/sections/overview/dashboard-overview';
 
@@ -9,13 +9,7 @@ import { DashboardOverview } from 'src/sections/overview/dashboard-overview';
 const metadata = { title: `Dashboard - ${CONFIG.appName}` };
 
 export default function Page() {
-  return (
-    <>
-      <Helmet>
-        <title>{metadata.title}</title>
-      </Helmet>
+  useDocumentTitle(metadata.title);
 
-      <DashboardOverview />
-    </>
-  );
+  return <DashboardOverview />;
 }

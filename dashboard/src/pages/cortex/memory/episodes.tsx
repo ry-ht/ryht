@@ -1,15 +1,9 @@
-import { Helmet } from 'react-helmet-async';
 import { CONFIG } from 'src/global-config';
+import { useDocumentTitle } from 'src/hooks/use-document-title';
 import { MemoryEpisodesView } from 'src/sections/cortex';
 
 export default function Page() {
-  return (
-    <>
-      <Helmet>
-        <title>{`Memory Episodes - ${CONFIG.appName}`}</title>
-      </Helmet>
+  useDocumentTitle(`Memory Episodes - ${CONFIG.appName}`);
 
-      <MemoryEpisodesView />
-    </>
-  );
+  return <MemoryEpisodesView />;
 }

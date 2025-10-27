@@ -1,6 +1,6 @@
-import { Helmet } from 'react-helmet-async';
-
 import { CONFIG } from 'src/global-config';
+
+import { useDocumentTitle } from 'src/hooks/use-document-title';
 
 import { CodeUnitsView } from 'src/sections/cortex/code-units-view';
 
@@ -9,13 +9,7 @@ import { CodeUnitsView } from 'src/sections/cortex/code-units-view';
 const metadata = { title: `Code Units | Cortex - ${CONFIG.appName}` };
 
 export default function Page() {
-  return (
-    <>
-      <Helmet>
-        <title> {metadata.title}</title>
-      </Helmet>
+  useDocumentTitle(metadata.title);
 
-      <CodeUnitsView />
-    </>
-  );
+  return <CodeUnitsView />;
 }
