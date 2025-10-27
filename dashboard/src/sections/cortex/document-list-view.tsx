@@ -18,13 +18,12 @@ import { useSnackbar } from 'src/components/snackbar';
 import {
   useTable,
   emptyRows,
-  rowInRange,
   TableNoData,
   TableEmptyRows,
   TableHeadCustom,
   TableSelectedAction,
-  TablePaginationCustom,
 } from 'src/components/table';
+import TablePagination from '@mui/material/TablePagination';
 
 import useSWR, { mutate } from 'swr';
 import { cortexClient, cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
@@ -42,6 +41,11 @@ const TABLE_HEAD = [
   { id: 'updated_at', label: 'Updated' },
   { id: '', width: 88 },
 ];
+
+// Helper function to get rows for current page
+function rowInRange<T>(array: T[], page: number, rowsPerPage: number): T[] {
+  return array.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+}
 
 // ----------------------------------------------------------------------
 
@@ -229,13 +233,13 @@ export function DocumentListView() {
           </Scrollbar>
         </TableContainer>
 
-        <TablePaginationCustom
+        <TablePagination
+          component="div"
           page={table.page}
-          dense={table.dense}
           count={dataFiltered.length}
           rowsPerPage={table.rowsPerPage}
           onPageChange={table.onChangePage}
-          onChangeDense={table.onChangeDense}
+          rowsPerPageOptions={[5, 10, 25]}
           onRowsPerPageChange={table.onChangeRowsPerPage}
         />
       </Card>

@@ -24,22 +24,35 @@ const PageSix = lazy(() => import('src/pages/dashboard/six'));
 // Agent pages
 const AgentListPage = lazy(() => import('src/pages/dashboard/agents/list'));
 const AgentCreatePage = lazy(() => import('src/pages/dashboard/agents/create'));
+const AgentDetailPage = lazy(() => import('src/pages/dashboard/agents/detail'));
 
 // Workflow pages
 const WorkflowListPage = lazy(() => import('src/pages/dashboard/workflows/list'));
 const WorkflowCreatePage = lazy(() => import('src/pages/dashboard/workflows/create'));
+const WorkflowDetailPage = lazy(() => import('src/pages/dashboard/workflows/detail'));
+
+// Telemetry pages
+const TelemetryPage = lazy(() => import('src/pages/dashboard/telemetry'));
+
+// Task pages
+const TaskListPage = lazy(() => import('src/pages/dashboard/tasks/list'));
+const TaskDetailPage = lazy(() => import('src/pages/dashboard/tasks/detail'));
 
 // Cortex pages
 const CortexOverviewPage = lazy(() => import('src/pages/cortex/overview'));
 const CortexWorkspaceListPage = lazy(() => import('src/pages/cortex/workspaces/list'));
-const CortexDocumentListPage = lazy(() => import('src/pages/cortex/documents/list'));
-const CortexDocumentViewPage = lazy(() => import('src/pages/cortex/documents/view'));
 const CortexWorkspaceCreatePage = lazy(() => import('src/pages/cortex/workspaces/create'));
+const CortexWorkspaceDetailPage = lazy(() => import('src/pages/cortex/workspaces/detail'));
 const CortexWorkspaceBrowsePage = lazy(() => import('src/pages/cortex/workspaces/browse'));
+const CortexWorkspaceCodeUnitsPage = lazy(() => import('src/pages/cortex/workspaces/code-units'));
+const CortexWorkspaceDependenciesPage = lazy(() => import('src/pages/cortex/workspaces/dependencies'));
 const CortexDocumentListPage = lazy(() => import('src/pages/cortex/documents/list'));
 const CortexDocumentCreatePage = lazy(() => import('src/pages/cortex/documents/create'));
 const CortexDocumentViewPage = lazy(() => import('src/pages/cortex/documents/view'));
 const CortexMemorySearchPage = lazy(() => import('src/pages/cortex/memory'));
+const CortexMemoryEpisodesPage = lazy(() => import('src/pages/cortex/memory/episodes'));
+const CortexMemoryPatternsPage = lazy(() => import('src/pages/cortex/memory/patterns'));
+const CortexMemoryConsolidatePage = lazy(() => import('src/pages/cortex/memory/consolidate'));
 
 // ----------------------------------------------------------------------
 
@@ -86,6 +99,14 @@ export const dashboardRoutes: RouteObject[] = [
         children: [
           { element: <WorkflowListPage />, index: true },
           { path: 'create', element: <WorkflowCreatePage /> },
+          { path: ':id', element: <WorkflowDetailPage /> },
+        ],
+      },
+      {
+        path: 'tasks',
+        children: [
+          { element: <TaskListPage />, index: true },
+          { path: ':id', element: <TaskDetailPage /> },
         ],
       },
       {
@@ -97,7 +118,10 @@ export const dashboardRoutes: RouteObject[] = [
             children: [
               { element: <CortexWorkspaceListPage />, index: true },
               { path: 'create', element: <CortexWorkspaceCreatePage /> },
+              { path: ':id', element: <CortexWorkspaceDetailPage /> },
               { path: ':id/browse', element: <CortexWorkspaceBrowsePage /> },
+              { path: ':id/code-units', element: <CortexWorkspaceCodeUnitsPage /> },
+              { path: ':id/dependencies', element: <CortexWorkspaceDependenciesPage /> },
             ],
           },
           {
@@ -108,7 +132,15 @@ export const dashboardRoutes: RouteObject[] = [
               { path: ':id', element: <CortexDocumentViewPage /> },
             ],
           },
-          { path: 'memory', element: <CortexMemorySearchPage /> },
+          {
+            path: 'memory',
+            children: [
+              { element: <CortexMemorySearchPage />, index: true },
+              { path: 'episodes', element: <CortexMemoryEpisodesPage /> },
+              { path: 'patterns', element: <CortexMemoryPatternsPage /> },
+              { path: 'consolidate', element: <CortexMemoryConsolidatePage /> },
+            ],
+          },
         ],
       },
     ],
