@@ -250,7 +250,7 @@ where
 
     /// Producer thread: discovers files and sends to queue
     fn producer(
-        processor: Arc<F>,
+        _processor: Arc<F>,
         files: Vec<PathBuf>,
         sender: Sender<Option<Job<C>>>,
         config: Arc<C>,
@@ -301,9 +301,9 @@ where
     /// Process a single job with retry logic
     fn process_job(
         &self,
-        mut job: Job<C>,
-        receiver: &Receiver<Option<Job<C>>>,
-        stats: &Arc<Mutex<ProcessingStats>>,
+        job: Job<C>,
+        _receiver: &Receiver<Option<Job<C>>>,
+        _stats: &Arc<Mutex<ProcessingStats>>,
     ) -> FileResult {
         let mut last_error = None;
 

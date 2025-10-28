@@ -322,6 +322,8 @@ impl ProgressTracker {
         if let Some(ref bar) = *self.bar.lock() {
             bar.abandon_with_message(format!("Error: {}", error));
         }
+        #[cfg(not(feature = "progress"))]
+        let _ = error;
     }
 
     /// Get throughput in files per second

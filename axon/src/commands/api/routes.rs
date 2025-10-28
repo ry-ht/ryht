@@ -8,10 +8,16 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 
 use super::error::ApiError;
 use super::websocket::WsManager;
 use crate::commands::runtime_manager::AgentRuntimeManager;
+
+// Global server start time
+lazy_static::lazy_static! {
+    static ref SERVER_START_TIME: Instant = Instant::now();
+}
 
 /// Application state shared across routes
 #[derive(Clone)]
@@ -125,10 +131,13 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
     let system_status = runtime.get_system_status().await.ok();
     let ws_count = state.ws_manager.connection_count().await;
 
+    // Calculate uptime in seconds
+    let uptime_seconds = SERVER_START_TIME.elapsed().as_secs();
+
     Json(HealthResponse {
         status: "healthy".to_string(),
         version: crate::VERSION.to_string(),
-        uptime_seconds: 0, // TODO: Track server start time
+        uptime_seconds,
         active_agents: system_status.as_ref().map(|s| s.active_agents).unwrap_or(0),
         running_workflows: system_status.as_ref().map(|s| s.running_workflows).unwrap_or(0),
         websocket_connections: ws_count,
@@ -331,11 +340,40 @@ struct UpdateAgentRequest {
 }
 
 async fn update_agent(
-    State(_state): State<AppState>,
-    Path(_id): Path<String>,
-    Json(_req): Json<UpdateAgentRequest>,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateAgentRequest>,
 ) -> Result<StatusCode, ApiError> {
-    // TODO: Implement agent configuration updates
+    let mut runtime = state.runtime.write().await;
+
+    // Verify agent exists
+    let agent_info = runtime.get_agent_info(&id).await?;
+
+    // Stop the existing agent
+    runtime.stop_agent(&id, false).await?;
+
+    // Create updated configuration
+    let mut config = crate::agents::AgentConfig {
+        name: agent_info.name,
+        agent_type: agent_info.agent_type,
+        capabilities: agent_info.capabilities.into_iter().collect(),
+        max_concurrent_tasks: req.max_concurrent_tasks
+            .unwrap_or(agent_info.metadata.max_concurrent_tasks),
+        task_timeout_seconds: req.task_timeout_seconds.unwrap_or(300),
+        custom_config: std::collections::HashMap::new(),
+    };
+
+    // Add model config if it exists
+    if let Some(model_config) = agent_info.metadata.model_config {
+        config.custom_config.insert(
+            "model".to_string(),
+            serde_json::Value::String(model_config.model)
+        );
+    }
+
+    // Start agent with new configuration
+    runtime.start_agent(config).await?;
+
     Ok(StatusCode::OK)
 }
 

@@ -309,13 +309,27 @@ pub async fn workspace_delete(name_or_id: String, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// Switch active workspace
+/// Switch default workspace for new sessions
 pub async fn workspace_switch(name: String) -> Result<()> {
     let mut config = CortexConfig::load()?;
-    config.active_workspace = Some(name.clone());
+
+    // Verify workspace exists
+    let storage = create_storage(&config).await?;
+    let conn = storage.acquire().await?;
+    let workspaces: Vec<Workspace> = conn.connection()
+        .select("workspace")
+        .await
+        .context("Failed to fetch workspaces")?;
+
+    if !workspaces.iter().any(|w| w.name == name) {
+        return Err(anyhow::anyhow!("Workspace '{}' does not exist", name));
+    }
+
+    config.default_workspace = Some(name.clone());
     config.save_project()?;
 
-    output::success(format!("Switched to workspace: {}", name));
+    output::success(format!("Set default workspace to: {}", name));
+    output::info("New sessions will use this workspace by default");
     Ok(())
 }
 
@@ -330,16 +344,20 @@ pub async fn ingest_path(
     recursive: bool,
 ) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone())
-        .ok_or_else(|| anyhow::anyhow!("No active workspace. Use --workspace or 'cortex workspace switch'"))?;
+
+    let storage = create_storage(&config).await?;
+
+    // Create a temporary session for this ingestion
+    let (session_id, workspace_name) = create_temp_session(storage.clone(), workspace, &config).await
+        .context("Failed to create session for ingestion")?;
 
     output::header(format!("Ingesting: {}", path.display()));
     output::kv("Workspace", &workspace_name);
+    output::kv("Session", &session_id.to_string());
     output::kv("Recursive", recursive);
 
     let spinner = output::spinner("Loading project...");
 
-    let storage = create_storage(&config).await?;
     let vfs = VirtualFileSystem::new(storage.clone());
     let loader = ExternalProjectLoader::new(vfs.clone());
 
@@ -1806,10 +1824,10 @@ async fn install_qdrant_docker() -> Result<()> {
 
 /// Create a storage connection manager from config
 async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>> {
-    use cortex_storage::PoolConnectionMode;
+    use cortex_storage::connection_pool::ConnectionMode;
 
     let db_config = DatabaseConfig {
-        connection_mode: PoolConnectionMode::Local {
+        connection_mode: ConnectionMode::Local {
             endpoint: config.database.connection_string.clone(),
         },
         credentials: Credentials {
@@ -1829,6 +1847,53 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
         .context("Failed to create storage connection")?;
 
     Ok(Arc::new(manager))
+}
+
+/// Create a temporary session for a workspace
+async fn create_temp_session(
+    storage: Arc<ConnectionManager>,
+    workspace_name: Option<String>,
+    config: &CortexConfig,
+) -> Result<(cortex_storage::session::SessionId, String)> {
+    use cortex_storage::session::{AgentSession, SessionManager, SessionState};
+
+    // Determine which workspace to use
+    let workspace_to_use = workspace_name
+        .or_else(|| config.default_workspace.clone())
+        .ok_or_else(|| anyhow::anyhow!("No workspace specified and no default workspace configured"))?;
+
+    // Get workspace ID from name
+    let conn = storage.acquire().await?;
+    let workspaces: Vec<Workspace> = conn.connection()
+        .select("workspace")
+        .await
+        .context("Failed to fetch workspaces")?;
+
+    let workspace = workspaces.iter()
+        .find(|w| w.name == workspace_to_use)
+        .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_to_use))?;
+
+    // Create a temporary session for CLI operations
+    let session_manager = SessionManager::new(storage.clone());
+    let session = session_manager.create_session(
+        "cli-temp".to_string(),
+        workspace.id,
+        Some("Temporary CLI session".to_string()),
+        None, // No parent session
+        None, // Default TTL
+    ).await?;
+
+    Ok((session.id, workspace.name.clone()))
+}
+
+/// Get workspace name to use for command
+fn get_workspace_name(
+    specified: Option<String>,
+    config: &CortexConfig,
+) -> Result<String> {
+    specified
+        .or_else(|| config.default_workspace.clone())
+        .ok_or_else(|| anyhow::anyhow!("No workspace specified and no default workspace configured"))
 }
 
 // ============================================================================

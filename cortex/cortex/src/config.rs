@@ -25,9 +25,15 @@ pub struct CortexConfig {
     /// MCP server configuration
     pub mcp: McpConfig,
 
-    /// Active workspace
+    /// Active workspace (DEPRECATED - use session-based workspace selection)
+    /// This field is kept for backward compatibility but should not be used
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(note = "Use session-based workspace selection instead")]
     pub active_workspace: Option<String>,
+
+    /// Default workspace for new sessions (if not specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_workspace: Option<String>,
 }
 
 /// Database configuration
@@ -88,7 +94,7 @@ impl Default for CortexConfig {
 
         Self {
             database: DatabaseConfig {
-                connection_string: format!("file://{}/db", data_dir.display()),
+                connection_string: "ws://127.0.0.1:8000".to_string(),
                 namespace: "cortex".to_string(),
                 database: "main".to_string(),
                 pool_size: 10,
@@ -105,7 +111,9 @@ impl Default for CortexConfig {
                 address: "127.0.0.1".to_string(),
                 port: 3000,
             },
+            #[allow(deprecated)]
             active_workspace: None,
+            default_workspace: None,
         }
     }
 }
@@ -229,8 +237,14 @@ impl CortexConfig {
         }
 
         // Merge workspace
-        if overlay.active_workspace.is_some() {
-            base.active_workspace = overlay.active_workspace;
+        #[allow(deprecated)]
+        {
+            if overlay.active_workspace.is_some() {
+                base.active_workspace = overlay.active_workspace;
+            }
+        }
+        if overlay.default_workspace.is_some() {
+            base.default_workspace = overlay.default_workspace;
         }
 
         base
@@ -283,8 +297,18 @@ impl CortexConfig {
             }
         }
 
+        // Keep for backward compatibility
+        #[allow(deprecated)]
         if let Ok(val) = std::env::var("CORTEX_WORKSPACE") {
-            self.active_workspace = Some(val);
+            self.active_workspace = Some(val.clone());
+            // Also set as default if default is not set
+            if self.default_workspace.is_none() {
+                self.default_workspace = Some(val);
+            }
+        }
+
+        if let Ok(val) = std::env::var("CORTEX_DEFAULT_WORKSPACE") {
+            self.default_workspace = Some(val);
         }
     }
 

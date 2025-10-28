@@ -590,8 +590,8 @@ impl ConnectionPool {
         // Authenticate first (required before using namespace/database)
         if let (Some(username), Some(password)) = (&self.credentials.username, &self.credentials.password) {
             if let Err(e) = db.signin(surrealdb::opt::auth::Root {
-                username,
-                password,
+                username: username,
+                password: password,
             })
             .await
             .context("Authentication failed") {

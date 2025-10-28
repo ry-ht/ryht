@@ -245,7 +245,6 @@ fn create_batches(
             // Push remaining small files batch
             if !current_batch.is_empty() {
                 batches.push(current_batch);
-                current_batch = Batch::new(batches.len());
             }
 
             // Each large file gets its own batch

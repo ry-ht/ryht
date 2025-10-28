@@ -7,7 +7,16 @@
 set -euo pipefail
 
 # Ensure PATH includes cargo/rustc and essential utilities
-export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+# Use dynamic detection for cargo path to ensure portability
+if [ -d "${HOME}/.cargo/bin" ]; then
+    CARGO_BIN="${HOME}/.cargo/bin"
+else
+    # Try to find cargo in system
+    CARGO_BIN="$(dirname "$(which cargo 2>/dev/null || echo /usr/local/bin/cargo)")"
+fi
+
+# Export PATH with all essential system directories
+export PATH="${CARGO_BIN}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$SCRIPT_DIR/dist"

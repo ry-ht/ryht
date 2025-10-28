@@ -168,14 +168,108 @@ impl RuntimeManager {
         }
     }
 
-    pub async fn get_agent_logs(&self, _agent_id: &str, _lines: usize) -> Result<Vec<String>> {
-        // TODO: Implement actual log retrieval
-        Ok(vec!["Log retrieval not yet implemented".to_string()])
+    pub async fn get_agent_logs(&self, agent_id: &str, lines: usize) -> Result<Vec<String>> {
+        // Verify agent exists
+        let agents = self.agents.read().await;
+        if !agents.contains_key(agent_id) {
+            return Err(anyhow::anyhow!("Agent not found: {}", agent_id));
+        }
+        drop(agents);
+
+        // Get the log file path from the config
+        let config = crate::commands::config::AxonConfig::load()
+            .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+        let log_file = config.logs_dir().join(format!("{}.log", agent_id));
+
+        // Check if log file exists
+        if !log_file.exists() {
+            return Ok(vec!["No logs available yet".to_string()]);
+        }
+
+        // Read the log file
+        let content = std::fs::read_to_string(&log_file)
+            .map_err(|e| anyhow::anyhow!("Failed to read log file: {}", e))?;
+
+        // Get the last N lines
+        let log_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        let start = log_lines.len().saturating_sub(lines);
+        Ok(log_lines[start..].to_vec())
     }
 
-    pub async fn stream_agent_logs(&self, _agent_id: &str) -> Result<mpsc::Receiver<String>> {
-        let (_tx, rx) = mpsc::channel(100);
-        // TODO: Implement log streaming
+    pub async fn stream_agent_logs(&self, agent_id: &str) -> Result<mpsc::Receiver<String>> {
+        // Verify agent exists
+        let agents = self.agents.read().await;
+        if !agents.contains_key(agent_id) {
+            return Err(anyhow::anyhow!("Agent not found: {}", agent_id));
+        }
+        drop(agents);
+
+        // Get the log file path from the config
+        let config = crate::commands::config::AxonConfig::load()
+            .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+        let log_file = config.logs_dir().join(format!("{}.log", agent_id));
+
+        let (tx, rx) = mpsc::channel(100);
+
+        // Spawn a task to watch the log file and stream new lines
+        tokio::spawn(async move {
+            use std::fs::File;
+            use std::io::{BufRead, BufReader, Seek, SeekFrom};
+            use tokio::time::{sleep, Duration};
+
+            // Wait for log file to exist if it doesn't
+            while !log_file.exists() {
+                if tx.is_closed() {
+                    return;
+                }
+                sleep(Duration::from_millis(500)).await;
+            }
+
+            // Open the file and seek to the end
+            let mut file = match File::open(&log_file) {
+                Ok(f) => f,
+                Err(e) => {
+                    let _ = tx.send(format!("Error opening log file: {}", e)).await;
+                    return;
+                }
+            };
+
+            // Seek to end of file to start streaming from now
+            if let Err(e) = file.seek(SeekFrom::End(0)) {
+                let _ = tx.send(format!("Error seeking log file: {}", e)).await;
+                return;
+            }
+
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+
+            loop {
+                // Check if the receiver is still active
+                if tx.is_closed() {
+                    break;
+                }
+
+                // Try to read a line
+                match reader.read_line(&mut line) {
+                    Ok(0) => {
+                        // No new data, wait a bit and try again
+                        sleep(Duration::from_millis(100)).await;
+                    }
+                    Ok(_) => {
+                        // Send the line (trim the trailing newline)
+                        if let Err(_) = tx.send(line.trim_end().to_string()).await {
+                            break;
+                        }
+                        line.clear();
+                    }
+                    Err(e) => {
+                        let _ = tx.send(format!("Error reading log file: {}", e)).await;
+                        break;
+                    }
+                }
+            }
+        });
+
         Ok(rx)
     }
 

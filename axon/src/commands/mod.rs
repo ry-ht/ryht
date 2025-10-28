@@ -264,7 +264,12 @@ pub async fn workflow_run(
 
     if dry_run {
         println!("Dry run - validating workflow...");
-        // TODO: Validate workflow
+
+        // Validate workflow structure
+        if let Err(e) = validate_workflow_content(&workflow_content) {
+            return Err(anyhow::anyhow!("Workflow validation failed: {}", e));
+        }
+
         println!("✓ Workflow is valid");
         return Ok(());
     }
@@ -363,16 +368,106 @@ pub async fn workflow_validate(workflow: PathBuf) -> Result<()> {
 
     let content = fs::read_to_string(&workflow).await?;
 
-    // TODO: Implement proper workflow validation
-    // For now, just check if it's valid YAML/JSON
-    if workflow.extension().and_then(|s| s.to_str()) == Some("json") {
-        serde_json::from_str::<serde_json::Value>(&content)?;
-    } else {
-        serde_yaml::from_str::<serde_yaml::Value>(&content)?;
-    }
+    // Validate workflow structure
+    validate_workflow_content(&content)?;
 
     println!("✓ Workflow is valid");
     Ok(())
+}
+
+/// Validate workflow content structure
+fn validate_workflow_content(content: &str) -> Result<()> {
+    // Try to parse as JSON first
+    let workflow: crate::orchestration::workflow::Workflow =
+        if let Ok(wf) = serde_json::from_str(content) {
+            wf
+        } else {
+            // Try YAML
+            serde_yaml::from_str(content)
+                .map_err(|e| anyhow::anyhow!("Failed to parse workflow as JSON or YAML: {}", e))?
+        };
+
+    // Validate workflow structure
+    if workflow.name.is_empty() {
+        return Err(anyhow::anyhow!("Workflow name cannot be empty"));
+    }
+
+    if workflow.tasks.is_empty() {
+        return Err(anyhow::anyhow!("Workflow must have at least one task"));
+    }
+
+    // Validate each task
+    for task in &workflow.tasks {
+        if task.id.is_empty() {
+            return Err(anyhow::anyhow!("Task ID cannot be empty"));
+        }
+        if task.name.is_empty() {
+            return Err(anyhow::anyhow!("Task name cannot be empty (task: {})", task.id));
+        }
+    }
+
+    // Validate dependencies reference existing tasks
+    let task_ids: std::collections::HashSet<_> = workflow.tasks.iter().map(|t| t.id.as_str()).collect();
+    for (task_id, deps) in &workflow.dependencies {
+        if !task_ids.contains(task_id.as_str()) {
+            return Err(anyhow::anyhow!("Dependency references non-existent task: {}", task_id));
+        }
+        for dep in deps {
+            if !task_ids.contains(dep.as_str()) {
+                return Err(anyhow::anyhow!("Task {} depends on non-existent task: {}", task_id, dep));
+            }
+        }
+    }
+
+    // Check for circular dependencies
+    if has_circular_dependencies(&workflow.dependencies) {
+        return Err(anyhow::anyhow!("Workflow contains circular dependencies"));
+    }
+
+    Ok(())
+}
+
+/// Check for circular dependencies using depth-first search
+fn has_circular_dependencies(dependencies: &std::collections::HashMap<String, Vec<String>>) -> bool {
+    use std::collections::{HashMap, HashSet};
+
+    let mut visited = HashSet::new();
+    let mut rec_stack = HashSet::new();
+
+    fn dfs(
+        node: &str,
+        dependencies: &HashMap<String, Vec<String>>,
+        visited: &mut HashSet<String>,
+        rec_stack: &mut HashSet<String>,
+    ) -> bool {
+        visited.insert(node.to_string());
+        rec_stack.insert(node.to_string());
+
+        if let Some(deps) = dependencies.get(node) {
+            for dep in deps {
+                if !visited.contains(dep) {
+                    if dfs(dep, dependencies, visited, rec_stack) {
+                        return true;
+                    }
+                } else if rec_stack.contains(dep) {
+                    return true;
+                }
+            }
+        }
+
+        rec_stack.remove(node);
+        false
+    }
+
+    for task_id in dependencies.keys() {
+        if !visited.contains(task_id) {
+            if dfs(task_id, dependencies, &mut visited, &mut rec_stack) {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 // Server commands
@@ -571,7 +666,25 @@ pub async fn monitor_dashboard(refresh: u64) -> Result<()> {
         println!();
         println!("Recent Activity:");
         println!("================");
-        // TODO: Show recent logs
+
+        // Try to show recent logs from any available agent
+        let agents = RUNTIME_MANAGER.list_agents(None).await?;
+        if !agents.is_empty() {
+            // Show logs from the first agent as an example
+            let agent_id = &agents[0].id;
+            match RUNTIME_MANAGER.get_agent_logs(agent_id, 5).await {
+                Ok(logs) => {
+                    for log in logs {
+                        println!("  {}", log);
+                    }
+                }
+                Err(_) => {
+                    println!("  No recent activity");
+                }
+            }
+        } else {
+            println!("  No agents running");
+        }
 
         tokio::time::sleep(Duration::from_secs(refresh)).await;
     }
