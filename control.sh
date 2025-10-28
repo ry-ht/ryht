@@ -232,6 +232,40 @@ logs() {
     tail -f "$log_file"
 }
 
+rebuild_dashboard() {
+    print_info "Rebuilding Dashboard..."
+
+    # Check if Axon is running
+    local axon_was_running=false
+    if [ -f "$DIST_DIR/axon.pid" ] && kill -0 "$(cat "$DIST_DIR/axon.pid")" 2>/dev/null; then
+        axon_was_running=true
+        print_info "Axon is running, will restart after rebuild"
+    fi
+
+    # Build dashboard
+    cd "$DASHBOARD_DIR"
+    if ! npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"; then
+        print_error "Dashboard build failed. Check $LOG_DIR/build-dashboard.log"
+        exit 1
+    fi
+
+    # Copy to dist
+    rm -rf "$DIST_DIR/dashboard"
+    cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
+    print_success "Dashboard rebuilt successfully"
+
+    # Restart Axon if it was running
+    if [ "$axon_was_running" = true ]; then
+        print_info "Restarting Axon to serve updated dashboard..."
+        stop_service axon
+        sleep 1
+        start_axon
+        print_success "Axon restarted with new dashboard"
+    else
+        print_info "Start Axon to see changes: ./control.sh start axon"
+    fi
+}
+
 clean() {
     print_info "Cleaning build artifacts and logs..."
     stop_all
@@ -246,7 +280,23 @@ clean() {
 case "${1:-}" in
     build)
         check_requirements
+
+        # Check if services are running
+        local services_were_running=false
+        if [ -f "$DIST_DIR/axon.pid" ] && kill -0 "$(cat "$DIST_DIR/axon.pid")" 2>/dev/null; then
+            services_were_running=true
+            print_warning "Services are running. They will be restarted after build."
+            stop_all
+            sleep 2
+        fi
+
         build_all
+
+        # Restart if they were running
+        if [ "$services_were_running" = true ]; then
+            print_info "Restarting services..."
+            $0 start
+        fi
         ;;
     start)
         case "${2:-all}" in
@@ -294,6 +344,9 @@ case "${1:-}" in
     logs)
         logs "${2:-}"
         ;;
+    rebuild-dashboard)
+        rebuild_dashboard
+        ;;
     clean)
         clean
         ;;
@@ -303,24 +356,30 @@ case "${1:-}" in
         echo "Usage: $0 <command> [options]"
         echo ""
         echo "Commands:"
-        echo "  build              - Build all components (axon, cortex, dashboard)"
-        echo "  start [service]    - Start service(s)"
-        echo "    all              - Start all services (default)"
-        echo "    axon             - Start Axon only"
-        echo "    cortex           - Start Cortex only"
-        echo "  stop               - Stop all services"
-        echo "  restart [service]  - Restart service(s)"
-        echo "  status             - Show status of all services"
-        echo "  logs <service>     - Tail logs for a service (axon, cortex)"
-        echo "  clean              - Clean all build artifacts and stop services"
+        echo "  build                - Build all components (auto-restarts if running)"
+        echo "  rebuild-dashboard    - Rebuild only dashboard (auto-restarts Axon if running)"
+        echo "  start [service]      - Start service(s)"
+        echo "    all                - Start all services (default)"
+        echo "    axon               - Start Axon only"
+        echo "    cortex             - Start Cortex only"
+        echo "  stop                 - Stop all services"
+        echo "  restart [service]    - Restart service(s)"
+        echo "  status               - Show status of all services"
+        echo "  logs <service>       - Tail logs for a service (axon, cortex)"
+        echo "  clean                - Clean all build artifacts and stop services"
         echo ""
         echo "Examples:"
-        echo "  $0 build           - Build everything"
-        echo "  $0 start           - Start all services (Axon + Cortex + Dashboard)"
-        echo "  $0 start axon      - Start only Axon"
-        echo "  $0 restart         - Restart all services"
-        echo "  $0 logs axon       - View Axon logs"
-        echo "  $0 status          - Check service status"
-        echo "  $0 stop            - Stop all services"
+        echo "  $0 build             - Build everything (restarts services if running)"
+        echo "  $0 rebuild-dashboard - Quick dashboard rebuild (restarts Axon if running)"
+        echo "  $0 start             - Start all services (Axon + Cortex + Dashboard)"
+        echo "  $0 start axon        - Start only Axon"
+        echo "  $0 restart           - Restart all services"
+        echo "  $0 logs axon         - View Axon logs"
+        echo "  $0 status            - Check service status"
+        echo "  $0 stop              - Stop all services"
+        echo ""
+        echo "Dashboard updates:"
+        echo "  After changing dashboard code, run './control.sh rebuild-dashboard'"
+        echo "  This rebuilds the dashboard and restarts Axon to serve new files"
         ;;
 esac
