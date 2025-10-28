@@ -235,13 +235,6 @@ logs() {
 rebuild_dashboard() {
     print_info "Rebuilding Dashboard..."
 
-    # Check if Axon is running
-    local axon_was_running=false
-    if [ -f "$DIST_DIR/axon.pid" ] && kill -0 "$(cat "$DIST_DIR/axon.pid")" 2>/dev/null; then
-        axon_was_running=true
-        print_info "Axon is running, will restart after rebuild"
-    fi
-
     # Build dashboard
     cd "$DASHBOARD_DIR"
     if ! npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"; then
@@ -252,18 +245,10 @@ rebuild_dashboard() {
     # Copy to dist
     rm -rf "$DIST_DIR/dashboard"
     cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
-    print_success "Dashboard rebuilt successfully"
+    print_success "Dashboard rebuilt successfully in $DIST_DIR/dashboard"
 
-    # Restart Axon if it was running
-    if [ "$axon_was_running" = true ]; then
-        print_info "Restarting Axon to serve updated dashboard..."
-        stop_service axon
-        sleep 1
-        start_axon
-        print_success "Axon restarted with new dashboard"
-    else
-        print_info "Start Axon to see changes: ./control.sh start axon"
-    fi
+    print_info "Note: Axon will serve the updated files automatically."
+    print_info "If changes don't appear, try hard-refreshing your browser (Ctrl+Shift+R or Cmd+Shift+R)"
 }
 
 clean() {
@@ -357,7 +342,7 @@ case "${1:-}" in
         echo ""
         echo "Commands:"
         echo "  build                - Build all components (auto-restarts if running)"
-        echo "  rebuild-dashboard    - Rebuild only dashboard (auto-restarts Axon if running)"
+        echo "  rebuild-dashboard    - Rebuild only dashboard to dist/dashboard (no restart)"
         echo "  start [service]      - Start service(s)"
         echo "    all                - Start all services (default)"
         echo "    axon               - Start Axon only"
@@ -370,7 +355,7 @@ case "${1:-}" in
         echo ""
         echo "Examples:"
         echo "  $0 build             - Build everything (restarts services if running)"
-        echo "  $0 rebuild-dashboard - Quick dashboard rebuild (restarts Axon if running)"
+        echo "  $0 rebuild-dashboard - Quick dashboard rebuild (no service restart)"
         echo "  $0 start             - Start all services (Axon + Cortex + Dashboard)"
         echo "  $0 start axon        - Start only Axon"
         echo "  $0 restart           - Restart all services"
@@ -380,6 +365,7 @@ case "${1:-}" in
         echo ""
         echo "Dashboard updates:"
         echo "  After changing dashboard code, run './control.sh rebuild-dashboard'"
-        echo "  This rebuilds the dashboard and restarts Axon to serve new files"
+        echo "  This rebuilds only the dashboard to dist/dashboard (services keep running)"
+        echo "  Refresh browser (Ctrl+Shift+R) to see changes"
         ;;
 esac
