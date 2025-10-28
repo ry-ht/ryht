@@ -150,287 +150,283 @@ export function DashboardOverview() {
   const overallHealth = axonHealthy && cortexHealthy ? 'healthy' : 'degraded';
 
   return (
-    <>
-      <CustomBreadcrumbs heading="Dashboard" sx={{ mb: 3 }} />
-
-      <Grid container spacing={3}>
-        {/* System Health Section */}
-        <Grid size={{ xs: 12 }}>
-          <SystemHealthSection
-            axonHealth={axonHealth}
-            cortexHealth={cortexHealth}
-            axonHealthy={axonHealthy}
-            cortexHealthy={cortexHealthy}
-          />
-        </Grid>
-
-        {/* Quick Metrics Row */}
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Active Agents"
-            value={activeAgents}
-            total={agents.length}
-            icon="solar:users-group-rounded-bold"
-            color="info"
-            href="/agents"
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Running Workflows"
-            value={runningWorkflows}
-            total={workflows.length}
-            icon="solar:routing-2-bold"
-            color="primary"
-            href="/workflows"
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Total Workspaces"
-            value={workspaces.length}
-            icon="solar:folder-with-files-bold"
-            color="success"
-            href="/cortex/workspaces"
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricCard
-            title="Total Documents"
-            value={documents.length}
-            icon="solar:document-text-bold"
-            color="warning"
-            href="/cortex/documents"
-          />
-        </Grid>
-
-        {/* Axon Status Section */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
-            <CardHeader
-              title="Axon Multi-Agent System"
-              subheader="Real-time agent and workflow status"
-              avatar={
-                <StatusIndicator
-                  status={axonHealthy ? 'healthy' : 'unhealthy'}
-                  size={12}
-                />
-              }
-              action={
-                <Button
-                  size="small"
-                  href="/agents"
-                  endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
-                >
-                  View All
-                </Button>
-              }
-            />
-            <Divider />
-            <Stack spacing={3} sx={{ p: 3 }}>
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Active Agents
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={activeAgents} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Running Workflows
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={runningWorkflows} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Tasks Executed
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={axonSystemStatus?.total_tasks_executed || 0} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      System Uptime
-                    </Typography>
-                    <Typography variant="h4">
-                      {formatUptime(axonHealth?.uptime_seconds || 0)}
-                    </Typography>
-                  </Stack>
-                </Grid>
-              </Grid>
-
-              {axonSystemStatus && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                    System Resources
-                  </Typography>
-                  <Stack spacing={1}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2">CPU Usage</Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {(axonSystemStatus.cpu_usage_percent || 0).toFixed(1)}%
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2">Memory Usage</Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {(axonSystemStatus.memory_usage_mb || 0).toFixed(0)} MB
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </Box>
-              )}
-            </Stack>
-          </Card>
-        </Grid>
-
-        {/* Cortex Status Section */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
-            <CardHeader
-              title="Cortex Cognitive System"
-              subheader="Knowledge base and memory status"
-              avatar={
-                <StatusIndicator
-                  status={cortexHealthy ? 'healthy' : 'unhealthy'}
-                  size={12}
-                />
-              }
-              action={
-                <Button
-                  size="small"
-                  href="/cortex"
-                  endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
-                >
-                  View All
-                </Button>
-              }
-            />
-            <Divider />
-            <Stack spacing={3} sx={{ p: 3 }}>
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Workspaces
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={cortexSystemStats?.workspaces_count || 0} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Documents
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={cortexSystemStats?.documents_count || 0} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Code Units
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={cortexSystemStats?.code_units_count || 0} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-                <Grid size={{ xs: 6 }}>
-                  <Stack spacing={1}>
-                    <Typography variant="caption" color="text.secondary">
-                      Tasks Active
-                    </Typography>
-                    <Typography variant="h4">
-                      <AnimateCountUp to={tasksInProgress} />
-                    </Typography>
-                  </Stack>
-                </Grid>
-              </Grid>
-
-              {cortexSystemStats && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                    Storage & Files
-                  </Typography>
-                  <Stack spacing={1}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2">Total Files</Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {cortexSystemStats.files_count.toLocaleString()}
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2">Storage Used</Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {formatBytes(cortexSystemStats.total_storage)}
-                      </Typography>
-                    </Stack>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2">Updated Today</Typography>
-                      <Typography variant="body2" fontWeight="bold" color="success.main">
-                        {recentDocuments} documents
-                      </Typography>
-                    </Stack>
-                  </Stack>
-                </Box>
-              )}
-            </Stack>
-          </Card>
-        </Grid>
-
-        {/* Activity Feed */}
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <ActivityFeed
-            events={recentActivity}
-            agents={agents}
-            workflows={workflows}
-            documents={documents}
-            workspaces={workspaces}
-          />
-        </Grid>
-
-        {/* Quick Actions */}
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <QuickActionsPanel />
-        </Grid>
-
-        {/* Additional Info */}
-        {!axonHealthy && (
-          <Grid size={{ xs: 12 }}>
-            <Alert severity="error">
-              Axon system is not responding. Please check the service status.
-            </Alert>
-          </Grid>
-        )}
-
-        {!cortexHealthy && (
-          <Grid size={{ xs: 12 }}>
-            <Alert severity="error">
-              Cortex system is not responding. Please check the service status.
-            </Alert>
-          </Grid>
-        )}
+    <Grid container spacing={3}>
+      {/* System Health Section */}
+      <Grid size={{ xs: 12 }}>
+        <SystemHealthSection
+          axonHealth={axonHealth}
+          cortexHealth={cortexHealth}
+          axonHealthy={axonHealthy}
+          cortexHealthy={cortexHealthy}
+        />
       </Grid>
-    </>
+
+      {/* Quick Metrics Row */}
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <MetricCard
+          title="Active Agents"
+          value={activeAgents}
+          total={agents.length}
+          icon="solar:users-group-rounded-bold"
+          color="info"
+          href="/agents"
+        />
+      </Grid>
+
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <MetricCard
+          title="Running Workflows"
+          value={runningWorkflows}
+          total={workflows.length}
+          icon="solar:routing-2-bold"
+          color="primary"
+          href="/workflows"
+        />
+      </Grid>
+
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <MetricCard
+          title="Total Workspaces"
+          value={workspaces.length}
+          icon="solar:folder-with-files-bold"
+          color="success"
+          href="/cortex/workspaces"
+        />
+      </Grid>
+
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+        <MetricCard
+          title="Total Documents"
+          value={documents.length}
+          icon="solar:document-text-bold"
+          color="warning"
+          href="/cortex/documents"
+        />
+      </Grid>
+
+      {/* Axon Status Section */}
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Card sx={{ height: '100%' }}>
+          <CardHeader
+            title="Axon Multi-Agent System"
+            subheader="Real-time agent and workflow status"
+            avatar={
+              <StatusIndicator
+                status={axonHealthy ? 'healthy' : 'unhealthy'}
+                size={12}
+              />
+            }
+            action={
+              <Button
+                size="small"
+                href="/agents"
+                endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
+              >
+                View All
+              </Button>
+            }
+          />
+          <Divider />
+          <Stack spacing={3} sx={{ p: 3 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Active Agents
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={activeAgents} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Running Workflows
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={runningWorkflows} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Tasks Executed
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={axonSystemStatus?.total_tasks_executed || 0} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    System Uptime
+                  </Typography>
+                  <Typography variant="h4">
+                    {formatUptime(axonHealth?.uptime_seconds || 0)}
+                  </Typography>
+                </Stack>
+              </Grid>
+            </Grid>
+
+            {axonSystemStatus && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                  System Resources
+                </Typography>
+                <Stack spacing={1}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">CPU Usage</Typography>
+                    <Typography variant="body2" fontWeight="bold">
+                      {(axonSystemStatus.cpu_usage_percent || 0).toFixed(1)}%
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">Memory Usage</Typography>
+                    <Typography variant="body2" fontWeight="bold">
+                      {(axonSystemStatus.memory_usage_mb || 0).toFixed(0)} MB
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        </Card>
+      </Grid>
+
+      {/* Cortex Status Section */}
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Card sx={{ height: '100%' }}>
+          <CardHeader
+            title="Cortex Cognitive System"
+            subheader="Knowledge base and memory status"
+            avatar={
+              <StatusIndicator
+                status={cortexHealthy ? 'healthy' : 'unhealthy'}
+                size={12}
+              />
+            }
+            action={
+              <Button
+                size="small"
+                href="/cortex"
+                endIcon={<Iconify icon="eva:arrow-ios-forward-fill" />}
+              >
+                View All
+              </Button>
+            }
+          />
+          <Divider />
+          <Stack spacing={3} sx={{ p: 3 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Workspaces
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={cortexSystemStats?.workspaces_count || 0} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Documents
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={cortexSystemStats?.documents_count || 0} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Code Units
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={cortexSystemStats?.code_units_count || 0} />
+                  </Typography>
+                </Stack>
+              </Grid>
+              <Grid size={{ xs: 6 }}>
+                <Stack spacing={1}>
+                  <Typography variant="caption" color="text.secondary">
+                    Tasks Active
+                  </Typography>
+                  <Typography variant="h4">
+                    <AnimateCountUp to={tasksInProgress} />
+                  </Typography>
+                </Stack>
+              </Grid>
+            </Grid>
+
+            {cortexSystemStats && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                  Storage & Files
+                </Typography>
+                <Stack spacing={1}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">Total Files</Typography>
+                    <Typography variant="body2" fontWeight="bold">
+                      {cortexSystemStats.files_count.toLocaleString()}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">Storage Used</Typography>
+                    <Typography variant="body2" fontWeight="bold">
+                      {formatBytes(cortexSystemStats.total_storage)}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="body2">Updated Today</Typography>
+                    <Typography variant="body2" fontWeight="bold" color="success.main">
+                      {recentDocuments} documents
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        </Card>
+      </Grid>
+
+      {/* Activity Feed */}
+      <Grid size={{ xs: 12, lg: 8 }}>
+        <ActivityFeed
+          events={recentActivity}
+          agents={agents}
+          workflows={workflows}
+          documents={documents}
+          workspaces={workspaces}
+        />
+      </Grid>
+
+      {/* Quick Actions */}
+      <Grid size={{ xs: 12, lg: 4 }}>
+        <QuickActionsPanel />
+      </Grid>
+
+      {/* Additional Info */}
+      {!axonHealthy && (
+        <Grid size={{ xs: 12 }}>
+          <Alert severity="error">
+            Axon system is not responding. Please check the service status.
+          </Alert>
+        </Grid>
+      )}
+
+      {!cortexHealthy && (
+        <Grid size={{ xs: 12 }}>
+          <Alert severity="error">
+            Cortex system is not responding. Please check the service status.
+          </Alert>
+        </Grid>
+      )}
+    </Grid>
   );
 }
 

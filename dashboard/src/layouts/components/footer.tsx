@@ -122,9 +122,9 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
         left: 0,
         right: 0,
         height: 48,
-        bgcolor: alpha(theme.palette.background.default, 0.8),
+        bgcolor: (t) => alpha(t.palette.background.paper, 0.9),
         backdropFilter: 'blur(8px)',
-        borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+        borderTop: (t) => `1px solid ${alpha(t.palette.divider, 0.2)}`,
         zIndex: theme.zIndex.appBar - 1,
         transition: theme.transitions.create(
           ['background-color', 'border-color', 'padding-left'],

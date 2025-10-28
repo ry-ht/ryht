@@ -189,6 +189,7 @@ export function AgentListView() {
   };
 
   return (
+    <Box gap={2}>
     <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Agents"
@@ -414,6 +415,7 @@ export function AgentListView() {
         </MenuItem>
       </CustomPopover>
     </Stack>
+    </Box>
   );
 }
 
