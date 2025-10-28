@@ -39,7 +39,7 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
   const [wsConnected, setWsConnected] = useState(false);
 
   // Fetch health data
-  const { data: axonHealth } = useSWR<AxonHealthResponse | null>(
+  const { data: axonHealth, error: axonError } = useSWR<AxonHealthResponse | null>(
     '/health',
     async () => {
       try {
@@ -49,10 +49,10 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
         return null;
       }
     },
-    { refreshInterval: 30000, revalidateOnFocus: false }
+    { refreshInterval: 10000, revalidateOnFocus: false }
   );
 
-  const { data: cortexHealth } = useSWR<CortexHealthResponse | null>(
+  const { data: cortexHealth, error: cortexError } = useSWR<CortexHealthResponse | null>(
     '/cortex/health',
     async () => {
       try {
@@ -62,7 +62,7 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
         return null;
       }
     },
-    { refreshInterval: 30000, revalidateOnFocus: false }
+    { refreshInterval: 10000, revalidateOnFocus: false }
   );
 
   // Update current time every second
@@ -83,10 +83,12 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
     return () => clearInterval(checkConnection);
   }, []);
 
-  // Calculate system health status
-  const axonHealthy = axonHealth?.status === 'healthy' || axonHealth?.status === 'ok';
-  const cortexHealthy = cortexHealth?.status === 'healthy';
+  // Calculate system health status - more robust logic
+  const axonHealthy = !axonError && (axonHealth?.status === 'healthy' || axonHealth?.status === 'ok');
+  const cortexHealthy = !cortexError && cortexHealth?.status === 'healthy';
 
+  // System is healthy only if both services are explicitly healthy
+  // If data is still loading or there's an error, show degraded
   const systemStatus = axonHealthy && cortexHealthy ? 'healthy' : 'degraded';
 
   const getStatusColor = (status: string) => {
