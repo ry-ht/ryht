@@ -47,24 +47,24 @@ const ICONS = {
 
 export const navData: NavSectionProps['data'] = [
   /**
-   * System Overview
+   * System
    */
   {
-    subheader: 'Overview',
+    subheader: 'System',
     items: [
       {
         title: 'Dashboard',
         path: paths.dashboard.root,
         icon: ICONS.dashboard,
-        info: <Label color="info">RyHt</Label>,
+        info: <Label color="info">v1.0</Label>,
       },
     ],
   },
   /**
-   * Multi-Agent System (Axon)
+   * Multi-Agent System
    */
   {
-    subheader: 'Multi-Agent System',
+    subheader: 'Agents & Workflows',
     items: [
       {
         title: 'Agents',
@@ -73,14 +73,6 @@ export const navData: NavSectionProps['data'] = [
         children: [
           { title: 'All Agents', path: paths.dashboard.agents.list },
           { title: 'Create Agent', path: paths.dashboard.agents.create },
-          { title: 'Orchestrator', path: paths.dashboard.agents.byType('orchestrator') },
-          { title: 'Developer', path: paths.dashboard.agents.byType('developer') },
-          { title: 'Reviewer', path: paths.dashboard.agents.byType('reviewer') },
-          { title: 'Tester', path: paths.dashboard.agents.byType('tester') },
-          { title: 'Documenter', path: paths.dashboard.agents.byType('documenter') },
-          { title: 'Architect', path: paths.dashboard.agents.byType('architect') },
-          { title: 'Researcher', path: paths.dashboard.agents.byType('researcher') },
-          { title: 'Optimizer', path: paths.dashboard.agents.byType('optimizer') },
         ],
       },
       {
@@ -111,7 +103,7 @@ export const navData: NavSectionProps['data'] = [
     ],
   },
   /**
-   * Cognitive System (Cortex)
+   * Cognitive System
    */
   {
     subheader: 'Cognitive System',
@@ -121,9 +113,9 @@ export const navData: NavSectionProps['data'] = [
         path: paths.dashboard.memory.root,
         icon: ICONS.analytics,
         children: [
-          { title: 'Working Memory', path: paths.dashboard.memory.working },
-          { title: 'Episodic Memory', path: paths.dashboard.memory.episodic },
-          { title: 'Semantic Memory', path: paths.dashboard.memory.semantic },
+          { title: 'Working', path: paths.dashboard.memory.working },
+          { title: 'Episodic', path: paths.dashboard.memory.episodic },
+          { title: 'Semantic', path: paths.dashboard.memory.semantic },
           { title: 'Patterns', path: paths.dashboard.memory.patterns },
           { title: 'Consolidation', path: paths.dashboard.memory.consolidation },
         ],
@@ -134,56 +126,56 @@ export const navData: NavSectionProps['data'] = [
         icon: ICONS.folder,
         children: [
           { title: 'All Workspaces', path: paths.dashboard.workspaces.list },
-          { title: 'Create Workspace', path: paths.dashboard.workspaces.create },
+          { title: 'Create', path: paths.dashboard.workspaces.create },
         ],
       },
       {
-        title: 'Code Intelligence',
+        title: 'Code Analysis',
         path: paths.dashboard.code.root,
         icon: ICONS.file,
         children: [
-          { title: 'Code Analysis', path: paths.dashboard.code.analysis },
+          { title: 'Overview', path: paths.dashboard.code.analysis },
           { title: 'Dependencies', path: paths.dashboard.code.dependencies },
-          { title: 'Quality Metrics', path: paths.dashboard.code.quality },
+          { title: 'Quality', path: paths.dashboard.code.quality },
           { title: 'VFS Browser', path: paths.dashboard.code.vfs },
         ],
       },
       {
-        title: 'Knowledge Base',
+        title: 'Knowledge',
         path: paths.dashboard.knowledge.root,
         icon: ICONS.course,
         children: [
           { title: 'Documents', path: paths.dashboard.knowledge.documents },
-          { title: 'Semantic Search', path: paths.dashboard.knowledge.search },
+          { title: 'Search', path: paths.dashboard.knowledge.search },
         ],
       },
     ],
   },
   /**
-   * Monitoring & Analytics
+   * Monitoring
    */
   {
     subheader: 'Monitoring',
     items: [
       {
-        title: 'Real-time Metrics',
+        title: 'Metrics',
         path: paths.dashboard.monitoring.metrics,
         icon: ICONS.banking,
       },
       {
-        title: 'Logs & Events',
+        title: 'Logs',
         path: paths.dashboard.monitoring.logs,
         icon: ICONS.blog,
       },
       {
-        title: 'System Health',
+        title: 'Health',
         path: paths.dashboard.monitoring.health,
         icon: ICONS.tour,
       },
     ],
   },
   /**
-   * Configuration
+   * Settings
    */
   {
     subheader: 'Settings',
