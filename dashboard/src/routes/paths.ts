@@ -3,6 +3,7 @@
 const ROOTS = {
   AUTH: '/auth',
   DASHBOARD: '/dashboard',
+  CORTEX: '/cortex',
 };
 
 // ----------------------------------------------------------------------
@@ -110,6 +111,33 @@ export const paths = {
     // Configuration
     config: {
       root: `${ROOTS.DASHBOARD}/config`,
+    },
+  },
+  // CORTEX - Cognitive System
+  cortex: {
+    root: ROOTS.CORTEX,
+    overview: ROOTS.CORTEX,
+    workspaces: {
+      root: `${ROOTS.CORTEX}/workspaces`,
+      list: `${ROOTS.CORTEX}/workspaces`,
+      create: `${ROOTS.CORTEX}/workspaces/create`,
+      details: (id: string) => `${ROOTS.CORTEX}/workspaces/${id}`,
+      browse: (id: string) => `${ROOTS.CORTEX}/workspaces/${id}/browse`,
+      codeUnits: (id: string) => `${ROOTS.CORTEX}/workspaces/${id}/code-units`,
+      dependencies: (id: string) => `${ROOTS.CORTEX}/workspaces/${id}/dependencies`,
+    },
+    documents: {
+      root: `${ROOTS.CORTEX}/documents`,
+      list: `${ROOTS.CORTEX}/documents`,
+      create: `${ROOTS.CORTEX}/documents/create`,
+      view: (id: string) => `${ROOTS.CORTEX}/documents/${id}`,
+    },
+    memory: {
+      root: `${ROOTS.CORTEX}/memory`,
+      search: `${ROOTS.CORTEX}/memory`,
+      episodes: `${ROOTS.CORTEX}/memory/episodes`,
+      patterns: `${ROOTS.CORTEX}/memory/patterns`,
+      consolidate: `${ROOTS.CORTEX}/memory/consolidate`,
     },
   },
 };

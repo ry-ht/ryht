@@ -282,7 +282,7 @@ case "${1:-}" in
         check_requirements
 
         # Check if services are running
-        local services_were_running=false
+        services_were_running=false
         if [ -f "$DIST_DIR/axon.pid" ] && kill -0 "$(cat "$DIST_DIR/axon.pid")" 2>/dev/null; then
             services_were_running=true
             print_warning "Services are running. They will be restarted after build."

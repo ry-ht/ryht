@@ -122,11 +122,11 @@ export const navData: NavSectionProps['data'] = [
       },
       {
         title: 'Workspaces',
-        path: paths.dashboard.workspaces.root,
+        path: paths.cortex.workspaces.root,
         icon: ICONS.folder,
         children: [
-          { title: 'All Workspaces', path: paths.dashboard.workspaces.list },
-          { title: 'Create', path: paths.dashboard.workspaces.create },
+          { title: 'All Workspaces', path: paths.cortex.workspaces.list },
+          { title: 'Create', path: paths.cortex.workspaces.create },
         ],
       },
       {
