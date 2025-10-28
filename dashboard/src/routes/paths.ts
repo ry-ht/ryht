@@ -1,8 +1,7 @@
 // ----------------------------------------------------------------------
 
 const ROOTS = {
-  AUTH: '/auth',
-  DASHBOARD: '/dashboard',
+  DASHBOARD: '',  // Empty string = root path (routes are mounted at /)
   CORTEX: '/cortex',
 };
 
@@ -11,35 +10,6 @@ const ROOTS = {
 export const paths = {
   faqs: '/faqs',
   minimalStore: 'https://mui.com/store/items/minimal-dashboard/',
-  // AUTH
-  auth: {
-    amplify: {
-      signIn: `${ROOTS.AUTH}/amplify/sign-in`,
-      verify: `${ROOTS.AUTH}/amplify/verify`,
-      signUp: `${ROOTS.AUTH}/amplify/sign-up`,
-      updatePassword: `${ROOTS.AUTH}/amplify/update-password`,
-      resetPassword: `${ROOTS.AUTH}/amplify/reset-password`,
-    },
-    jwt: {
-      signIn: `${ROOTS.AUTH}/jwt/sign-in`,
-    },
-    firebase: {
-      signIn: `${ROOTS.AUTH}/firebase/sign-in`,
-      verify: `${ROOTS.AUTH}/firebase/verify`,
-      signUp: `${ROOTS.AUTH}/firebase/sign-up`,
-      resetPassword: `${ROOTS.AUTH}/firebase/reset-password`,
-    },
-    auth0: {
-      signIn: `${ROOTS.AUTH}/auth0/sign-in`,
-    },
-    supabase: {
-      signIn: `${ROOTS.AUTH}/supabase/sign-in`,
-      verify: `${ROOTS.AUTH}/supabase/verify`,
-      signUp: `${ROOTS.AUTH}/supabase/sign-up`,
-      updatePassword: `${ROOTS.AUTH}/supabase/update-password`,
-      resetPassword: `${ROOTS.AUTH}/supabase/reset-password`,
-    },
-  },
   // DASHBOARD
   dashboard: {
     root: ROOTS.DASHBOARD,
@@ -78,15 +48,7 @@ export const paths = {
       patterns: `${ROOTS.DASHBOARD}/memory/patterns`,
       consolidation: `${ROOTS.DASHBOARD}/memory/consolidation`,
     },
-    workspaces: {
-      root: `${ROOTS.DASHBOARD}/workspaces`,
-      list: `${ROOTS.DASHBOARD}/workspaces`,
-      create: `${ROOTS.DASHBOARD}/workspaces/create`,
-      details: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}`,
-      browse: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/browse`,
-      codeUnits: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/code-units`,
-      dependencies: (id: string) => `${ROOTS.DASHBOARD}/workspaces/${id}/dependencies`,
-    },
+    // NOTE: Workspaces are only available under paths.cortex.workspaces (no dashboard workspaces)
     code: {
       root: `${ROOTS.DASHBOARD}/code`,
       analysis: `${ROOTS.DASHBOARD}/code/analysis`,
@@ -98,8 +60,7 @@ export const paths = {
       root: `${ROOTS.DASHBOARD}/knowledge`,
       documents: `${ROOTS.DASHBOARD}/knowledge/documents`,
       search: `${ROOTS.DASHBOARD}/knowledge/search`,
-      createDocument: `${ROOTS.DASHBOARD}/knowledge/documents/create`,
-      documentDetails: (id: string) => `${ROOTS.DASHBOARD}/knowledge/documents/${id}`,
+      // NOTE: Create and detail pages not implemented yet
     },
     // Monitoring & Analytics
     monitoring: {

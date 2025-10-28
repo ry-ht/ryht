@@ -21,6 +21,7 @@ const PageSix = lazy(() => import('src/pages/dashboard/six'));
 // Agent pages
 const AgentListPage = lazy(() => import('src/pages/dashboard/agents/list'));
 const AgentCreatePage = lazy(() => import('src/pages/dashboard/agents/create'));
+const AgentDetailPage = lazy(() => import('src/pages/dashboard/agents/detail'));
 
 // Agent type pages
 const AgentOrchestratorPage = lazy(() => import('src/pages/dashboard/agents/type/orchestrator'));
@@ -126,6 +127,7 @@ export const dashboardRoutes: RouteObject[] = [
         children: [
           { element: <AgentListPage />, index: true },
           { path: 'create', element: <AgentCreatePage /> },
+          { path: ':id', element: <AgentDetailPage /> },
           { path: 'type/orchestrator', element: <AgentOrchestratorPage /> },
           { path: 'type/developer', element: <AgentDeveloperPage /> },
           { path: 'type/reviewer', element: <AgentReviewerPage /> },
