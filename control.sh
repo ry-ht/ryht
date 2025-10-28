@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# Ensure PATH includes cargo/rustc and essential utilities
+export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$SCRIPT_DIR/dist"
 DASHBOARD_DIR="$SCRIPT_DIR/dashboard"
@@ -45,23 +48,55 @@ check_requirements() {
 build_all() {
     print_info "Building all projects..."
 
-    print_info "Building Axon (Rust)..."
-    cd "$SCRIPT_DIR/axon" && cargo build --release 2>&1 | tee "$LOG_DIR/build-axon.log"
+    # Build both Rust projects from workspace root
+    print_info "Building Axon and Cortex (Rust workspace)..."
+    cd "$SCRIPT_DIR"
+    if ! cargo build --release -p axon 2>&1 | tee "$LOG_DIR/build-axon.log"; then
+        print_error "Axon build failed. Check $LOG_DIR/build-axon.log"
+        exit 1
+    fi
+    if [ ! -f "$SCRIPT_DIR/target/release/axon" ]; then
+        print_error "Axon binary not found after build at $SCRIPT_DIR/target/release/axon"
+        exit 1
+    fi
+    print_success "Axon built successfully"
 
-    print_info "Building Cortex (Rust)..."
-    cd "$SCRIPT_DIR/cortex" && cargo build --release 2>&1 | tee "$LOG_DIR/build-cortex.log"
+    if ! cargo build --release -p cortex 2>&1 | tee "$LOG_DIR/build-cortex.log"; then
+        print_error "Cortex build failed. Check $LOG_DIR/build-cortex.log"
+        exit 1
+    fi
+    if [ ! -f "$SCRIPT_DIR/target/release/cortex" ]; then
+        print_error "Cortex binary not found after build at $SCRIPT_DIR/target/release/cortex"
+        exit 1
+    fi
+    print_success "Cortex built successfully"
 
+    # Build Dashboard
     print_info "Building Dashboard (TypeScript)..."
-    cd "$DASHBOARD_DIR" && npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"
+    cd "$DASHBOARD_DIR"
+    if ! npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"; then
+        print_error "Dashboard build failed. Check $LOG_DIR/build-dashboard.log"
+        exit 1
+    fi
+    if [ ! -d "$DASHBOARD_DIR/dist" ]; then
+        print_error "Dashboard dist directory not found after build"
+        exit 1
+    fi
+    print_success "Dashboard built successfully"
 
+    # Copy binaries to dist
+    print_info "Copying binaries to $DIST_DIR..."
     mkdir -p "$DIST_DIR"
-    cp "$SCRIPT_DIR/axon/target/release/axon" "$DIST_DIR/"
-    cp "$SCRIPT_DIR/cortex/target/release/cortex" "$DIST_DIR/"
+    cp "$SCRIPT_DIR/target/release/axon" "$DIST_DIR/"
+    cp "$SCRIPT_DIR/target/release/cortex" "$DIST_DIR/"
     rm -rf "$DIST_DIR/dashboard"
     cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
 
-    print_success "Build completed successfully"
+    print_success "✓ Build completed successfully"
     print_info "Binaries location: $DIST_DIR"
+    print_info "  - Axon:      $DIST_DIR/axon"
+    print_info "  - Cortex:    $DIST_DIR/cortex"
+    print_info "  - Dashboard: $DIST_DIR/dashboard/"
 }
 
 start_axon() {
@@ -71,7 +106,6 @@ start_axon() {
         exit 1
     fi
     cd "$DIST_DIR"
-    export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
     ./axon server start > "$LOG_DIR/axon.log" 2>&1 &
 
     # Wait for server to start and check health
@@ -102,7 +136,6 @@ start_cortex() {
         exit 1
     fi
     cd "$DIST_DIR"
-    export PATH="/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
     ./cortex server start > "$LOG_DIR/cortex.log" 2>&1 &
 
     # Wait for server to start and check health (cortex needs more time)
@@ -203,8 +236,9 @@ clean() {
     print_info "Cleaning build artifacts and logs..."
     stop_all
     rm -rf "$DIST_DIR"
-    cd "$SCRIPT_DIR/axon" && cargo clean
-    cd "$SCRIPT_DIR/cortex" && cargo clean
+    # Clean Rust workspace target directory (shared by axon and cortex)
+    cd "$SCRIPT_DIR" && cargo clean
+    # Clean Dashboard
     cd "$DASHBOARD_DIR" && rm -rf dist node_modules/.vite
     print_success "Clean completed"
 }
