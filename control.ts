@@ -7,7 +7,6 @@
 import { existsSync, mkdirSync, rmSync, cpSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { $ } from "bun";
 
 // Setup paths
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +49,41 @@ const print = {
     error: (msg: string) => console.log(`${RED}[ERROR]${NC} ${msg}`),
 };
 
+// Helper function to execute shell commands
+const exec = async (cmd: string[], options: any = {}) => {
+    const proc = Bun.spawn(cmd, {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: process.env,
+        ...options,
+    });
+
+    const output = await new Response(proc.stdout).text();
+    await proc.exited;
+    return { output, exitCode: proc.exitCode };
+};
+
+// Helper to execute and get text output
+const execText = async (cmd: string[], options: any = {}) => {
+    const result = await exec(cmd, options);
+    if (result.exitCode !== 0) {
+        throw new Error(`Command failed: ${cmd.join(" ")}`);
+    }
+    return result.output;
+};
+
+// Helper to execute silently
+const execQuiet = async (cmd: string[], options: any = {}) => {
+    const proc = Bun.spawn(cmd, {
+        stdout: "ignore",
+        stderr: "ignore",
+        env: process.env,
+        ...options,
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+};
+
 // Ensure log directory exists
 if (!existsSync(LOG_DIR)) {
     mkdirSync(LOG_DIR, { recursive: true });
@@ -57,8 +91,20 @@ if (!existsSync(LOG_DIR)) {
 
 const commandExists = async (cmd: string): Promise<boolean> => {
     try {
-        await $`which ${cmd}`.quiet();
-        return true;
+        // Check in common locations
+        if (cmd === "cargo") {
+            return existsSync(`${process.env.HOME}/.cargo/bin/cargo`);
+        }
+
+        // For other commands, try which
+        const proc = Bun.spawn(["which", cmd], {
+            stdout: "pipe",
+            stderr: "pipe",
+            env: process.env,
+        });
+
+        await proc.exited;
+        return proc.exitCode === 0;
     } catch {
         return false;
     }
@@ -89,10 +135,12 @@ const buildAll = async () => {
     // Build Axon
     const axonBuildLog = Bun.file(join(LOG_DIR, "build-axon.log"));
     try {
-        const proc = Bun.spawn(["cargo", "build", "--release", "-p", "axon"], {
+        const cargoPath = `${process.env.HOME}/.cargo/bin/cargo`;
+        const proc = Bun.spawn([cargoPath, "build", "--release", "-p", "axon"], {
             cwd: SCRIPT_DIR,
             stdout: "pipe",
             stderr: "pipe",
+            env: process.env,
         });
 
         const output = await new Response(proc.stdout).text();
@@ -114,10 +162,12 @@ const buildAll = async () => {
     // Build Cortex
     const cortexBuildLog = Bun.file(join(LOG_DIR, "build-cortex.log"));
     try {
-        const proc = Bun.spawn(["cargo", "build", "--release", "-p", "cortex"], {
+        const cargoPath = `${process.env.HOME}/.cargo/bin/cargo`;
+        const proc = Bun.spawn([cargoPath, "build", "--release", "-p", "cortex"], {
             cwd: SCRIPT_DIR,
             stdout: "pipe",
             stderr: "pipe",
+            env: process.env,
         });
 
         const output = await new Response(proc.stdout).text();
@@ -211,15 +261,19 @@ const startAxon = async () => {
             const response = await fetch("http://127.0.0.1:3000/api/v1/health");
             if (response.ok) {
                 // Find the PID
-                const psResult = await $`ps aux | grep "axon internal-server-run" | grep -v grep | head -1`.text();
-                const pid = psResult.split(/\s+/)[1];
+                try {
+                    const psResult = await execText(["sh", "-c", "ps aux | grep 'axon internal-server-run' | grep -v grep | head -1"]);
+                    const pid = psResult.split(/\s+/)[1];
 
-                if (pid) {
-                    await Bun.write(join(DIST_DIR, "axon.pid"), pid);
-                    print.success(`Axon server started (PID: ${pid})`);
-                    print.info(`Logs: ${logFile.name}`);
-                    print.info("API: http://localhost:3000");
-                    return;
+                    if (pid) {
+                        await Bun.write(join(DIST_DIR, "axon.pid"), pid);
+                        print.success(`Axon server started (PID: ${pid})`);
+                        print.info(`Logs: ${logFile.name}`);
+                        print.info("API: http://localhost:3000");
+                        return;
+                    }
+                } catch {
+                    // Failed to get PID
                 }
             }
         } catch {
@@ -258,15 +312,19 @@ const startCortex = async () => {
             const response = await fetch("http://127.0.0.1:8080/api/v1/health");
             if (response.ok) {
                 // Find the PID
-                const psResult = await $`ps aux | grep "cortex internal-server-run" | grep -v grep | head -1`.text();
-                const pid = psResult.split(/\s+/)[1];
+                try {
+                    const psResult = await execText(["sh", "-c", "ps aux | grep 'cortex internal-server-run' | grep -v grep | head -1"]);
+                    const pid = psResult.split(/\s+/)[1];
 
-                if (pid) {
-                    await Bun.write(join(DIST_DIR, "cortex.pid"), pid);
-                    print.success(`Cortex server started (PID: ${pid})`);
-                    print.info(`Logs: ${logFile.name}`);
-                    print.info("API: http://localhost:8080");
-                    return;
+                    if (pid) {
+                        await Bun.write(join(DIST_DIR, "cortex.pid"), pid);
+                        print.success(`Cortex server started (PID: ${pid})`);
+                        print.info(`Logs: ${logFile.name}`);
+                        print.info("API: http://localhost:8080");
+                        return;
+                    }
+                } catch {
+                    // Failed to get PID
                 }
             }
         } catch {
@@ -277,7 +335,7 @@ const startCortex = async () => {
 
     // Check if process exists even if health check failed
     try {
-        const psResult = await $`ps aux | grep "cortex internal-server-run" | grep -v grep | head -1`.text();
+        const psResult = await execText(["sh", "-c", "ps aux | grep 'cortex internal-server-run' | grep -v grep | head -1"]);
         const pid = psResult.split(/\s+/)[1];
 
         if (pid) {
@@ -300,7 +358,7 @@ const stopService = async (service: string) => {
     if (existsSync(pidFile)) {
         const pid = await Bun.file(pidFile).text();
         try {
-            await $`kill ${pid}`.quiet();
+            await execQuiet(["kill", pid.trim()]);
             print.success(`${service} stopped`);
         } catch {
             // Process might already be dead
@@ -317,15 +375,17 @@ const stopAll = async () => {
 
     // Kill any remaining server processes
     try {
-        await $`pkill -f "axon internal-server-run"`.quiet();
-        print.info("Killed remaining axon processes");
+        if (await execQuiet(["pkill", "-f", "axon internal-server-run"])) {
+            print.info("Killed remaining axon processes");
+        }
     } catch {
         // No processes to kill
     }
 
     try {
-        await $`pkill -f "cortex internal-server-run"`.quiet();
-        print.info("Killed remaining cortex processes");
+        if (await execQuiet(["pkill", "-f", "cortex internal-server-run"])) {
+            print.info("Killed remaining cortex processes");
+        }
     } catch {
         // No processes to kill
     }
@@ -341,8 +401,11 @@ const statusAll = async () => {
         if (existsSync(pidFile)) {
             const pid = await Bun.file(pidFile).text();
             try {
-                await $`kill -0 ${pid}`.quiet();
-                print.success(`  ${svc} running (PID: ${pid})`);
+                if (await execQuiet(["kill", "-0", pid.trim()])) {
+                    print.success(`  ${svc} running (PID: ${pid.trim()})`);
+                } else {
+                    print.info(`  ${svc} not running`);
+                }
             } catch {
                 print.info(`  ${svc} not running`);
             }
@@ -389,8 +452,17 @@ const rebuildDashboard = async () => {
     const logFile = Bun.file(join(LOG_DIR, "build-dashboard.log"));
 
     try {
-        const build = await $`npm run build 2>&1`.text();
-        await Bun.write(logFile, build);
+        const proc = Bun.spawn(["npm", "run", "build"], {
+            cwd: DASHBOARD_DIR,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+
+        const output = await new Response(proc.stdout).text();
+        const errors = await new Response(proc.stderr).text();
+        await Bun.write(logFile, output + errors);
+
+        await proc.exited;
 
         // Copy to dist
         if (existsSync(join(DIST_DIR, "dashboard"))) {
@@ -418,7 +490,8 @@ const clean = async () => {
 
     // Clean Rust workspace target directory
     process.chdir(SCRIPT_DIR);
-    await $`cargo clean`.quiet();
+    const cargoPath = `${process.env.HOME}/.cargo/bin/cargo`;
+    await execQuiet([cargoPath, "clean"], { cwd: SCRIPT_DIR });
 
     // Clean Dashboard
     process.chdir(DASHBOARD_DIR);
@@ -437,7 +510,7 @@ const startAll = async () => {
     if (!existsSync(join(DIST_DIR, "dashboard"))) {
         print.warning("Dashboard build not found, building...");
         process.chdir(DASHBOARD_DIR);
-        await $`npm run build`.quiet();
+        await execQuiet(["npm", "run", "build"], { cwd: DASHBOARD_DIR });
 
         if (existsSync(join(DIST_DIR, "dashboard"))) {
             rmSync(join(DIST_DIR, "dashboard"), { recursive: true, force: true });
@@ -511,11 +584,12 @@ const main = async () => {
             if (existsSync(axonPidFile)) {
                 const pid = await Bun.file(axonPidFile).text();
                 try {
-                    await $`kill -0 ${pid}`.quiet();
-                    servicesWereRunning = true;
-                    print.warning("Services are running. They will be restarted after build.");
-                    await stopAll();
-                    await Bun.sleep(2000);
+                    if (await execQuiet(["kill", "-0", pid.trim()])) {
+                        servicesWereRunning = true;
+                        print.warning("Services are running. They will be restarted after build.");
+                        await stopAll();
+                        await Bun.sleep(2000);
+                    }
                 } catch {
                     // PID file exists but process is dead
                 }
