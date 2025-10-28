@@ -7,7 +7,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
 
-import { cortexFetcher, cortexEndpoints } from 'src/lib/cortex-client';
+import { cortexFetcher } from 'src/lib/cortex-client';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';

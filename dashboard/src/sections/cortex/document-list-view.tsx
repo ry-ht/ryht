@@ -4,7 +4,6 @@ import useSWR, { mutate } from 'swr';
 import { useNavigate } from 'react-router';
 import { useState, useCallback } from 'react';
 
-import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';

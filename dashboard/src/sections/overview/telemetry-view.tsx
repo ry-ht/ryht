@@ -4,7 +4,6 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import { Bar, Line, Cell, XAxis, YAxis, Legend, Tooltip, BarChart, LineChart, CartesianGrid, ResponsiveContainer } from 'recharts';
 
-import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import Table from '@mui/material/Table';
