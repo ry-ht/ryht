@@ -8,6 +8,7 @@ use crate::output::{self, format_bytes, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
 use cortex_memory::CognitiveManager;
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, SurrealDBManager};
+use cortex_storage::session::SessionManager;
 use cortex_vfs::{
     ExternalProjectLoader, FlushOptions, FlushScope, MaterializationEngine, VirtualFileSystem,
     VirtualPath, VNode, Workspace, SyncSource, SyncSourceType,
@@ -1874,12 +1875,31 @@ async fn create_temp_session(
         .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_to_use))?;
 
     // Create a temporary session for CLI operations
-    let session_manager = SessionManager::new(storage.clone());
+    // Create session manager using the storage connection manager
+    let session_manager = SessionManager::from_connection_manager(&*storage).await?;
+
+    // Create metadata for the session
+    use cortex_storage::session::{SessionMetadata, IsolationLevel, SessionScope};
+    use std::collections::HashMap;
+
+    let metadata = SessionMetadata {
+        description: "Temporary CLI session".to_string(),
+        tags: vec!["cli".to_string(), "temporary".to_string()],
+        isolation_level: IsolationLevel::Serializable,
+        scope: SessionScope {
+            paths: vec!["*".to_string()],  // Full access to all paths
+            read_only_paths: vec![],
+            units: vec![],
+            allow_create: true,
+            allow_delete: true,
+        },
+        custom: HashMap::new(),
+    };
+
     let session = session_manager.create_session(
         "cli-temp".to_string(),
-        workspace.id,
-        Some("Temporary CLI session".to_string()),
-        None, // No parent session
+        workspace.id.into(), // Convert Uuid to CortexId
+        metadata,
         None, // Default TTL
     ).await?;
 
