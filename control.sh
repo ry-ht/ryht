@@ -137,42 +137,6 @@ start_cortex() {
     return 1
 }
 
-start_dashboard_dev() {
-    print_info "Starting Dashboard (dev mode)..."
-    cd "$DASHBOARD_DIR"
-    nohup npm run dev > "$LOG_DIR/dashboard.log" 2>&1 &
-    echo $! > "$DIST_DIR/dashboard.pid"
-    sleep 2
-    if kill -0 $(cat "$DIST_DIR/dashboard.pid") 2>/dev/null; then
-        print_success "Dashboard started (PID: $(cat "$DIST_DIR/dashboard.pid"))"
-        print_info "Logs: $LOG_DIR/dashboard.log"
-        print_info "URL: http://localhost:5173"
-    else
-        print_error "Dashboard failed to start. Check $LOG_DIR/dashboard.log"
-        exit 1
-    fi
-}
-
-start_dashboard_prod() {
-    print_info "Starting Dashboard (production mode)..."
-    if [ ! -d "$DIST_DIR/dashboard" ]; then
-        print_error "Dashboard build not found. Run './control.sh build' first"
-        exit 1
-    fi
-    cd "$DASHBOARD_DIR"
-    nohup npm run start > "$LOG_DIR/dashboard-prod.log" 2>&1 &
-    echo $! > "$DIST_DIR/dashboard.pid"
-    sleep 2
-    if kill -0 $(cat "$DIST_DIR/dashboard.pid") 2>/dev/null; then
-        print_success "Dashboard started in production mode (PID: $(cat "$DIST_DIR/dashboard.pid"))"
-        print_info "Logs: $LOG_DIR/dashboard-prod.log"
-        print_info "URL: http://localhost:4173"
-    else
-        print_error "Dashboard failed to start. Check $LOG_DIR/dashboard-prod.log"
-        exit 1
-    fi
-}
-
 stop_service() {
     local pid_file="$DIST_DIR/${1}.pid"
     if [ -f "$pid_file" ]; then
@@ -245,48 +209,6 @@ clean() {
     print_success "Clean completed"
 }
 
-dev() {
-    print_info "Starting development environment..."
-    stop_all
-
-    # Check if dashboard build exists, if not - build it
-    if [ ! -d "$DIST_DIR/dashboard" ]; then
-        print_warning "Dashboard build not found, building..."
-        cd "$DASHBOARD_DIR" && npm run build 2>&1 | tee "$LOG_DIR/build-dashboard.log"
-        rm -rf "$DIST_DIR/dashboard"
-        cp -r "$DASHBOARD_DIR/dist" "$DIST_DIR/dashboard"
-        print_success "Dashboard built and copied to $DIST_DIR/dashboard"
-    fi
-
-    print_info "Starting all services in development mode..."
-
-    # Start Axon (serves dashboard at / and API at /api/v1)
-    start_axon
-    sleep 2
-
-    # Start Cortex (optional - may fail if dependencies not ready)
-    set +e  # Don't exit on error
-    start_cortex
-    cortex_status=$?
-    set -e
-
-    if [ $cortex_status -ne 0 ]; then
-        print_warning "Cortex failed to start - continuing without it"
-        print_info "You can start Cortex manually later with: ./control.sh start cortex"
-    fi
-
-    print_success "Development environment started!"
-    print_info ""
-    print_info "🚀 Access points:"
-    print_info "   Dashboard:  http://localhost:3000"
-    print_info "   Axon API:   http://localhost:3000/api/v1"
-    if [ $cortex_status -eq 0 ]; then
-        print_info "   Cortex API: http://localhost:8080/api/v1"
-    fi
-    print_info ""
-    print_info "📝 View logs: ./control.sh logs [axon|cortex]"
-}
-
 case "${1:-}" in
     build)
         check_requirements
@@ -341,9 +263,6 @@ case "${1:-}" in
     clean)
         clean
         ;;
-    dev)
-        dev
-        ;;
     *)
         echo "RYHT Development Control Script"
         echo ""
@@ -351,23 +270,23 @@ case "${1:-}" in
         echo ""
         echo "Commands:"
         echo "  build              - Build all components (axon, cortex, dashboard)"
-        echo "  dev                - Start full development environment"
         echo "  start [service]    - Start service(s)"
         echo "    all              - Start all services (default)"
         echo "    axon             - Start Axon only"
         echo "    cortex           - Start Cortex only"
-        echo "    dashboard [mode] - Start Dashboard (dev/prod, default: dev)"
         echo "  stop               - Stop all services"
         echo "  restart [service]  - Restart service(s)"
         echo "  status             - Show status of all services"
-        echo "  logs <service>     - Tail logs for a service"
+        echo "  logs <service>     - Tail logs for a service (axon, cortex)"
         echo "  clean              - Clean all build artifacts and stop services"
         echo ""
         echo "Examples:"
         echo "  $0 build           - Build everything"
-        echo "  $0 dev             - Start development environment"
+        echo "  $0 start           - Start all services (Axon + Cortex + Dashboard)"
         echo "  $0 start axon      - Start only Axon"
-        echo "  $0 logs dashboard  - View Dashboard logs"
+        echo "  $0 restart         - Restart all services"
+        echo "  $0 logs axon       - View Axon logs"
+        echo "  $0 status          - Check service status"
         echo "  $0 stop            - Stop all services"
         ;;
 esac
