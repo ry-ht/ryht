@@ -42,30 +42,50 @@ A neural-inspired memory architecture with semantic understanding, temporal cont
 
 ### Prerequisites
 - Rust 1.75+ (install via [rustup](https://rustup.rs/))
+- Bun 1.0+ (install via [bun.sh](https://bun.sh/))
+- Node.js 20+ (for dashboard build)
 
 ### Build All Projects
 ```bash
+# Build and manage all components with control script
+./control.ts build
+
+# Or build manually
 cargo build --release
 ```
 
-### Build and Copy to dist/ (Recommended)
-Build all binaries and copy them to `dist/` directory:
+### Control Script (Bun-based)
+The project includes a TypeScript control script powered by Bun for managing all components:
 
 ```bash
-# Using bash script (release mode)
-./build-and-copy.sh release
+# Build all components
+./control.ts build
 
-# Or debug mode
-./build-and-copy.sh debug
+# Start services
+./control.ts start           # Start all (Axon + Cortex + Dashboard)
+./control.ts start axon      # Start only Axon
+./control.ts start cortex    # Start only Cortex
 
-# Using cargo-make (requires: cargo install cargo-make)
-cargo make dist          # Release binaries
-cargo make dist-debug    # Debug binaries
+# Manage services
+./control.ts stop            # Stop all services
+./control.ts restart         # Restart all services
+./control.ts status          # Check service status
+
+# Dashboard development
+./control.ts rebuild-dashboard  # Quick rebuild (no restart)
+
+# View logs
+./control.ts logs axon       # View Axon logs
+./control.ts logs cortex     # View Cortex logs
+
+# Clean up
+./control.ts clean           # Clean all artifacts
 ```
 
 Binaries will be available in `dist/`:
 - `dist/cortex` - Cortex CLI and server
 - `dist/axon` - Axon orchestration system
+- `dist/dashboard` - Web dashboard
 
 ### Run Axon (Multi-Agent Dashboard)
 ```bash
