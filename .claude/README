@@ -1,0 +1,52 @@
+CORTEX MCP SERVER CONFIGURATION
+================================
+
+This directory contains the MCP (Model Context Protocol) server configuration
+for Cortex - the cognitive system with 172 tools across 20 categories.
+
+SETUP
+-----
+The MCP server is already configured in mcp_config.json and ready to use.
+
+AVAILABLE TOOLS
+---------------
+Cortex provides 172 tools in 20 categories:
+- Workspace Management (8 tools)
+- Virtual Filesystem (12 tools)
+- Code Navigation (10 tools)
+- Code Manipulation (15 tools)
+- Semantic Search (8 tools)
+- Dependency Analysis (10 tools)
+- Code Quality (8 tools)
+- Version Control (10 tools)
+- Cognitive Memory (12 tools)
+- Multi-Agent Coordination (10 tools)
+- Materialization (8 tools)
+- Testing & Validation (10 tools)
+- Documentation (8 tools)
+- Build & Execution (8 tools)
+- Monitoring & Analytics (10 tools)
+- Security Analysis (4 tools)
+- Type Analysis (4 tools)
+- AI-Assisted Development (6 tools)
+- Advanced Testing (6 tools)
+- Architecture Analysis (5 tools)
+
+USAGE
+-----
+The MCP server will be automatically available in Claude Code.
+Use tools with the mcp__cortex__ prefix.
+
+TESTING
+-------
+To manually test the MCP server:
+  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"0.1.0","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | ./dist/cortex mcp stdio
+
+To see all available tools:
+  ./dist/cortex mcp info --detailed
+
+CONFIGURATION
+-------------
+Config file: .claude/mcp_config.json
+Binary: /Users/taaliman/projects/luxquant/ry-ht/ryht/dist/cortex
+Database: /Users/taaliman/.ryht/cortex/cortex.db

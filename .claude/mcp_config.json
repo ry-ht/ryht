@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cortex": {
+      "command": "/Users/taaliman/projects/luxquant/ry-ht/ryht/dist/cortex",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "PATH": "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "RUST_LOG": "info",
+        "CORTEX_DB_PATH": "/Users/taaliman/.ryht/cortex/cortex.db"
+      }
+    }
+  }
+}
