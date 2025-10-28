@@ -1,8 +1,24 @@
 //! HTTP handlers for MCP endpoints.
 
-use axum::{Json, response::IntoResponse, http::StatusCode};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use mcp_sdk::prelude::*;
+use mcp_sdk::tool::ToolContent;
 use serde::{Deserialize, Serialize};
-use mcp_sdk::tool::ToolDefinition;
+use std::sync::Arc;
+
+/// Shared state for MCP handlers
+#[derive(Clone)]
+pub struct McpHandlerState {
+    pub server: Arc<mcp_sdk::McpServer>,
+}
+
+impl McpHandlerState {
+    pub fn new(server: mcp_sdk::McpServer) -> Self {
+        Self {
+            server: Arc::new(server),
+        }
+    }
+}
 
 /// Request to list tools
 #[derive(Debug, Deserialize)]
@@ -11,7 +27,7 @@ pub struct ListToolsRequest {}
 /// Response with tool list
 #[derive(Debug, Serialize)]
 pub struct ListToolsResponse {
-    pub tools: Vec<ToolDefinition>,
+    pub tools: Vec<mcp_sdk::tool::ToolDefinition>,
 }
 
 /// Request to call a tool
@@ -27,45 +43,122 @@ pub struct CallToolResponse {
     pub result: serde_json::Value,
 }
 
+/// Error response
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+}
+
 /// Handler for listing available tools
 pub async fn list_tools(
+    State(state): State<McpHandlerState>,
     Json(_payload): Json<ListToolsRequest>,
 ) -> impl IntoResponse {
-    use crate::mcp::tools;
+    tracing::info!("Listing available tools");
 
-    // Get all registered tool definitions
-    let tools = tools::get_tools();
-    tracing::info!("Listing {} available tools", tools.len());
+    // Get the tool registry from the MCP server
+    let server = state.server.as_ref();
+    let tools = server.tools().list().await;
+
+    tracing::info!("Found {} available tools", tools.len());
 
     Json(ListToolsResponse { tools })
 }
 
 /// Handler for calling a tool
 pub async fn call_tool(
+    State(state): State<McpHandlerState>,
     Json(payload): Json<CallToolRequest>,
-) -> Result<Json<CallToolResponse>, StatusCode> {
+) -> impl IntoResponse {
     tracing::info!("Calling tool: {} with params: {:?}", payload.name, payload.parameters);
 
-    // Note: In a full implementation, this would:
-    // 1. Look up the tool by name from a registry
-    // 2. Deserialize parameters into the tool's input type
-    // 3. Execute the tool with the proper context
-    // 4. Return the tool's output as JSON
-    //
-    // For now, we return a placeholder response indicating the tool was called.
-    // The actual execution would happen through the MCP SDK's tool dispatch mechanism.
+    // Get the tool registry from the MCP server
+    let server = state.server.as_ref();
+    let tool = match server.tools().get(&payload.name).await {
+        Some(tool) => tool,
+        None => {
+            tracing::warn!("Tool not found: {}", payload.name);
+            return (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "tool_not_found".to_string(),
+                    message: format!("Tool '{}' not found", payload.name),
+                }),
+            ).into_response();
+        }
+    };
 
-    let result = serde_json::json!({
-        "status": "pending_implementation",
-        "tool": payload.name,
-        "message": "Tool execution requires MCP server context and proper dispatch mechanism",
-        "parameters_received": payload.parameters,
-    });
+    // Create tool context
+    let context = ToolContext::builder()
+        .request_id(serde_json::json!(uuid::Uuid::new_v4().to_string()))
+        .build();
 
-    tracing::warn!(
-        "Tool execution not fully implemented. Tool '{}' call recorded but not executed.",
-        payload.name
-    );
+    // Execute the tool
+    match tool.execute(payload.parameters, &context).await {
+        Ok(result) => {
+            tracing::info!("Tool '{}' executed successfully", payload.name);
 
-    Ok(Json(CallToolResponse { result }))
+            // Convert ToolResult to JSON
+            let result_json = if result.is_error.unwrap_or(false) {
+                // Return error result
+                serde_json::json!({
+                    "is_error": true,
+                    "content": result.content.iter().map(|c| {
+                        match c {
+                            ToolContent::Text { text } => serde_json::json!({
+                                "type": "text",
+                                "text": text
+                            }),
+                            ToolContent::Image { data, mime_type } => serde_json::json!({
+                                "type": "image",
+                                "data": data,
+                                "mime_type": mime_type
+                            }),
+                            ToolContent::Resource { uri } => serde_json::json!({
+                                "type": "resource",
+                                "uri": uri
+                            }),
+                        }
+                    }).collect::<Vec<_>>()
+                })
+            } else {
+                // Return success result
+                serde_json::json!({
+                    "is_error": false,
+                    "content": result.content.iter().map(|c| {
+                        match c {
+                            ToolContent::Text { text } => serde_json::json!({
+                                "type": "text",
+                                "text": text
+                            }),
+                            ToolContent::Image { data, mime_type } => serde_json::json!({
+                                "type": "image",
+                                "data": data,
+                                "mime_type": mime_type
+                            }),
+                            ToolContent::Resource { uri } => serde_json::json!({
+                                "type": "resource",
+                                "uri": uri
+                            }),
+                        }
+                    }).collect::<Vec<_>>()
+                })
+            };
+
+            Json(CallToolResponse {
+                result: result_json,
+            }).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Tool '{}' execution failed: {}", payload.name, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "execution_failed".to_string(),
+                    message: format!("Tool execution failed: {}", e),
+                }),
+            ).into_response()
+        }
+    }
 }
