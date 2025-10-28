@@ -577,23 +577,35 @@ impl SurrealDBManager {
     /// Check if the server is running
     #[instrument(skip(self))]
     pub async fn is_running(&self) -> bool {
-        // Check if we have a process handle
+        // First check if we have a process handle
         if self.process.is_some() {
             // Try to connect to the server
             return self.health_check().await.is_ok();
         }
 
-        // Check if PID file exists
-        if fs::metadata(&self.config.pid_file).await.is_ok() {
+        // Check if PID file exists and process is alive
+        let pid_exists = if fs::metadata(&self.config.pid_file).await.is_ok() {
             if let Ok(pid_str) = fs::read_to_string(&self.config.pid_file).await {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                     // Check if process is still alive
-                    return Self::is_process_alive(pid).await;
+                    Self::is_process_alive(pid).await
+                } else {
+                    false
                 }
+            } else {
+                false
             }
-        }
+        } else {
+            false
+        };
 
-        false
+        // If PID exists and process is alive, also verify via health check
+        if pid_exists {
+            // Try health check to confirm the server is responsive
+            self.health_check().await.is_ok()
+        } else {
+            false
+        }
     }
 
     /// Check if a process with the given PID is alive

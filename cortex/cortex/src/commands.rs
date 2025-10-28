@@ -174,10 +174,39 @@ pub async fn workspace_create(name: String) -> Result<()> {
         updated_at: chrono::Utc::now(),
     };
 
-    // Save workspace to database
+    // Save workspace to database - let SurrealDB generate the ID
     let conn = storage.acquire().await?;
-    let _: Option<Workspace> = conn.connection().create("workspace")
-        .content(workspace)
+
+    // Create the workspace using INSERT which lets SurrealDB generate the ID
+    let query = r#"
+        INSERT INTO workspace {
+            workspace_id: $workspace_id,
+            name: $name,
+            namespace: $namespace,
+            sync_sources: $sync_sources,
+            metadata: $metadata,
+            read_only: $read_only,
+            parent_workspace: $parent_workspace,
+            fork_metadata: $fork_metadata,
+            dependencies: $dependencies,
+            created_at: $created_at,
+            updated_at: $updated_at
+        }
+    "#;
+
+    let _result = conn.connection()
+        .query(query)
+        .bind(("workspace_id", workspace_id.to_string()))  // Store UUID as string
+        .bind(("name", workspace.name.clone()))
+        .bind(("namespace", workspace.namespace.clone()))
+        .bind(("sync_sources", workspace.sync_sources.clone()))
+        .bind(("metadata", workspace.metadata.clone()))
+        .bind(("read_only", workspace.read_only))
+        .bind(("parent_workspace", workspace.parent_workspace.map(|id| id.to_string())))  // Convert UUID to String
+        .bind(("fork_metadata", workspace.fork_metadata.clone()))
+        .bind(("dependencies", workspace.dependencies.clone()))
+        .bind(("created_at", workspace.created_at.to_rfc3339()))  // Convert to string
+        .bind(("updated_at", workspace.updated_at.to_rfc3339()))  // Convert to string
         .await
         .context("Failed to create workspace in database")?;
 

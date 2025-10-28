@@ -98,8 +98,8 @@ impl Default for CortexConfig {
                 namespace: "cortex".to_string(),
                 database: "main".to_string(),
                 pool_size: 10,
-                username: None,
-                password: None,
+                username: Some("root".to_string()),
+                password: Some("root".to_string()),
             },
             storage: StorageConfig {
                 data_dir,
