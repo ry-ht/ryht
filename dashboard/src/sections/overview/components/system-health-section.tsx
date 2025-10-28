@@ -37,8 +37,8 @@ export function SystemHealthSection({
   return (
     <Card>
       <CardHeader
-        title="System Health"
-        subheader="Overall system and service status"
+        // title="System Health"
+        // subheader="Overall system and service status"
         avatar={<StatusIndicator status={overallStatus} size={12} />}
       />
       <Divider />

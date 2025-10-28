@@ -151,23 +151,7 @@ export function DashboardOverview() {
 
   return (
     <>
-      <CustomBreadcrumbs
-        heading="Dashboard"
-        action={
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip
-              label={wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
-              color={wsConnected ? 'success' : 'default'}
-              size="small"
-              icon={<Iconify icon={wsConnected ? 'eva:wifi-fill' : 'eva:wifi-off-fill'} />}
-            />
-            <Label color={overallHealth === 'healthy' ? 'success' : 'warning'}>
-              {overallHealth}
-            </Label>
-          </Stack>
-        }
-        sx={{ mb: 3 }}
-      />
+      <CustomBreadcrumbs heading="Dashboard" sx={{ mb: 3 }} />
 
       <Grid container spacing={3}>
         {/* System Health Section */}
