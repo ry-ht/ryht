@@ -85,10 +85,7 @@ export function Footer({ layoutQuery = 'lg' }: FooterProps) {
 
   // Calculate system health status
   const axonHealthy = axonHealth?.status === 'healthy' || axonHealth?.status === 'ok';
-  const cortexHealthy =
-    cortexHealth?.status === 'healthy' &&
-    cortexHealth?.services?.database === 'healthy' &&
-    cortexHealth?.services?.vfs === 'healthy';
+  const cortexHealthy = cortexHealth?.status === 'healthy';
 
   const systemStatus = axonHealthy && cortexHealthy ? 'healthy' : 'degraded';
 
