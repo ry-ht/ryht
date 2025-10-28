@@ -59,7 +59,7 @@ impl ToApiResponse<WorkspaceResponse> for WorkspaceDetails {
         let source_path = self.sync_sources.iter()
             .find_map(|source| {
                 if let cortex_vfs::SyncSourceType::LocalPath { path, .. } = &source.source {
-                    Some(path.to_string_lossy().to_string())
+                    Some(path.clone())
                 } else {
                     None
                 }

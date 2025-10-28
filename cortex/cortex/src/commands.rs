@@ -96,7 +96,7 @@ pub async fn init_workspace(
     let sync_sources = vec![SyncSource {
         id: Uuid::new_v4(),
         source: SyncSourceType::LocalPath {
-            path: workspace_path.clone(),
+            path: workspace_path.display().to_string(),
             watch: false,
         },
         read_only: false,

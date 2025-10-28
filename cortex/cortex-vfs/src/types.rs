@@ -359,7 +359,7 @@ impl Workspace {
     pub fn source_path(&self) -> Option<String> {
         for source in &self.sync_sources {
             if let SyncSourceType::LocalPath { path, .. } = &source.source {
-                return Some(path.to_string_lossy().to_string());
+                return Some(path.clone());
             }
         }
         None
@@ -398,7 +398,7 @@ pub struct SyncSource {
 pub enum SyncSourceType {
     /// Local filesystem path
     LocalPath {
-        path: PathBuf,
+        path: String,
         watch: bool, // Enable filesystem watching
     },
 
@@ -417,7 +417,7 @@ pub enum SyncSourceType {
         port: Option<u16>,
         user: String,
         path: String,
-        key_path: Option<PathBuf>,
+        key_path: Option<String>,
     },
 
     /// S3 bucket
@@ -824,13 +824,13 @@ mod tests {
     fn test_sync_source_type_variants() {
         // Test local path variant
         let local = SyncSourceType::LocalPath {
-            path: PathBuf::from("/home/user/project"),
+            path: "/home/user/project".to_string(),
             watch: true,
         };
 
         match local {
             SyncSourceType::LocalPath { path, watch } => {
-                assert_eq!(path, PathBuf::from("/home/user/project"));
+                assert_eq!(path, "/home/user/project");
                 assert!(watch);
             }
             _ => panic!("Expected LocalPath variant"),
@@ -847,7 +847,7 @@ mod tests {
                 SyncSource {
                     id: Uuid::new_v4(),
                     source: SyncSourceType::LocalPath {
-                        path: PathBuf::from("/local/path"),
+                        path: "/local/path".to_string(),
                         watch: true,
                     },
                     read_only: false,

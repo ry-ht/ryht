@@ -91,7 +91,7 @@ impl ExternalProjectLoader {
         let sync_source = SyncSource {
             id: Uuid::new_v4(),
             source: SyncSourceType::LocalPath {
-                path: source_path.to_path_buf(),
+                path: source_path.display().to_string(),
                 watch: false, // External imports don't watch by default
             },
             read_only: options.read_only && !options.create_fork,
@@ -143,14 +143,13 @@ impl ExternalProjectLoader {
         let mut walker = WalkBuilder::new(current);
         walker
             .hidden(false)
-            .git_ignore(true)
-            .git_exclude(true)
-            .standard_filters(true);
+            .git_ignore(true)  // Respect .gitignore files
+            .git_exclude(true) // Respect .git/info/exclude
+            .git_global(true)  // Respect global gitignore
+            .standard_filters(true); // Skip hidden and other standard patterns
 
-        // Add exclude patterns
-        for pattern in &options.exclude_patterns {
-            walker.add_custom_ignore_filename(pattern);
-        }
+        // Note: exclude_patterns are checked in should_include() method
+        // The WalkBuilder will automatically read and respect .gitignore files
 
         if let Some(max_depth) = options.max_depth {
             walker.max_depth(Some(max_depth));
@@ -290,24 +289,43 @@ impl ExternalProjectLoader {
             return true;
         }
 
-        // Simple glob matching
-        let pattern_parts: Vec<&str> = pattern.split("/**").collect();
-        if pattern_parts.len() == 2 {
-            let prefix = pattern_parts[0].trim_start_matches("**/");
-            let suffix = pattern_parts[1].trim_end_matches("/**");
+        // Normalize paths for comparison (use forward slashes)
+        let path_normalized = path.replace('\\', "/");
+        let pattern_normalized = pattern.replace('\\', "/");
 
-            if !prefix.is_empty() && !path.contains(prefix) {
+        // Handle **/pattern/** format (matches anywhere in path)
+        if pattern_normalized.starts_with("**/") && pattern_normalized.ends_with("/**") {
+            let middle = pattern_normalized
+                .trim_start_matches("**/")
+                .trim_end_matches("/**");
+            // Check if path contains this segment as a complete directory name
+            // e.g., **/target/** should match "foo/target/debug" but not "foo/targeting"
+            if middle.is_empty() {
                 return false;
             }
-            if !suffix.is_empty() && !path.contains(suffix) {
-                return false;
-            }
-
-            return true;
+            let needle = format!("/{}/", middle);
+            let haystack_with_slashes = format!("/{}/", path_normalized);
+            return haystack_with_slashes.contains(&needle)
+                || path_normalized.starts_with(&format!("{}/", middle))
+                || path_normalized.ends_with(&format!("/{}", middle));
         }
 
-        // Exact match
-        path.contains(pattern)
+        // Handle **/pattern format (matches at end)
+        if pattern_normalized.starts_with("**/") {
+            let suffix = pattern_normalized.trim_start_matches("**/");
+            return path_normalized.ends_with(suffix)
+                || path_normalized.contains(&format!("/{}", suffix));
+        }
+
+        // Handle pattern/** format (matches at start)
+        if pattern_normalized.ends_with("/**") {
+            let prefix = pattern_normalized.trim_end_matches("/**");
+            return path_normalized.starts_with(&format!("{}/", prefix))
+                || path_normalized == prefix;
+        }
+
+        // Exact match or simple contains
+        path_normalized.contains(&pattern_normalized)
     }
 
     /// Save a vnode to database.

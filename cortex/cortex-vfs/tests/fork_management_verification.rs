@@ -65,12 +65,12 @@ async fn create_test_workspace(
                 id: Uuid::new_v4(),
                 source: if read_only {
                     SyncSourceType::LocalPath {
-                        path: PathBuf::from(format!("/test/{}", name)),
+                        path: format!("/test/{}", name),
                         watch: false,
                     }
                 } else {
                     SyncSourceType::LocalPath {
-                        path: PathBuf::from(format!("/test/{}", name)),
+                        path: format!("/test/{}", name),
                         watch: false,
                     }
                 },

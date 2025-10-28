@@ -255,7 +255,7 @@ impl Tool for WorkspaceCreateTool {
             vec![SyncSource {
                 id: Uuid::new_v4(),
                 source: SyncSourceType::LocalPath {
-                    path: path.clone(),
+                    path: path.display().to_string(),
                     watch: false,
                 },
                 read_only: false,
@@ -335,22 +335,27 @@ impl Tool for WorkspaceCreateTool {
             }
 
             // Process code units if requested
+            // TODO: Make ingestion async/background to avoid hanging on large workspaces
+            // Issue: ingest_workspace() loads ALL files into memory and processes sequentially
+            // For now, skip ingestion during workspace creation
             if input.process_code && files_imported > 0 {
-                info!("Processing code units for workspace {}", workspace_id);
-                match self.ctx.ingestion.ingest_workspace(&workspace_id).await {
-                    Ok(ingestion_result) => {
-                        units_extracted = ingestion_result.total_units;
-                        if !ingestion_result.files_with_errors.is_empty() {
-                            warnings.push(format!(
-                                "Failed to parse {} files",
-                                ingestion_result.files_with_errors.len()
-                            ));
-                        }
-                    }
-                    Err(e) => {
-                        warnings.push(format!("Code processing failed: {}", e));
-                    }
-                }
+                info!("Skipping code ingestion during workspace creation (will be done separately)");
+                warnings.push("Code processing skipped - use separate ingestion tool for large workspaces".to_string());
+                // Commented out to prevent hang:
+                // match self.ctx.ingestion.ingest_workspace(&workspace_id).await {
+                //     Ok(ingestion_result) => {
+                //         units_extracted = ingestion_result.total_units;
+                //         if !ingestion_result.files_with_errors.is_empty() {
+                //             warnings.push(format!(
+                //                 "Failed to parse {} files",
+                //                 ingestion_result.files_with_errors.len()
+                //             ));
+                //         }
+                //     }
+                //     Err(e) => {
+                //         warnings.push(format!("Code processing failed: {}", e));
+                //     }
+                // }
             }
         }
 

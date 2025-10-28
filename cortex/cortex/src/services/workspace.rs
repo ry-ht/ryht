@@ -48,7 +48,7 @@ impl WorkspaceService {
             sync_sources.push(SyncSource {
                 id: Uuid::new_v4(),
                 source: SyncSourceType::LocalPath {
-                    path: PathBuf::from(source_path),
+                    path: source_path,
                     watch: false,
                 },
                 read_only: false,
@@ -432,7 +432,7 @@ impl WorkspaceDetails {
     pub fn source_path(&self) -> Option<String> {
         for source in &self.sync_sources {
             if let SyncSourceType::LocalPath { path, .. } = &source.source {
-                return Some(path.display().to_string());
+                return Some(path.clone());
             }
         }
         None
@@ -477,7 +477,7 @@ mod tests {
                 SyncSource {
                     id: Uuid::new_v4(),
                     source: SyncSourceType::LocalPath {
-                        path: PathBuf::from("/path/to/workspace"),
+                        path: "/path/to/workspace".to_string(),
                         watch: false,
                     },
                     read_only: false,
