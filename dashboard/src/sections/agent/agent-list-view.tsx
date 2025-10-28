@@ -189,7 +189,7 @@ export function AgentListView() {
   };
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Agents"
         links={[
@@ -413,7 +413,7 @@ export function AgentListView() {
           Delete
         </MenuItem>
       </CustomPopover>
-    </>
+    </Stack>
   );
 }
 

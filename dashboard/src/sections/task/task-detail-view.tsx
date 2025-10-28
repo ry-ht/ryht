@@ -116,7 +116,7 @@ export function TaskDetailView() {
   const displayTask = isEditing ? { ...task, ...editedTask } : task;
 
   return (
-    <>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading={task.title}
         links={[
@@ -607,6 +607,6 @@ export function TaskDetailView() {
         </Box>
         </Box>
       </Stack>
-    </>
+    </Stack>
   );
 }

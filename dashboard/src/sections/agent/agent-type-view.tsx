@@ -111,7 +111,7 @@ export function AgentTypeView({ agentType }: AgentTypeViewProps) {
   }, [filteredAgents]);
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading={`${agentType} Agents`}
         links={[
@@ -279,6 +279,6 @@ export function AgentTypeView({ agentType }: AgentTypeViewProps) {
           </Card>
         )}
       </Stack>
-    </>
+    </Stack>
   );
 }

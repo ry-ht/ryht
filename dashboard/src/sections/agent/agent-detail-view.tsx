@@ -156,7 +156,7 @@ export function AgentDetailView() {
   }
 
   return (
-    <>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading={agent.name}
         links={[
@@ -428,7 +428,7 @@ export function AgentDetailView() {
           </Card>
         </Grid>
       </Grid>
-    </>
+    </Stack>
   );
 }
 

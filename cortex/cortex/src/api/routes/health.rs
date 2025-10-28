@@ -36,21 +36,25 @@ async fn health_check(
     let request_id = uuid::Uuid::new_v4().to_string();
     let start = Instant::now();
 
-    // Check database connectivity
+    tracing::debug!("Health check requested");
+
+    // Check database connectivity with a timeout-safe approach
+    // Instead of doing a complex query, just try to acquire a connection
     let db_start = Instant::now();
-    let db_connected = match state.storage.acquire().await {
-        Ok(conn) => {
-            // Try a simple query to verify connection
-            match conn.connection().query("SELECT * FROM ONLY $tb LIMIT 1").bind(("tb", "workspace")).await {
-                Ok(_) => true,
-                Err(e) => {
-                    tracing::warn!("Database query failed: {}", e);
-                    false
-                }
-            }
+    let db_connected = match tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        state.storage.acquire()
+    ).await {
+        Ok(Ok(_conn)) => {
+            tracing::debug!("Database connection acquired successfully");
+            true
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::warn!("Database connection failed: {}", e);
+            false
+        }
+        Err(_) => {
+            tracing::warn!("Database connection timed out after 500ms");
             false
         }
     };
@@ -88,6 +92,8 @@ async fn health_check(
     };
 
     let duration = start.elapsed().as_millis() as u64;
+
+    tracing::debug!("Health check completed in {}ms: status={}", duration, &health.status);
 
     Ok(Json(ApiResponse::success(health, request_id, duration)))
 }

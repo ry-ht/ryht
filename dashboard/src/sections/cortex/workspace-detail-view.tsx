@@ -123,9 +123,9 @@ export function WorkspaceDetailView() {
   // ----------------------------------------------------------------------
 
   return (
-    <>
+    <Stack spacing={3}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+      <Stack direction="row" alignItems="center" spacing={2}>
         <Button
           startIcon={<Iconify icon="eva:arrow-back-fill" />}
           onClick={() => navigate('/cortex/workspaces')}
@@ -525,6 +525,6 @@ export function WorkspaceDetailView() {
           </TabPanel>
         </TabContext>
       </Card>
-    </>
+    </Stack>
   );
 }

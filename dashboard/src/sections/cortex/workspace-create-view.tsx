@@ -55,7 +55,7 @@ export function WorkspaceCreateView() {
   );
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading="Create Workspace"
         links={[
@@ -64,7 +64,6 @@ export function WorkspaceCreateView() {
           { name: 'Workspaces', href: '/cortex/workspaces' },
           { name: 'Create' },
         ]}
-        sx={{ mb: 3 }}
       />
 
       <Card sx={{ p: 3, maxWidth: 720 }}>
@@ -123,6 +122,6 @@ export function WorkspaceCreateView() {
           </Stack>
         </form>
       </Card>
-    </Box>
+    </Stack>
   );
 }

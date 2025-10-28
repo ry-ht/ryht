@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -98,7 +99,7 @@ export function WorkflowListView() {
   };
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Workflows"
         links={[
@@ -185,7 +186,7 @@ export function WorkflowListView() {
           </MenuItem>
         )}
       </CustomPopover>
-    </>
+    </Stack>
   );
 }
 

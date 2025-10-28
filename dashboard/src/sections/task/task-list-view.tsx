@@ -94,7 +94,7 @@ export function TaskListView() {
   ).sort();
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Tasks"
         links={[
@@ -191,7 +191,7 @@ export function TaskListView() {
         onClose={() => setOpenCreateDialog(false)}
         onSuccess={() => mutate(axonEndpoints.tasks.list)}
       />
-    </>
+    </Stack>
   );
 }
 

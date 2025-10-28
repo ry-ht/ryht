@@ -117,7 +117,7 @@ export function AgentCreateView() {
   });
 
   return (
-    <>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading="Create Agent"
         links={[
@@ -184,6 +184,6 @@ export function AgentCreateView() {
           </Stack>
         </Card>
       </Form>
-    </>
+    </Stack>
   );
 }

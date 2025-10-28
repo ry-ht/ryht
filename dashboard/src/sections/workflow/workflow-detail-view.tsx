@@ -123,7 +123,7 @@ export function WorkflowDetailView() {
   const duration = calculateDuration();
 
   return (
-    <>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading={workflow.name}
         links={[
@@ -344,7 +344,7 @@ export function WorkflowDetailView() {
           </MenuItem>
         )} */}
       </CustomPopover>
-    </>
+    </Stack>
   );
 }
 

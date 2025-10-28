@@ -110,7 +110,7 @@ export function TelemetryView() {
   const avgResponseTime = telemetry?.avg_response_time_ms || 0;
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Telemetry"
         links={[
@@ -314,6 +314,6 @@ export function TelemetryView() {
           </Card>
         </Grid>
       </Grid>
-    </>
+    </Stack>
   );
 }

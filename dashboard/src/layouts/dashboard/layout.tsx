@@ -128,7 +128,7 @@ export function DashboardLayout({
         </>
       ),
       rightArea: (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'right', gap: 1 }}>
           {/** @slot Searchbar */}
           <Searchbar data={navData} />
 

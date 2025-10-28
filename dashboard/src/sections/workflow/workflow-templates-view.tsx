@@ -80,7 +80,7 @@ export function WorkflowTemplatesView() {
   };
 
   return (
-    <>
+    <Stack spacing={2}>
       <CustomBreadcrumbs
         heading="Workflow Templates"
         links={[
@@ -193,6 +193,6 @@ export function WorkflowTemplatesView() {
           ))}
         </Grid>
       </Stack>
-    </>
+    </Stack>
   );
 }

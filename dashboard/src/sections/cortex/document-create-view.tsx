@@ -85,7 +85,7 @@ export function DocumentCreateView() {
   );
 
   return (
-    <>
+    <Stack spacing={3}>
       <CustomBreadcrumbs
         heading="Create Document"
         links={[
@@ -174,6 +174,6 @@ export function DocumentCreateView() {
           </Stack>
         </form>
       </Card>
-    </>
+    </Stack>
   );
 }
