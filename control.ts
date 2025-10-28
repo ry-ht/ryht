@@ -4,10 +4,10 @@
  * Manages Axon (multi-agent system), Cortex (cognitive system), and Dashboard
  */
 
-import { $ } from "bun";
 import { existsSync, mkdirSync, rmSync, cpSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { $ } from "bun";
 
 // Setup paths
 const __filename = fileURLToPath(import.meta.url);
@@ -89,8 +89,17 @@ const buildAll = async () => {
     // Build Axon
     const axonBuildLog = Bun.file(join(LOG_DIR, "build-axon.log"));
     try {
-        const axonBuild = await $`cargo build --release -p axon 2>&1`.text();
-        await Bun.write(axonBuildLog, axonBuild);
+        const proc = Bun.spawn(["cargo", "build", "--release", "-p", "axon"], {
+            cwd: SCRIPT_DIR,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+
+        const output = await new Response(proc.stdout).text();
+        const errors = await new Response(proc.stderr).text();
+        await Bun.write(axonBuildLog, output + errors);
+
+        await proc.exited;
 
         if (!existsSync(join(SCRIPT_DIR, "target/release/axon"))) {
             throw new Error("Axon binary not found after build");
@@ -98,14 +107,24 @@ const buildAll = async () => {
         print.success("Axon built successfully");
     } catch (e) {
         print.error(`Axon build failed. Check ${axonBuildLog.name}`);
+        console.error(e);
         process.exit(1);
     }
 
     // Build Cortex
     const cortexBuildLog = Bun.file(join(LOG_DIR, "build-cortex.log"));
     try {
-        const cortexBuild = await $`cargo build --release -p cortex 2>&1`.text();
-        await Bun.write(cortexBuildLog, cortexBuild);
+        const proc = Bun.spawn(["cargo", "build", "--release", "-p", "cortex"], {
+            cwd: SCRIPT_DIR,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+
+        const output = await new Response(proc.stdout).text();
+        const errors = await new Response(proc.stderr).text();
+        await Bun.write(cortexBuildLog, output + errors);
+
+        await proc.exited;
 
         if (!existsSync(join(SCRIPT_DIR, "target/release/cortex"))) {
             throw new Error("Cortex binary not found after build");
@@ -113,6 +132,7 @@ const buildAll = async () => {
         print.success("Cortex built successfully");
     } catch (e) {
         print.error(`Cortex build failed. Check ${cortexBuildLog.name}`);
+        console.error(e);
         process.exit(1);
     }
 
@@ -122,8 +142,17 @@ const buildAll = async () => {
 
     const dashboardBuildLog = Bun.file(join(LOG_DIR, "build-dashboard.log"));
     try {
-        const dashboardBuild = await $`npm run build 2>&1`.text();
-        await Bun.write(dashboardBuildLog, dashboardBuild);
+        const proc = Bun.spawn(["npm", "run", "build"], {
+            cwd: DASHBOARD_DIR,
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+
+        const output = await new Response(proc.stdout).text();
+        const errors = await new Response(proc.stderr).text();
+        await Bun.write(dashboardBuildLog, output + errors);
+
+        await proc.exited;
 
         if (!existsSync(join(DASHBOARD_DIR, "dist"))) {
             throw new Error("Dashboard dist directory not found after build");
@@ -131,6 +160,7 @@ const buildAll = async () => {
         print.success("Dashboard built successfully");
     } catch (e) {
         print.error(`Dashboard build failed. Check ${dashboardBuildLog.name}`);
+        console.error(e);
         process.exit(1);
     }
 
