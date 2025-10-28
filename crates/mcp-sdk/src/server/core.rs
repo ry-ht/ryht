@@ -441,6 +441,62 @@ impl McpServer {
         // For now, return resource not found since resources aren't fully implemented
         JsonRpcResponse::resource_not_found(request.id, "Resources not yet implemented")
     }
+
+    /// Serves the MCP server using the provided transport.
+    ///
+    /// This method runs the main server loop, receiving requests from the transport,
+    /// processing them through `handle_request()`, and sending responses back.
+    /// The loop continues until the transport is closed (e.g., stdin is closed).
+    ///
+    /// # Arguments
+    ///
+    /// * `transport` - The transport implementation to use for communication
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use mcp_server::server::McpServer;
+    /// use mcp_server::transport::StdioTransport;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let server = McpServer::builder()
+    ///         .name("my-server")
+    ///         .version("1.0.0")
+    ///         .build();
+    ///
+    ///     let transport = StdioTransport::new();
+    ///     server.serve(transport).await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn serve<T: crate::transport::Transport>(
+        &self,
+        mut transport: T,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use tracing::{info, warn};
+
+        info!("MCP server starting");
+
+        loop {
+            match transport.recv().await {
+                Some(request) => {
+                    let response = self.handle_request(request).await;
+                    if let Err(e) = transport.send(response).await {
+                        warn!("Failed to send response: {}", e);
+                        break;
+                    }
+                }
+                None => {
+                    info!("Transport closed, shutting down");
+                    break;
+                }
+            }
+        }
+
+        info!("MCP server stopped");
+        Ok(())
+    }
 }
 
 #[cfg(test)]

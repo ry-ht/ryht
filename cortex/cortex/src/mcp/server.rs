@@ -392,24 +392,10 @@ impl CortexMcpServer {
     /// IMPROVED: Adds cleanup on shutdown to prevent resource leaks
     pub async fn serve_stdio(self) -> Result<()> {
         info!("Starting Cortex MCP Server on stdio");
-        let mut transport = StdioTransport::new();
+        let transport = StdioTransport::new();
 
-        // Server loop: read requests and send responses
-        loop {
-            match transport.recv().await {
-                Some(request) => {
-                    let response = self.server.handle_request(request).await;
-                    if let Err(e) = transport.send(response).await {
-                        warn!("Failed to send response: {}", e);
-                        break;
-                    }
-                }
-                None => {
-                    info!("Transport closed, shutting down");
-                    break;
-                }
-            }
-        }
+        // Serve using the SDK's built-in serve method
+        let result = self.server.serve(transport).await;
 
         // Cleanup resources on shutdown
         info!("Performing cleanup before shutdown");
@@ -419,7 +405,8 @@ impl CortexMcpServer {
             info!("Storage shutdown successfully");
         }
 
-        Ok(())
+        // Return any error from serve
+        result.map_err(|e| anyhow::anyhow!("Server error: {}", e))
     }
 
     /// Serves the MCP server over HTTP with SSE
@@ -430,25 +417,11 @@ impl CortexMcpServer {
         {
             info!("Starting Cortex MCP Server on HTTP: {}", _bind_addr);
             let addr: std::net::SocketAddr = _bind_addr.parse()?;
-            let mut transport = mcp_sdk::transport::HttpTransport::new(addr);
+            let transport = mcp_sdk::transport::HttpTransport::new(addr);
 
-            // Server loop: read requests and send responses
-            loop {
-                match transport.recv().await {
-                    Some(request) => {
-                        let response = self.server.handle_request(request).await;
-                        if let Err(e) = transport.send(response).await {
-                            warn!("Failed to send response: {}", e);
-                            break;
-                        }
-                    }
-                    None => {
-                        info!("Transport closed, shutting down");
-                        break;
-                    }
-                }
-            }
-            Ok(())
+            // Serve using the SDK's built-in serve method
+            self.server.serve(transport).await
+                .map_err(|e| anyhow::anyhow!("HTTP server error: {}", e))
         }
 
         #[cfg(not(feature = "http"))]
