@@ -4,9 +4,10 @@
  * Manages Axon (multi-agent system), Cortex (cognitive system), and Dashboard
  */
 
-import { existsSync, mkdirSync, rmSync, cpSync } from "fs";
+import { existsSync, mkdirSync, rmSync, cpSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { homedir } from "os";
 
 // Setup paths
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +16,10 @@ const SCRIPT_DIR = __dirname;
 const DIST_DIR = join(SCRIPT_DIR, "dist");
 const DASHBOARD_DIR = join(SCRIPT_DIR, "dashboard");
 const LOG_DIR = join(DIST_DIR, "logs");
+
+// Config paths
+const CONFIG_DIR = join(homedir(), ".ryht");
+const CONFIG_FILE = join(CONFIG_DIR, "config.toml");
 
 // Colors for output
 const RED = '\x1b[0;31m';
@@ -35,19 +40,192 @@ const setupPath = () => {
         "/sbin"
     ];
 
+    // Ensure we have access to basic utilities and cargo
     process.env.PATH = `${systemPaths.join(":")}:${process.env.PATH}`;
 };
 
 // Initialize PATH
 setupPath();
 
-// Utility functions
+// Utility functions (defined early for use in config loading)
 const print = {
     info: (msg: string) => console.log(`${BLUE}[INFO]${NC} ${msg}`),
     success: (msg: string) => console.log(`${GREEN}[SUCCESS]${NC} ${msg}`),
     warning: (msg: string) => console.log(`${YELLOW}[WARNING]${NC} ${msg}`),
     error: (msg: string) => console.log(`${RED}[ERROR]${NC} ${msg}`),
 };
+
+// Simple TOML parser for our config structure
+const parseTOML = (content: string): Record<string, any> => {
+    const lines = content.split('\n');
+    const result: Record<string, any> = {};
+    let currentSection: string[] = [];
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Skip empty lines and comments
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        // Section header [section] or [section.subsection]
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            const section = trimmed.slice(1, -1);
+            currentSection = section.split('.');
+
+            // Create nested object structure
+            let obj = result;
+            for (let i = 0; i < currentSection.length; i++) {
+                const key = currentSection[i];
+                if (i === currentSection.length - 1) {
+                    if (!obj[key]) obj[key] = {};
+                } else {
+                    if (!obj[key]) obj[key] = {};
+                    obj = obj[key];
+                }
+            }
+            continue;
+        }
+
+        // Key-value pair
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex > 0) {
+            const key = trimmed.slice(0, eqIndex).trim();
+            let value = trimmed.slice(eqIndex + 1).trim();
+
+            // Remove quotes from strings
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+
+            // Parse boolean
+            if (value === 'true') value = true as any;
+            else if (value === 'false') value = false as any;
+            // Parse number
+            else if (!isNaN(Number(value)) && value !== '') {
+                value = Number(value) as any;
+            }
+
+            // Set value in nested structure
+            let obj = result;
+            for (let i = 0; i < currentSection.length; i++) {
+                const section = currentSection[i];
+                if (!obj[section]) obj[section] = {};
+                if (i === currentSection.length - 1) {
+                    obj[section][key] = value;
+                } else {
+                    obj = obj[section];
+                }
+            }
+        }
+    }
+
+    return result;
+};
+
+// Configuration type
+interface Config {
+    cortex: {
+        server: {
+            host: string;
+            port: number;
+        };
+        mcp: {
+            server_bind: string;
+        };
+    };
+    axon: {
+        server: {
+            host: string;
+            port: number;
+        };
+    };
+}
+
+// Load and parse configuration
+const loadConfig = (): Config => {
+    const defaults: Config = {
+        cortex: {
+            server: {
+                host: "127.0.0.1",
+                port: 8080  // Cortex API server default
+            },
+            mcp: {
+                server_bind: "127.0.0.1:3000"
+            }
+        },
+        axon: {
+            server: {
+                host: "127.0.0.1",
+                port: 9090  // Axon API server default
+            }
+        }
+    };
+
+    try {
+        if (!existsSync(CONFIG_FILE)) {
+            print.warning(`Config file not found at ${CONFIG_FILE}, using defaults`);
+            return defaults;
+        }
+
+        const content = readFileSync(CONFIG_FILE, 'utf-8');
+        const parsed = parseTOML(content) as any;
+
+        // Extract configuration with defaults
+        const config: Config = {
+            cortex: {
+                server: {
+                    host: parsed.cortex?.server?.host || defaults.cortex.server.host,
+                    port: parsed.cortex?.server?.port || defaults.cortex.server.port
+                },
+                mcp: {
+                    server_bind: parsed.cortex?.mcp?.server_bind || defaults.cortex.mcp.server_bind
+                }
+            },
+            axon: {
+                server: {
+                    host: parsed.axon?.server?.host || defaults.axon.server.host,
+                    port: parsed.axon?.server?.port || defaults.axon.server.port
+                }
+            }
+        };
+
+        return config;
+    } catch (error) {
+        print.warning(`Failed to load config: ${error}. Using defaults.`);
+        return defaults;
+    }
+};
+
+// Helper to build URLs from config
+const getAxonUrls = (config: Config) => {
+    const { host, port } = config.axon.server;
+    return {
+        health: `http://${host}:${port}/api/v1/health`,
+        api: `http://${host}:${port}`
+    };
+};
+
+const getCortexUrls = (config: Config) => {
+    // Use cortex.server (API server), not cortex.mcp (MCP server)
+    const { host, port } = config.cortex.server;
+    return {
+        health: `http://${host}:${port}/api/v1/health`,
+        api: `http://${host}:${port}`
+    };
+};
+
+// Load config at startup
+const CONFIG = loadConfig();
+const AXON_URLS = getAxonUrls(CONFIG);
+const CORTEX_URLS = getCortexUrls(CONFIG);
+
+// Log configuration on startup (useful for debugging)
+if (process.env.DEBUG) {
+    print.info(`Loaded configuration from ${CONFIG_FILE}`);
+    print.info(`Axon API: ${AXON_URLS.api}`);
+    print.info(`Cortex API: ${CORTEX_URLS.api}`);
+}
 
 // Helper function to execute shell commands
 const exec = async (cmd: string[], options: any = {}) => {
@@ -258,7 +436,7 @@ const startAxon = async () => {
 
     for (let i = 0; i < 5; i++) {
         try {
-            const response = await fetch("http://127.0.0.1:3000/api/v1/health");
+            const response = await fetch(AXON_URLS.health);
             if (response.ok) {
                 // Find the PID
                 try {
@@ -269,7 +447,7 @@ const startAxon = async () => {
                         await Bun.write(join(DIST_DIR, "axon.pid"), pid);
                         print.success(`Axon server started (PID: ${pid})`);
                         print.info(`Logs: ${logFile.name}`);
-                        print.info("API: http://localhost:3000");
+                        print.info(`API: ${AXON_URLS.api}`);
                         return;
                     }
                 } catch {
@@ -309,7 +487,7 @@ const startCortex = async () => {
 
     for (let i = 0; i < 10; i++) {
         try {
-            const response = await fetch("http://127.0.0.1:8080/api/v1/health");
+            const response = await fetch(CORTEX_URLS.health);
             if (response.ok) {
                 // Find the PID
                 try {
@@ -320,7 +498,7 @@ const startCortex = async () => {
                         await Bun.write(join(DIST_DIR, "cortex.pid"), pid);
                         print.success(`Cortex server started (PID: ${pid})`);
                         print.info(`Logs: ${logFile.name}`);
-                        print.info("API: http://localhost:8080");
+                        print.info(`API: ${CORTEX_URLS.api}`);
                         return;
                     }
                 } catch {
@@ -342,7 +520,7 @@ const startCortex = async () => {
             await Bun.write(join(DIST_DIR, "cortex.pid"), pid);
             print.warning(`Cortex server started but health check timed out (PID: ${pid})`);
             print.info(`Server may still be initializing. Check logs: ${logFile.name}`);
-            print.info("API: http://localhost:8080");
+            print.info(`API: ${CORTEX_URLS.api}`);
             return;
         }
     } catch {
@@ -416,7 +594,7 @@ const statusAll = async () => {
 
     // Check if dashboard is built
     if (existsSync(join(DIST_DIR, "dashboard"))) {
-        print.success("  dashboard built (served via Axon at http://localhost:3000)");
+        print.success(`  dashboard built (served via Axon at ${AXON_URLS.api})`);
     } else {
         print.warning("  dashboard not built (run './control.ts build' first)");
     }
@@ -530,9 +708,9 @@ const startAll = async () => {
 
     print.info("");
     print.info("🚀 Services started:");
-    print.info("   Dashboard:  http://localhost:3000");
-    print.info("   Axon API:   http://localhost:3000/api/v1");
-    print.info("   Cortex API: http://localhost:8080/api/v1");
+    print.info(`   Dashboard:  ${AXON_URLS.api}`);
+    print.info(`   Axon API:   ${AXON_URLS.api}/api/v1`);
+    print.info(`   Cortex API: ${CORTEX_URLS.api}/api/v1`);
 };
 
 const showHelp = () => {

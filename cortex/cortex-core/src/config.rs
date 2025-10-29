@@ -162,6 +162,7 @@ pub struct GlobalConfig {
 /// Cortex-specific configuration section
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CortexSection {
+    pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub pool: PoolConfig,
     pub cache: CacheConfig,
@@ -440,7 +441,12 @@ impl Default for CortexSection {
         mcp.log_file_stdio = cortex_dir.join("logs").join("mcp-stdio.log").to_string_lossy().to_string();
         mcp.log_file_http = cortex_dir.join("logs").join("mcp-http.log").to_string_lossy().to_string();
 
+        // Cortex API server uses port 8080 by default
+        let mut server = ServerConfig::default();
+        server.port = 8080;
+
         Self {
+            server,
             database: DatabaseConfig::default(),
             pool: PoolConfig::default(),
             cache: CacheConfig::default(),

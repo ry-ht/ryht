@@ -1,38 +1,68 @@
-# Cortex Global Configuration Example
+# RYHT Global Configuration Example
 #
-# This file demonstrates all available configuration options for Cortex.
-# Copy this file to ~/.ryht/cortex/config.toml and customize as needed.
+# This is the unified configuration for both Cortex and Axon components.
+# Copy this file to ~/.ryht/config.toml and customize as needed.
+#
+# Configuration can be overridden using environment variables with the CORTEX_ or RYHT_ prefix.
+# Example: CORTEX_LOG_LEVEL=debug, CORTEX_DB_MODE=remote
+
+# Configuration profile: dev, prod, or test
+# Can be overridden with RYHT_CONFIG_PROFILE environment variable
+profile = "dev"
 
 [general]
 # Configuration version (used for migration support)
 version = "0.1.0"
 
-# Log level: trace, debug, info, warn, error
+# Global log level: trace, debug, info, warn, error
+# Can be overridden with CORTEX_LOG_LEVEL environment variable
 log_level = "info"
 
-[database]
+# Enable hot-reload of configuration file
+hot_reload = true
+
+# Hot-reload check interval in seconds
+hot_reload_interval_secs = 5
+
+# ==============================================================================
+# CORTEX CONFIGURATION
+# ==============================================================================
+
+[cortex.server]
+# Cortex REST API server configuration
+host = "127.0.0.1"
+port = 8080
+
+[cortex.database]
 # Database mode: local, remote, or hybrid
-# - local: Embedded SurrealDB instance
-# - remote: Connect to remote SurrealDB instance(s)
-# - hybrid: Local cache with remote sync
+# - local: Embedded SurrealDB instance (for development)
+# - remote: Connect to remote SurrealDB instance(s) (for production)
+# - hybrid: Local cache with remote sync (for distributed systems)
+# Can be overridden with CORTEX_DB_MODE environment variable
 mode = "local"
 
 # Local binding address for embedded database (used in local/hybrid mode)
+# Can be overridden with CORTEX_DB_LOCAL_BIND environment variable
 local_bind = "127.0.0.1:8000"
 
 # Remote database URLs (used in remote/hybrid mode)
+# Can be overridden with CORTEX_DB_URL environment variable (comma-separated)
 # Example: ["ws://localhost:8001", "ws://backup.example.com:8000"]
 remote_urls = []
 
 # Database credentials
+# Can be overridden with CORTEX_DB_USERNAME and CORTEX_DB_PASSWORD environment variables
+# SECURITY WARNING: For production, use environment variables instead of storing credentials here
 username = "root"
 password = "root"
 
 # SurrealDB namespace and database
+# Can be overridden with CORTEX_DB_NAMESPACE and CORTEX_DB_DATABASE environment variables
 namespace = "cortex"
 database = "knowledge"
 
-[pool]
+[cortex.pool]
+# Database connection pool configuration
 # Minimum number of connections to maintain in the pool
 min_connections = 2
 
@@ -45,18 +75,21 @@ connection_timeout_ms = 5000
 # Idle connection timeout in milliseconds (5 minutes)
 idle_timeout_ms = 300000
 
-[cache]
+[cortex.cache]
 # In-memory cache size in megabytes
+# Can be overridden with CORTEX_CACHE_SIZE_MB environment variable
 memory_size_mb = 512
 
 # Default TTL for cache entries in seconds (5 minutes)
 ttl_seconds = 300
 
 # Optional Redis URL for distributed caching
+# Can be overridden with CORTEX_CACHE_REDIS_URL environment variable
 # Example: "redis://localhost:6379"
 redis_url = ""
 
-[vfs]
+[cortex.vfs]
+# Virtual filesystem configuration
 # Maximum file size in megabytes that can be stored in VFS
 max_file_size_mb = 100
 
@@ -66,7 +99,8 @@ auto_flush = false
 # Interval between automatic flushes in seconds (if auto_flush is true)
 flush_interval_seconds = 60
 
-[ingestion]
+[cortex.ingestion]
+# Code ingestion pipeline configuration
 # Number of parallel workers for ingestion pipeline
 parallel_workers = 4
 
@@ -78,10 +112,13 @@ generate_embeddings = true
 
 # Embedding model to use
 # Supported: "text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"
+# Requires OPENAI_API_KEY environment variable
 embedding_model = "text-embedding-3-small"
 
-[mcp]
+[cortex.mcp]
+# Cortex MCP (Model Context Protocol) server configuration
 # MCP server binding address
+# Can be overridden with CORTEX_MCP_SERVER_BIND environment variable
 server_bind = "127.0.0.1:3000"
 
 # Enable CORS for web-based clients
@@ -89,3 +126,149 @@ cors_enabled = true
 
 # Maximum request size in megabytes
 max_request_size_mb = 10
+
+# Log file for stdio mode (set automatically based on ~/.ryht/cortex/logs/)
+log_file_stdio = ""
+
+# Log file for HTTP mode (set automatically based on ~/.ryht/cortex/logs/)
+log_file_http = ""
+
+# Log level for MCP server: trace, debug, info, warn, error
+log_level = "info"
+
+# ==============================================================================
+# AXON CONFIGURATION
+# ==============================================================================
+
+[axon.server]
+# Axon REST API server configuration
+host = "127.0.0.1"
+port = 9090
+
+[axon.runtime]
+# Agent runtime configuration
+# Maximum number of concurrent agents
+max_agents = 10
+
+# Agent execution timeout in seconds (5 minutes)
+agent_timeout_seconds = 300
+
+# Task queue size
+task_queue_size = 100
+
+# Enable automatic recovery from agent failures
+enable_auto_recovery = true
+
+[axon.mcp]
+# Axon MCP (Model Context Protocol) server configuration
+# Note: Axon uses a different port than Cortex
+server_bind = "127.0.0.1:3001"
+
+# Enable CORS for web-based clients
+cors_enabled = true
+
+# Maximum request size in megabytes
+max_request_size_mb = 10
+
+# Log file for stdio mode (set automatically based on ~/.ryht/axon/logs/)
+log_file_stdio = ""
+
+# Log file for HTTP mode (set automatically based on ~/.ryht/axon/logs/)
+log_file_http = ""
+
+# Log level for MCP server: trace, debug, info, warn, error
+log_level = "info"
+
+# ==============================================================================
+# AUTHENTICATION & SECURITY
+# ==============================================================================
+
+[auth]
+# JWT secret key for token signing
+# SECURITY WARNING: Override this with JWT_SECRET environment variable in production!
+# Generate a strong random key: openssl rand -base64 32
+jwt_secret = "cortex-dev-secret-change-in-production"
+
+# Access token expiration time in minutes
+access_token_expiry_mins = 15
+
+# Refresh token expiration time in days
+refresh_token_expiry_days = 7
+
+# JWT issuer claim
+jwt_issuer = "cortex-api"
+
+# JWT audience claim
+jwt_audience = "cortex-client"
+
+# Enable API key authentication
+api_keys_enabled = true
+
+# Maximum number of active sessions per user
+max_sessions_per_user = 5
+
+# ==============================================================================
+# ENVIRONMENT VARIABLE OVERRIDES
+# ==============================================================================
+#
+# All configuration values can be overridden using environment variables:
+#
+# General:
+#   RYHT_CONFIG_PATH      - Path to this config file
+#   RYHT_CONFIG_PROFILE   - Configuration profile (dev, prod, test)
+#   CORTEX_LOG_LEVEL      - Global log level
+#
+# Database:
+#   CORTEX_DB_MODE        - Database mode (local, remote, hybrid)
+#   CORTEX_DB_URL         - Remote database URL
+#   CORTEX_DB_LOCAL_BIND  - Local database bind address
+#   CORTEX_DB_USERNAME    - Database username
+#   CORTEX_DB_PASSWORD    - Database password
+#   CORTEX_DB_NAMESPACE   - SurrealDB namespace
+#   CORTEX_DB_DATABASE    - SurrealDB database name
+#
+# MCP Server:
+#   CORTEX_MCP_SERVER_BIND - Cortex MCP server bind address
+#
+# Cache:
+#   CORTEX_CACHE_SIZE_MB   - In-memory cache size
+#   CORTEX_CACHE_REDIS_URL - Redis URL for distributed caching
+#
+# Security:
+#   JWT_SECRET             - JWT secret key (IMPORTANT for production!)
+#   OPENAI_API_KEY         - OpenAI API key for embeddings
+#   QDRANT_URL             - Qdrant vector database URL
+#   QDRANT_API_KEY         - Qdrant API key
+#
+# ==============================================================================
+
+# ==============================================================================
+# PRODUCTION CONFIGURATION RECOMMENDATIONS
+# ==============================================================================
+#
+# For production deployments, consider these changes:
+#
+# 1. Security:
+#    - Set a strong JWT_SECRET via environment variable
+#    - Use strong database credentials (not root/root)
+#    - Enable HTTPS/TLS for all network communication
+#    - Restrict network bindings (not 0.0.0.0 unless necessary)
+#
+# 2. Performance:
+#    - Use "remote" database mode with dedicated SurrealDB cluster
+#    - Increase max_connections in [cortex.pool] based on load
+#    - Configure Redis for distributed caching
+#    - Adjust parallel_workers based on CPU cores
+#
+# 3. Reliability:
+#    - Set hot_reload = false for stability
+#    - Configure backup strategy for database
+#    - Enable auto_flush in [cortex.vfs] if needed
+#    - Monitor and set appropriate timeouts
+#
+# 4. Logging:
+#    - Set log_level = "info" or "warn" in production
+#    - Configure log rotation and retention
+#    - Use centralized logging if available
+#
+# ==============================================================================
