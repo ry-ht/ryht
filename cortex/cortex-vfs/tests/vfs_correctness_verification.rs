@@ -603,6 +603,187 @@ async fn test_workspace_isolation() {
 }
 
 // ============================================================================
+// Test 8: Workspace Serialization and Database Persistence
+// ============================================================================
+
+#[tokio::test]
+async fn test_workspace_serialization_and_persistence() {
+    use cortex_vfs::types::{Workspace, SyncSource, SyncSourceType, SyncSourceStatus};
+    use std::collections::HashMap;
+
+    println!("\n=== TEST 8: Workspace Serialization and Persistence ===\n");
+
+    let (vfs, storage) = create_test_vfs().await;
+
+    println!("Step 1: Test serialization of Workspace with LocalPath sync source");
+
+    // Create a workspace with LocalPath sync source (the problematic case)
+    let sync_source = SyncSource {
+        id: Uuid::new_v4(),
+        source: SyncSourceType::LocalPath {
+            path: "/test/path".to_string(),
+            watch: false,
+        },
+        read_only: false,
+        priority: 10,
+        last_sync: Some(chrono::Utc::now()),
+        status: SyncSourceStatus::Synced,
+        metadata: HashMap::new(),
+    };
+
+    let mut metadata = HashMap::new();
+    metadata.insert("test_key".to_string(), serde_json::json!("test_value"));
+
+    let workspace = Workspace {
+        id: Uuid::new_v4(),
+        name: "test_workspace".to_string(),
+        namespace: "test_ns".to_string(),
+        sync_sources: vec![sync_source],
+        metadata,
+        read_only: false,
+        parent_workspace: None,
+        fork_metadata: None,
+        dependencies: vec![],
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+
+    println!("  Workspace ID: {}", workspace.id);
+    println!("  Workspace Name: {}", workspace.name);
+    println!("  Sync Sources: {}", workspace.sync_sources.len());
+
+    // Test 1: Serialize to JSON
+    println!("\nStep 2: Test serde_json::to_value serialization");
+    let json_result = serde_json::to_value(&workspace);
+    match &json_result {
+        Ok(json) => {
+            println!("  ✓ Serialization successful");
+            println!("  JSON preview: {}",
+                serde_json::to_string_pretty(json)
+                    .unwrap()
+                    .chars()
+                    .take(500)
+                    .collect::<String>()
+            );
+        }
+        Err(e) => {
+            println!("  ✗ Serialization failed: {}", e);
+            panic!("Workspace serialization failed: {}", e);
+        }
+    }
+
+    // Test 2: Deserialize back
+    println!("\nStep 3: Test deserialization");
+    let json = json_result.unwrap();
+    let deserialized: Result<Workspace, _> = serde_json::from_value(json);
+    match &deserialized {
+        Ok(ws) => {
+            println!("  ✓ Deserialization successful");
+            println!("  Deserialized ID: {}", ws.id);
+            println!("  Deserialized Name: {}", ws.name);
+            assert_eq!(ws.id, workspace.id);
+            assert_eq!(ws.name, workspace.name);
+            assert_eq!(ws.sync_sources.len(), 1);
+        }
+        Err(e) => {
+            println!("  ✗ Deserialization failed: {}", e);
+            panic!("Workspace deserialization failed: {}", e);
+        }
+    }
+
+    // Test 3: Database persistence
+    println!("\nStep 4: Test database persistence via create_workspace");
+    let result = vfs.create_workspace(&workspace).await;
+    match &result {
+        Ok(_) => {
+            println!("  ✓ create_workspace returned Ok");
+        }
+        Err(e) => {
+            println!("  ✗ create_workspace returned Err: {}", e);
+            panic!("create_workspace failed: {}", e);
+        }
+    }
+
+    // Test 4: Query back from database
+    println!("\nStep 5: Query workspace from database");
+    let conn = storage.acquire().await.unwrap();
+    let query = "SELECT * FROM workspace WHERE id = $id";
+    let mut response = conn
+        .connection()
+        .query(query)
+        .bind(("id", workspace.id))
+        .await
+        .unwrap();
+
+    let retrieved: Option<Workspace> = response.take(0).unwrap();
+    match retrieved {
+        Some(ws) => {
+            println!("  ✓ Workspace retrieved from database");
+            println!("  Retrieved ID: {}", ws.id);
+            println!("  Retrieved Name: {}", ws.name);
+            println!("  Retrieved Namespace: {}", ws.namespace);
+            println!("  Retrieved Sync Sources: {}", ws.sync_sources.len());
+
+            assert_eq!(ws.id, workspace.id);
+            assert_eq!(ws.name, workspace.name);
+            assert_eq!(ws.namespace, workspace.namespace);
+            assert_eq!(ws.sync_sources.len(), 1);
+
+            // Verify sync source details
+            if let SyncSourceType::LocalPath { path, watch } = &ws.sync_sources[0].source {
+                println!("  ✓ Sync source type is LocalPath");
+                println!("    Path: {}", path);
+                println!("    Watch: {}", watch);
+                assert_eq!(path, "/test/path");
+                assert_eq!(*watch, false);
+            } else {
+                panic!("Sync source type is not LocalPath!");
+            }
+        }
+        None => {
+            println!("  ✗ Workspace NOT found in database!");
+
+            // Additional diagnostics
+            println!("\n  Running diagnostics...");
+
+            // Check if workspace table exists
+            let table_check: Result<Vec<serde_json::Value>, _> = conn
+                .connection()
+                .query("INFO FOR TABLE workspace")
+                .await
+                .and_then(|mut r| r.take(0));
+
+            match table_check {
+                Ok(_) => println!("    ✓ workspace table exists"),
+                Err(e) => println!("    ✗ workspace table check failed: {}", e),
+            }
+
+            // Check all workspaces
+            let all_workspaces: Result<Vec<serde_json::Value>, _> = conn
+                .connection()
+                .query("SELECT * FROM workspace")
+                .await
+                .and_then(|mut r| r.take(0));
+
+            match all_workspaces {
+                Ok(workspaces) => {
+                    println!("    Total workspaces in database: {}", workspaces.len());
+                    for (i, ws) in workspaces.iter().enumerate() {
+                        println!("      Workspace {}: {}", i + 1,
+                            serde_json::to_string_pretty(ws).unwrap_or_default());
+                    }
+                }
+                Err(e) => println!("    ✗ Failed to query all workspaces: {}", e),
+            }
+
+            panic!("Workspace was not persisted to database!");
+        }
+    }
+
+    println!("\n✅ Workspace serialization and persistence test PASSED\n");
+}
+
+// ============================================================================
 // Summary Test
 // ============================================================================
 
@@ -620,6 +801,7 @@ async fn test_vfs_production_readiness_summary() {
     println!("✅ Cache Correctness & Invalidation");
     println!("✅ Language Detection");
     println!("✅ Workspace Isolation");
+    println!("✅ Workspace Serialization & Persistence");
     println!();
     println!("All VFS correctness tests verified successfully!");
     println!();

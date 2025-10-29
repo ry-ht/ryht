@@ -851,17 +851,92 @@ impl VirtualFileSystem {
 
     /// Create a workspace in the database.
     pub async fn create_workspace(&self, workspace: &Workspace) -> Result<()> {
-        let query = "CREATE workspace CONTENT $workspace";
+        debug!("Creating workspace: id={}, name={}", workspace.id, workspace.name);
 
-        let conn = self.storage.acquire().await?;
-        let workspace_json = serde_json::to_value(workspace)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+        // Use formatted query with backticks for the ID like auth.rs does
+        let query = format!("CREATE workspace:`{}` CONTENT $workspace", workspace.id);
 
-        conn.connection()
-            .query(query)
+        let conn = self.storage.acquire().await.map_err(|e| {
+            error!("Failed to acquire database connection: {}", e);
+            e
+        })?;
+
+        debug!("Serializing workspace to JSON...");
+        let mut workspace_json = serde_json::to_value(workspace)
+            .map_err(|e| {
+                error!("Failed to serialize workspace to JSON: {}", e);
+                error!("Workspace data: id={}, name={}, namespace={}, sync_sources_count={}",
+                    workspace.id, workspace.name, workspace.namespace, workspace.sync_sources.len());
+                error!("Serialization error details: {:?}", e);
+                CortexError::storage(format!("Workspace serialization failed: {}", e))
+            })?;
+
+        // Remove the 'id' field since it's specified in the record ID
+        // SurrealDB will return a Thing for the id field, which conflicts with our UUID type
+        if let serde_json::Value::Object(ref mut map) = workspace_json {
+            map.remove("id");
+        }
+
+        debug!("Workspace serialized successfully. JSON size: {} bytes",
+            serde_json::to_string(&workspace_json).unwrap_or_default().len());
+        debug!("Workspace JSON preview: {}",
+            serde_json::to_string_pretty(&workspace_json)
+                .unwrap_or_else(|_| "<failed to format>".to_string())
+                .chars()
+                .take(500)
+                .collect::<String>());
+
+        debug!("Executing CREATE workspace query: {}", query);
+        let result = conn.connection()
+            .query(&query)
             .bind(("workspace", workspace_json))
             .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+            .map_err(|e| {
+                error!("Database query failed: {}", e);
+                error!("Query: {}", query);
+                error!("Error type: {:?}", e);
+                CortexError::storage(format!("Failed to create workspace in database: {}", e))
+            })?;
+
+        debug!("Query executed. Result: {:?}", result);
+
+        // Check if the workspace was actually created by querying it back
+        let verify_query = format!("SELECT * FROM workspace:`{}`", workspace.id);
+        debug!("Verifying with query: {}", verify_query);
+
+        let mut verify_response = conn.connection()
+            .query(&verify_query)
+            .await
+            .map_err(|e| {
+                error!("Failed to verify workspace creation: {}", e);
+                CortexError::storage(e.to_string())
+            })?;
+
+        let verify_result: Option<Workspace> = verify_response
+            .take(0)
+            .map_err(|e| {
+                error!("Failed to extract verification result: {}", e);
+                CortexError::storage(e.to_string())
+            })?;
+
+        if let Some(verified) = verify_result {
+            debug!("✓ Workspace created and verified: id={}, name={}", verified.id, verified.name);
+        } else {
+            error!("✗ Workspace was NOT found in database after creation!");
+            error!("This indicates the CREATE query succeeded but the data wasn't persisted");
+
+            // Additional debugging - list all workspaces
+            let all_query = "SELECT * FROM workspace";
+            if let Ok(mut all_response) = conn.connection().query(all_query).await {
+                if let Ok(all_workspaces) = all_response.take::<Vec<serde_json::Value>>(0) {
+                    error!("Total workspaces in DB: {}", all_workspaces.len());
+                }
+            }
+
+            return Err(CortexError::storage(
+                "Workspace creation appeared to succeed but data was not persisted to database"
+            ));
+        }
 
         Ok(())
     }

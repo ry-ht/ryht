@@ -4,3 +4,6 @@ SELECT * FROM vnode LIMIT 5;
 SELECT * FROM workspace WHERE workspace_id = '5705a8db-2d0f-47c8-95e5-70243aded3f3';
 SELECT workspace_id, count() AS total FROM vnode GROUP ALL;
 DELETE vnode; DELETE workspace;
+SELECT name, workspace_id, namespace FROM workspace;
+SELECT workspace_id, count() AS total FROM vnode GROUP ALL;
+DELETE vnode; DELETE workspace;
