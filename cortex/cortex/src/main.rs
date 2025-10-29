@@ -82,6 +82,14 @@ enum Commands {
     #[command(subcommand)]
     Workspace(WorkspaceCommands),
 
+    /// Virtual File System operations
+    #[command(subcommand)]
+    Vfs(VfsCommands),
+
+    /// Code manipulation operations
+    #[command(subcommand)]
+    Code(CodeCommands),
+
     /// Ingest files or directories into Cortex
     Ingest {
         /// Path to ingest
@@ -241,6 +249,231 @@ enum WorkspaceCommands {
     Switch {
         /// Workspace name
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum VfsCommands {
+    /// List directory contents
+    Ls {
+        /// Path to list
+        #[arg(default_value = "/")]
+        path: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Recursive listing
+        #[arg(short, long)]
+        recursive: bool,
+
+        /// Include hidden files
+        #[arg(long)]
+        hidden: bool,
+    },
+
+    /// Read file contents
+    Cat {
+        /// File path to read
+        path: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Show directory tree
+    Tree {
+        /// Path to show tree for
+        #[arg(default_value = "/")]
+        path: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Maximum depth
+        #[arg(short = 'd', long, default_value = "3")]
+        max_depth: usize,
+
+        /// Include files
+        #[arg(short = 'f', long, default_value = "true")]
+        files: bool,
+    },
+
+    /// Delete file or directory
+    Rm {
+        /// Path to delete
+        path: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Recursive deletion
+        #[arg(short, long)]
+        recursive: bool,
+    },
+
+    /// Copy file or directory
+    Cp {
+        /// Source path
+        source: String,
+
+        /// Target path
+        target: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Recursive copy
+        #[arg(short, long, default_value = "true")]
+        recursive: bool,
+
+        /// Overwrite if exists
+        #[arg(long)]
+        overwrite: bool,
+    },
+
+    /// Move/rename file or directory
+    Mv {
+        /// Source path
+        source: String,
+
+        /// Target path
+        target: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Overwrite if exists
+        #[arg(long)]
+        overwrite: bool,
+    },
+
+    /// Create directory
+    Mkdir {
+        /// Directory path
+        path: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        /// Create parent directories
+        #[arg(short = 'p', long, default_value = "true")]
+        parents: bool,
+    },
+
+    /// Write file contents
+    Write {
+        /// File path
+        path: String,
+
+        /// Content to write
+        content: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum CodeCommands {
+    /// Create a new code unit
+    Create {
+        /// File path
+        #[arg(short, long)]
+        file: String,
+
+        /// Unit type (function, struct, enum, impl)
+        #[arg(short = 't', long)]
+        unit_type: String,
+
+        /// Unit name
+        #[arg(short, long)]
+        name: String,
+
+        /// Function body or implementation
+        #[arg(short, long)]
+        body: String,
+
+        /// Function signature (optional)
+        #[arg(short, long)]
+        signature: Option<String>,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Rename a code unit
+    Rename {
+        /// Unit ID
+        #[arg(short, long)]
+        unit_id: String,
+
+        /// New name
+        #[arg(short, long)]
+        name: String,
+
+        /// Update all references
+        #[arg(long, default_value = "true")]
+        update_refs: bool,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Extract function from code block
+    ExtractFunction {
+        /// Unit ID containing the code
+        #[arg(short, long)]
+        unit_id: String,
+
+        /// Start line number
+        #[arg(long)]
+        start_line: usize,
+
+        /// End line number
+        #[arg(long)]
+        end_line: usize,
+
+        /// New function name
+        #[arg(short, long)]
+        name: String,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Optimize imports in a file
+    OptimizeImports {
+        /// File path
+        #[arg(short, long)]
+        file: String,
+
+        /// Remove unused imports
+        #[arg(long, default_value = "true")]
+        remove_unused: bool,
+
+        /// Sort imports
+        #[arg(long, default_value = "true")]
+        sort: bool,
+
+        /// Group imports
+        #[arg(long, default_value = "true")]
+        group: bool,
+
+        /// Workspace name
+        #[arg(short, long)]
+        workspace: Option<String>,
     },
 }
 
@@ -696,6 +929,48 @@ async fn run() -> Result<()> {
             }
             WorkspaceCommands::Switch { name } => {
                 commands::workspace_switch(name).await?;
+            }
+        },
+
+        Commands::Vfs(vfs_cmd) => match vfs_cmd {
+            VfsCommands::Ls { path, workspace, recursive, hidden } => {
+                commands::vfs_ls(path, workspace, recursive, hidden, format).await?;
+            }
+            VfsCommands::Cat { path, workspace } => {
+                commands::vfs_cat(path, workspace).await?;
+            }
+            VfsCommands::Tree { path, workspace, max_depth, files } => {
+                commands::vfs_tree(path, workspace, max_depth, files, format).await?;
+            }
+            VfsCommands::Rm { path, workspace, recursive } => {
+                commands::vfs_rm(path, workspace, recursive).await?;
+            }
+            VfsCommands::Cp { source, target, workspace, recursive, overwrite } => {
+                commands::vfs_cp(source, target, workspace, recursive, overwrite).await?;
+            }
+            VfsCommands::Mv { source, target, workspace, overwrite } => {
+                commands::vfs_mv(source, target, workspace, overwrite).await?;
+            }
+            VfsCommands::Mkdir { path, workspace, parents } => {
+                commands::vfs_mkdir(path, workspace, parents).await?;
+            }
+            VfsCommands::Write { path, content, workspace } => {
+                commands::vfs_write(path, content, workspace).await?;
+            }
+        },
+
+        Commands::Code(code_cmd) => match code_cmd {
+            CodeCommands::Create { file, unit_type, name, body, signature, workspace } => {
+                commands::code_create(file, unit_type, name, body, signature, workspace).await?;
+            }
+            CodeCommands::Rename { unit_id, name, update_refs, workspace } => {
+                commands::code_rename(unit_id, name, update_refs, workspace).await?;
+            }
+            CodeCommands::ExtractFunction { unit_id, start_line, end_line, name, workspace } => {
+                commands::code_extract_function(unit_id, start_line, end_line, name, workspace).await?;
+            }
+            CodeCommands::OptimizeImports { file, remove_unused, sort, group, workspace } => {
+                commands::code_optimize_imports(file, remove_unused, sort, group, workspace).await?;
             }
         },
 

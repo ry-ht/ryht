@@ -2447,6 +2447,365 @@ pub async fn server_status() -> Result<()> {
 // ============================================================================
 // Qdrant Commands (re-exported from qdrant_commands module)
 // ============================================================================
+// ============================================================================
+// VFS Commands
+// ============================================================================
+
+/// Helper to get workspace ID from name or use active workspace
+async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Option<String>) -> Result<Uuid> {
+    if let Some(name) = workspace {
+        // Try parsing as UUID first
+        if let Ok(uuid) = Uuid::parse_str(&name) {
+            return Ok(uuid);
+        }
+        // Search by name
+        let conn = storage.acquire().await?;
+        let mut response = conn.connection()
+            .query("SELECT * FROM workspace WHERE name = $name")
+            .bind(("name", name.clone()))
+            .await?;
+        let workspaces: Vec<Workspace> = response.take(0)?;
+        workspaces.first()
+            .map(|w| w.id)
+            .ok_or_else(|| anyhow::anyhow!("Workspace not found: {}", name))
+    } else {
+        // Use active workspace from config
+        let config = CortexConfig::load()?;
+        config.active_workspace
+            .ok_or_else(|| anyhow::anyhow!("No active workspace. Use --workspace flag or run 'cortex workspace switch'"))
+            .and_then(|name| {
+                // Resolve active workspace name to ID
+                futures::executor::block_on(async {
+                    let conn = storage.acquire().await?;
+                    let mut response = conn.connection()
+                        .query("SELECT * FROM workspace WHERE name = $name")
+                        .bind(("name", name.clone()))
+                        .await?;
+                    let workspaces: Vec<Workspace> = response.take(0)?;
+                    workspaces.first()
+                        .map(|w| w.id)
+                        .ok_or_else(|| anyhow::anyhow!("Active workspace not found: {}", name))
+                })
+            })
+    }
+}
+
+pub async fn vfs_ls(
+    path: String,
+    workspace: Option<String>,
+    recursive: bool,
+    hidden: bool,
+    format: OutputFormat,
+) -> Result<()> {
+    let spinner = output::spinner("Listing directory...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage.clone());
+    let vpath = VirtualPath::new(&path)?;
+    let nodes = vfs.list_directory(&workspace_id, &vpath, recursive).await?;
+
+    spinner.finish_and_clear();
+
+    match format {
+        OutputFormat::Json => {
+            output::output(&nodes, format)?;
+        }
+        _ => {
+            for node in nodes {
+                if !hidden && node.path.to_string().contains("/.") {
+                    continue;
+                }
+                let type_str = if node.is_directory() { "DIR " } else { "FILE" };
+                let size_str = if node.is_file() {
+                    format_bytes(node.size_bytes as u64)
+                } else {
+                    "-".to_string()
+                };
+                println!("{} {:>10} {}", type_str, size_str, node.path);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn vfs_cat(path: String, workspace: Option<String>) -> Result<()> {
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let vpath = VirtualPath::new(&path)?;
+    let content = vfs.read_file(&workspace_id, &vpath).await?;
+
+    print!("{}", String::from_utf8_lossy(&content));
+    Ok(())
+}
+
+pub async fn vfs_tree(
+    path: String,
+    workspace: Option<String>,
+    max_depth: usize,
+    files: bool,
+    format: OutputFormat,
+) -> Result<()> {
+    let spinner = output::spinner("Building tree...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let vpath = VirtualPath::new(&path)?;
+    let nodes = vfs.list_directory(&workspace_id, &vpath, true).await?;
+
+    spinner.finish_and_clear();
+
+    // Build tree structure
+    fn print_tree(nodes: &[VNode], prefix: &str, depth: usize, max_depth: usize, show_files: bool) {
+        if depth > max_depth {
+            return;
+        }
+        for (i, node) in nodes.iter().enumerate() {
+            if !show_files && node.is_file() {
+                continue;
+            }
+            let is_last = i == nodes.len() - 1;
+            let connector = if is_last { "└──" } else { "├──" };
+            let icon = if node.is_directory() { "📁" } else { "📄" };
+            println!("{}{} {} {}", prefix, connector, icon, node.path.file_name().unwrap_or(""));
+        }
+    }
+
+    match format {
+        OutputFormat::Json => output::output(&nodes, format)?,
+        _ => print_tree(&nodes, "", 0, max_depth, files),
+    }
+
+    Ok(())
+}
+
+pub async fn vfs_rm(path: String, workspace: Option<String>, recursive: bool) -> Result<()> {
+    let spinner = output::spinner("Deleting...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let vpath = VirtualPath::new(&path)?;
+    vfs.delete(&workspace_id, &vpath, recursive).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Deleted: {}", path));
+    Ok(())
+}
+
+pub async fn vfs_cp(
+    source: String,
+    target: String,
+    workspace: Option<String>,
+    recursive: bool,
+    overwrite: bool,
+) -> Result<()> {
+    let spinner = output::spinner("Copying...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let src_path = VirtualPath::new(&source)?;
+    let dst_path = VirtualPath::new(&target)?;
+    vfs.copy(&workspace_id, &src_path, &dst_path, recursive, overwrite).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Copied: {} -> {}", source, target));
+    Ok(())
+}
+
+pub async fn vfs_mv(
+    source: String,
+    target: String,
+    workspace: Option<String>,
+    overwrite: bool,
+) -> Result<()> {
+    let spinner = output::spinner("Moving...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let src_path = VirtualPath::new(&source)?;
+    let dst_path = VirtualPath::new(&target)?;
+    vfs.move_node(&workspace_id, &src_path, &dst_path, overwrite).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Moved: {} -> {}", source, target));
+    Ok(())
+}
+
+pub async fn vfs_mkdir(path: String, workspace: Option<String>, parents: bool) -> Result<()> {
+    let spinner = output::spinner("Creating directory...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let vpath = VirtualPath::new(&path)?;
+    vfs.create_directory(&workspace_id, &vpath, parents).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Created directory: {}", path));
+    Ok(())
+}
+
+pub async fn vfs_write(path: String, content: String, workspace: Option<String>) -> Result<()> {
+    let spinner = output::spinner("Writing file...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let vfs = VirtualFileSystem::new(storage);
+    let vpath = VirtualPath::new(&path)?;
+    vfs.write_file(&workspace_id, &vpath, content.as_bytes()).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Written: {}", path));
+    Ok(())
+}
+
+// ============================================================================
+// Code Commands
+// ============================================================================
+
+pub async fn code_create(
+    file: String,
+    unit_type: String,
+    name: String,
+    body: String,
+    signature: Option<String>,
+    workspace: Option<String>,
+) -> Result<()> {
+    let spinner = output::spinner("Creating code unit...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    // Use MCP server to call code manipulation tool
+    let mcp_server = CortexMcpServer::new_with_workspace(storage.clone(), workspace_id.to_string()).await?;
+
+    let input = serde_json::json!({
+        "file_path": file,
+        "unit_type": unit_type,
+        "name": name,
+        "body": body,
+        "signature": signature,
+        "workspace_id": workspace_id.to_string(),
+    });
+
+    let result = mcp_server.call_tool("cortex.code.create_unit", input).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Created {} '{}' in {}", unit_type, name, file));
+
+    if let Some(result_json) = result.content.first() {
+        match result_json {
+            mcp_sdk::protocol::ToolResponseContent::Text { text } => {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
+                    if let Some(unit_id) = value.get("unit_id") {
+                        output::kv("Unit ID", unit_id);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn code_rename(
+    unit_id: String,
+    name: String,
+    update_refs: bool,
+    workspace: Option<String>,
+) -> Result<()> {
+    let spinner = output::spinner("Renaming code unit...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
+
+    let input = serde_json::json!({
+        "unit_id": unit_id,
+        "new_name": name,
+        "update_references": update_refs,
+    });
+
+    let _result = mcp_server.call_tool("cortex.code.rename_unit", input).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Renamed unit to '{}'", name));
+    Ok(())
+}
+
+pub async fn code_extract_function(
+    unit_id: String,
+    start_line: usize,
+    end_line: usize,
+    name: String,
+    workspace: Option<String>,
+) -> Result<()> {
+    let spinner = output::spinner("Extracting function...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
+
+    let input = serde_json::json!({
+        "source_unit_id": unit_id,
+        "start_line": start_line,
+        "end_line": end_line,
+        "function_name": name,
+    });
+
+    let _result = mcp_server.call_tool("cortex.code.extract_function", input).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Extracted function '{}'", name));
+    Ok(())
+}
+
+pub async fn code_optimize_imports(
+    file: String,
+    remove_unused: bool,
+    sort: bool,
+    group: bool,
+    workspace: Option<String>,
+) -> Result<()> {
+    let spinner = output::spinner("Optimizing imports...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+
+    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
+
+    let input = serde_json::json!({
+        "file_path": file,
+        "remove_unused": remove_unused,
+        "sort": sort,
+        "group": group,
+        "workspace_id": workspace_id.to_string(),
+    });
+
+    let _result = mcp_server.call_tool("cortex.code.optimize_imports", input).await?;
+
+    spinner.finish_and_clear();
+    output::success(format!("Optimized imports in {}", file));
+    Ok(())
+}
 
 pub use crate::qdrant_commands::{
     qdrant_init,
