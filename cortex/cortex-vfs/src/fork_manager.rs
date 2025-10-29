@@ -75,15 +75,37 @@ impl ForkManager {
         // Store fork workspace
         let conn = self.storage.acquire().await?;
 
-        // Serialize workspace to JSON string
-        let fork_json = serde_json::to_string(&fork)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+        // Use raw query with <datetime> type cast for proper DateTime handling
+        let created_at_str = fork.created_at.to_rfc3339();
+        let updated_at_str = fork.updated_at.to_rfc3339();
 
-        // Embed JSON directly in query like auth.rs and create_workspace do
-        // This avoids SurrealDB's Thing type conversion for id field
-        let query = format!("CREATE workspace:`{}` CONTENT {}", fork.id, fork_json);
+        let query = format!(r#"
+            CREATE workspace:`{}` CONTENT {{
+                name: $name,
+                namespace: $namespace,
+                sync_sources: $sync_sources,
+                metadata: $metadata,
+                read_only: $read_only,
+                parent_workspace: $parent_workspace,
+                fork_metadata: $fork_metadata,
+                dependencies: $dependencies,
+                created_at: <datetime> $created_at,
+                updated_at: <datetime> $updated_at
+            }}
+        "#, fork.id);
 
-        conn.connection().query(&query)
+        conn.connection()
+            .query(&query)
+            .bind(("name", fork.name.clone()))
+            .bind(("namespace", fork.namespace.clone()))
+            .bind(("sync_sources", fork.sync_sources.clone()))
+            .bind(("metadata", fork.metadata.clone()))
+            .bind(("read_only", fork.read_only))
+            .bind(("parent_workspace", fork.parent_workspace))
+            .bind(("fork_metadata", fork.fork_metadata.clone()))
+            .bind(("dependencies", fork.dependencies.clone()))
+            .bind(("created_at", created_at_str))
+            .bind(("updated_at", updated_at_str))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
