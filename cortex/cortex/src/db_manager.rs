@@ -626,19 +626,6 @@ impl DatabaseManager {
         let stdout_log = std::fs::File::create(log_dir.join("qdrant.stdout.log"))?;
         let stderr_log = std::fs::File::create(log_dir.join("qdrant.stderr.log"))?;
 
-        // Start Qdrant process in background using std::process for true daemonization
-        let mut cmd = Command::new(&qdrant_path);
-
-        // Configure ports
-        cmd.env("QDRANT__SERVICE__HTTP_PORT", self.qdrant_config.port.to_string());
-        if let Some(grpc_port) = self.qdrant_config.grpc_port {
-            cmd.env("QDRANT__SERVICE__GRPC_PORT", grpc_port.to_string());
-        }
-        let data_dir_str = data_dir.to_str().ok_or_else(|| {
-            anyhow::anyhow!("Invalid UTF-8 in data directory path: {:?}", data_dir)
-        })?;
-        cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir_str);
-
         // Set PATH to include cargo/rust tools and system utilities
         // This is critical for Qdrant to find dependencies
         let cargo_bin = std::path::PathBuf::from(&home).join(".cargo").join("bin");
@@ -648,6 +635,40 @@ impl DatabaseManager {
         } else {
             format!("{}:{}:/usr/local/bin:/usr/bin:/bin", cargo_bin.display(), existing_path)
         };
+
+        // Configure environment variables
+        let data_dir_str = data_dir.to_str().ok_or_else(|| {
+            anyhow::anyhow!("Invalid UTF-8 in data directory path: {:?}", data_dir)
+        })?;
+
+        // CRITICAL: Use shell wrapper to set file descriptor limit on macOS
+        // On macOS, setrlimit in pre_exec doesn't work reliably due to low system soft limits (256)
+        // Instead, wrap Qdrant command in a shell with ulimit to properly raise the limit
+        let qdrant_path_str = qdrant_path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("Invalid UTF-8 in qdrant path: {:?}", qdrant_path)
+        })?;
+
+        // Build the shell command that sets ulimit before launching Qdrant
+        // Using 'exec' to replace the shell process with Qdrant (no extra process)
+        let shell_cmd = format!(
+            "ulimit -n 65536 && echo \"File descriptor limit: $(ulimit -n)\" >&2 && exec \"{}\"",
+            qdrant_path_str
+        );
+
+        debug!("Starting Qdrant with shell wrapper to set file descriptor limit");
+        debug!("Shell command: {}", shell_cmd);
+
+        // Start Qdrant process in background using shell wrapper
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c");
+        cmd.arg(shell_cmd);
+
+        // Configure Qdrant environment variables
+        cmd.env("QDRANT__SERVICE__HTTP_PORT", self.qdrant_config.port.to_string());
+        if let Some(grpc_port) = self.qdrant_config.grpc_port {
+            cmd.env("QDRANT__SERVICE__GRPC_PORT", grpc_port.to_string());
+        }
+        cmd.env("QDRANT__STORAGE__STORAGE_PATH", data_dir_str);
         cmd.env("PATH", new_path);
 
         // Redirect logs to files for debugging
@@ -656,7 +677,7 @@ impl DatabaseManager {
         cmd.stdin(Stdio::null());
 
         // Spawn and detach - process continues running independently
-        let child = cmd.spawn().context("Failed to spawn Qdrant process")?;
+        let child = cmd.spawn().context("Failed to spawn Qdrant process with shell wrapper")?;
 
         debug!("Qdrant process spawned with PID: {:?}", child.id());
 
@@ -673,6 +694,7 @@ impl DatabaseManager {
 
         output::success("Qdrant native binary started");
         output::info(format!("Logs: {}", log_dir.display()));
+        output::info("Check stderr log for 'File descriptor limit' to verify ulimit was set correctly");
         Ok(())
     }
 
