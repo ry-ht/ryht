@@ -262,12 +262,29 @@ impl ReviewerAgent {
         debug!("Read file {} for review", file_path);
 
         // 2. Get code units with dependencies
+        // Detect language from file extension
+        let language = std::path::Path::new(file_path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| match ext {
+                "rs" => "rust",
+                "py" => "python",
+                "js" => "javascript",
+                "ts" => "typescript",
+                "go" => "go",
+                "java" => "java",
+                "cpp" | "cc" | "cxx" => "cpp",
+                "c" => "c",
+                _ => ext,
+            })
+            .unwrap_or("unknown");
+
         let units = cortex
             .get_code_units(
                 workspace_id,
                 UnitFilters {
                     unit_type: None,
-                    language: Some("rust".to_string()),
+                    language: Some(language.to_string()),
                     visibility: None,
                 },
             )
