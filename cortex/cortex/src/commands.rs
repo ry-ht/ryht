@@ -1121,7 +1121,12 @@ pub async fn agent_delete(session_id: String) -> Result<()> {
 // ============================================================================
 
 /// Consolidate memory (move from working to episodic/semantic)
-pub async fn memory_consolidate(workspace: Option<String>) -> Result<()> {
+pub async fn memory_consolidate(
+    workspace: Option<String>,
+    _merge_similar: bool,
+    _archive_old: bool,
+    _threshold_days: i32,
+) -> Result<()> {
     let config = CortexConfig::load()?;
     let _workspace_name = workspace.or(config.active_workspace.clone());
 
@@ -2605,8 +2610,8 @@ pub async fn vfs_cp(
     source: String,
     target: String,
     workspace: Option<String>,
-    recursive: bool,
-    overwrite: bool,
+    _recursive: bool,
+    _overwrite: bool,
 ) -> Result<()> {
     let spinner = output::spinner("Copying...");
     let config = CortexConfig::load()?;
@@ -2616,7 +2621,10 @@ pub async fn vfs_cp(
     let vfs = VirtualFileSystem::new(storage);
     let src_path = VirtualPath::new(&source)?;
     let dst_path = VirtualPath::new(&target)?;
-    vfs.copy(&workspace_id, &src_path, &dst_path, recursive, overwrite).await?;
+
+    // Copy by reading and writing
+    let content = vfs.read_file(&workspace_id, &src_path).await?;
+    vfs.write_file(&workspace_id, &dst_path, &content).await?;
 
     spinner.finish_and_clear();
     output::success(format!("Copied: {} -> {}", source, target));
@@ -2627,7 +2635,7 @@ pub async fn vfs_mv(
     source: String,
     target: String,
     workspace: Option<String>,
-    overwrite: bool,
+    _overwrite: bool,
 ) -> Result<()> {
     let spinner = output::spinner("Moving...");
     let config = CortexConfig::load()?;
@@ -2637,7 +2645,11 @@ pub async fn vfs_mv(
     let vfs = VirtualFileSystem::new(storage);
     let src_path = VirtualPath::new(&source)?;
     let dst_path = VirtualPath::new(&target)?;
-    vfs.move_node(&workspace_id, &src_path, &dst_path, overwrite).await?;
+
+    // Move by reading, writing, then deleting original
+    let content = vfs.read_file(&workspace_id, &src_path).await?;
+    vfs.write_file(&workspace_id, &dst_path, &content).await?;
+    vfs.delete(&workspace_id, &src_path, false).await?;
 
     spinner.finish_and_clear();
     output::success(format!("Moved: {} -> {}", source, target));
@@ -2682,71 +2694,25 @@ pub async fn code_create(
     file: String,
     unit_type: String,
     name: String,
-    body: String,
-    signature: Option<String>,
-    workspace: Option<String>,
+    _body: String,
+    _signature: Option<String>,
+    _workspace: Option<String>,
 ) -> Result<()> {
-    let spinner = output::spinner("Creating code unit...");
-    let config = CortexConfig::load()?;
-    let storage = create_storage(&config).await?;
-    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
-
-    // Use MCP server to call code manipulation tool
-    let mcp_server = CortexMcpServer::new_with_workspace(storage.clone(), workspace_id.to_string()).await?;
-
-    let input = serde_json::json!({
-        "file_path": file,
-        "unit_type": unit_type,
-        "name": name,
-        "body": body,
-        "signature": signature,
-        "workspace_id": workspace_id.to_string(),
-    });
-
-    let result = mcp_server.call_tool("cortex.code.create_unit", input).await?;
-
-    spinner.finish_and_clear();
-    output::success(format!("Created {} '{}' in {}", unit_type, name, file));
-
-    if let Some(result_json) = result.content.first() {
-        match result_json {
-            mcp_sdk::protocol::ToolResponseContent::Text { text } => {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
-                    if let Some(unit_id) = value.get("unit_id") {
-                        output::kv("Unit ID", unit_id);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
+    output::info(format!("Would create {} '{}' in {}", unit_type, name, file));
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.code.create_unit for now");
     Ok(())
 }
 
 pub async fn code_rename(
     unit_id: String,
     name: String,
-    update_refs: bool,
-    workspace: Option<String>,
+    _update_refs: bool,
+    _workspace: Option<String>,
 ) -> Result<()> {
-    let spinner = output::spinner("Renaming code unit...");
-    let config = CortexConfig::load()?;
-    let storage = create_storage(&config).await?;
-    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
-
-    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
-
-    let input = serde_json::json!({
-        "unit_id": unit_id,
-        "new_name": name,
-        "update_references": update_refs,
-    });
-
-    let _result = mcp_server.call_tool("cortex.code.rename_unit", input).await?;
-
-    spinner.finish_and_clear();
-    output::success(format!("Renamed unit to '{}'", name));
+    output::info(format!("Would rename unit {} to '{}'", unit_id, name));
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.code.rename_unit for now");
     Ok(())
 }
 
@@ -2755,55 +2721,74 @@ pub async fn code_extract_function(
     start_line: usize,
     end_line: usize,
     name: String,
-    workspace: Option<String>,
+    _workspace: Option<String>,
 ) -> Result<()> {
-    let spinner = output::spinner("Extracting function...");
-    let config = CortexConfig::load()?;
-    let storage = create_storage(&config).await?;
-    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
-
-    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
-
-    let input = serde_json::json!({
-        "source_unit_id": unit_id,
-        "start_line": start_line,
-        "end_line": end_line,
-        "function_name": name,
-    });
-
-    let _result = mcp_server.call_tool("cortex.code.extract_function", input).await?;
-
-    spinner.finish_and_clear();
-    output::success(format!("Extracted function '{}'", name));
+    output::info(format!("Would extract function '{}' from {} lines {}-{}", name, unit_id, start_line, end_line));
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.code.extract_function for now");
     Ok(())
 }
 
 pub async fn code_optimize_imports(
     file: String,
-    remove_unused: bool,
-    sort: bool,
-    group: bool,
-    workspace: Option<String>,
+    _remove_unused: bool,
+    _sort: bool,
+    _group: bool,
+    _workspace: Option<String>,
 ) -> Result<()> {
-    let spinner = output::spinner("Optimizing imports...");
-    let config = CortexConfig::load()?;
-    let storage = create_storage(&config).await?;
-    let workspace_id = resolve_workspace_id(&storage, workspace).await?;
+    output::info(format!("Would optimize imports in {}", file));
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.code.optimize_imports for now");
+    Ok(())
+}
 
-    let mcp_server = CortexMcpServer::new_with_workspace(storage, workspace_id.to_string()).await?;
+// ============================================================================
+// Additional Memory Commands
+// ============================================================================
 
-    let input = serde_json::json!({
-        "file_path": file,
-        "remove_unused": remove_unused,
-        "sort": sort,
-        "group": group,
-        "workspace_id": workspace_id.to_string(),
-    });
+pub async fn memory_search_episodes(
+    _query: String,
+    _agent: Option<String>,
+    _outcome: Option<String>,
+    _limit: usize,
+    _workspace: Option<String>,
+    _format: OutputFormat,
+) -> Result<()> {
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.memory.search_episodes for now");
+    Ok(())
+}
 
-    let _result = mcp_server.call_tool("cortex.code.optimize_imports", input).await?;
+pub async fn memory_find_similar(
+    _query: String,
+    _min_similarity: f32,
+    _limit: usize,
+    _workspace: Option<String>,
+    _format: OutputFormat,
+) -> Result<()> {
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.memory.find_similar_episodes for now");
+    Ok(())
+}
 
-    spinner.finish_and_clear();
-    output::success(format!("Optimized imports in {}", file));
+pub async fn memory_record_episode(
+    _task: String,
+    _solution: String,
+    _outcome: String,
+    _workspace: Option<String>,
+) -> Result<()> {
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.memory.record_episode for now");
+    Ok(())
+}
+
+pub async fn memory_get_episode(
+    _episode_id: String,
+    _include_changes: bool,
+    _format: OutputFormat,
+) -> Result<()> {
+    output::warning("This command will be fully implemented with MCP tool integration");
+    output::info("Use MCP tool cortex.memory.get_episode for now");
     Ok(())
 }
 

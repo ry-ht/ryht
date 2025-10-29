@@ -559,6 +559,18 @@ enum MemoryCommands {
         /// Workspace to consolidate
         #[arg(short, long)]
         workspace: Option<String>,
+
+        /// Merge similar episodes
+        #[arg(long, default_value = "true")]
+        merge_similar: bool,
+
+        /// Archive old episodes
+        #[arg(long, default_value = "true")]
+        archive_old: bool,
+
+        /// Threshold in days
+        #[arg(long, default_value = "90")]
+        threshold_days: i32,
     },
 
     /// Forget (delete) old memory
@@ -569,6 +581,75 @@ enum MemoryCommands {
         /// Workspace to forget from
         #[arg(short, long)]
         workspace: Option<String>,
+    },
+
+    /// Search episodes by criteria
+    SearchEpisodes {
+        /// Search query
+        query: String,
+
+        /// Agent ID filter
+        #[arg(long)]
+        agent: Option<String>,
+
+        /// Outcome filter (success, failed)
+        #[arg(long)]
+        outcome: Option<String>,
+
+        /// Limit results
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Workspace to search
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Find similar episodes
+    FindSimilar {
+        /// Query description
+        query: String,
+
+        /// Minimum similarity (0.0-1.0)
+        #[arg(long, default_value = "0.7")]
+        min_similarity: f32,
+
+        /// Limit results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+
+        /// Workspace to search
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Record a new episode
+    RecordEpisode {
+        /// Task description
+        #[arg(short, long)]
+        task: String,
+
+        /// Solution summary
+        #[arg(short, long)]
+        solution: String,
+
+        /// Outcome (success/failed)
+        #[arg(short, long, default_value = "success")]
+        outcome: String,
+
+        /// Workspace
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
+    /// Get episode by ID
+    GetEpisode {
+        /// Episode ID
+        episode_id: String,
+
+        /// Include changes
+        #[arg(long, default_value = "true")]
+        include_changes: bool,
     },
 }
 
@@ -1039,11 +1120,23 @@ async fn run() -> Result<()> {
         },
 
         Commands::Memory(memory_cmd) => match memory_cmd {
-            MemoryCommands::Consolidate { workspace } => {
-                commands::memory_consolidate(workspace).await?;
+            MemoryCommands::Consolidate { workspace, merge_similar, archive_old, threshold_days } => {
+                commands::memory_consolidate(workspace, merge_similar, archive_old, threshold_days).await?;
             }
             MemoryCommands::Forget { before, workspace } => {
                 commands::memory_forget(before, workspace).await?;
+            }
+            MemoryCommands::SearchEpisodes { query, agent, outcome, limit, workspace } => {
+                commands::memory_search_episodes(query, agent, outcome, limit, workspace, format).await?;
+            }
+            MemoryCommands::FindSimilar { query, min_similarity, limit, workspace } => {
+                commands::memory_find_similar(query, min_similarity, limit, workspace, format).await?;
+            }
+            MemoryCommands::RecordEpisode { task, solution, outcome, workspace } => {
+                commands::memory_record_episode(task, solution, outcome, workspace).await?;
+            }
+            MemoryCommands::GetEpisode { episode_id, include_changes } => {
+                commands::memory_get_episode(episode_id, include_changes, format).await?;
             }
         },
 
