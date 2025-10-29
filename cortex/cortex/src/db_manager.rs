@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 /// Database backend type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -536,8 +536,26 @@ impl DatabaseManager {
 
             retries += 1;
             if retries >= self.config.health_check_retries {
+                // Provide detailed error with log hints for Qdrant
+                if backend == DatabaseBackend::Qdrant {
+                    let home = std::env::var("HOME").unwrap_or_default();
+                    let log_path = format!("{}/.cortex/logs/qdrant.stderr.log", home);
+                    error!("{} did not become healthy. Check logs at: {}", backend.as_str(), log_path);
+
+                    // Try to read last few lines of error log
+                    if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+                        let last_lines: Vec<&str> = log_content.lines().rev().take(10).collect();
+                        if !last_lines.is_empty() {
+                            error!("Last error log lines:");
+                            for line in last_lines.iter().rev() {
+                                error!("  {}", line);
+                            }
+                        }
+                    }
+                }
+
                 bail!(
-                    "{} did not become healthy after {} retries ({} seconds)",
+                    "{} did not become healthy after {} retries ({} seconds). Check logs for details.",
                     backend.as_str(),
                     self.config.health_check_retries,
                     self.config.health_check_retries * 2 + 1
@@ -567,12 +585,27 @@ impl DatabaseManager {
     /// Start native Qdrant binary
     async fn start_native_qdrant(&self) -> Result<()> {
         use std::process::{Command, Stdio};
+        use std::net::TcpListener;
 
         let home = std::env::var("HOME").context("HOME not set")?;
         let qdrant_path = std::path::PathBuf::from(&home).join(".cortex").join("bin").join("qdrant");
 
         if !qdrant_path.exists() {
             bail!("Qdrant binary not found at: {}", qdrant_path.display());
+        }
+
+        // Check if port is already in use
+        let port = self.qdrant_config.port;
+        if let Err(_) = TcpListener::bind(format!("127.0.0.1:{}", port)) {
+            // Port is in use, try to kill existing Qdrant process
+            warn!("Port {} is in use, attempting to stop existing Qdrant process", port);
+            let _ = self.stop_native_qdrant().await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
+
+            // Check again
+            if let Err(_) = TcpListener::bind(format!("127.0.0.1:{}", port)) {
+                bail!("Port {} is still in use after cleanup attempt. Please manually stop Qdrant or check for port conflicts.", port);
+            }
         }
 
         // Set data directory
@@ -615,7 +648,20 @@ impl DatabaseManager {
         cmd.stdin(Stdio::null());
 
         // Spawn and detach - process continues running independently
-        cmd.spawn().context("Failed to spawn Qdrant process")?;
+        let child = cmd.spawn().context("Failed to spawn Qdrant process")?;
+
+        debug!("Qdrant process spawned with PID: {:?}", child.id());
+
+        // Give the process a moment to start before returning
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Verify process actually started by checking if port becomes occupied
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Ok(_) = TcpListener::bind(format!("127.0.0.1:{}", port)) {
+            // Port is still free - process likely failed to start
+            warn!("Qdrant process may have failed to start - port {} is not in use", port);
+            output::warning("Check logs for errors");
+        }
 
         output::success("Qdrant native binary started");
         output::info(format!("Logs: {}", log_dir.display()));
