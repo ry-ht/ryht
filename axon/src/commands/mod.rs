@@ -7,7 +7,7 @@ pub mod runtime_manager_impl;
 pub mod server_manager;
 pub mod api;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -958,6 +958,213 @@ pub async fn interactive_mode(mode: String) -> Result<()> {
             return Err(anyhow::anyhow!("Unknown interactive mode: {}", mode));
         }
     }
+
+    Ok(())
+}
+
+// ============================================================================
+// MCP Commands
+// ============================================================================
+
+/// Initialize file-only logging (no stdout/stderr output)
+fn init_file_logging(log_file: &str, log_level: &str) -> Result<()> {
+    use tracing_subscriber::fmt;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::EnvFilter;
+
+    // Create log directory if it doesn't exist
+    if let Some(parent) = std::path::Path::new(log_file).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Open log file for appending
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)?;
+
+    // Create filter from log level
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(log_level));
+
+    // Initialize file-only subscriber (NO stdout/stderr!)
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().with_writer(Arc::new(file)))
+        .try_init()
+        .map_err(|e| anyhow::anyhow!("Failed to initialize logging: {}", e))?;
+
+    Ok(())
+}
+
+/// Start MCP server in stdio mode
+pub async fn mcp_stdio() -> Result<()> {
+    // Get log file path - use a default location in the user's home directory
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let log_file = format!("{}/.axon/logs/mcp-stdio.log", home);
+    let log_level = "axon=info,warn";
+
+    // Initialize file logging for stdio mode (NO stdout/stderr output!)
+    init_file_logging(&log_file, log_level)?;
+
+    tracing::info!("Starting Axon MCP Server (stdio mode)");
+    tracing::info!("Log file: {}", log_file);
+
+    // Get Cortex URL from environment or use default
+    let cortex_url = std::env::var("CORTEX_MCP_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let working_dir = std::env::current_dir()?;
+
+    // Create MCP server configuration
+    let config = crate::mcp_server::McpServerConfig {
+        name: "axon-mcp".to_string(),
+        version: crate::VERSION.to_string(),
+        cortex_url: cortex_url.clone(),
+        working_dir,
+        max_concurrent_agents: 10,
+        default_timeout_secs: 3600,
+    };
+
+    // Initialize Cortex bridge
+    let cortex_config = crate::cortex_bridge::CortexConfig {
+        base_url: cortex_url,
+        ..Default::default()
+    };
+    let cortex = Arc::new(crate::cortex_bridge::CortexBridge::new(cortex_config).await?);
+
+    // Create and run MCP server
+    let server = crate::mcp_server::AxonMcpServer::new(config, cortex);
+
+    tracing::info!("MCP server started successfully, listening on stdio");
+
+    server.run().await?;
+    Ok(())
+}
+
+/// Start MCP server in HTTP mode
+pub async fn mcp_http(address: String, port: u16) -> Result<()> {
+    // Get log file path
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let log_file = format!("{}/.axon/logs/mcp-http.log", home);
+    let log_level = "axon=info,warn";
+
+    // Initialize file logging for HTTP mode
+    init_file_logging(&log_file, log_level)?;
+
+    println!("Starting Axon MCP Server (HTTP mode)");
+    println!("Address: {}", address);
+    println!("Port: {}", port);
+    println!("Initializing server...");
+
+    // Get Cortex URL from environment or use default
+    let cortex_url = std::env::var("CORTEX_MCP_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let working_dir = std::env::current_dir()?;
+
+    // Create MCP server configuration
+    let config = crate::mcp_server::McpServerConfig {
+        name: "axon-mcp".to_string(),
+        version: crate::VERSION.to_string(),
+        cortex_url: cortex_url.clone(),
+        working_dir,
+        max_concurrent_agents: 10,
+        default_timeout_secs: 3600,
+    };
+
+    // Initialize Cortex bridge
+    let cortex_config = crate::cortex_bridge::CortexConfig {
+        base_url: cortex_url,
+        ..Default::default()
+    };
+    let cortex = Arc::new(crate::cortex_bridge::CortexBridge::new(cortex_config).await?);
+
+    // Create MCP server
+    let server = crate::mcp_server::AxonMcpServer::new(config, cortex);
+
+    let bind_addr = format!("{}:{}", address, port);
+
+    println!("✓ MCP server started successfully");
+    println!("Listening on http://{}", bind_addr);
+    println!("Log file: {}", log_file);
+    println!("Press Ctrl+C to stop");
+
+    tracing::info!("MCP HTTP server started on {}", bind_addr);
+    tracing::info!("Log file: {}", log_file);
+
+    server.serve_http(&bind_addr).await?;
+    Ok(())
+}
+
+/// Show information about available MCP tools
+pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
+    println!("Axon MCP Server - Tools Information");
+    println!("====================================");
+    println!();
+
+    // Tool categories and descriptions
+    let categories = vec![
+        ("Agent Management", 3, vec![
+            ("axon.agent.launch", "Launch a specialized agent (developer, tester, reviewer, etc.) to perform a specific task"),
+            ("axon.agent.status", "Check the status of a running agent by agent_id"),
+            ("axon.agent.stop", "Stop a running agent by agent_id"),
+        ]),
+        ("Orchestration", 1, vec![
+            ("axon.orchestrate.task", "Orchestrate a complex task across multiple specialized agents"),
+        ]),
+        ("Knowledge Integration", 1, vec![
+            ("axon.cortex.query", "Query the Cortex knowledge graph for code, patterns, and semantic information"),
+        ]),
+        ("Session Management", 2, vec![
+            ("axon.session.create", "Create an isolated work session for experimental changes"),
+            ("axon.session.merge", "Merge a session's changes back into the main workspace"),
+        ]),
+    ];
+
+    // Filter by category if specified
+    let filtered_categories: Vec<_> = if let Some(ref filter) = category {
+        categories.into_iter()
+            .filter(|(cat, _, _)| cat.to_lowercase().contains(&filter.to_lowercase()))
+            .collect()
+    } else {
+        categories
+    };
+
+    if filtered_categories.is_empty() {
+        println!("No categories found matching: {}", category.unwrap());
+        return Ok(());
+    }
+
+    // Calculate total tools
+    let total_tools: usize = filtered_categories.iter().map(|(_, count, _)| count).sum();
+
+    println!("Total Tools: {}", total_tools);
+    println!("Categories: {}", filtered_categories.len());
+    println!();
+
+    for (cat_name, count, tools) in filtered_categories {
+        println!("## {} ({} tools)", cat_name, count);
+        println!();
+
+        if detailed {
+            for (tool_name, description) in tools {
+                println!("  - {}", tool_name);
+                println!("    {}", description);
+                println!();
+            }
+        } else {
+            for (tool_name, _) in tools {
+                println!("  - {}", tool_name);
+            }
+            println!();
+        }
+    }
+
+    println!("Usage:");
+    println!("  axon mcp stdio              Start MCP server in stdio mode");
+    println!("  axon mcp http               Start MCP server in HTTP mode");
+    println!("  axon mcp info --detailed    Show detailed tool information");
+    println!();
 
     Ok(())
 }

@@ -73,12 +73,17 @@ impl ForkManager {
         };
 
         // Store fork workspace
-        let query = "CREATE workspace CONTENT $workspace";
         let conn = self.storage.acquire().await?;
-        let fork_json = serde_json::to_value(&fork)
+
+        // Serialize workspace to JSON string
+        let fork_json = serde_json::to_string(&fork)
             .map_err(|e| CortexError::storage(e.to_string()))?;
-        conn.connection().query(query)
-            .bind(("workspace", fork_json))
+
+        // Embed JSON directly in query like auth.rs and create_workspace do
+        // This avoids SurrealDB's Thing type conversion for id field
+        let query = format!("CREATE workspace:`{}` CONTENT {}", fork.id, fork_json);
+
+        conn.connection().query(&query)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
@@ -118,12 +123,17 @@ impl ForkManager {
             fork_vnode.updated_at = chrono::Utc::now();
 
             // Store fork vnode
-            let query = "CREATE vnode CONTENT $vnode";
             let conn = self.storage.acquire().await?;
-            let vnode_json = serde_json::to_value(&fork_vnode)
+
+            // Serialize vnode to JSON string
+            let vnode_json = serde_json::to_string(&fork_vnode)
                 .map_err(|e| CortexError::storage(e.to_string()))?;
-            conn.connection().query(query)
-                .bind(("vnode", vnode_json))
+
+            // Embed JSON directly in query like auth.rs and save_vnode do
+            // This avoids SurrealDB's Thing type conversion for id field
+            let query = format!("CREATE vnode CONTENT {}", vnode_json);
+
+            conn.connection().query(&query)
                 .await
                 .map_err(|e| CortexError::storage(e.to_string()))?;
 
@@ -404,12 +414,17 @@ impl ForkManager {
         target_vnode.created_at = chrono::Utc::now();
         target_vnode.updated_at = chrono::Utc::now();
 
-        let query = "CREATE vnode CONTENT $vnode";
         let conn = self.storage.acquire().await?;
-        let vnode_json = serde_json::to_value(&target_vnode)
+
+        // Serialize vnode to JSON string
+        let vnode_json = serde_json::to_string(&target_vnode)
             .map_err(|e| CortexError::storage(e.to_string()))?;
-        conn.connection().query(query)
-            .bind(("vnode", vnode_json))
+
+        // Embed JSON directly in query like auth.rs and save_vnode do
+        // This avoids SurrealDB's Thing type conversion for id field
+        let query = format!("CREATE vnode CONTENT {}", vnode_json);
+
+        conn.connection().query(&query)
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 

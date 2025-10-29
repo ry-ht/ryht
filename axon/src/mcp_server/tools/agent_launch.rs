@@ -8,7 +8,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// Agent launch tool input
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct AgentLaunchInput {
     /// Agent type to launch
     pub agent_type: String,

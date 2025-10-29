@@ -34,6 +34,7 @@ chrono = { workspace = true }
 
 # Local dependencies (within workspace)
 mcp-sdk = { path = "../crates/mcp-sdk" }
+schemars = { workspace = true }
 
 # External dependencies
 tokio-stream = { version = "0.1", features = ["sync"] }

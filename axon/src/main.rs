@@ -13,6 +13,10 @@
 //! # List running agents
 //! axon agent list
 //!
+//! # Start MCP server
+//! axon mcp stdio
+//! axon mcp http
+//!
 //! # Start REST API server for dashboard
 //! axon server start
 //!
@@ -129,6 +133,10 @@ enum Commands {
     /// Export metrics and reports
     #[command(subcommand)]
     Export(ExportCommands),
+
+    /// Model Context Protocol operations
+    #[command(subcommand)]
+    Mcp(McpCommands),
 
     /// Interactive mode
     Interactive {
@@ -384,6 +392,34 @@ enum ExportCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum McpCommands {
+    /// Start MCP server in stdio mode
+    Stdio,
+
+    /// Start MCP server in HTTP mode
+    Http {
+        /// Server address
+        #[arg(short, long, default_value = "127.0.0.1")]
+        address: String,
+
+        /// Server port
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+    },
+
+    /// Show information about available MCP tools
+    Info {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+
+        /// Filter by category
+        #[arg(long)]
+        category: Option<String>,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
@@ -395,8 +431,12 @@ async fn main() {
 async fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialize logging
-    init_logging(cli.verbose);
+    // Skip default logging for MCP stdio mode (it will use file-only logging)
+    let is_mcp_stdio = matches!(&cli.command, Commands::Mcp(McpCommands::Stdio));
+
+    if !is_mcp_stdio {
+        init_logging(cli.verbose);
+    }
 
     // Use command functions from the commands module
     use axon::commands::*;
@@ -522,6 +562,18 @@ async fn run() -> Result<()> {
             }
             ExportCommands::Workflows { output, format } => {
                 export_workflows(output, format).await?;
+            }
+        },
+
+        Commands::Mcp(mcp_cmd) => match mcp_cmd {
+            McpCommands::Stdio => {
+                mcp_stdio().await?;
+            }
+            McpCommands::Http { address, port } => {
+                mcp_http(address, port).await?;
+            }
+            McpCommands::Info { detailed, category } => {
+                mcp_info(detailed, category).await?;
             }
         },
 

@@ -361,17 +361,18 @@ impl VirtualFileSystem {
 
     /// Save a vnode to the database.
     pub async fn save_vnode(&self, vnode: &VNode) -> Result<()> {
-        let query = format!(
-            "CREATE vnode CONTENT $vnode"
-        );
-
         let conn = self.storage.acquire().await?;
-        let vnode_json = serde_json::to_value(vnode)
+
+        // Serialize vnode to JSON string
+        let vnode_json = serde_json::to_string(vnode)
             .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        // Embed JSON directly in query like auth.rs and create_workspace do
+        // This avoids SurrealDB's Thing type conversion for id field
+        let query = format!("CREATE vnode CONTENT {}", vnode_json);
 
         conn.connection()
             .query(&query)
-            .bind(("vnode", vnode_json))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
@@ -640,19 +641,25 @@ impl VirtualFileSystem {
         // We'll use an atomic increment that creates if not exists
         let query = r#"
             LET $record = SELECT * FROM type::thing('file_content', $hash) LIMIT 1;
-            IF $record {
+            IF count($record) > 0 {
                 UPDATE type::thing('file_content', $hash) SET reference_count += 1;
             } ELSE {
                 CREATE type::thing('file_content', $hash) CONTENT $content;
             };
         "#;
 
-        conn.connection()
-            .query(query)
-            .bind(("hash", hash.to_string()))
-            .bind(("content", file_content_json))
-            .await
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+        // Add timeout to prevent hanging during large file imports
+        // Increased from 30s to 120s to handle large workspace imports
+        tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            conn.connection()
+                .query(query)
+                .bind(("hash", hash.to_string()))
+                .bind(("content", file_content_json))
+        )
+        .await
+        .map_err(|_| CortexError::storage("Query timed out after 120 seconds".to_string()))?
+        .map_err(|e| CortexError::storage(e.to_string()))?;
 
         debug!("Content stored/referenced: {} (atomic operation)", hash);
         Ok(())
@@ -853,16 +860,13 @@ impl VirtualFileSystem {
     pub async fn create_workspace(&self, workspace: &Workspace) -> Result<()> {
         debug!("Creating workspace: id={}, name={}", workspace.id, workspace.name);
 
-        // Use formatted query with backticks for the ID like auth.rs does
-        let query = format!("CREATE workspace:`{}` CONTENT $workspace", workspace.id);
-
         let conn = self.storage.acquire().await.map_err(|e| {
             error!("Failed to acquire database connection: {}", e);
             e
         })?;
 
         debug!("Serializing workspace to JSON...");
-        let mut workspace_json = serde_json::to_value(workspace)
+        let workspace_json = serde_json::to_string(workspace)
             .map_err(|e| {
                 error!("Failed to serialize workspace to JSON: {}", e);
                 error!("Workspace data: id={}, name={}, namespace={}, sync_sources_count={}",
@@ -871,29 +875,19 @@ impl VirtualFileSystem {
                 CortexError::storage(format!("Workspace serialization failed: {}", e))
             })?;
 
-        // Remove the 'id' field since it's specified in the record ID
-        // SurrealDB will return a Thing for the id field, which conflicts with our UUID type
-        if let serde_json::Value::Object(ref mut map) = workspace_json {
-            map.remove("id");
-        }
+        debug!("Workspace serialized successfully. JSON size: {} bytes", workspace_json.len());
 
-        debug!("Workspace serialized successfully. JSON size: {} bytes",
-            serde_json::to_string(&workspace_json).unwrap_or_default().len());
-        debug!("Workspace JSON preview: {}",
-            serde_json::to_string_pretty(&workspace_json)
-                .unwrap_or_else(|_| "<failed to format>".to_string())
-                .chars()
-                .take(500)
-                .collect::<String>());
+        // Embed JSON directly in query like auth.rs does (lines 552, 682)
+        // This avoids SurrealDB's Thing type conversion for id field
+        let query = format!("CREATE workspace:`{}` CONTENT {}", workspace.id, workspace_json);
 
-        debug!("Executing CREATE workspace query: {}", query);
+        debug!("Executing CREATE workspace query");
         let result = conn.connection()
             .query(&query)
-            .bind(("workspace", workspace_json))
             .await
             .map_err(|e| {
                 error!("Database query failed: {}", e);
-                error!("Query: {}", query);
+                error!("Query: CREATE workspace:`{}` CONTENT ...", workspace.id);
                 error!("Error type: {:?}", e);
                 CortexError::storage(format!("Failed to create workspace in database: {}", e))
             })?;
