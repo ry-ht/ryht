@@ -2747,48 +2747,178 @@ pub async fn code_optimize_imports(
 // ============================================================================
 
 pub async fn memory_search_episodes(
-    _query: String,
-    _agent: Option<String>,
-    _outcome: Option<String>,
-    _limit: usize,
-    _workspace: Option<String>,
-    _format: OutputFormat,
+    query: String,
+    agent: Option<String>,
+    outcome: Option<String>,
+    limit: usize,
+    workspace: Option<String>,
+    format: OutputFormat,
 ) -> Result<()> {
-    output::warning("This command will be fully implemented with MCP tool integration");
-    output::info("Use MCP tool cortex.memory.search_episodes for now");
+    let spinner = output::spinner("Searching episodes...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let memory = CognitiveManager::new(storage);
+
+    // Search episodes
+    let episodes = memory.search_episodes(
+        query.clone(),
+        agent.clone(),
+        outcome.clone(),
+        workspace,
+        limit,
+    ).await.unwrap_or_else(|_| Vec::new());
+
+    spinner.finish_and_clear();
+
+    if episodes.is_empty() {
+        output::warning("No episodes found matching the criteria");
+        return Ok(());
+    }
+
+    match format {
+        OutputFormat::Json => {
+            output::output(&episodes, format)?;
+        }
+        _ => {
+            output::success(format!("Found {} episodes", episodes.len()));
+            for (i, episode) in episodes.iter().enumerate().take(limit) {
+                println!("\n{}. {}", i + 1, episode.task_description);
+                println!("   Agent: {}", episode.agent_id.as_deref().unwrap_or("unknown"));
+                println!("   Outcome: {}", episode.outcome);
+                println!("   Created: {}", episode.created_at.format("%Y-%m-%d %H:%M"));
+            }
+        }
+    }
+
     Ok(())
 }
 
 pub async fn memory_find_similar(
-    _query: String,
-    _min_similarity: f32,
-    _limit: usize,
-    _workspace: Option<String>,
-    _format: OutputFormat,
+    query: String,
+    min_similarity: f32,
+    limit: usize,
+    workspace: Option<String>,
+    format: OutputFormat,
 ) -> Result<()> {
-    output::warning("This command will be fully implemented with MCP tool integration");
-    output::info("Use MCP tool cortex.memory.find_similar_episodes for now");
+    let spinner = output::spinner("Finding similar episodes...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let memory = CognitiveManager::new(storage);
+
+    // Find similar episodes
+    let episodes = memory.find_similar_episodes(
+        query.clone(),
+        workspace,
+        min_similarity,
+        limit,
+    ).await.unwrap_or_else(|_| Vec::new());
+
+    spinner.finish_and_clear();
+
+    if episodes.is_empty() {
+        output::warning(format!("No similar episodes found (similarity >= {})", min_similarity));
+        return Ok(());
+    }
+
+    match format {
+        OutputFormat::Json => {
+            output::output(&episodes, format)?;
+        }
+        _ => {
+            output::success(format!("Found {} similar episodes", episodes.len()));
+            for (i, (episode, similarity)) in episodes.iter().enumerate().take(limit) {
+                println!("\n{}. {} (similarity: {:.2})", i + 1, episode.task_description, similarity);
+                println!("   Solution: {}", episode.solution_summary);
+                println!("   Created: {}", episode.created_at.format("%Y-%m-%d %H:%M"));
+            }
+        }
+    }
+
     Ok(())
 }
 
 pub async fn memory_record_episode(
-    _task: String,
-    _solution: String,
-    _outcome: String,
-    _workspace: Option<String>,
+    task: String,
+    solution: String,
+    outcome: String,
+    workspace: Option<String>,
 ) -> Result<()> {
-    output::warning("This command will be fully implemented with MCP tool integration");
-    output::info("Use MCP tool cortex.memory.record_episode for now");
+    let spinner = output::spinner("Recording episode...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let memory = CognitiveManager::new(storage);
+
+    // Record episode
+    let episode_id = memory.record_episode(
+        task.clone(),
+        solution.clone(),
+        outcome.clone(),
+        workspace,
+        Vec::new(), // entities_affected
+        Vec::new(), // file_changes
+        Vec::new(), // lessons_learned
+        None, // duration_seconds
+    ).await?;
+
+    spinner.finish_and_clear();
+    output::success("Episode recorded successfully");
+    output::kv("Episode ID", episode_id);
+    output::kv("Task", task);
+    output::kv("Outcome", outcome);
+
     Ok(())
 }
 
 pub async fn memory_get_episode(
-    _episode_id: String,
-    _include_changes: bool,
-    _format: OutputFormat,
+    episode_id: String,
+    include_changes: bool,
+    format: OutputFormat,
 ) -> Result<()> {
-    output::warning("This command will be fully implemented with MCP tool integration");
-    output::info("Use MCP tool cortex.memory.get_episode for now");
+    let spinner = output::spinner("Retrieving episode...");
+    let config = CortexConfig::load()?;
+    let storage = create_storage(&config).await?;
+    let memory = CognitiveManager::new(storage);
+
+    // Get episode
+    let episode = memory.get_episode(&episode_id, include_changes).await?;
+
+    spinner.finish_and_clear();
+
+    match format {
+        OutputFormat::Json => {
+            output::output(&episode, format)?;
+        }
+        _ => {
+            output::success("Episode retrieved");
+            println!("\nTask: {}", episode.task_description);
+            println!("Solution: {}", episode.solution_summary);
+            println!("Outcome: {}", episode.outcome);
+            println!("Created: {}", episode.created_at.format("%Y-%m-%d %H:%M:%S"));
+
+            if let Some(agent) = episode.agent_id {
+                println!("Agent: {}", agent);
+            }
+
+            if let Some(duration) = episode.duration_seconds {
+                println!("Duration: {}s", duration);
+            }
+
+            if !episode.lessons_learned.is_empty() {
+                println!("\nLessons learned:");
+                for lesson in &episode.lessons_learned {
+                    println!("  - {}", lesson);
+                }
+            }
+
+            if include_changes && !episode.file_changes.is_empty() {
+                println!("\nFile changes:");
+                for change in &episode.file_changes {
+                    println!("  {} - {}", change.change_type, change.file_path);
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
