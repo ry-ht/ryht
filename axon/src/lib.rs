@@ -39,6 +39,9 @@ pub mod cortex_bridge;
 // CLI commands and server
 pub mod commands;
 
+// MCP server for agent orchestration
+pub mod mcp_server;
+
 // Re-export key types from cc module
 pub use cc::{
     ClaudeClient,
