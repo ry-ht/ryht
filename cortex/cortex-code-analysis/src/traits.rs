@@ -48,7 +48,7 @@ pub trait ParserTrait: Sized {
     fn get_language(&self) -> Lang;
 
     /// Get the root node of the parsed tree
-    fn get_root(&self) -> Node;
+    fn get_root<'a>(&'a self) -> Node<'a>;
 
     /// Get the source code as bytes
     fn get_code(&self) -> &[u8];

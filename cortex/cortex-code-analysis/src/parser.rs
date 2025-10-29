@@ -56,7 +56,7 @@ impl<T: LanguageInfo> ParserTrait for Parser<T> {
         T::get_lang()
     }
 
-    fn get_root(&self) -> Node {
+    fn get_root<'a>(&'a self) -> Node<'a> {
         Node::new(self.tree.root_node())
     }
 
