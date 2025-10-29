@@ -941,16 +941,22 @@ impl DocGenerateReadmeTool {
             .map_err(|e| format!("Database error: {}", e))?;
         let conn = pooled.connection();
 
-        let workspace_query = format!("SELECT * FROM workspace WHERE id = '{}'", workspace_id);
+        let workspace_query = format!("SELECT *, <string>meta::id(id) as id FROM workspace WHERE id = '{}'", workspace_id);
         let mut result = conn.query(&workspace_query).await
             .map_err(|e| format!("Query error: {}", e))?;
-        let workspaces: Vec<serde_json::Value> = result.take(0)
+
+        // Parse with string ID
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            name: Option<String>,
+        }
+
+        let workspaces: Vec<WorkspaceWithStringId> = result.take(0)
             .map_err(|e| format!("Failed to parse workspace: {}", e))?;
 
-        let workspace = workspaces.first();
-        let workspace_name = workspace
-            .and_then(|w| w.get("name"))
-            .and_then(|n| n.as_str())
+        let workspace_name = workspaces.first()
+            .and_then(|w| w.name.as_deref())
             .unwrap_or("Project");
 
         // Title

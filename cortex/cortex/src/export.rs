@@ -217,7 +217,7 @@ pub async fn export_workspace(
         .context("Failed to acquire database connection")?;
 
     // Query workspace by name
-    let query = "SELECT * FROM workspace WHERE name = $name LIMIT 1";
+    let query = "SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name LIMIT 1";
     let workspace_name_owned = workspace_name.to_string();
     let mut result = conn.connection()
         .query(query)
@@ -225,10 +225,29 @@ pub async fn export_workspace(
         .await
         .context("Failed to query workspace")?;
 
-    let workspace: Option<cortex_vfs::Workspace> = result.take(0)
+    // Parse with string ID and convert to UUID
+    #[derive(serde::Deserialize)]
+    struct WorkspaceWithStringId {
+        id: String,
+        #[serde(flatten)]
+        rest: serde_json::Value,
+    }
+
+    let workspace_raw: Option<WorkspaceWithStringId> = result.take(0)
         .context("Failed to deserialize workspace")?;
 
-    let workspace = workspace
+    let workspace = workspace_raw
+        .map(|w| {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+            serde_json::from_value::<cortex_vfs::Workspace>(workspace_json)
+        })
+        .transpose()
+        .context("Failed to parse workspace")?
         .ok_or_else(|| anyhow::anyhow!("Workspace '{}' not found", workspace_name))?;
 
     // Count files in workspace

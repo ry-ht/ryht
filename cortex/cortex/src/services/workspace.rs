@@ -111,14 +111,36 @@ impl WorkspaceService {
 
         let conn = self.storage.acquire().await?;
 
-        let mut query = String::from("SELECT * FROM workspace ORDER BY created_at DESC");
+        let mut query = String::from("SELECT *, <string>meta::id(id) as id FROM workspace ORDER BY created_at DESC");
 
         if let Some(limit) = filters.limit {
             query.push_str(&format!(" LIMIT {}", limit));
         }
 
         let mut response = conn.connection().query(&query).await?;
-        let workspaces: Vec<Workspace> = response.take(0)?;
+
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+        let workspaces: Vec<Workspace> = workspaces_raw
+            .into_iter()
+            .filter_map(|w| {
+                // Extract UUID from "workspace:uuid" format
+                let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+                let mut workspace_json = w.rest;
+                if let Some(obj) = workspace_json.as_object_mut() {
+                    obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+                }
+                serde_json::from_value::<Workspace>(workspace_json).ok()
+            })
+            .collect();
 
         Ok(workspaces
             .into_iter()

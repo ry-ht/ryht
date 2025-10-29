@@ -278,9 +278,9 @@ pub async fn workspace_list(status: Option<String>, limit: usize, format: Output
 
     // Build query with filters
     let query = if let Some(ref status_filter) = status {
-        format!("SELECT * FROM workspace WHERE metadata.archived = $archived LIMIT {}", limit)
+        format!("SELECT *, <string>meta::id(id) as id FROM workspace WHERE metadata.archived = $archived LIMIT {}", limit)
     } else {
-        format!("SELECT * FROM workspace LIMIT {}", limit)
+        format!("SELECT *, <string>meta::id(id) as id FROM workspace LIMIT {}", limit)
     };
 
     let mut response = if let Some(ref status_filter) = status {
@@ -297,7 +297,28 @@ pub async fn workspace_list(status: Option<String>, limit: usize, format: Output
             .context("Failed to fetch workspaces from database")?
     };
 
-    let workspaces: Vec<Workspace> = response.take(0)?;
+    // Parse with string IDs and convert to UUIDs
+    #[derive(serde::Deserialize)]
+    struct WorkspaceWithStringId {
+        id: String,
+        #[serde(flatten)]
+        rest: serde_json::Value,
+    }
+
+    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+    let workspaces: Vec<Workspace> = workspaces_raw
+        .into_iter()
+        .filter_map(|w| {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+            serde_json::from_value::<Workspace>(workspace_json).ok()
+        })
+        .collect();
 
     match format {
         OutputFormat::Json => {
@@ -372,17 +393,29 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     } else {
         // Search by name
         let mut response = conn.connection()
-            .query("SELECT * FROM workspace WHERE name = $name")
+            .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name")
             .bind(("name", workspace_id.clone()))
             .await
             .context("Failed to query workspace")?;
-        let workspaces: Vec<Workspace> = response.take(0)?;
 
-        if workspaces.is_empty() {
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+        if workspaces_raw.is_empty() {
             return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
         }
 
-        workspaces[0].id
+        let w = &workspaces_raw[0];
+        // Extract UUID from "workspace:uuid" format
+        let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+        Uuid::parse_str(uuid_str)?
     };
 
     // Delete all VNodes in this workspace
@@ -649,17 +682,29 @@ pub async fn list_documents(workspace: Option<String>, format: OutputFormat) -> 
     // Find workspace ID if workspace name is provided
     let workspace_id = if let Some(ref ws_name) = workspace_name {
         let mut response = conn.connection()
-            .query("SELECT * FROM workspace WHERE name = $name LIMIT 1")
+            .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name LIMIT 1")
             .bind(("name", ws_name.clone()))
             .await
             .context("Failed to query workspace")?;
-        let workspaces: Vec<Workspace> = response.take(0)?;
 
-        if workspaces.is_empty() {
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+        if workspaces_raw.is_empty() {
             return Err(anyhow::anyhow!("Workspace not found: {}", ws_name));
         }
 
-        Some(workspaces[0].id)
+        let w = &workspaces_raw[0];
+        // Extract UUID from "workspace:uuid" format
+        let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+        Some(Uuid::parse_str(uuid_str)?)
     } else {
         None
     };
@@ -1902,6 +1947,7 @@ async fn install_qdrant_docker() -> Result<()> {
 /// Create a storage connection manager from config
 async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>> {
     use cortex_storage::connection_pool::ConnectionMode;
+    use std::time::Duration;
 
     let db_config = DatabaseConfig {
         connection_mode: ConnectionMode::Local {
@@ -1913,7 +1959,20 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
         },
         pool_config: PoolConfig {
             max_connections: config.database.pool_size,
-            ..Default::default()
+            min_connections: 2,
+            connection_timeout: Duration::from_secs(10),
+            idle_timeout: Some(Duration::from_secs(300)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+            retry_policy: cortex_storage::connection_pool::RetryPolicy {
+                max_attempts: 3,
+                initial_backoff: Duration::from_millis(50),
+                max_backoff: Duration::from_secs(5),
+                multiplier: 1.5,
+            },
+            warm_connections: true,
+            validate_on_checkout: false,
+            recycle_after_uses: Some(10000),
+            shutdown_grace_period: Duration::from_secs(30),
         },
         namespace: config.database.namespace.clone(),
         database: config.database.database.clone(),
@@ -2416,12 +2475,26 @@ async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Optio
         // Search by name
         let conn = storage.acquire().await?;
         let mut response = conn.connection()
-            .query("SELECT * FROM workspace WHERE name = $name")
+            .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name")
             .bind(("name", name.clone()))
             .await?;
-        let workspaces: Vec<Workspace> = response.take(0)?;
-        workspaces.first()
-            .map(|w| w.id)
+
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+        workspaces_raw.first()
+            .map(|w| {
+                // Extract UUID from "workspace:uuid" format
+                let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+                Uuid::parse_str(uuid_str)
+            })
+            .transpose()?
             .ok_or_else(|| anyhow::anyhow!("Workspace not found: {}", name))
     } else {
         // Use default workspace from config
@@ -2433,12 +2506,26 @@ async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Optio
                 futures::executor::block_on(async {
                     let conn = storage.acquire().await?;
                     let mut response = conn.connection()
-                        .query("SELECT * FROM workspace WHERE name = $name")
+                        .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name")
                         .bind(("name", name.clone()))
                         .await?;
-                    let workspaces: Vec<Workspace> = response.take(0)?;
-                    workspaces.first()
-                        .map(|w| w.id)
+
+                    // Parse with string IDs and convert to UUIDs
+                    #[derive(serde::Deserialize)]
+                    struct WorkspaceWithStringId {
+                        id: String,
+                        #[serde(flatten)]
+                        rest: serde_json::Value,
+                    }
+
+                    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+                    workspaces_raw.first()
+                        .map(|w| {
+                            // Extract UUID from "workspace:uuid" format
+                            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+                            Uuid::parse_str(uuid_str)
+                        })
+                        .transpose()?
                         .ok_or_else(|| anyhow::anyhow!("Default workspace not found: {}", name))
                 })
             })

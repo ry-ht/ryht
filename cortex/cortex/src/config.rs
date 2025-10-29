@@ -142,30 +142,119 @@ impl CortexConfig {
     }
 
     /// Load configuration with full priority chain
+    ///
+    /// This now loads from the unified config at ~/.ryht/config.toml and maps
+    /// the GlobalConfig structure to the legacy CortexConfig structure.
     pub fn load() -> Result<Self> {
-        let mut config = Self::default();
+        // Try to load from the unified GlobalConfig
+        // Use existing runtime if available, otherwise create a new one
+        let global_config_result = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // We're inside a runtime, use it
+            tokio::task::block_in_place(|| {
+                handle.block_on(cortex_core::config::GlobalConfig::load())
+            })
+        } else {
+            // No runtime exists, create a new one
+            let runtime = tokio::runtime::Runtime::new()
+                .map_err(|e| CortexError::config(format!("Failed to create tokio runtime: {}", e)))?;
+            runtime.block_on(cortex_core::config::GlobalConfig::load())
+        };
 
-        // Try to load system-wide config
-        if let Ok(system_path) = Self::default_path() {
-            if system_path.exists() {
-                if let Ok(system_config) = Self::from_file(&system_path) {
-                    config = Self::merge(config, system_config);
+        match global_config_result {
+            Ok(cfg) => {
+                // Successfully loaded unified config, convert it to CortexConfig
+                Self::from_global_config(&cfg)
+            }
+            Err(_) => {
+                // If unified config doesn't exist, fall back to legacy loading
+                let mut config = Self::default();
+
+                // Try to load project-specific config (legacy)
+                let project_path = Self::project_path();
+                if project_path.exists() {
+                    if let Ok(project_config) = Self::from_file(&project_path) {
+                        config = Self::merge(config, project_config);
+                    }
+                }
+
+                // Apply environment variable overrides
+                config.apply_env_overrides();
+
+                Ok(config)
+            }
+        }
+    }
+
+    /// Convert GlobalConfig to CortexConfig
+    ///
+    /// Maps the new unified config structure to the legacy CortexConfig structure.
+    fn from_global_config(global: &cortex_core::config::GlobalConfig) -> Result<Self> {
+        let db = &global.cortex().database;
+        let pool = &global.cortex().pool;
+        let mcp = &global.cortex().mcp;
+
+        // Build connection string from mode and bind address
+        let connection_string = match db.mode.as_str() {
+            "local" => format!("ws://{}", db.local_bind),
+            "remote" => {
+                if let Some(url) = db.remote_urls.first() {
+                    url.clone()
+                } else {
+                    return Err(CortexError::config("Remote mode requires at least one remote URL"));
                 }
             }
-        }
-
-        // Try to load project-specific config
-        let project_path = Self::project_path();
-        if project_path.exists() {
-            if let Ok(project_config) = Self::from_file(&project_path) {
-                config = Self::merge(config, project_config);
+            "hybrid" => {
+                // For hybrid mode, use local bind
+                format!("ws://{}", db.local_bind)
             }
-        }
+            _ => {
+                return Err(CortexError::config(format!("Unknown database mode: {}", db.mode)));
+            }
+        };
 
-        // Apply environment variable overrides
-        config.apply_env_overrides();
+        eprintln!("DEBUG: connection_string = {}", connection_string);
+        eprintln!("DEBUG: db.mode = {}", db.mode);
+        eprintln!("DEBUG: db.local_bind = {}", db.local_bind);
 
-        Ok(config)
+        // Extract MCP address and port from server_bind (e.g., "127.0.0.1:3000")
+        let (mcp_address, mcp_port) = if let Some(colon_idx) = mcp.server_bind.rfind(':') {
+            let address = mcp.server_bind[..colon_idx].to_string();
+            let port = mcp.server_bind[colon_idx + 1..]
+                .parse::<u16>()
+                .unwrap_or(3000);
+            (address, port)
+        } else {
+            (mcp.server_bind.clone(), 3000)
+        };
+
+        Ok(Self {
+            database: DatabaseConfig {
+                connection_string,
+                namespace: db.namespace.clone(),
+                database: db.database.clone(),
+                pool_size: pool.max_connections as usize,
+                username: Some(db.username.clone()),
+                password: Some(db.password.clone()),
+            },
+            storage: StorageConfig {
+                data_dir: cortex_core::config::GlobalConfig::cortex_data_dir()
+                    .unwrap_or_else(|_| {
+                        dirs::data_dir()
+                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                            .join("cortex")
+                    }),
+                cache_size_mb: global.cortex().cache.memory_size_mb as usize,
+                compression_enabled: true,
+            },
+            mcp: McpConfig {
+                enabled: true,
+                address: mcp_address,
+                port: mcp_port,
+            },
+            #[allow(deprecated)]
+            active_workspace: None,
+            default_workspace: None,
+        })
     }
 
     /// Load configuration from file

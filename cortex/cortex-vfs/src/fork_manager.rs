@@ -455,14 +455,34 @@ impl ForkManager {
 
     /// Get a workspace by ID.
     async fn get_workspace(&self, workspace_id: &Uuid) -> Result<Workspace> {
-        let query = "SELECT * FROM workspace WHERE id = $id LIMIT 1";
+        let query = "SELECT *, <string>meta::id(id) as id FROM workspace WHERE id = $id LIMIT 1";
         let conn = self.storage.acquire().await?;
         let mut result = conn.connection().query(query)
             .bind(("id", workspace_id.to_string()))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
-        let workspace: Option<Workspace> = result.take(0)
+
+        // Parse the result with the full record ID string
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspace_raw: Option<WorkspaceWithStringId> = result.take(0)
             .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let workspace = workspace_raw.map(|w| {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+            serde_json::from_value::<Workspace>(workspace_json)
+                .map_err(|e| CortexError::storage(e.to_string()))
+        }).transpose()?;
 
         workspace.ok_or_else(|| CortexError::not_found("Workspace", workspace_id.to_string()))
     }

@@ -175,7 +175,7 @@ async fn get_overview(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Count workspaces
-    let workspace_query = "SELECT * FROM workspace";
+    let workspace_query = "SELECT *, <string>meta::id(id) as id FROM workspace";
     let mut workspace_response = conn.connection()
         .query(workspace_query)
         .await
@@ -183,6 +183,7 @@ async fn get_overview(
 
     #[derive(Deserialize)]
     struct WorkspaceRecord {
+        id: String,
         #[serde(default)]
         archived: bool,
     }
@@ -622,7 +623,7 @@ async fn get_health(
     // Test database connectivity
     let db_start = Instant::now();
     let _: Result<Vec<serde_json::Value>, _> = conn.connection()
-        .query("SELECT * FROM workspace LIMIT 1")
+        .query("SELECT *, <string>meta::id(id) as id FROM workspace LIMIT 1")
         .await
         .map(|mut r| r.take(0).unwrap_or_default());
     let db_latency = db_start.elapsed().as_millis() as i64;
@@ -696,7 +697,7 @@ async fn get_system_stats(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Count workspaces
-    let workspace_query = "SELECT * FROM workspace";
+    let workspace_query = "SELECT *, <string>meta::id(id) as id FROM workspace";
     let mut workspace_response = conn.connection()
         .query(workspace_query)
         .await
