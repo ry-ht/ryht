@@ -566,7 +566,7 @@ impl DatabaseManager {
 
     /// Start native Qdrant binary
     async fn start_native_qdrant(&self) -> Result<()> {
-        use tokio::process::Command;
+        use std::process::{Command, Stdio};
 
         let home = std::env::var("HOME").context("HOME not set")?;
         let qdrant_path = std::path::PathBuf::from(&home).join(".cortex").join("bin").join("qdrant");
@@ -585,7 +585,7 @@ impl DatabaseManager {
         let stdout_log = std::fs::File::create(log_dir.join("qdrant.stdout.log"))?;
         let stderr_log = std::fs::File::create(log_dir.join("qdrant.stderr.log"))?;
 
-        // Start Qdrant process in background
+        // Start Qdrant process in background using std::process for true daemonization
         let mut cmd = Command::new(&qdrant_path);
 
         // Configure ports
@@ -610,9 +610,11 @@ impl DatabaseManager {
         cmd.env("PATH", new_path);
 
         // Redirect logs to files for debugging
-        cmd.stdout(std::process::Stdio::from(stdout_log));
-        cmd.stderr(std::process::Stdio::from(stderr_log));
+        cmd.stdout(Stdio::from(stdout_log));
+        cmd.stderr(Stdio::from(stderr_log));
+        cmd.stdin(Stdio::null());
 
+        // Spawn and detach - process continues running independently
         cmd.spawn().context("Failed to spawn Qdrant process")?;
 
         output::success("Qdrant native binary started");
