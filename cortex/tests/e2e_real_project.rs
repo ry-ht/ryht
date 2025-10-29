@@ -994,7 +994,7 @@ async fn phase7_verification(
         .arg("check")
         .arg("--manifest-path")
         .arg(output_dir.join("Cargo.toml"))
-        .env("PATH", "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin")
+        .env("PATH", build_path_with_cargo())
         .output()
         .await;
 
@@ -1015,6 +1015,13 @@ async fn phase7_verification(
 
     metrics.end_phase("Phase 7: Verification", start);
     Ok(success)
+}
+
+/// Build PATH with cargo bin and standard system paths
+fn build_path_with_cargo() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let cargo_bin = std::path::PathBuf::from(home).join(".cargo").join("bin");
+    format!("{}:/usr/local/bin:/usr/bin:/bin", cargo_bin.display())
 }
 
 #[tokio::test]

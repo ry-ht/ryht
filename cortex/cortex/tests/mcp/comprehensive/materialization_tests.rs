@@ -687,9 +687,16 @@ async fn verify_materialized_files(dir: &Path) -> MaterializationReport {
     report
 }
 
+/// Build PATH with cargo bin and standard system paths
+fn build_path_with_cargo() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let cargo_bin = std::path::PathBuf::from(home).join(".cargo").join("bin");
+    format!("{}:/usr/local/bin:/usr/bin:/bin", cargo_bin.display())
+}
+
 async fn compile_rust_project(dir: &Path) -> bool {
     let output = std::process::Command::new("cargo")
-        .env("PATH", "/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin")
+        .env("PATH", build_path_with_cargo())
         .arg("build")
         .arg("--manifest-path")
         .arg(dir.join("Cargo.toml"))
@@ -703,7 +710,7 @@ async fn compile_rust_project(dir: &Path) -> bool {
 
 async fn run_cargo_tests(dir: &Path) -> bool {
     let output = std::process::Command::new("cargo")
-        .env("PATH", "/Users/taaliman/.cargo/bin:/usr/local/bin:/bin:/usr/bin")
+        .env("PATH", build_path_with_cargo())
         .arg("test")
         .arg("--manifest-path")
         .arg(dir.join("Cargo.toml"))

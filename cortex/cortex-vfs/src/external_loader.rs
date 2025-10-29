@@ -79,6 +79,88 @@ impl ExternalProjectLoader {
         Ok(report)
     }
 
+    /// Import files into an existing workspace without creating a new one.
+    ///
+    /// This method is useful when you already have a workspace created and want to
+    /// import files into it, avoiding the workspace creation step that `import_project`
+    /// performs. This is particularly useful in CLI commands where the workspace
+    /// is created separately.
+    ///
+    /// # Arguments
+    /// * `workspace_id` - The UUID of the existing workspace to import into
+    /// * `source_path` - The physical filesystem path to import from
+    /// * `options` - Import options (patterns, read-only mode, etc.)
+    ///
+    /// # Returns
+    /// An `ImportReport` with statistics about the import operation
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - Source path doesn't exist or is not a directory
+    /// - Workspace doesn't exist
+    /// - Permission issues accessing files
+    /// - Database errors during import
+    pub async fn import_into_workspace(
+        &self,
+        workspace_id: &Uuid,
+        source_path: &Path,
+        options: ImportOptions,
+    ) -> Result<ImportReport> {
+        let start = Instant::now();
+        info!(
+            "Importing into workspace {} from: {}",
+            workspace_id,
+            source_path.display()
+        );
+
+        // Validate source path
+        if !source_path.exists() {
+            return Err(CortexError::not_found(
+                "SourcePath",
+                source_path.display().to_string()
+            ));
+        }
+
+        if !source_path.is_dir() {
+            return Err(CortexError::invalid_input(
+                "Source path must be a directory"
+            ));
+        }
+
+        // Initialize root directory if it doesn't exist
+        let root_path = VirtualPath::root();
+        let root_exists = self.vfs.exists(workspace_id, &root_path).await?;
+        if !root_exists {
+            let mut root_vnode = VNode::new_directory(*workspace_id, root_path);
+            root_vnode.read_only = options.read_only && !options.create_fork;
+            root_vnode.mark_synchronized();
+            self.save_vnode(&root_vnode).await?;
+        }
+
+        let mut report = ImportReport {
+            workspace_id: *workspace_id,
+            ..Default::default()
+        };
+
+        // Walk directory and import files
+        self.import_directory(
+            source_path,
+            source_path,
+            workspace_id,
+            &options,
+            &mut report,
+        ).await?;
+
+        report.duration_ms = start.elapsed().as_millis() as u64;
+
+        info!(
+            "Import completed: {} files, {} directories in {}ms",
+            report.files_imported, report.directories_imported, report.duration_ms
+        );
+
+        Ok(report)
+    }
+
     /// Create a workspace for the imported project.
     async fn create_workspace(
         &self,

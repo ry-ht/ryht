@@ -234,7 +234,8 @@ pub async fn workspace_create(
         spinner.finish_and_clear();
         let import_spinner = output::spinner("Importing project...");
 
-        match loader.import_project(path, vfs_opts).await {
+        // Use import_into_workspace to import into the already created workspace
+        match loader.import_into_workspace(&workspace_id, path, vfs_opts).await {
             Ok(report) => {
                 import_spinner.finish_and_clear();
                 output::success(format!("Created workspace: {}", name));
@@ -415,7 +416,7 @@ pub async fn ingest_path(
     let storage = create_storage(&config).await?;
 
     // Create a temporary session for this ingestion
-    let (session_id, workspace_name) = create_temp_session(storage.clone(), workspace, &config).await
+    let (session_id, workspace_id, workspace_name) = create_temp_session(storage.clone(), workspace, &config).await
         .context("Failed to create session for ingestion")?;
 
     output::header(format!("Ingesting: {}", path.display()));
@@ -428,7 +429,7 @@ pub async fn ingest_path(
     let vfs = VirtualFileSystem::new(storage.clone());
     let loader = ExternalProjectLoader::new(vfs.clone());
 
-    // Import project
+    // Import project into existing workspace
     let options = cortex_vfs::ImportOptions {
         read_only: false,
         create_fork: false,
@@ -447,7 +448,7 @@ pub async fn ingest_path(
         max_file_size_bytes: Some(10 * 1024 * 1024), // 10 MB default
     };
 
-    let report = loader.import_project(&path, options).await?;
+    let report = loader.import_into_workspace(&workspace_id, &path, options).await?;
 
     spinner.finish_and_clear();
 
@@ -1927,7 +1928,7 @@ async fn create_temp_session(
     storage: Arc<ConnectionManager>,
     workspace_name: Option<String>,
     config: &CortexConfig,
-) -> Result<(cortex_storage::session::SessionId, String)> {
+) -> Result<(cortex_storage::session::SessionId, Uuid, String)> {
     use cortex_storage::session::{AgentSession, SessionManager, SessionState};
 
     // Determine which workspace to use
@@ -1975,7 +1976,7 @@ async fn create_temp_session(
         None, // Default TTL
     ).await?;
 
-    Ok((session.id, workspace.name.clone()))
+    Ok((session.id, workspace.id, workspace.name.clone()))
 }
 
 /// Get workspace name to use for command

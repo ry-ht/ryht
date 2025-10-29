@@ -303,7 +303,8 @@ impl Tool for WorkspaceCreateTool {
                 max_file_size_bytes: Some((input.max_file_size_mb * 1024 * 1024) as usize),
             };
 
-            match self.ctx.loader.import_project(path, vfs_opts).await {
+            // Use import_into_workspace to import into the already created workspace
+            match self.ctx.loader.import_into_workspace(&workspace_id, path, vfs_opts).await {
                 Ok(report) => {
                     files_imported = report.files_imported;
                     directories_imported = report.directories_imported;
