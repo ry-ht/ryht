@@ -300,6 +300,7 @@ impl Tool for WorkspaceCreateTool {
                 max_depth: None,
                 process_code: input.process_code,
                 generate_embeddings: false,
+                max_file_size_bytes: Some((input.max_file_size_mb * 1024 * 1024) as usize),
             };
 
             match self.ctx.loader.import_project(path, vfs_opts).await {

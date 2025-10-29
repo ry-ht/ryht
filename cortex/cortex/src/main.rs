@@ -1308,7 +1308,7 @@ async fn run() -> Result<()> {
                 "wizard" => {
                     use cortex::interactive;
                     let config = interactive::workspace_setup_wizard().await?;
-                    commands::workspace_create(config.name).await?;
+                    commands::workspace_create(config.name, None, true, true, 10).await?;
                 }
                 "search" => {
                     use cortex::interactive;
@@ -1331,7 +1331,7 @@ async fn run() -> Result<()> {
                     match choice {
                         0 => {
                             let config = interactive::workspace_setup_wizard().await?;
-                            commands::workspace_create(config.name).await?;
+                            commands::workspace_create(config.name, None, true, true, 10).await?;
                         }
                         1 => {
                             interactive::interactive_health_check().await?;

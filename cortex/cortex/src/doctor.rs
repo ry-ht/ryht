@@ -335,7 +335,7 @@ async fn check_workspace_integrity() -> DiagnosticResult {
     } else {
         DiagnosticResult {
             check_name: "Workspace Integrity".to_string(),
-            status: DiagnosticStatus::Info,
+            status: DiagnosticStatus::Warning,
             message: "No default workspace configured".to_string(),
             suggestion: Some("Create with: cortex workspace create".to_string()),
             auto_fixable: false,
