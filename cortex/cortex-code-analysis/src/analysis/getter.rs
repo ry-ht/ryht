@@ -190,11 +190,11 @@ fn get_rust_op_type(node: &Node) -> HalsteadType {
     }
 }
 
-fn get_rust_operator_str(id: u16) -> &'static str {
-    // Mapping node kind IDs to operator strings
-    // This would require tree-sitter grammar enum integration
-    // For now, return empty string as placeholder
-    _ = id;
+fn get_rust_operator_str(_id: u16) -> &'static str {
+    // Note: Direct ID to operator string mapping is unreliable across tree-sitter versions
+    // The caller should use node.kind() string representation instead
+    // For now, this returns empty string as operators are better extracted via node text
+    // Future improvement: modify spaces.rs to use node.kind() or node text directly
     ""
 }
 

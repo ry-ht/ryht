@@ -1572,14 +1572,60 @@ impl CodeChangeSignatureTool {
                 // Parameter exists in old signature, use its value
                 new_args.push(value.clone());
             } else {
-                // New parameter - use a default value
-                // For now, use a placeholder that will cause a compilation error,
-                // alerting the user to fix it manually
-                new_args.push("/* TODO: provide value */".to_string());
+                // New parameter - generate intelligent default value
+                let default_value = self.generate_default_value(new_param);
+                new_args.push(default_value);
             }
         }
 
         new_args
+    }
+
+    /// Generate intelligent default value based on parameter name and common patterns
+    fn generate_default_value(&self, param_name: &str) -> String {
+        let lower_name = param_name.to_lowercase();
+
+        // Boolean parameters
+        if lower_name.starts_with("is_") || lower_name.starts_with("has_")
+            || lower_name.starts_with("should_") || lower_name.starts_with("can_")
+            || lower_name.starts_with("enable") || lower_name == "flag" {
+            return "false".to_string();
+        }
+
+        // Numeric parameters
+        if lower_name.contains("count") || lower_name.contains("size")
+            || lower_name.contains("length") || lower_name.contains("index")
+            || lower_name == "n" || lower_name == "i" || lower_name == "idx" {
+            return "0".to_string();
+        }
+
+        // String parameters
+        if lower_name.contains("name") || lower_name.contains("path")
+            || lower_name.contains("message") || lower_name.contains("text")
+            || lower_name.contains("str") || lower_name.contains("id") {
+            return "String::new()".to_string();
+        }
+
+        // Option types (common Rust pattern)
+        if lower_name.starts_with("opt") || lower_name.starts_with("maybe")
+            || lower_name.contains("optional") {
+            return "None".to_string();
+        }
+
+        // Vector/Collection parameters
+        if lower_name.contains("list") || lower_name.contains("vec")
+            || lower_name.contains("items") || lower_name.contains("array") {
+            return "Vec::new()".to_string();
+        }
+
+        // Context or state parameters
+        if lower_name.contains("context") || lower_name.contains("ctx")
+            || lower_name.contains("state") {
+            return format!("Default::default()  // TODO: Check if {} needs specific initialization", param_name);
+        }
+
+        // Default fallback with helpful comment
+        format!("Default::default()  // TODO: Provide appropriate value for '{}'", param_name)
     }
 
     /// Extract arguments from a call expression node
@@ -2666,9 +2712,28 @@ impl Tool for CodeOverrideMethodTool {
 
         // Build method body
         let body = if input.call_super {
-            format!("        // TODO: Call parent implementation\n        todo!(\"Override {}\")", input.method_name)
+            // Generate actual parent call with proper parameters
+            let param_names: Vec<String> = parent_method.parameters.iter()
+                .map(|p| p.name.clone())
+                .collect();
+
+            let parent_call = if param_names.is_empty() {
+                format!("Self::{}_default()", input.method_name)
+            } else {
+                format!("Self::{}_default({})", input.method_name, param_names.join(", "))
+            };
+
+            // Include comment explaining the pattern
+            format!(
+                "        // Call parent/trait default implementation\n        // Note: Adjust method name based on your trait or parent struct\n        {}",
+                if parent_method.return_type.is_some() {
+                    format!("        {}", parent_call)
+                } else {
+                    format!("        {};\n        // Add additional logic here if needed", parent_call)
+                }
+            )
         } else {
-            format!("        todo!(\"Override {}\")", input.method_name)
+            format!("        todo!(\"Implement {}\")", input.method_name)
         };
 
         let method_code = format!(
