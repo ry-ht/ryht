@@ -1,0 +1,19 @@
+# Cortex Project Configuration
+# This file contains project-specific settings for Cortex
+
+[database]
+connection_string = "ws://127.0.0.1:8000"
+namespace = "cortex"
+database = "main"
+pool_size = 10
+username = "root"
+password = "root"
+
+[storage]
+cache_size_mb = 1024
+compression_enabled = true
+
+[mcp]
+enabled = true
+address = "127.0.0.1"
+port = 3000

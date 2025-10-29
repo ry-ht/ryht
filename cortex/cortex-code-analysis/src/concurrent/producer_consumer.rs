@@ -123,6 +123,7 @@ struct Job<C> {
     path: PathBuf,
     size: u64,
     config: Arc<C>,
+    #[allow(dead_code)]
     retry_count: usize,
 }
 
@@ -474,6 +475,7 @@ where
     }
 
     /// Helper to clone the processor for workers
+    #[allow(dead_code)]
     fn clone_processor(&self) -> Self {
         Self {
             config: self.config.clone(),

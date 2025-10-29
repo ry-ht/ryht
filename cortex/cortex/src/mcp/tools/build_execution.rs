@@ -16,34 +16,14 @@ use crate::services::build::{BuildService, BuildConfig, TestConfig};
 pub struct BuildExecutionContext {
     storage: Arc<ConnectionManager>,
     build_service: Arc<BuildService>,
-    /// Active workspace ID (shared with workspace tools)
-    active_workspace: Arc<std::sync::RwLock<Option<Uuid>>>,
 }
 
 impl BuildExecutionContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        Self::with_active_workspace(storage, Arc::new(std::sync::RwLock::new(None)))
-    }
-
-    /// Create a new context with a shared active workspace reference
-    pub fn with_active_workspace(storage: Arc<ConnectionManager>, active_workspace: Arc<std::sync::RwLock<Option<Uuid>>>) -> Self {
         let build_service = Arc::new(BuildService::new(storage.clone()));
         Self {
             storage,
             build_service,
-            active_workspace,
-        }
-    }
-
-    /// Get the currently active workspace ID
-    pub fn get_active_workspace(&self) -> Option<Uuid> {
-        self.active_workspace.read().ok().and_then(|guard| *guard)
-    }
-
-    /// Set the active workspace ID
-    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
-        if let Ok(mut guard) = self.active_workspace.write() {
-            *guard = workspace_id;
         }
     }
 }

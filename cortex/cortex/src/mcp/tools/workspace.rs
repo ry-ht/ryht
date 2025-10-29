@@ -61,8 +61,6 @@ pub struct WorkspaceContext {
     semantic_memory: Arc<SemanticMemorySystem>,
     ingestion: Arc<FileIngestionPipeline>,
     fork_manager: Arc<ForkManager>,
-    /// Active workspace ID (shared across all tools)
-    active_workspace: Arc<RwLock<Option<Uuid>>>,
     /// Workspace service
     workspace_service: Arc<WorkspaceService>,
 }
@@ -95,26 +93,8 @@ impl WorkspaceContext {
             semantic_memory,
             ingestion,
             fork_manager,
-            active_workspace: Arc::new(RwLock::new(None)),
             workspace_service,
         })
-    }
-
-    /// Get the currently active workspace ID
-    pub fn get_active_workspace(&self) -> Option<Uuid> {
-        self.active_workspace.read().ok().and_then(|guard| *guard)
-    }
-
-    /// Set the active workspace ID
-    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
-        if let Ok(mut guard) = self.active_workspace.write() {
-            *guard = workspace_id;
-        }
-    }
-
-    /// Get a reference to the active workspace Arc for sharing with other contexts
-    pub fn active_workspace_ref(&self) -> Arc<RwLock<Option<Uuid>>> {
-        self.active_workspace.clone()
     }
 
     // Note: Workspace CRUD operations now use WorkspaceService
@@ -606,7 +586,10 @@ impl Tool for WorkspaceActivateTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Sets the active workspace for subsequent operations. Validates workspace exists and is accessible.")
+        Some("DEPRECATED: This tool no longer sets a global active workspace. \
+              Use workspace_id parameter in individual tool calls, or set workspace_id \
+              in session metadata when creating an MCP session. \
+              For CLI commands, use 'cortex workspace switch <name>' to set the default workspace.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -615,32 +598,19 @@ impl Tool for WorkspaceActivateTool {
 
     async fn execute(
         &self,
-        input: serde_json::Value,
+        _input: serde_json::Value,
         _context: &ToolContext,
     ) -> std::result::Result<ToolResult, ToolError> {
-        let input: ActivateInput = serde_json::from_value(input)
-            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
-
-        let workspace_id = Uuid::parse_str(&input.workspace_id)
-            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid workspace ID: {}", e)))?;
-
-        // Verify workspace exists
-        let workspace = self.ctx.workspace_service.get_workspace(&workspace_id).await
-            .map_err(|e| ToolError::ExecutionFailed(format!("Failed to get workspace: {}", e)))?
-            .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
-
-        info!("Activating workspace: {} ({})", workspace.name, workspace_id);
-
-        // Store active workspace in context
-        self.ctx.set_active_workspace(Some(workspace_id));
-
-        let output = ActivateOutput {
-            workspace_id: workspace_id.to_string(),
-            name: workspace.name,
-            status: "activated".to_string(),
-        };
-
-        Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))
+        Err(ToolError::ExecutionFailed(
+            "This tool is deprecated. The global 'active workspace' concept has been removed \
+             in favor of session-based workspace management. \n\n\
+             To use a workspace:\n\
+             1. Pass 'workspace_id' directly in tool calls that support it\n\
+             2. Set 'workspace_id' in session metadata when creating an MCP session\n\
+             3. For CLI commands, use 'cortex workspace switch <name>' to set the default\n\n\
+             Multiple sessions can now work on different workspaces simultaneously without conflicts."
+                .to_string()
+        ))
     }
 }
 

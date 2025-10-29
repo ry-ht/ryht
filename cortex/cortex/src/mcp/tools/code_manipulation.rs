@@ -48,36 +48,16 @@ pub struct CodeManipulationContext {
     storage: Arc<ConnectionManager>,
     vfs: Arc<VirtualFileSystem>,
     code_unit_service: Arc<CodeUnitService>,
-    /// Active workspace ID (shared with workspace tools)
-    active_workspace: Arc<RwLock<Option<Uuid>>>,
 }
 
 impl CodeManipulationContext {
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        Self::with_active_workspace(storage, Arc::new(RwLock::new(None)))
-    }
-
-    /// Create a new context with a shared active workspace reference
-    pub fn with_active_workspace(storage: Arc<ConnectionManager>, active_workspace: Arc<RwLock<Option<Uuid>>>) -> Self {
         let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
         let code_unit_service = Arc::new(CodeUnitService::new(storage.clone()));
         Self {
             storage,
             vfs,
             code_unit_service,
-            active_workspace,
-        }
-    }
-
-    /// Get the currently active workspace ID
-    pub fn get_active_workspace(&self) -> Option<Uuid> {
-        self.active_workspace.read().ok().and_then(|guard| *guard)
-    }
-
-    /// Set the active workspace ID
-    pub fn set_active_workspace(&self, workspace_id: Option<Uuid>) {
-        if let Ok(mut guard) = self.active_workspace.write() {
-            *guard = workspace_id;
         }
     }
 

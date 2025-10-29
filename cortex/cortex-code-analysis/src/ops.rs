@@ -105,6 +105,7 @@ impl Ops {
     }
 
     /// Merges operators and operands from another Ops instance
+    #[allow(dead_code)]
     fn merge_ops(&mut self, other: &Ops) {
         self.operands.extend_from_slice(&other.operands);
         self.operators.extend_from_slice(&other.operators);

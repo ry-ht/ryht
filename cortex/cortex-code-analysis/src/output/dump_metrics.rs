@@ -78,10 +78,14 @@ pub struct FlatMetrics {
     pub cognitive_avg: f64,
 
     // Halstead metrics
-    pub halstead_n1: f64,
-    pub halstead_N1: f64,
-    pub halstead_n2: f64,
-    pub halstead_N2: f64,
+    /// Number of unique operators (n1 in Halstead metrics)
+    pub halstead_unique_operators: f64,
+    /// Total number of operators (N1 in Halstead metrics)
+    pub halstead_total_operators: f64,
+    /// Number of unique operands (n2 in Halstead metrics)
+    pub halstead_unique_operands: f64,
+    /// Total number of operands (N2 in Halstead metrics)
+    pub halstead_total_operands: f64,
     pub halstead_vocabulary: f64,
     pub halstead_length: f64,
     pub halstead_volume: f64,
@@ -128,10 +132,10 @@ impl FlatMetrics {
             cognitive: m.cognitive.cognitive(),
             cognitive_avg: m.cognitive.cognitive_average(),
 
-            halstead_n1: m.halstead.u_operators(),
-            halstead_N1: m.halstead.operators(),
-            halstead_n2: m.halstead.u_operands(),
-            halstead_N2: m.halstead.operands(),
+            halstead_unique_operators: m.halstead.u_operators(),
+            halstead_total_operators: m.halstead.operators(),
+            halstead_unique_operands: m.halstead.u_operands(),
+            halstead_total_operands: m.halstead.operands(),
             halstead_vocabulary: m.halstead.vocabulary(),
             halstead_length: m.halstead.length(),
             halstead_volume: m.halstead.volume(),

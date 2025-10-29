@@ -65,14 +65,17 @@ pub trait ParserTrait: Sized {
 /// Search operations on AST nodes.
 pub(crate) trait Search<'a> {
     /// Find first node matching the predicate in depth-first order
+    #[allow(dead_code)]
     fn first_occurrence(&self, pred: fn(u16) -> bool) -> Option<Node<'a>>;
 
     /// Execute an action on every node in the tree
     fn act_on_node(&self, pred: &mut dyn FnMut(&Node<'a>));
 
     /// Find first child matching the predicate
+    #[allow(dead_code)]
     fn first_child(&self, pred: fn(u16) -> bool) -> Option<Node<'a>>;
 
     /// Execute an action on every direct child
+    #[allow(dead_code)]
     fn act_on_child(&self, action: &mut dyn FnMut(&Node<'a>));
 }

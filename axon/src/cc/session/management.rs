@@ -59,6 +59,7 @@ pub struct SessionStats {
     /// Last message timestamp
     pub last_message_at: Option<DateTime<Utc>>,
     /// Estimated size in bytes
+    #[allow(dead_code)]
     pub size_bytes: usize,
     /// Most used tools
     pub top_tools: Vec<(String, usize)>,

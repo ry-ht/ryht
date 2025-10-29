@@ -27,6 +27,7 @@ pub mod tools;
 pub mod handlers;
 pub mod types;
 pub mod graph_algorithms;
+pub mod context;
 
 pub use server::{CortexMcpServer, CortexMcpServerBuilder};
 
@@ -35,6 +36,7 @@ pub mod prelude {
     pub use super::server::{CortexMcpServer, CortexMcpServerBuilder};
     pub use super::tools::*;
     pub use super::types::*;
+    pub use super::context::CortexToolContext;
     // Re-export specific items from mcp_sdk to avoid conflicts
     pub use mcp_sdk::prelude::{McpServer, Tool, ToolError, ToolResult};
 }
