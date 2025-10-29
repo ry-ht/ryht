@@ -324,19 +324,19 @@ async fn check_workspace_integrity() -> DiagnosticResult {
         }
     };
 
-    if let Some(workspace) = config.active_workspace {
+    if let Some(workspace) = config.default_workspace {
         DiagnosticResult {
             check_name: "Workspace Integrity".to_string(),
             status: DiagnosticStatus::Pass,
-            message: format!("Active workspace: {}", workspace),
+            message: format!("Default workspace: {}", workspace),
             suggestion: None,
             auto_fixable: false,
         }
     } else {
         DiagnosticResult {
             check_name: "Workspace Integrity".to_string(),
-            status: DiagnosticStatus::Warning,
-            message: "No active workspace".to_string(),
+            status: DiagnosticStatus::Info,
+            message: "No default workspace configured".to_string(),
             suggestion: Some("Create with: cortex workspace create".to_string()),
             auto_fixable: false,
         }

@@ -80,7 +80,7 @@ pub async fn init_workspace(
 
     // Create workspace config
     let mut workspace_config = config.clone();
-    workspace_config.active_workspace = Some(name.clone());
+    workspace_config.default_workspace = Some(name.clone());
     workspace_config.save_project()?;
 
     // Initialize storage
@@ -153,7 +153,7 @@ pub async fn workspace_create(
     root_path: Option<PathBuf>,
     auto_import: bool,
     process_code: bool,
-    _max_file_size_mb: u64,
+    max_file_size_mb: u64,
 ) -> Result<()> {
     let spinner = output::spinner("Creating workspace...");
 
@@ -431,30 +431,6 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     Ok(())
 }
 
-/// Switch default workspace for new sessions
-pub async fn workspace_switch(name: String) -> Result<()> {
-    let mut config = CortexConfig::load()?;
-
-    // Verify workspace exists
-    let storage = create_storage(&config).await?;
-    let conn = storage.acquire().await?;
-    let workspaces: Vec<Workspace> = conn.connection()
-        .select("workspace")
-        .await
-        .context("Failed to fetch workspaces")?;
-
-    if !workspaces.iter().any(|w| w.name == name) {
-        return Err(anyhow::anyhow!("Workspace '{}' does not exist", name));
-    }
-
-    config.default_workspace = Some(name.clone());
-    config.save_project()?;
-
-    output::success(format!("Set default workspace to: {}", name));
-    output::info("New sessions will use this workspace by default");
-    Ok(())
-}
-
 // ============================================================================
 // Ingestion Commands
 // ============================================================================
@@ -536,7 +512,7 @@ pub async fn search_memory(
     format: OutputFormat,
 ) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone());
+    let workspace_name = workspace.or(config.default_workspace.clone());
 
     let spinner = output::spinner("Searching...");
 
@@ -648,7 +624,7 @@ pub async fn search_memory(
 /// List projects in workspace
 pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone());
+    let workspace_name = workspace.or(config.default_workspace.clone());
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -691,7 +667,7 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
 /// List documents in workspace
 pub async fn list_documents(workspace: Option<String>, format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone());
+    let workspace_name = workspace.or(config.default_workspace.clone());
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -759,7 +735,7 @@ pub async fn list_episodes(
     format: OutputFormat,
 ) -> Result<()> {
     let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.active_workspace.clone());
+    let workspace_name = workspace.or(config.default_workspace.clone());
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -1003,8 +979,8 @@ pub async fn config_list() -> Result<()> {
     println!("  address: {}", config.mcp.address);
     println!("  port: {}", config.mcp.port);
 
-    if let Some(workspace) = &config.active_workspace {
-        println!("\nActive Workspace: {}", workspace);
+    if let Some(workspace) = &config.default_workspace {
+        println!("\nDefault Workspace: {}", workspace);
     }
 
     Ok(())
@@ -1128,7 +1104,7 @@ pub async fn memory_consolidate(
     _threshold_days: i32,
 ) -> Result<()> {
     let config = CortexConfig::load()?;
-    let _workspace_name = workspace.or(config.active_workspace.clone());
+    let _workspace_name = workspace.or(config.default_workspace.clone());
 
     let spinner = output::spinner("Consolidating memory...");
 
@@ -2474,12 +2450,12 @@ async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Optio
             .map(|w| w.id)
             .ok_or_else(|| anyhow::anyhow!("Workspace not found: {}", name))
     } else {
-        // Use active workspace from config
+        // Use default workspace from config
         let config = CortexConfig::load()?;
-        config.active_workspace
-            .ok_or_else(|| anyhow::anyhow!("No active workspace. Use --workspace flag or run 'cortex workspace switch'"))
+        config.default_workspace
+            .ok_or_else(|| anyhow::anyhow!("No workspace specified. Use --workspace flag or set default_workspace in config"))
             .and_then(|name| {
-                // Resolve active workspace name to ID
+                // Resolve default workspace name to ID
                 futures::executor::block_on(async {
                     let conn = storage.acquire().await?;
                     let mut response = conn.connection()
@@ -2489,7 +2465,7 @@ async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Optio
                     let workspaces: Vec<Workspace> = response.take(0)?;
                     workspaces.first()
                         .map(|w| w.id)
-                        .ok_or_else(|| anyhow::anyhow!("Active workspace not found: {}", name))
+                        .ok_or_else(|| anyhow::anyhow!("Default workspace not found: {}", name))
                 })
             })
     }

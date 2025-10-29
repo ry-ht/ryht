@@ -244,12 +244,6 @@ enum WorkspaceCommands {
         #[arg(short, long)]
         confirm: bool,
     },
-
-    /// Switch active workspace
-    Switch {
-        /// Workspace name
-        name: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -1007,9 +1001,6 @@ async fn run() -> Result<()> {
             }
             WorkspaceCommands::Delete { workspace_id, confirm } => {
                 commands::workspace_delete(workspace_id, confirm).await?;
-            }
-            WorkspaceCommands::Switch { name } => {
-                commands::workspace_switch(name).await?;
             }
         },
 

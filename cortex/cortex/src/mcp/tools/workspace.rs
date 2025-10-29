@@ -585,7 +585,7 @@ impl Tool for WorkspaceActivateTool {
         Some("DEPRECATED: This tool no longer sets a global active workspace. \
               Use workspace_id parameter in individual tool calls, or set workspace_id \
               in session metadata when creating an MCP session. \
-              For CLI commands, use 'cortex workspace switch <name>' to set the default workspace.")
+              For CLI usage, set default_workspace in the configuration file.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -603,7 +603,7 @@ impl Tool for WorkspaceActivateTool {
              To use a workspace:\n\
              1. Pass 'workspace_id' directly in tool calls that support it\n\
              2. Set 'workspace_id' in session metadata when creating an MCP session\n\
-             3. For CLI commands, use 'cortex workspace switch <name>' to set the default\n\n\
+             3. For CLI usage, set 'default_workspace' in the configuration file\n\n\
              Multiple sessions can now work on different workspaces simultaneously without conflicts."
                 .to_string()
         ))

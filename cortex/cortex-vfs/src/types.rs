@@ -612,6 +612,9 @@ pub struct ImportOptions {
 
     /// Generate semantic embeddings
     pub generate_embeddings: bool,
+
+    /// Maximum file size in bytes (files larger than this will be skipped)
+    pub max_file_size_bytes: Option<usize>,
 }
 
 impl Default for ImportOptions {
@@ -631,6 +634,7 @@ impl Default for ImportOptions {
             max_depth: None,
             process_code: true,
             generate_embeddings: false,
+            max_file_size_bytes: None,
         }
     }
 }
