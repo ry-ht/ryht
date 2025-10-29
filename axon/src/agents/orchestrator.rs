@@ -1,8 +1,28 @@
 //! Orchestrator Agent Implementation
+//!
+//! # DEPRECATED - Use LeadAgent Instead
+//!
+//! This is a minimal stub implementation for backwards compatibility.
+//! For actual orchestration functionality, use `crate::orchestration::lead_agent::LeadAgent`
+//! which provides:
+//! - Strategy-based task decomposition
+//! - Multi-agent coordination
+//! - Context-aware delegation
+//! - Session management with Cortex integration
+//! - Message bus coordination
+//!
+//! This stub exists only for:
+//! - Type compatibility in legacy code
+//! - Agent registry during initialization
+//!
+//! See: `/Users/taaliman/projects/luxquant/ry-ht/ryht/axon/src/orchestration/lead_agent.rs`
 
 use super::*;
 
-/// Orchestrator agent for coordinating multi-agent workflows
+/// Orchestrator agent stub for coordinating multi-agent workflows
+///
+/// **DEPRECATED:** Use `crate::orchestration::lead_agent::LeadAgent` for actual orchestration.
+/// This is a minimal stub kept for backwards compatibility.
 pub struct OrchestratorAgent {
     id: AgentId,
     name: String,
