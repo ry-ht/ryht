@@ -315,27 +315,23 @@ impl Tool for WorkspaceCreateTool {
             }
 
             // Process code units if requested
-            // TODO: Make ingestion async/background to avoid hanging on large workspaces
-            // Issue: ingest_workspace() loads ALL files into memory and processes sequentially
-            // For now, skip ingestion during workspace creation
+            // Now uses batch processing to avoid memory issues on large workspaces
             if input.process_code && files_imported > 0 {
-                info!("Skipping code ingestion during workspace creation (will be done separately)");
-                warnings.push("Code processing skipped - use separate ingestion tool for large workspaces".to_string());
-                // Commented out to prevent hang:
-                // match self.ctx.ingestion.ingest_workspace(&workspace_id).await {
-                //     Ok(ingestion_result) => {
-                //         units_extracted = ingestion_result.total_units;
-                //         if !ingestion_result.files_with_errors.is_empty() {
-                //             warnings.push(format!(
-                //                 "Failed to parse {} files",
-                //                 ingestion_result.files_with_errors.len()
-                //             ));
-                //         }
-                //     }
-                //     Err(e) => {
-                //         warnings.push(format!("Code processing failed: {}", e));
-                //     }
-                // }
+                info!("Processing code units (using batch processing for large workspaces)");
+                match self.ctx.ingestion.ingest_workspace(&workspace_id).await {
+                    Ok(ingestion_result) => {
+                        units_extracted = ingestion_result.total_units;
+                        if !ingestion_result.files_with_errors.is_empty() {
+                            warnings.push(format!(
+                                "Failed to parse {} files",
+                                ingestion_result.files_with_errors.len()
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        warnings.push(format!("Code processing failed: {}", e));
+                    }
+                }
             }
         }
 

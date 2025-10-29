@@ -148,7 +148,13 @@ pub async fn init_workspace(
 // ============================================================================
 
 /// Create a new workspace
-pub async fn workspace_create(name: String) -> Result<()> {
+pub async fn workspace_create(
+    name: String,
+    root_path: Option<PathBuf>,
+    auto_import: bool,
+    process_code: bool,
+    _max_file_size_mb: u64,
+) -> Result<()> {
     let spinner = output::spinner("Creating workspace...");
 
     let config = CortexConfig::load()?;
@@ -157,6 +163,24 @@ pub async fn workspace_create(name: String) -> Result<()> {
 
     let workspace_id = Uuid::new_v4();
 
+    // Create sync source for local path if provided
+    let sync_sources = if let Some(ref path) = root_path {
+        vec![SyncSource {
+            id: Uuid::new_v4(),
+            source: SyncSourceType::LocalPath {
+                path: path.display().to_string(),
+                watch: false,
+            },
+            read_only: false,
+            priority: 100,
+            last_sync: None,
+            status: SyncSourceStatus::Unsynced,
+            metadata: HashMap::new(),
+        }]
+    } else {
+        vec![]
+    };
+
     // Create metadata
     let metadata = HashMap::new();
 
@@ -164,7 +188,7 @@ pub async fn workspace_create(name: String) -> Result<()> {
         id: workspace_id,
         name: name.clone(),
         namespace: format!("workspace_{}", workspace_id),
-        sync_sources: vec![], // No sync sources for virtual workspace
+        sync_sources,
         metadata,
         read_only: false,
         parent_workspace: None,
@@ -211,28 +235,96 @@ pub async fn workspace_create(name: String) -> Result<()> {
         .context("Failed to create workspace in database")?;
 
     // Initialize root directory in VFS
-    let root_path = VirtualPath::new(".")?;
-    vfs.create_directory(&workspace_id, &root_path, true).await
+    let root = VirtualPath::new(".")?;
+    vfs.create_directory(&workspace_id, &root, true).await
         .context("Failed to create root directory in VFS")?;
 
-    spinner.finish_and_clear();
-    output::success(format!("Created workspace: {}", name));
-    output::kv("ID", workspace_id);
+    // Import if requested and root_path is provided
+    if auto_import && root_path.is_some() {
+        let path = root_path.as_ref().unwrap();
+        let loader = ExternalProjectLoader::new(vfs.clone());
+
+        let vfs_opts = cortex_vfs::ImportOptions {
+            read_only: false,
+            create_fork: false,
+            namespace: workspace.namespace.clone(),
+            include_patterns: vec!["**/*".to_string()],
+            exclude_patterns: vec![
+                "**/node_modules/**".to_string(),
+                "**/target/**".to_string(),
+                "**/.git/**".to_string(),
+                "**/dist/**".to_string(),
+                "**/build/**".to_string(),
+                "**/.DS_Store".to_string(),
+            ],
+            max_depth: None,
+            process_code,
+            generate_embeddings: false,
+        };
+
+        spinner.finish_and_clear();
+        let import_spinner = output::spinner("Importing project...");
+
+        match loader.import_project(path, vfs_opts).await {
+            Ok(report) => {
+                import_spinner.finish_and_clear();
+                output::success(format!("Created workspace: {}", name));
+                output::kv("ID", workspace_id);
+                output::kv("Files imported", report.files_imported);
+                output::kv("Directories imported", report.directories_imported);
+                output::kv("Total size", format_bytes(report.bytes_imported as u64));
+
+                if !report.errors.is_empty() {
+                    output::warning(format!("{} errors occurred during import", report.errors.len()));
+                }
+            }
+            Err(e) => {
+                import_spinner.finish_and_clear();
+                output::warning(format!("Import failed: {}", e));
+                output::success(format!("Created workspace: {}", name));
+                output::kv("ID", workspace_id);
+            }
+        }
+    } else {
+        spinner.finish_and_clear();
+        output::success(format!("Created workspace: {}", name));
+        output::kv("ID", workspace_id);
+    }
 
     Ok(())
 }
 
 /// List all workspaces
-pub async fn workspace_list(format: OutputFormat) -> Result<()> {
+pub async fn workspace_list(status: Option<String>, limit: usize, format: OutputFormat) -> Result<()> {
     let config = CortexConfig::load()?;
     let storage = create_storage(&config).await?;
     let _vfs = VirtualFileSystem::new(storage.clone());
 
     // Fetch workspaces from database
     let conn = storage.acquire().await?;
-    let workspaces: Vec<Workspace> = conn.connection().select("workspace")
-        .await
-        .context("Failed to fetch workspaces from database")?;
+
+    // Build query with filters
+    let query = if let Some(ref status_filter) = status {
+        format!("SELECT * FROM workspace WHERE metadata.archived = $archived LIMIT {}", limit)
+    } else {
+        format!("SELECT * FROM workspace LIMIT {}", limit)
+    };
+
+    let mut response = if let Some(ref status_filter) = status {
+        let archived = status_filter == "archived";
+        conn.connection()
+            .query(&query)
+            .bind(("archived", archived))
+            .await
+            .context("Failed to fetch workspaces from database")?
+    } else {
+        conn.connection()
+            .query(&query)
+            .await
+            .context("Failed to fetch workspaces from database")?
+    };
+
+    let workspaces: Vec<Workspace> = response.take(0)?;
 
     match format {
         OutputFormat::Json => {
@@ -286,10 +378,10 @@ fn format_relative_time(dt: &chrono::DateTime<chrono::Utc>) -> String {
 }
 
 /// Delete a workspace
-pub async fn workspace_delete(name_or_id: String, force: bool) -> Result<()> {
-    if !force && !output::confirm(format!("Delete workspace '{}'?", name_or_id))? {
-        output::info("Cancelled");
-        return Ok(());
+pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()> {
+    if !confirm {
+        output::error("Deletion requires confirmation. Use --confirm flag to proceed.");
+        return Err(anyhow::anyhow!("Confirmation required"));
     }
 
     let spinner = output::spinner("Deleting workspace...");
@@ -302,19 +394,19 @@ pub async fn workspace_delete(name_or_id: String, force: bool) -> Result<()> {
     let conn = storage.acquire().await?;
 
     // Try to parse as UUID first
-    let workspace_id = if let Ok(uuid) = Uuid::parse_str(&name_or_id) {
+    let ws_id = if let Ok(uuid) = Uuid::parse_str(&workspace_id) {
         uuid
     } else {
         // Search by name
         let mut response = conn.connection()
             .query("SELECT * FROM workspace WHERE name = $name")
-            .bind(("name", name_or_id.clone()))
+            .bind(("name", workspace_id.clone()))
             .await
             .context("Failed to query workspace")?;
         let workspaces: Vec<Workspace> = response.take(0)?;
 
         if workspaces.is_empty() {
-            return Err(anyhow::anyhow!("Workspace not found: {}", name_or_id));
+            return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
         }
 
         workspaces[0].id
@@ -323,18 +415,18 @@ pub async fn workspace_delete(name_or_id: String, force: bool) -> Result<()> {
     // Delete all VNodes in this workspace
     let mut _response = conn.connection()
         .query("DELETE FROM vnode WHERE workspace_id = $workspace_id")
-        .bind(("workspace_id", workspace_id))
+        .bind(("workspace_id", ws_id))
         .await
         .context("Failed to delete workspace vnodes")?;
 
     // Delete the workspace
     let _: Option<Workspace> = conn.connection()
-        .delete(("workspace", workspace_id.to_string()))
+        .delete(("workspace", ws_id.to_string()))
         .await
         .context("Failed to delete workspace from database")?;
 
     spinner.finish_and_clear();
-    output::success(format!("Deleted workspace: {}", name_or_id));
+    output::success(format!("Deleted workspace: {}", workspace_id));
 
     Ok(())
 }

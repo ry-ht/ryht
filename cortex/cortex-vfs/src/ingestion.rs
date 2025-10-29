@@ -277,6 +277,7 @@ impl FileIngestionPipeline {
     }
 
     /// Ingest all files in a workspace.
+    /// Uses batch processing to avoid loading all files into memory at once.
     pub async fn ingest_workspace(
         &self,
         workspace_id: &Uuid,
@@ -297,22 +298,39 @@ impl FileIngestionPipeline {
             .filter(|vnode| vnode.is_file())
             .collect();
 
-        for vnode in &code_files {
-            debug!("Processing file: {}", vnode.path);
+        let total_files = code_files.len();
+        info!("Found {} files to process", total_files);
 
-            match self.ingest_file(workspace_id, &vnode.path).await {
-                Ok(result) => {
-                    total_units += result.units_stored;
-                    if !result.errors.is_empty() {
-                        files_with_errors.push(result.file_path.clone());
+        // Process files in batches to avoid memory issues
+        const BATCH_SIZE: usize = 100;
+        for (batch_idx, batch) in code_files.chunks(BATCH_SIZE).enumerate() {
+            info!(
+                "Processing batch {}/{} ({} files)",
+                batch_idx + 1,
+                (total_files + BATCH_SIZE - 1) / BATCH_SIZE,
+                batch.len()
+            );
+
+            for vnode in batch {
+                debug!("Processing file: {}", vnode.path);
+
+                match self.ingest_file(workspace_id, &vnode.path).await {
+                    Ok(result) => {
+                        total_units += result.units_stored;
+                        if !result.errors.is_empty() {
+                            files_with_errors.push(result.file_path.clone());
+                        }
+                        file_results.push(result);
                     }
-                    file_results.push(result);
-                }
-                Err(e) => {
-                    error!("Failed to ingest file {}: {}", vnode.path, e);
-                    files_with_errors.push(vnode.path.to_string());
+                    Err(e) => {
+                        error!("Failed to ingest file {}: {}", vnode.path, e);
+                        files_with_errors.push(vnode.path.to_string());
+                    }
                 }
             }
+
+            // Yield to allow other tasks to run between batches
+            tokio::task::yield_now().await;
         }
 
         let files_processed = code_files.len();

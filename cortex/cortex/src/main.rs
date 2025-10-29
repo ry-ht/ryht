@@ -198,19 +198,43 @@ enum WorkspaceCommands {
     Create {
         /// Workspace name
         name: String,
+
+        /// Root path of the project to import (optional for empty workspace)
+        #[arg(short, long)]
+        root_path: Option<PathBuf>,
+
+        /// Auto import on creation
+        #[arg(long, default_value = "true")]
+        auto_import: bool,
+
+        /// Process code units (parse files)
+        #[arg(long, default_value = "true")]
+        process_code: bool,
+
+        /// Maximum file size to import (MB)
+        #[arg(long, default_value = "10")]
+        max_file_size_mb: u64,
     },
 
     /// List all workspaces
-    List,
+    List {
+        /// Filter by status
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Maximum number of results
+        #[arg(short, long, default_value = "100")]
+        limit: usize,
+    },
 
     /// Delete a workspace
     Delete {
         /// Workspace name or ID
-        name_or_id: String,
+        workspace_id: String,
 
-        /// Force deletion without confirmation
+        /// Confirm deletion (required, use --confirm to proceed)
         #[arg(short, long)]
-        force: bool,
+        confirm: bool,
     },
 
     /// Switch active workspace
@@ -657,14 +681,18 @@ async fn run() -> Result<()> {
         Commands::Workspace(workspace_cmd) => match workspace_cmd {
             WorkspaceCommands::Create {
                 name,
+                root_path,
+                auto_import,
+                process_code,
+                max_file_size_mb,
             } => {
-                commands::workspace_create(name).await?;
+                commands::workspace_create(name, root_path, auto_import, process_code, max_file_size_mb).await?;
             }
-            WorkspaceCommands::List => {
-                commands::workspace_list(format).await?;
+            WorkspaceCommands::List { status, limit } => {
+                commands::workspace_list(status, limit, format).await?;
             }
-            WorkspaceCommands::Delete { name_or_id, force } => {
-                commands::workspace_delete(name_or_id, force).await?;
+            WorkspaceCommands::Delete { workspace_id, confirm } => {
+                commands::workspace_delete(workspace_id, confirm).await?;
             }
             WorkspaceCommands::Switch { name } => {
                 commands::workspace_switch(name).await?;
