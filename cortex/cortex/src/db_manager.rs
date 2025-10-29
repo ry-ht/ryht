@@ -472,8 +472,14 @@ impl DatabaseManager {
                 // Use HTTP health check endpoint (Qdrant 1.x uses /healthz)
                 let health_url = format!("{}/healthz", url);
 
-                match reqwest::get(&health_url).await {
+                match reqwest::Client::new()
+                    .get(&health_url)
+                    .timeout(Duration::from_secs(5))
+                    .send()
+                    .await
+                {
                     Ok(response) if response.status().is_success() => {
+                        debug!("Qdrant health check succeeded: {}", response.status());
                         Ok(ComponentStatus {
                             running: true,
                             healthy: true,
@@ -483,6 +489,7 @@ impl DatabaseManager {
                         })
                     }
                     Ok(response) => {
+                        warn!("Qdrant health check failed with status: {}", response.status());
                         Ok(ComponentStatus {
                             running: true,
                             healthy: false,
@@ -492,6 +499,7 @@ impl DatabaseManager {
                         })
                     }
                     Err(e) => {
+                        debug!("Qdrant health check connection error: {}", e);
                         Ok(ComponentStatus {
                             running: false,
                             healthy: false,
