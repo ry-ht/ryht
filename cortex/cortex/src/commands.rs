@@ -391,43 +391,42 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     let ws_id = if let Ok(uuid) = Uuid::parse_str(&workspace_id) {
         uuid
     } else {
-        // Search by name
+        // Search by name - get as raw JSON to avoid Thing deserialization issues
         let mut response = conn.connection()
-            .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name")
+            .query("SELECT VALUE id FROM workspace WHERE name = $name")
             .bind(("name", workspace_id.clone()))
             .await
             .context("Failed to query workspace")?;
 
-        // Parse with string IDs and convert to UUIDs
-        #[derive(serde::Deserialize)]
-        struct WorkspaceWithStringId {
-            id: String,
-            #[serde(flatten)]
-            rest: serde_json::Value,
-        }
+        // Get raw JSON values
+        let workspace_ids: Vec<serde_json::Value> = response.take(0)?;
 
-        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
-
-        if workspaces_raw.is_empty() {
+        if workspace_ids.is_empty() {
             return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
         }
 
-        let w = &workspaces_raw[0];
-        // Extract UUID from "workspace:uuid" format
-        let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+        // Extract UUID from the thing - it's in format "workspace:uuid" or just the object
+        let id_value = &workspace_ids[0];
+        let id_str = id_value.as_str()
+            .or_else(|| id_value.get("id").and_then(|v| v.as_str()))
+            .ok_or_else(|| anyhow::anyhow!("Invalid workspace ID format"))?;
+
+        // Extract UUID from "workspace:uuid" format or parse directly
+        let uuid_str = id_str.strip_prefix("workspace:").unwrap_or(id_str);
         Uuid::parse_str(uuid_str)?
     };
 
     // Delete all VNodes in this workspace
     let mut _response = conn.connection()
         .query("DELETE FROM vnode WHERE workspace_id = $workspace_id")
-        .bind(("workspace_id", ws_id))
+        .bind(("workspace_id", ws_id.to_string()))
         .await
         .context("Failed to delete workspace vnodes")?;
 
-    // Delete the workspace
-    let _: Option<Workspace> = conn.connection()
-        .delete(("workspace", ws_id.to_string()))
+    // Delete the workspace using query to avoid deserialization issues
+    let mut _response = conn.connection()
+        .query("DELETE FROM workspace WHERE id = $workspace_id")
+        .bind(("workspace_id", format!("workspace:{}", ws_id)))
         .await
         .context("Failed to delete workspace from database")?;
 
@@ -712,7 +711,7 @@ pub async fn list_documents(workspace: Option<String>, format: OutputFormat) -> 
     // Query vnodes of type Document
     let mut response = if let Some(ws_id) = workspace_id {
         conn.connection().query("SELECT * FROM vnode WHERE workspace_id = $workspace_id AND node_type = 'document'")
-            .bind(("workspace_id", ws_id))
+            .bind(("workspace_id", ws_id.to_string()))
             .await
             .context("Failed to fetch documents from database")?
     } else {

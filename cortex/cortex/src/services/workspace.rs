@@ -209,10 +209,11 @@ impl WorkspaceService {
             .await?
             .take(0)?;
 
-        // Delete workspace
-        let _: Option<Workspace> = conn
+        // Delete workspace using query to avoid deserialization issues with Thing
+        let mut _response = conn
             .connection()
-            .delete(("workspace", workspace_id.to_string()))
+            .query("DELETE FROM workspace WHERE id = $workspace_id")
+            .bind(("workspace_id", format!("workspace:{}", workspace_id)))
             .await?;
 
         info!("Deleted workspace: {}", workspace_id);
