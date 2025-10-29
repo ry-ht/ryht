@@ -37,6 +37,7 @@ use anyhow::Result as AnyhowResult;
 
 // Import the unified service layer
 use crate::services::CodeUnitService;
+use crate::mcp::context::CortexToolContext;
 
 // =============================================================================
 // Shared Context
@@ -483,7 +484,7 @@ impl Tool for CodeUpdateUnitTool {
         serde_json::to_value(schemars::schema_for!(UpdateUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: UpdateUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -502,10 +503,9 @@ impl Tool for CodeUpdateUnitTool {
         }
 
         // Get workspace ID from context
-        let workspace_id = self.ctx.get_active_workspace()
-            .ok_or_else(|| ToolError::ExecutionFailed(
-                "No active workspace set. Please activate a workspace first using cortex.workspace.activate".to_string()
-            ))?;
+        let cortex_ctx = CortexToolContext::from_mcp_context(context);
+        let workspace_id = cortex_ctx.require_workspace()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
         let language = match unit.language {
             Language::Rust => ParserLanguage::Rust,
             Language::TypeScript => ParserLanguage::TypeScript,
@@ -655,7 +655,7 @@ impl Tool for CodeDeleteUnitTool {
         serde_json::to_value(schemars::schema_for!(DeleteUnitInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: DeleteUnitInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
@@ -674,10 +674,9 @@ impl Tool for CodeDeleteUnitTool {
         }
 
         // Get workspace ID from context
-        let workspace_id = self.ctx.get_active_workspace()
-            .ok_or_else(|| ToolError::ExecutionFailed(
-                "No active workspace set. Please activate a workspace first using cortex.workspace.activate".to_string()
-            ))?;
+        let cortex_ctx = CortexToolContext::from_mcp_context(context);
+        let workspace_id = cortex_ctx.require_workspace()
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
         let language = match unit.language {
             Language::Rust => ParserLanguage::Rust,
             Language::TypeScript => ParserLanguage::TypeScript,

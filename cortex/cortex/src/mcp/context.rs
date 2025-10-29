@@ -4,7 +4,7 @@
 //! including session-based workspace management.
 
 use mcp_sdk::ToolContext;
-use cortex_core::id::{CortexId, SessionId};
+use cortex_core::id::CortexId;
 use cortex_core::error::{CortexError, Result};
 use uuid::Uuid;
 
@@ -16,7 +16,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct CortexToolContext {
     /// Session ID if this tool is being called within a session
-    pub session_id: Option<SessionId>,
+    pub session_id: Option<CortexId>,
 
     /// Workspace ID for this operation
     /// Can come from session metadata or be explicitly specified
@@ -49,19 +49,19 @@ impl CortexToolContext {
     /// ```
     pub fn from_mcp_context(mcp_context: &ToolContext) -> Self {
         // Extract session_id from metadata
-        let session_id = mcp_context.metadata
+        let session_id = mcp_context.metadata()
             .get("session_id")
             .and_then(|v| v.as_str())
-            .and_then(|s| CortexId::from_str(s).ok());
+            .and_then(|s| CortexId::parse(s).ok());
 
         // Extract workspace_id from metadata
-        let workspace_id = mcp_context.metadata
+        let workspace_id = mcp_context.metadata()
             .get("workspace_id")
             .and_then(|v| v.as_str())
             .and_then(|s| Uuid::parse_str(s).ok());
 
         // Extract agent_id from metadata
-        let agent_id = mcp_context.metadata
+        let agent_id = mcp_context.metadata()
             .get("agent_id")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
@@ -108,7 +108,7 @@ impl CortexToolContext {
     /// # Errors
     ///
     /// Returns `CortexError::InvalidInput` if session_id is not set
-    pub fn require_session(&self) -> Result<SessionId> {
+    pub fn require_session(&self) -> Result<CortexId> {
         self.session_id
             .clone()
             .ok_or_else(|| CortexError::invalid_input(

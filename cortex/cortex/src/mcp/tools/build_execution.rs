@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 // Import BuildService from the services layer
 use crate::services::build::{BuildService, BuildConfig, TestConfig};
+use crate::mcp::context::CortexToolContext;
 
 #[derive(Clone)]
 pub struct BuildExecutionContext {
@@ -568,19 +569,21 @@ impl Tool for TestExecuteTool {
         serde_json::to_value(schemars::schema_for!(TestExecuteInput)).unwrap()
     }
 
-    async fn execute(&self, input: Value, _context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
+    async fn execute(&self, input: Value, context: &ToolContext) -> std::result::Result<ToolResult, ToolError> {
         let input: TestExecuteInput = serde_json::from_value(input)
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         debug!("Executing tests with pattern: {:?}", input.test_pattern);
 
-        // Get workspace ID from input parameter or active workspace context
+        // Get workspace ID from input parameter or MCP context
         let workspace_id = if input.workspace_id == "00000000-0000-0000-0000-000000000000" {
-            // No workspace ID provided in input, try to get from active workspace
-            self.ctx.get_active_workspace()
-                .ok_or_else(|| ToolError::ExecutionFailed(
-                    "No active workspace set. Please activate a workspace first using cortex.workspace.activate or provide workspace_id parameter".to_string()
-                ))?
+            // No workspace ID provided in input, try to get from MCP context
+            let cortex_ctx = CortexToolContext::from_mcp_context(context);
+            cortex_ctx.require_workspace()
+                .map_err(|e| ToolError::ExecutionFailed(format!(
+                    "No workspace ID in context. Please provide workspace_id parameter or set workspace_id in session metadata. Error: {}",
+                    e
+                )))?
         } else {
             // Parse the provided workspace ID
             Uuid::parse_str(&input.workspace_id)
