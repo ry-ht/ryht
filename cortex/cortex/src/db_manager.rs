@@ -80,8 +80,8 @@ pub struct DatabaseManagerConfig {
 impl Default for DatabaseManagerConfig {
     fn default() -> Self {
         Self {
-            use_docker_compose: true,
-            use_native_qdrant: false,
+            use_docker_compose: false,
+            use_native_qdrant: true,
             docker_compose_file: PathBuf::from("docker-compose.yml"),
             startup_timeout: Duration::from_secs(60),
             shutdown_timeout: Duration::from_secs(30),
@@ -738,13 +738,18 @@ pub async fn create_from_global_config() -> Result<DatabaseManager> {
     let docker_running = is_docker_qdrant_running().await;
 
     if native_running {
+        // Native Qdrant is running - use native mode
         manager_config.use_docker_compose = false;
         manager_config.use_native_qdrant = true;
     } else if docker_running {
+        // Docker Qdrant is running - use docker mode but not compose
         manager_config.use_docker_compose = false;
         manager_config.use_native_qdrant = false;
+    } else {
+        // Nothing is running - use defaults which are now native mode
+        // This allows proper stop behavior even when nothing is running
+        debug!("No Qdrant process detected - using default native configuration");
     }
-    // else use defaults (Docker Compose mode)
 
     DatabaseManager::new(manager_config, surrealdb_config, qdrant_config).await
 }

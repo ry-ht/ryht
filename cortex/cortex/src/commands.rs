@@ -391,29 +391,28 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     let ws_id = if let Ok(uuid) = Uuid::parse_str(&workspace_id) {
         uuid
     } else {
-        // Search by name - get as raw JSON to avoid Thing deserialization issues
+        // Search by name - use workspace list command which handles IDs correctly
         let mut response = conn.connection()
-            .query("SELECT VALUE id FROM workspace WHERE name = $name")
+            .query("SELECT meta::id(id) as id_str FROM workspace WHERE name = $name LIMIT 1")
             .bind(("name", workspace_id.clone()))
             .await
             .context("Failed to query workspace")?;
 
-        // Get raw JSON values
-        let workspace_ids: Vec<serde_json::Value> = response.take(0)?;
+        #[derive(serde::Deserialize)]
+        struct WorkspaceIdResult {
+            id_str: String,
+        }
 
-        if workspace_ids.is_empty() {
+        let results: Vec<WorkspaceIdResult> = response.take(0)?;
+
+        if results.is_empty() {
             return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
         }
 
-        // Extract UUID from the thing - it's in format "workspace:uuid" or just the object
-        let id_value = &workspace_ids[0];
-        let id_str = id_value.as_str()
-            .or_else(|| id_value.get("id").and_then(|v| v.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("Invalid workspace ID format"))?;
-
-        // Extract UUID from "workspace:uuid" format or parse directly
-        let uuid_str = id_str.strip_prefix("workspace:").unwrap_or(id_str);
-        Uuid::parse_str(uuid_str)?
+        // Extract UUID from "workspace:uuid" format
+        let id_str = &results[0].id_str;
+        let uuid_part = id_str.strip_prefix("workspace:").unwrap_or(id_str);
+        Uuid::parse_str(uuid_part)?
     };
 
     // Delete all VNodes in this workspace
@@ -1186,37 +1185,25 @@ pub async fn db_start(
     qdrant_port: Option<u16>,
     qdrant_grpc_port: Option<u16>,
     qdrant_data: Option<PathBuf>,
-    use_docker: bool,
+    _use_docker: bool,
 ) -> Result<()> {
     output::header("Starting Database Infrastructure");
     output::info("Managing both SurrealDB (metadata) and Qdrant (vectors)");
     println!();
 
-    // Auto-detect Qdrant installation mode if use_docker is false
-    let should_use_docker = if use_docker {
-        output::info("Using Docker mode (explicitly requested)");
-        true
-    } else {
-        // Check if native Qdrant binary is installed
-        let qdrant_binary_installed = is_qdrant_binary_installed().await;
-        let docker_available = is_docker_available().await;
+    // Check if native Qdrant binary is installed
+    let qdrant_binary_installed = is_qdrant_binary_installed().await;
 
-        if qdrant_binary_installed {
-            output::info("Native Qdrant binary detected at ~/.cortex/bin/qdrant");
-            output::info("Starting Qdrant in native mode");
-            false
-        } else if docker_available {
-            output::info("Native Qdrant not found, Docker is available");
-            output::info("Starting Qdrant in Docker mode");
-            true
-        } else {
-            output::error("Neither native Qdrant nor Docker are available");
-            output::info("Please install one:");
-            output::info("  - Native: cortex db install --database qdrant");
-            output::info("  - Docker: cortex db install --database qdrant-docker");
-            return Err(anyhow::anyhow!("No Qdrant installation found"));
-        }
-    };
+    if !qdrant_binary_installed {
+        output::error("Native Qdrant binary not found at ~/.cortex/bin/qdrant");
+        output::info("Please install Qdrant:");
+        output::info("  cortex db install --database qdrant");
+        return Err(anyhow::anyhow!("Qdrant not installed"));
+    }
+
+    output::info("Native Qdrant binary detected at ~/.cortex/bin/qdrant");
+    output::info("Starting databases in native mode");
+    println!();
 
     // Load base configuration
     let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
@@ -1254,10 +1241,9 @@ pub async fn db_start(
         request_timeout: std::time::Duration::from_secs(60),
     };
 
-    // Build database manager configuration
-    let mut manager_config = crate::db_manager::DatabaseManagerConfig::default();
-    manager_config.use_docker_compose = should_use_docker;
-    manager_config.use_native_qdrant = !should_use_docker;
+    // Build database manager configuration - always use native mode
+    let manager_config = crate::db_manager::DatabaseManagerConfig::default();
+    // defaults are already set to native mode
 
     // Store qdrant_data for later use if needed
     if let Some(_data_dir) = qdrant_data {
