@@ -212,10 +212,6 @@ impl CortexConfig {
             }
         };
 
-        eprintln!("DEBUG: connection_string = {}", connection_string);
-        eprintln!("DEBUG: db.mode = {}", db.mode);
-        eprintln!("DEBUG: db.local_bind = {}", db.local_bind);
-
         // Extract MCP address and port from server_bind (e.g., "127.0.0.1:3000")
         let (mcp_address, mcp_port) = if let Some(colon_idx) = mcp.server_bind.rfind(':') {
             let address = mcp.server_bind[..colon_idx].to_string();

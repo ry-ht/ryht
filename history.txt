@@ -7,3 +7,4 @@ DELETE vnode; DELETE workspace;
 SELECT name, workspace_id, namespace FROM workspace;
 SELECT workspace_id, count() AS total FROM vnode GROUP ALL;
 DELETE vnode; DELETE workspace;
+SELECT *, <string>meta::id(id) as id FROM workspace LIMIT 1;
