@@ -5,9 +5,12 @@ use crate::cortex_bridge::{
     CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern,
     SearchFilters, TokenUsage, UnitFilters, WorkspaceId,
 };
+use crate::cc::{query, ClaudeCodeOptions, Message};
+use crate::cc::messages::ContentBlock;
+use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Test suite specification
 #[derive(Debug, Clone)]
@@ -379,41 +382,97 @@ impl TesterAgent {
         patterns: &[Pattern],
         episodes: &[Episode],
         units: &[crate::cortex_bridge::CodeUnit],
-        _existing_tests: &[crate::cortex_bridge::CodeSearchResult],
+        existing_tests: &[crate::cortex_bridge::CodeSearchResult],
     ) -> Result<(String, usize)> {
-        // Simplified synthesis - in production would use LLM with context
-        let mut tests = format!("// Generated {:?} tests for: {}\n", spec.test_type, spec.target_path);
-        tests.push_str("// Test coverage target: ");
-        tests.push_str(&format!("{:.1}%\n\n", spec.coverage_target * 100.0));
+        // Build rich context for Claude
+        let mut prompt = format!(
+            "Generate comprehensive {:?} tests for: {}\n\n",
+            spec.test_type, spec.target_path
+        );
 
+        prompt.push_str(&format!("Target coverage: {:.1}%\n", spec.coverage_target * 100.0));
+        prompt.push_str(&format!("Test type: {:?}\n\n", spec.test_type));
+
+        // Add code units context
+        if !units.is_empty() {
+            prompt.push_str("Code units to test:\n");
+            for unit in units.iter().take(10) {
+                prompt.push_str(&format!(
+                    "- {} {}: {} (complexity: {})\n",
+                    unit.unit_type, unit.name,
+                    unit.signature,
+                    unit.complexity.cyclomatic
+                ));
+            }
+            prompt.push('\n');
+        }
+
+        // Add test patterns context
         if !patterns.is_empty() {
-            tests.push_str("// Applied test patterns:\n");
+            prompt.push_str("Test patterns to apply:\n");
             for (i, pattern) in patterns.iter().take(3).enumerate() {
-                tests.push_str(&format!("// {}. {}\n", i + 1, pattern.name));
+                prompt.push_str(&format!("{}. {}: {}\n", i + 1, pattern.name, pattern.description));
             }
-            tests.push('\n');
+            prompt.push('\n');
         }
 
+        // Add existing tests as reference
+        if !existing_tests.is_empty() {
+            prompt.push_str("Existing test examples (for style reference):\n");
+            for (i, test) in existing_tests.iter().take(3).enumerate() {
+                prompt.push_str(&format!("{}. {}\n", i + 1, test.name));
+                if !test.snippet.is_empty() {
+                    prompt.push_str(&format!("   {}\n", test.snippet));
+                }
+            }
+            prompt.push('\n');
+        }
+
+        // Add episodes context
         if !episodes.is_empty() {
-            tests.push_str("// Learned from episodes:\n");
+            prompt.push_str("Learned from past test generation:\n");
             for (i, episode) in episodes.iter().take(2).enumerate() {
-                tests.push_str(&format!("// {}. {}\n", i + 1, episode.task_description));
+                prompt.push_str(&format!("{}. {}\n", i + 1, episode.task_description));
+                if !episode.lessons_learned.is_empty() {
+                    prompt.push_str(&format!("   Lesson: {}\n", episode.lessons_learned[0]));
+                }
             }
-            tests.push('\n');
+            prompt.push('\n');
         }
 
-        // Generate tests for each unit
-        let mut test_count = 0;
-        for unit in units.iter().take(5) {
-            tests.push_str(&"#[test]\n".to_string());
-            tests.push_str(&format!("fn test_{}() {{\n", unit.name));
-            tests.push_str("    // TODO: Implement test based on unit behavior\n");
-            tests.push_str("    assert!(true);\n");
-            tests.push_str("}\n\n");
-            test_count += 1;
+        prompt.push_str(&format!(
+            "Generate complete, production-ready Rust tests. Include:\n\
+            1. Proper test structure with #[test] attribute\n\
+            2. Comprehensive test cases covering:\n\
+               - Happy path scenarios\n\
+               - Edge cases (empty inputs, boundary values)\n\
+               - Error conditions\n\
+            3. Clear test names describing what is being tested\n\
+            4. Meaningful assertions with descriptive messages\n\
+            5. Test fixtures and setup code if needed\n\
+            6. Follow Rust testing best practices\n\n\
+            Return ONLY the Rust test code, wrapped in a ```rust code block.\n"
+        ));
+
+        // Use Claude CLI to generate tests
+        debug!("Calling Claude for test synthesis");
+        let test_code = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.query_claude(&prompt).await
+            })
+        })?;
+
+        // Extract code from response
+        let extracted_code = self.extract_code_blocks(&test_code)?;
+
+        if extracted_code.is_empty() {
+            warn!("No test code blocks found in Claude response, using raw response");
+            let test_count = self.count_tests(&test_code);
+            return Ok((test_code, test_count));
         }
 
-        Ok((tests, test_count))
+        let test_count = self.count_tests(&extracted_code);
+        Ok((extracted_code, test_count))
     }
 
     fn get_test_path(&self, target_path: &str) -> String {
@@ -431,14 +490,571 @@ impl TesterAgent {
         coverage * 0.8 // Account for partial coverage
     }
 
-    fn run_tests(&self, _test_suite_path: &str) -> Result<(usize, usize, usize)> {
-        // Simplified - in production would use actual test runner
-        Ok((5, 0, 0)) // 5 passed, 0 failed, 0 skipped
+    fn run_tests(&self, test_suite_path: &str) -> Result<(usize, usize, usize)> {
+        use std::process::Command;
+
+        debug!("Running tests for: {}", test_suite_path);
+
+        // Detect language and test framework
+        let (language, framework) = self.detect_test_framework(test_suite_path)?;
+        debug!("Detected language: {}, framework: {}", language, framework);
+
+        // Build PATH with standard directories
+        let path_env = self.build_path_env();
+
+        // Run appropriate test command based on language/framework
+        let output = match language.as_str() {
+            "rust" => {
+                debug!("Running Rust tests with cargo test");
+                Command::new("cargo")
+                    .arg("test")
+                    .arg("--")
+                    .arg("--test-threads=1")
+                    .env("PATH", &path_env)
+                    .current_dir(self.get_project_root(test_suite_path)?)
+                    .output()
+            }
+            "python" => {
+                let cmd = if framework == "pytest" { "pytest" } else { "python" };
+                debug!("Running Python tests with {}", cmd);
+                if framework == "pytest" {
+                    Command::new(cmd)
+                        .arg(test_suite_path)
+                        .arg("-v")
+                        .env("PATH", &path_env)
+                        .output()
+                } else {
+                    Command::new(cmd)
+                        .arg("-m")
+                        .arg("unittest")
+                        .arg(test_suite_path)
+                        .env("PATH", &path_env)
+                        .output()
+                }
+            }
+            "javascript" | "typescript" => {
+                debug!("Running JS/TS tests with npm test");
+                Command::new("npm")
+                    .arg("test")
+                    .arg("--")
+                    .arg(test_suite_path)
+                    .env("PATH", &path_env)
+                    .current_dir(self.get_project_root(test_suite_path)?)
+                    .output()
+            }
+            _ => {
+                warn!("Unsupported language: {}, cannot run tests", language);
+                return Ok((0, 0, 0));
+            }
+        };
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
+                debug!("Test output:\n{}\n{}", stdout, stderr);
+
+                // Parse test results based on framework
+                let (passed, failed, skipped) = self.parse_test_output(&language, &framework, &stdout, &stderr)?;
+
+                info!("Test results: {} passed, {} failed, {} skipped", passed, failed, skipped);
+                Ok((passed, failed, skipped))
+            }
+            Err(e) => {
+                warn!("Failed to run tests: {}", e);
+                // Return 0,0,0 if test runner not available (graceful fallback)
+                Ok((0, 0, 0))
+            }
+        }
     }
 
-    fn measure_coverage(&self, _test_suite_path: &str) -> Result<f32> {
-        // Simplified - in production would use coverage tool
-        Ok(0.75) // 75% coverage
+    fn measure_coverage(&self, test_suite_path: &str) -> Result<f32> {
+        use std::process::Command;
+
+        debug!("Measuring coverage for: {}", test_suite_path);
+
+        // Detect language
+        let (language, _) = self.detect_test_framework(test_suite_path)?;
+        debug!("Detected language: {}", language);
+
+        // Build PATH with standard directories
+        let path_env = self.build_path_env();
+
+        // Run appropriate coverage tool based on language
+        let output = match language.as_str() {
+            "rust" => {
+                debug!("Running Rust coverage with cargo-tarpaulin (or llvm-cov if available)");
+                // Try cargo-llvm-cov first, fallback to tarpaulin
+                let llvm_result = Command::new("cargo")
+                    .arg("llvm-cov")
+                    .arg("--all-features")
+                    .arg("--workspace")
+                    .arg("--")
+                    .arg("--test-threads=1")
+                    .env("PATH", &path_env)
+                    .current_dir(self.get_project_root(test_suite_path)?)
+                    .output();
+
+                if llvm_result.is_ok() {
+                    llvm_result
+                } else {
+                    debug!("cargo-llvm-cov not available, trying tarpaulin");
+                    Command::new("cargo")
+                        .arg("tarpaulin")
+                        .arg("--out")
+                        .arg("Stdout")
+                        .env("PATH", &path_env)
+                        .current_dir(self.get_project_root(test_suite_path)?)
+                        .output()
+                }
+            }
+            "python" => {
+                debug!("Running Python coverage with coverage.py");
+                Command::new("coverage")
+                    .arg("run")
+                    .arg("-m")
+                    .arg("pytest")
+                    .arg(test_suite_path)
+                    .env("PATH", &path_env)
+                    .output()
+                    .and_then(|_| {
+                        Command::new("coverage")
+                            .arg("report")
+                            .env("PATH", &path_env)
+                            .output()
+                    })
+            }
+            "javascript" | "typescript" => {
+                debug!("Running JS/TS coverage with nyc or jest --coverage");
+                // Try jest with coverage first
+                let jest_result = Command::new("npm")
+                    .arg("test")
+                    .arg("--")
+                    .arg("--coverage")
+                    .arg(test_suite_path)
+                    .env("PATH", &path_env)
+                    .current_dir(self.get_project_root(test_suite_path)?)
+                    .output();
+
+                if jest_result.is_ok() {
+                    jest_result
+                } else {
+                    debug!("jest not available, trying nyc");
+                    Command::new("nyc")
+                        .arg("npm")
+                        .arg("test")
+                        .env("PATH", &path_env)
+                        .current_dir(self.get_project_root(test_suite_path)?)
+                        .output()
+                }
+            }
+            _ => {
+                warn!("Unsupported language: {}, cannot measure coverage", language);
+                return Ok(0.0);
+            }
+        };
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
+                debug!("Coverage output:\n{}\n{}", stdout, stderr);
+
+                // Parse coverage percentage from output
+                let coverage = self.parse_coverage_output(&language, &stdout, &stderr)?;
+
+                info!("Coverage: {:.1}%", coverage * 100.0);
+                Ok(coverage)
+            }
+            Err(e) => {
+                warn!("Failed to measure coverage: {}", e);
+                // Return 0.0 if coverage tool not available (graceful fallback)
+                Ok(0.0)
+            }
+        }
+    }
+
+    // ========================================================================
+    // Helper methods for test execution and coverage
+    // ========================================================================
+
+    /// Query Claude CLI and collect response text
+    async fn query_claude(&self, prompt: &str) -> Result<String> {
+        let options = ClaudeCodeOptions::builder()
+            .system_prompt(crate::cc::options::SystemPrompt::String(
+                "You are an expert software testing engineer. Generate comprehensive, \
+                production-ready tests that cover edge cases, error conditions, and \
+                happy paths. Always wrap code in appropriate code blocks with language tags."
+                    .to_string(),
+            ))
+            .build();
+
+        let mut response_stream = query(prompt, Some(options))
+            .await
+            .map_err(|e| AgentError::CortexError(format!("Claude query failed: {}", e)))?;
+
+        let mut collected_text = String::new();
+
+        while let Some(msg_result) = response_stream.next().await {
+            match msg_result {
+                Ok(Message::Assistant { message }) => {
+                    for content_block in &message.content {
+                        if let ContentBlock::Text(text_content) = content_block {
+                            collected_text.push_str(&text_content.text);
+                        }
+                    }
+                }
+                Ok(Message::Result { result, is_error, .. }) => {
+                    if is_error {
+                        if let Some(err_msg) = result {
+                            return Err(AgentError::CortexError(format!("Claude error: {}", err_msg)));
+                        }
+                    }
+                    debug!("Claude query completed");
+                }
+                Ok(_) => {
+                    // Ignore other message types
+                }
+                Err(e) => {
+                    return Err(AgentError::CortexError(format!("Stream error: {}", e)));
+                }
+            }
+        }
+
+        if collected_text.is_empty() {
+            return Err(AgentError::CortexError("No response from Claude".to_string()));
+        }
+
+        Ok(collected_text)
+    }
+
+    /// Extract code blocks from Claude's response
+    fn extract_code_blocks(&self, response: &str) -> Result<String> {
+        let mut code_blocks = Vec::new();
+        let mut in_code_block = false;
+        let mut current_block = String::new();
+
+        for line in response.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("```rust") || trimmed.starts_with("```") {
+                if in_code_block {
+                    // End of code block
+                    if !current_block.is_empty() {
+                        code_blocks.push(current_block.clone());
+                        current_block.clear();
+                    }
+                    in_code_block = false;
+                } else {
+                    // Start of code block
+                    in_code_block = true;
+                }
+            } else if in_code_block {
+                current_block.push_str(line);
+                current_block.push('\n');
+            }
+        }
+
+        // If we ended while still in a code block, add it
+        if in_code_block && !current_block.is_empty() {
+            code_blocks.push(current_block);
+        }
+
+        if code_blocks.is_empty() {
+            return Ok(String::new());
+        }
+
+        // Return the concatenated code blocks
+        Ok(code_blocks.join("\n\n"))
+    }
+
+    /// Count tests in generated code
+    fn count_tests(&self, code: &str) -> usize {
+        code.matches("#[test]").count()
+            + code.matches("#[tokio::test]").count()
+            + code.matches("def test_").count() // Python
+            + code.matches("it(").count() // JavaScript/TypeScript
+            + code.matches("test(").count() // JavaScript/TypeScript
+    }
+
+    /// Detect test framework from file path and project structure
+    fn detect_test_framework(&self, test_path: &str) -> Result<(String, String)> {
+        use std::path::Path;
+
+        let path = Path::new(test_path);
+
+        // Detect language from file extension
+        let language = match path.extension().and_then(|e| e.to_str()) {
+            Some("rs") => "rust",
+            Some("py") => "python",
+            Some("js") => "javascript",
+            Some("ts") => "typescript",
+            Some("jsx") | Some("tsx") => "javascript",
+            _ => {
+                // Try to detect from parent directories
+                if test_path.contains("/tests/") || test_path.contains("/test/") {
+                    // Look for Cargo.toml nearby for Rust
+                    if Path::new(&test_path.replace("/tests/", "/Cargo.toml")).exists()
+                        || Path::new(&test_path.replace("/test/", "/Cargo.toml")).exists() {
+                        "rust"
+                    } else {
+                        "unknown"
+                    }
+                } else {
+                    "unknown"
+                }
+            }
+        };
+
+        // Detect framework based on language and project files
+        let framework = match language {
+            "rust" => "cargo",
+            "python" => {
+                // Check for pytest.ini or pytest in parent directories
+                let parent = path.parent().unwrap_or(path);
+                if Path::new(&format!("{}/pytest.ini", parent.display())).exists()
+                    || Path::new(&format!("{}/setup.cfg", parent.display())).exists() {
+                    "pytest"
+                } else {
+                    "unittest"
+                }
+            }
+            "javascript" | "typescript" => {
+                // Check for jest.config.js or package.json with jest
+                let parent = path.parent().unwrap_or(path);
+                if Path::new(&format!("{}/jest.config.js", parent.display())).exists()
+                    || Path::new(&format!("{}/jest.config.ts", parent.display())).exists() {
+                    "jest"
+                } else {
+                    "npm"
+                }
+            }
+            _ => "unknown",
+        };
+
+        Ok((language.to_string(), framework.to_string()))
+    }
+
+    /// Build PATH environment variable with standard directories
+    fn build_path_env(&self) -> String {
+        let standard_paths = vec![
+            "/Users/taaliman/.cargo/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+        ];
+
+        // Get current PATH and append standard paths
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let mut all_paths = vec![current_path];
+        all_paths.extend(standard_paths.iter().map(|s| s.to_string()));
+
+        all_paths.join(":")
+    }
+
+    /// Get project root from test file path
+    fn get_project_root(&self, test_path: &str) -> Result<String> {
+        use std::path::Path;
+
+        let path = Path::new(test_path);
+
+        // Walk up the directory tree to find project root
+        let mut current = path.parent();
+        while let Some(dir) = current {
+            // Check for common project root markers
+            if dir.join("Cargo.toml").exists()
+                || dir.join("package.json").exists()
+                || dir.join("setup.py").exists()
+                || dir.join("pyproject.toml").exists() {
+                return Ok(dir.to_string_lossy().to_string());
+            }
+            current = dir.parent();
+        }
+
+        // Fallback to current directory
+        Ok(".".to_string())
+    }
+
+    /// Parse test output to extract pass/fail/skip counts
+    fn parse_test_output(&self, language: &str, framework: &str, stdout: &str, stderr: &str) -> Result<(usize, usize, usize)> {
+        let output = format!("{}\n{}", stdout, stderr);
+
+        match (language, framework) {
+            ("rust", "cargo") => {
+                // Parse Rust test output
+                // Format: "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
+                let passed = output
+                    .lines()
+                    .find(|line| line.contains("test result:"))
+                    .and_then(|line| {
+                        line.split_whitespace()
+                            .find(|word| word.chars().all(|c| c.is_numeric()))
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let failed = output
+                    .lines()
+                    .find(|line| line.contains("failed;"))
+                    .and_then(|line| {
+                        line.split("failed;")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let skipped = output
+                    .lines()
+                    .find(|line| line.contains("ignored;"))
+                    .and_then(|line| {
+                        line.split("ignored;")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                Ok((passed, failed, skipped))
+            }
+            ("python", "pytest") => {
+                // Parse pytest output
+                // Format: "5 passed, 1 failed, 2 skipped in 0.12s"
+                let passed = output
+                    .lines()
+                    .find(|line| line.contains("passed"))
+                    .and_then(|line| {
+                        line.split("passed")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let failed = output
+                    .lines()
+                    .find(|line| line.contains("failed"))
+                    .and_then(|line| {
+                        line.split("failed")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let skipped = output
+                    .lines()
+                    .find(|line| line.contains("skipped"))
+                    .and_then(|line| {
+                        line.split("skipped")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                Ok((passed, failed, skipped))
+            }
+            ("javascript" | "typescript", "jest") | ("javascript" | "typescript", "npm") => {
+                // Parse Jest output
+                // Format: "Tests: 1 failed, 5 passed, 6 total"
+                let passed = output
+                    .lines()
+                    .find(|line| line.contains("Tests:") && line.contains("passed"))
+                    .and_then(|line| {
+                        line.split("passed")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let failed = output
+                    .lines()
+                    .find(|line| line.contains("Tests:") && line.contains("failed"))
+                    .and_then(|line| {
+                        line.split("failed")
+                            .next()
+                            .and_then(|s| s.split(',').next())
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                let skipped = output
+                    .lines()
+                    .find(|line| line.contains("Tests:") && line.contains("skipped"))
+                    .and_then(|line| {
+                        line.split("skipped")
+                            .next()
+                            .and_then(|s| s.split_whitespace().last())
+                            .and_then(|n| n.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+
+                Ok((passed, failed, skipped))
+            }
+            _ => Ok((0, 0, 0)),
+        }
+    }
+
+    /// Parse coverage output to extract percentage
+    fn parse_coverage_output(&self, language: &str, stdout: &str, stderr: &str) -> Result<f32> {
+        let output = format!("{}\n{}", stdout, stderr);
+
+        match language {
+            "rust" => {
+                // Parse tarpaulin or llvm-cov output
+                // Format: "75.00% coverage"
+                output
+                    .lines()
+                    .find(|line| line.contains("coverage") || line.contains("TOTAL"))
+                    .and_then(|line| {
+                        // Try to extract percentage
+                        line.split_whitespace()
+                            .find(|word| word.contains('%'))
+                            .and_then(|percent| {
+                                percent.trim_end_matches('%').parse::<f32>().ok()
+                            })
+                            .map(|p| p / 100.0)
+                    })
+                    .ok_or_else(|| AgentError::ValidationError("Could not parse coverage percentage".to_string()))
+            }
+            "python" => {
+                // Parse coverage.py output
+                // Format: "TOTAL 123 45 75%"
+                output
+                    .lines()
+                    .find(|line| line.contains("TOTAL"))
+                    .and_then(|line| {
+                        line.split_whitespace()
+                            .last()
+                            .and_then(|percent| {
+                                percent.trim_end_matches('%').parse::<f32>().ok()
+                            })
+                            .map(|p| p / 100.0)
+                    })
+                    .ok_or_else(|| AgentError::ValidationError("Could not parse coverage percentage".to_string()))
+            }
+            "javascript" | "typescript" => {
+                // Parse Jest or nyc output
+                // Format: "All files | 75.00 | 80.00 | 70.00 | 75.00 |"
+                output
+                    .lines()
+                    .find(|line| line.contains("All files") || line.contains("Statements"))
+                    .and_then(|line| {
+                        line.split('|')
+                            .nth(1)
+                            .and_then(|percent| {
+                                percent.trim().parse::<f32>().ok()
+                            })
+                            .map(|p| p / 100.0)
+                    })
+                    .ok_or_else(|| AgentError::ValidationError("Could not parse coverage percentage".to_string()))
+            }
+            _ => Ok(0.0),
+        }
     }
 }
 
