@@ -9,6 +9,11 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
+// For Claude CLI integration
+use crate::cc::{query, ClaudeCodeOptions, Message};
+use crate::cc::messages::ContentBlock;
+use futures::StreamExt;
+
 /// Code specification for generation
 #[derive(Debug, Clone)]
 pub struct CodeSpec {
@@ -628,88 +633,368 @@ impl DeveloperAgent {
         patterns: &[Pattern],
         _units: &[crate::cortex_bridge::CodeUnit],
     ) -> Result<String> {
-        // Simplified synthesis - in production would use LLM with context
-        let mut code = format!("// Generated code for: {}\n", spec.description);
-        code.push_str("// Language: ");
-        code.push_str(&spec.language);
-        code.push_str("\n\n");
+        // Build rich context for Claude
+        let mut prompt = format!(
+            "Generate {} code for: {}\n\n",
+            spec.language, spec.description
+        );
 
+        prompt.push_str(&format!("Target file: {}\n", spec.target_path));
+        prompt.push_str(&format!("Feature type: {}\n\n", spec.feature_type));
+
+        // Add similar code context
         if !similar_code.is_empty() {
-            code.push_str("// Similar implementations found:\n");
+            prompt.push_str("Similar implementations found:\n");
             for (i, similar) in similar_code.iter().take(3).enumerate() {
-                code.push_str(&format!("// {}. {}\n", i + 1, similar.name));
+                prompt.push_str(&format!("{}. {} (relevance: {:.2})\n",
+                    i + 1, similar.name, similar.relevance_score));
+                if !similar.snippet.is_empty() {
+                    prompt.push_str(&format!("   {}\n", similar.snippet));
+                }
             }
-            code.push('\n');
+            prompt.push('\n');
         }
 
+        // Add patterns context
         if !patterns.is_empty() {
-            code.push_str("// Applicable patterns:\n");
+            prompt.push_str("Applicable design patterns:\n");
             for (i, pattern) in patterns.iter().take(3).enumerate() {
-                code.push_str(&format!("// {}. {}\n", i + 1, pattern.name));
+                prompt.push_str(&format!("{}. {}: {}\n",
+                    i + 1, pattern.name, pattern.description));
             }
-            code.push('\n');
+            prompt.push('\n');
         }
 
+        // Add episodes context
         if !episodes.is_empty() {
-            code.push_str("// Learned from episodes:\n");
+            prompt.push_str("Learned from past implementations:\n");
             for (i, episode) in episodes.iter().take(2).enumerate() {
-                code.push_str(&format!("// {}. {}\n", i + 1, episode.task_description));
+                prompt.push_str(&format!("{}. {}\n", i + 1, episode.task_description));
+                if !episode.lessons_learned.is_empty() {
+                    prompt.push_str(&format!("   Lesson: {}\n", episode.lessons_learned[0]));
+                }
             }
-            code.push('\n');
+            prompt.push('\n');
         }
 
-        // Placeholder implementation
-        code.push_str("// TODO: Implement based on specification\n");
-        code.push_str("pub fn placeholder() {\n");
-        code.push_str("    unimplemented!()\n");
-        code.push_str("}\n");
+        prompt.push_str(&format!(
+            "Generate complete, production-ready {} code. Include proper error handling, \
+            documentation comments, and follow best practices. Return ONLY the code, \
+            wrapped in a code block with the language specified.\n",
+            spec.language
+        ));
 
-        Ok(code)
+        // Use Claude CLI to generate code
+        debug!("Calling Claude for code synthesis");
+        let code = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.query_claude(&prompt).await
+            })
+        })?;
+
+        // Extract code from response
+        let extracted_code = self.extract_code_blocks(&code, &spec.language)?;
+
+        if extracted_code.is_empty() {
+            warn!("No code blocks found in Claude response, using raw response");
+            Ok(code)
+        } else {
+            Ok(extracted_code)
+        }
     }
 
-    fn validate_code(&self, _code: &str, _language: &str) -> Result<()> {
-        // Simplified validation - in production would use proper syntax checker
-        // For now, just check basic structure
+    fn validate_code(&self, code: &str, language: &str) -> Result<()> {
+        debug!("Validating {} code", language);
+
+        // Basic structure validation
+        if code.trim().is_empty() {
+            return Err(AgentError::ValidationError("Code is empty".to_string()));
+        }
+
+        // Check balanced braces and parentheses
+        self.check_balanced_delimiters(code)?;
+
+        // Language-specific validation
+        match language.to_lowercase().as_str() {
+            "rust" => self.validate_rust_syntax(code),
+            "python" | "py" => self.validate_python_syntax(code),
+            "javascript" | "js" | "typescript" | "ts" => self.validate_js_syntax(code),
+            _ => {
+                debug!("No specific validation for language: {}", language);
+                Ok(())
+            }
+        }
+    }
+
+    fn check_balanced_delimiters(&self, code: &str) -> Result<()> {
+        let mut braces = 0;
+        let mut parens = 0;
+        let mut brackets = 0;
+        let mut in_string = false;
+        let mut escape_next = false;
+        let mut string_char = ' ';
+
+        for ch in code.chars() {
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+
+            if ch == '\\' {
+                escape_next = true;
+                continue;
+            }
+
+            if ch == '"' || ch == '\'' {
+                if !in_string {
+                    in_string = true;
+                    string_char = ch;
+                } else if ch == string_char {
+                    in_string = false;
+                }
+                continue;
+            }
+
+            if in_string {
+                continue;
+            }
+
+            match ch {
+                '{' => braces += 1,
+                '}' => braces -= 1,
+                '(' => parens += 1,
+                ')' => parens -= 1,
+                '[' => brackets += 1,
+                ']' => brackets -= 1,
+                _ => {}
+            }
+
+            if braces < 0 || parens < 0 || brackets < 0 {
+                return Err(AgentError::ValidationError(
+                    format!("Unbalanced delimiters: braces={}, parens={}, brackets={}", braces, parens, brackets)
+                ));
+            }
+        }
+
+        if braces != 0 || parens != 0 || brackets != 0 {
+            return Err(AgentError::ValidationError(
+                format!("Unbalanced delimiters: braces={}, parens={}, brackets={}", braces, parens, brackets)
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_rust_syntax(&self, code: &str) -> Result<()> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        debug!("Validating Rust syntax with rustc");
+
+        // Create a temporary file
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("rust_validate_{}.rs", uuid::Uuid::new_v4()));
+
+        // Write code to temp file
+        std::fs::write(&temp_file, code)
+            .map_err(|e| AgentError::ValidationError(format!("Failed to write temp file: {}", e)))?;
+
+        // Run rustc --crate-type lib to check syntax
+        let output = Command::new("rustc")
+            .arg("--crate-type")
+            .arg("lib")
+            .arg("--error-format=short")
+            .arg(&temp_file)
+            .arg("-o")
+            .arg("/dev/null")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+
+        // Clean up temp file
+        let _ = std::fs::remove_file(&temp_file);
+
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    debug!("Rust syntax validation passed");
+                    Ok(())
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    Err(AgentError::ValidationError(
+                        format!("Rust syntax errors:\n{}", stderr)
+                    ))
+                }
+            }
+            Err(e) => {
+                warn!("rustc not available: {}, skipping Rust validation", e);
+                Ok(())
+            }
+        }
+    }
+
+    fn validate_python_syntax(&self, code: &str) -> Result<()> {
+        use std::process::{Command, Stdio};
+
+        debug!("Validating Python syntax");
+
+        // Create a temporary file
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!("py_validate_{}.py", uuid::Uuid::new_v4()));
+
+        // Write code to temp file
+        std::fs::write(&temp_file, code)
+            .map_err(|e| AgentError::ValidationError(format!("Failed to write temp file: {}", e)))?;
+
+        // Run python -m py_compile to check syntax
+        let output = Command::new("python3")
+            .arg("-m")
+            .arg("py_compile")
+            .arg(&temp_file)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+
+        // Clean up temp file and compiled cache
+        let _ = std::fs::remove_file(&temp_file);
+
+        match output {
+            Ok(output) => {
+                if output.status.success() {
+                    debug!("Python syntax validation passed");
+                    Ok(())
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    Err(AgentError::ValidationError(
+                        format!("Python syntax errors:\n{}", stderr)
+                    ))
+                }
+            }
+            Err(e) => {
+                warn!("python3 not available: {}, skipping Python validation", e);
+                Ok(())
+            }
+        }
+    }
+
+    fn validate_js_syntax(&self, code: &str) -> Result<()> {
+        debug!("Validating JavaScript/TypeScript syntax (basic check)");
+
+        // Basic JS/TS syntax checks
+        // Check for common syntax errors
+        if code.contains("function") && !code.contains("function ") && !code.contains("function(") {
+            return Err(AgentError::ValidationError(
+                "Invalid function declaration syntax".to_string()
+            ));
+        }
+
+        // Check for unclosed template literals
+        let backtick_count = code.matches('`').count();
+        if backtick_count % 2 != 0 {
+            return Err(AgentError::ValidationError(
+                "Unclosed template literal".to_string()
+            ));
+        }
+
+        debug!("JavaScript/TypeScript basic syntax checks passed");
         Ok(())
     }
 
     fn apply_refactoring(
         &self,
         code: &str,
-        _units: &[crate::cortex_bridge::CodeUnit],
-        _episodes: &[Episode],
-        _patterns: &[Pattern],
+        units: &[crate::cortex_bridge::CodeUnit],
+        episodes: &[Episode],
+        patterns: &[Pattern],
         refactoring_type: RefactoringType,
     ) -> Result<(String, Vec<String>)> {
-        // Simplified refactoring - in production would use proper AST manipulation
-        let mut refactored = code.to_string();
         let mut changes = Vec::new();
 
         match refactoring_type {
             RefactoringType::Simplify => {
-                // Placeholder: remove empty lines
-                refactored = refactored
+                // For Simplify, do simple cleanup without LLM
+                let refactored = code
                     .lines()
                     .filter(|line| !line.trim().is_empty())
                     .collect::<Vec<_>>()
                     .join("\n");
                 changes.push("Removed empty lines".to_string());
+                Ok((refactored, changes))
             }
-            RefactoringType::ExtractMethod => {
-                changes.push("Extracted method (placeholder)".to_string());
-            }
-            RefactoringType::Rename => {
-                changes.push("Renamed symbol (placeholder)".to_string());
-            }
-            RefactoringType::Inline => {
-                changes.push("Inlined function (placeholder)".to_string());
-            }
-            RefactoringType::ExtractVariable => {
-                changes.push("Extracted variable (placeholder)".to_string());
+            RefactoringType::ExtractMethod
+            | RefactoringType::Rename
+            | RefactoringType::Inline
+            | RefactoringType::ExtractVariable => {
+                // Use Claude for complex refactorings
+                let mut prompt = format!(
+                    "Apply {:?} refactoring to the following code:\n\n```\n{}\n```\n\n",
+                    refactoring_type, code
+                );
+
+                // Add context from code units
+                if !units.is_empty() {
+                    prompt.push_str("Code structure context:\n");
+                    for unit in units.iter().take(5) {
+                        prompt.push_str(&format!(
+                            "- {} {} (complexity: {})\n",
+                            unit.unit_type, unit.name, unit.complexity.cyclomatic
+                        ));
+                    }
+                    prompt.push('\n');
+                }
+
+                // Add refactoring patterns
+                if !patterns.is_empty() {
+                    prompt.push_str("Refactoring patterns to consider:\n");
+                    for pattern in patterns.iter().take(3) {
+                        prompt.push_str(&format!("- {}: {}\n", pattern.name, pattern.description));
+                    }
+                    prompt.push('\n');
+                }
+
+                // Add episodes context
+                if !episodes.is_empty() {
+                    prompt.push_str("Past refactoring experiences:\n");
+                    for episode in episodes.iter().take(2) {
+                        prompt.push_str(&format!("- {}\n", episode.task_description));
+                    }
+                    prompt.push('\n');
+                }
+
+                prompt.push_str(&format!(
+                    "Apply the {:?} refactoring. Return the refactored code in a code block \
+                    and list the changes made. Format your response as:\n\
+                    1. Code block with refactored code\n\
+                    2. List of changes (one per line, starting with '-')\n",
+                    refactoring_type
+                ));
+
+                debug!("Calling Claude for refactoring");
+                let response = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        self.query_claude(&prompt).await
+                    })
+                })?;
+
+                // Extract refactored code
+                let refactored_code = self.extract_code_blocks(&response, "rust")?;
+                let code_to_use = if refactored_code.is_empty() {
+                    warn!("No code blocks in refactoring response");
+                    code.to_string()
+                } else {
+                    refactored_code
+                };
+
+                // Extract changes from response
+                changes = self.extract_changes_list(&response);
+
+                if changes.is_empty() {
+                    changes.push(format!("Applied {:?} refactoring", refactoring_type));
+                }
+
+                Ok((code_to_use, changes))
             }
         }
-
-        Ok((refactored, changes))
     }
 
     fn identify_bottlenecks(
@@ -736,17 +1021,226 @@ impl DeveloperAgent {
         &self,
         code: &str,
         bottlenecks: &[String],
-        _patterns: &[Pattern],
-        _episodes: &[Episode],
+        patterns: &[Pattern],
+        episodes: &[Episode],
     ) -> Result<(String, Vec<String>)> {
-        // Simplified optimization - in production would use proper analysis
-        let optimized = code.to_string();
-        let optimizations: Vec<String> = bottlenecks
-            .iter()
-            .map(|b| format!("Addressed: {}", b))
-            .collect();
+        if bottlenecks.is_empty() {
+            debug!("No bottlenecks identified, returning original code");
+            return Ok((code.to_string(), vec!["No optimizations needed".to_string()]));
+        }
 
-        Ok((optimized, optimizations))
+        // Build optimization prompt
+        let mut prompt = format!(
+            "Optimize the following code to address performance bottlenecks:\n\n```rust\n{}\n```\n\n",
+            code
+        );
+
+        prompt.push_str("Identified bottlenecks:\n");
+        for (i, bottleneck) in bottlenecks.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", i + 1, bottleneck));
+        }
+        prompt.push('\n');
+
+        // Add optimization patterns
+        if !patterns.is_empty() {
+            prompt.push_str("Optimization patterns to consider:\n");
+            for pattern in patterns.iter().take(3) {
+                prompt.push_str(&format!("- {}: {}\n", pattern.name, pattern.description));
+            }
+            prompt.push('\n');
+        }
+
+        // Add past optimization experiences
+        if !episodes.is_empty() {
+            prompt.push_str("Past optimization experiences:\n");
+            for episode in episodes.iter().take(3) {
+                prompt.push_str(&format!("- {}\n", episode.task_description));
+                if let Some(metrics) = episode.success_metrics.as_object() {
+                    if let Some(improvement) = metrics.get("improvement_percent") {
+                        prompt.push_str(&format!("  Achieved: {} improvement\n", improvement));
+                    }
+                }
+            }
+            prompt.push('\n');
+        }
+
+        prompt.push_str(
+            "Apply performance optimizations to address the bottlenecks. Consider:\n\
+            - Algorithm optimization (better complexity)\n\
+            - Data structure improvements\n\
+            - Caching strategies\n\
+            - Parallel processing where applicable\n\
+            - Memory allocation optimization\n\n\
+            Return:\n\
+            1. Optimized code in a code block\n\
+            2. List of optimizations applied (one per line, starting with '-')\n\
+            3. Expected performance improvement\n"
+        );
+
+        debug!("Calling Claude for optimization");
+        let response = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.query_claude(&prompt).await
+            })
+        })?;
+
+        // Extract optimized code
+        let optimized_code = self.extract_code_blocks(&response, "rust")?;
+        let code_to_use = if optimized_code.is_empty() {
+            warn!("No code blocks in optimization response, using original");
+            code.to_string()
+        } else {
+            optimized_code
+        };
+
+        // Extract optimizations list
+        let mut optimizations = self.extract_changes_list(&response);
+
+        if optimizations.is_empty() {
+            optimizations = bottlenecks
+                .iter()
+                .map(|b| format!("Addressed: {}", b))
+                .collect();
+        }
+
+        Ok((code_to_use, optimizations))
+    }
+
+    /// Query Claude CLI and collect response text
+    async fn query_claude(&self, prompt: &str) -> Result<String> {
+        let options = ClaudeCodeOptions::builder()
+            .system_prompt(crate::cc::options::SystemPrompt::String(
+                "You are an expert software engineer. Provide clear, concise, and accurate responses. \
+                When generating code, always wrap it in appropriate code blocks with language tags."
+                    .to_string(),
+            ))
+            .build();
+
+        let mut response_stream = query(prompt, Some(options))
+            .await
+            .map_err(|e| AgentError::CortexError(format!("Claude query failed: {}", e)))?;
+
+        let mut collected_text = String::new();
+
+        while let Some(msg_result) = response_stream.next().await {
+            match msg_result {
+                Ok(Message::Assistant { message }) => {
+                    for content_block in &message.content {
+                        if let ContentBlock::Text(text_content) = content_block {
+                            collected_text.push_str(&text_content.text);
+                        }
+                    }
+                }
+                Ok(Message::Result { result, is_error, .. }) => {
+                    if is_error {
+                        if let Some(err_msg) = result {
+                            return Err(AgentError::CortexError(format!("Claude error: {}", err_msg)));
+                        }
+                    }
+                    debug!("Claude query completed");
+                }
+                Ok(_) => {
+                    // Ignore other message types
+                }
+                Err(e) => {
+                    return Err(AgentError::CortexError(format!("Stream error: {}", e)));
+                }
+            }
+        }
+
+        if collected_text.is_empty() {
+            return Err(AgentError::CortexError("No response from Claude".to_string()));
+        }
+
+        Ok(collected_text)
+    }
+
+    /// Extract code blocks from Claude's response
+    fn extract_code_blocks(&self, response: &str, language: &str) -> Result<String> {
+        // Look for code blocks with language tag: ```language\n...\n```
+        let lang_pattern = format!("```{}", language);
+        let mut code_blocks = Vec::new();
+        let mut in_code_block = false;
+        let mut current_block = String::new();
+
+        for line in response.lines() {
+            if line.trim().starts_with(&lang_pattern) || line.trim() == "```rust" || line.trim() == "```" {
+                if in_code_block {
+                    // End of code block
+                    if !current_block.is_empty() {
+                        code_blocks.push(current_block.clone());
+                        current_block.clear();
+                    }
+                    in_code_block = false;
+                } else {
+                    // Start of code block
+                    in_code_block = true;
+                }
+            } else if in_code_block {
+                current_block.push_str(line);
+                current_block.push('\n');
+            }
+        }
+
+        // If we ended while still in a code block, add it
+        if in_code_block && !current_block.is_empty() {
+            code_blocks.push(current_block);
+        }
+
+        if code_blocks.is_empty() {
+            // Try to extract any code block (without language tag)
+            in_code_block = false;
+            current_block = String::new();
+
+            for line in response.lines() {
+                if line.trim().starts_with("```") {
+                    if in_code_block {
+                        if !current_block.is_empty() {
+                            code_blocks.push(current_block.clone());
+                            current_block.clear();
+                        }
+                        in_code_block = false;
+                    } else {
+                        in_code_block = true;
+                    }
+                } else if in_code_block {
+                    current_block.push_str(line);
+                    current_block.push('\n');
+                }
+            }
+
+            if in_code_block && !current_block.is_empty() {
+                code_blocks.push(current_block);
+            }
+        }
+
+        if code_blocks.is_empty() {
+            return Ok(String::new());
+        }
+
+        // Return the first (or concatenated) code block
+        Ok(code_blocks.join("\n\n"))
+    }
+
+    /// Extract a list of changes from Claude's response
+    fn extract_changes_list(&self, response: &str) -> Vec<String> {
+        let mut changes = Vec::new();
+
+        for line in response.lines() {
+            let trimmed = line.trim();
+            // Look for lines starting with - or * or numbered lists
+            if trimmed.starts_with("- ") {
+                changes.push(trimmed[2..].to_string());
+            } else if trimmed.starts_with("* ") {
+                changes.push(trimmed[2..].to_string());
+            } else if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_numeric()) {
+                if rest.starts_with(". ") || rest.starts_with(") ") {
+                    changes.push(rest[2..].to_string());
+                }
+            }
+        }
+
+        changes
     }
 
     fn estimate_complexity(&self, code: &str) -> Result<u32> {

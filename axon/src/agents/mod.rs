@@ -92,6 +92,9 @@ pub enum AgentError {
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
 
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
