@@ -86,7 +86,7 @@ impl Default for DatabaseManagerConfig {
             startup_timeout: Duration::from_secs(60),
             shutdown_timeout: Duration::from_secs(30),
             health_check_interval: Duration::from_secs(2),
-            health_check_retries: 15,
+            health_check_retries: 45, // Increased from 15 to 45 for Qdrant collection loading
         }
     }
 }
@@ -509,16 +509,25 @@ impl DatabaseManager {
     async fn wait_for_health(&self, backend: DatabaseBackend) -> Result<()> {
         let mut retries = 0;
 
+        // Give the process a bit more time to initialize before first check
+        // especially important for Qdrant when loading many collections
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
         loop {
             tokio::time::sleep(self.config.health_check_interval).await;
 
             match self.check_component_status(backend).await {
                 Ok(status) if status.healthy => {
-                    debug!("{} is healthy", backend.as_str());
+                    debug!("{} is healthy after {} checks", backend.as_str(), retries + 1);
                     return Ok(());
                 }
                 Ok(status) => {
-                    debug!("{} not yet healthy: {:?}", backend.as_str(), status.error);
+                    if retries % 5 == 0 {
+                        // Log every 5th attempt to avoid spam
+                        debug!("{} not yet healthy (attempt {}/{}): {:?}",
+                               backend.as_str(), retries + 1,
+                               self.config.health_check_retries, status.error);
+                    }
                 }
                 Err(e) => {
                     debug!("{} health check error: {}", backend.as_str(), e);
@@ -528,9 +537,10 @@ impl DatabaseManager {
             retries += 1;
             if retries >= self.config.health_check_retries {
                 bail!(
-                    "{} did not become healthy after {} retries",
+                    "{} did not become healthy after {} retries ({} seconds)",
                     backend.as_str(),
-                    self.config.health_check_retries
+                    self.config.health_check_retries,
+                    self.config.health_check_retries * 2 + 1
                 );
             }
         }
