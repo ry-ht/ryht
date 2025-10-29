@@ -29,7 +29,7 @@ impl CortexMcpServer {
     /// Creates a new Cortex MCP server using global configuration
     ///
     /// This will:
-    /// 1. Load configuration from ~/.ryht/cortex/config.toml
+    /// 1. Load configuration from ~/.ryht/config.toml (unified config)
     /// 2. Initialize connection to SurrealDB
     /// 3. Register all MCP tools
     /// 4. Set up middleware and hooks

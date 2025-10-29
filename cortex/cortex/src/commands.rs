@@ -138,7 +138,10 @@ pub async fn init_workspace(
     output::success(format!("Initialized Cortex workspace: {}", name));
     output::kv("Workspace ID", workspace_id);
     output::kv("Path", workspace_path.display());
-    output::kv("Config", cortex_dir.join("config.toml").display());
+    // Config is now at ~/.ryht/config.toml (unified config)
+    if let Ok(config_path) = cortex_core::config::GlobalConfig::config_path() {
+        output::kv("Config", config_path.display());
+    }
 
     Ok(())
 }

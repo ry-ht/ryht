@@ -571,33 +571,16 @@ async fn update_config(
     State(_state): State<AppState>,
     Json(req): Json<UpdateConfigRequest>,
 ) -> Result<StatusCode, ApiError> {
+    // Load workspace config
     let mut config = crate::commands::config::AxonConfig::load()
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Update fields if provided
+    // Update workspace fields if provided
     if let Some(workspace_name) = req.workspace_name {
         config.workspace_name = workspace_name;
     }
     if let Some(workspace_path) = req.workspace_path {
         config.workspace_path = std::path::PathBuf::from(workspace_path);
-    }
-    if let Some(host) = req.server_host {
-        config.server.host = host;
-    }
-    if let Some(port) = req.server_port {
-        config.server.port = port;
-    }
-    if let Some(max_agents) = req.runtime_max_agents {
-        config.runtime.max_agents = max_agents;
-    }
-    if let Some(timeout) = req.runtime_agent_timeout_seconds {
-        config.runtime.agent_timeout_seconds = timeout;
-    }
-    if let Some(queue_size) = req.runtime_task_queue_size {
-        config.runtime.task_queue_size = queue_size;
-    }
-    if let Some(auto_recovery) = req.runtime_enable_auto_recovery {
-        config.runtime.enable_auto_recovery = auto_recovery;
     }
     if let Some(enabled) = req.cortex_enabled {
         config.cortex.enabled = enabled;
@@ -609,9 +592,53 @@ async fn update_config(
         config.cortex.workspace = Some(workspace);
     }
 
-    // Save the updated configuration
+    // Handle global server/runtime config updates
+    let needs_global_update = req.server_host.is_some()
+        || req.server_port.is_some()
+        || req.runtime_max_agents.is_some()
+        || req.runtime_agent_timeout_seconds.is_some()
+        || req.runtime_task_queue_size.is_some()
+        || req.runtime_enable_auto_recovery.is_some();
+
+    if needs_global_update {
+        use cortex_core::config::GlobalConfig;
+
+        // Load global config
+        let mut global_config = GlobalConfig::load_or_create_default().await
+            .map_err(|e| ApiError::Internal(format!("Failed to load global config: {}", e)))?;
+
+        let axon = global_config.axon_mut();
+
+        // Update server config
+        if let Some(host) = req.server_host {
+            axon.server.host = host;
+        }
+        if let Some(port) = req.server_port {
+            axon.server.port = port;
+        }
+
+        // Update runtime config
+        if let Some(max_agents) = req.runtime_max_agents {
+            axon.runtime.max_agents = max_agents;
+        }
+        if let Some(timeout) = req.runtime_agent_timeout_seconds {
+            axon.runtime.agent_timeout_seconds = timeout;
+        }
+        if let Some(queue_size) = req.runtime_task_queue_size {
+            axon.runtime.task_queue_size = queue_size;
+        }
+        if let Some(auto_recovery) = req.runtime_enable_auto_recovery {
+            axon.runtime.enable_auto_recovery = auto_recovery;
+        }
+
+        // Save global config
+        global_config.save().await
+            .map_err(|e| ApiError::Internal(format!("Failed to save global configuration: {}", e)))?;
+    }
+
+    // Save the updated workspace configuration
     config.save()
-        .map_err(|e| ApiError::Internal(format!("Failed to save configuration: {}", e)))?;
+        .map_err(|e| ApiError::Internal(format!("Failed to save workspace configuration: {}", e)))?;
 
     Ok(StatusCode::OK)
 }

@@ -316,6 +316,18 @@ impl Tool for RunExecuteTool {
             }
         }
 
+        // Ensure PATH includes standard system paths
+        if !env_vars.contains_key("PATH") {
+            let existing_path = std::env::var("PATH").unwrap_or_default();
+            if existing_path.is_empty() {
+                env_vars.insert("PATH".to_string(), "/usr/local/bin:/usr/bin:/bin".to_string());
+            } else if !existing_path.contains("/usr/local/bin") || !existing_path.contains("/usr/bin") {
+                env_vars.insert("PATH".to_string(), format!("{}:/usr/local/bin:/usr/bin:/bin", existing_path));
+            } else {
+                env_vars.insert("PATH".to_string(), existing_path);
+            }
+        }
+
         // Determine working directory
         let working_dir = input.working_directory
             .as_deref()
@@ -458,6 +470,13 @@ impl Tool for RunScriptTool {
         cmd.args(&args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // Ensure PATH includes standard system paths
+        let existing_path = std::env::var("PATH").unwrap_or_default();
+        if !existing_path.contains("/usr/local/bin") || !existing_path.contains("/usr/bin") {
+            let new_path = format!("{}:/usr/local/bin:/usr/bin:/bin", existing_path);
+            cmd.env("PATH", new_path);
+        }
 
         let output = cmd.output().await
             .map_err(|e| ToolError::ExecutionFailed(format!("Failed to execute script: {}", e)))?;

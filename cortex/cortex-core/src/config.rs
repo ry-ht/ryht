@@ -12,22 +12,27 @@
 //!
 //! # Configuration Location
 //!
-//! By default, configuration is stored at `~/.ryht/cortex/config.toml`.
-//! This can be overridden with the `CORTEX_CONFIG_PATH` environment variable.
+//! By default, configuration is stored at `~/.ryht/config.toml`.
+//! This can be overridden with the `RYHT_CONFIG_PATH` environment variable.
 //!
 //! # Directory Structure
 //!
 //! ```text
-//! ~/.ryht/cortex/
-//! ├── config.toml          # Main configuration
-//! ├── surrealdb/          # SurrealDB data and logs
-//! ├── cache/              # Content cache
-//! ├── sessions/           # Agent sessions
-//! ├── temp/               # Temporary files
-//! ├── data/               # Additional data files
-//! ├── logs/               # Log files
-//! ├── run/                # PID files
-//! └── workspaces/         # Workspace metadata
+//! ~/.ryht/
+//! ├── config.toml          # Unified configuration for all components
+//! ├── cortex/              # Cortex-specific directories
+//! │   ├── surrealdb/      # SurrealDB data and logs
+//! │   ├── cache/          # Content cache
+//! │   ├── sessions/       # Agent sessions
+//! │   ├── temp/           # Temporary files
+//! │   ├── data/           # Additional data files
+//! │   ├── logs/           # Log files
+//! │   ├── run/            # PID files
+//! │   └── workspaces/     # Workspace metadata
+//! └── axon/               # Axon-specific directories
+//!     ├── logs/           # Axon log files
+//!     ├── agents/         # Agent state
+//!     └── workflows/      # Workflow definitions
 //! ```
 //!
 //! # Example
@@ -70,12 +75,12 @@ use tracing::{debug, info, warn};
 /// The current configuration version for migration support
 pub const CONFIG_VERSION: &str = "0.1.0";
 
-/// Environment variable prefix for all Cortex configuration overrides
-pub const ENV_PREFIX: &str = "CORTEX_";
+/// Environment variable prefix for all RYHT configuration overrides
+pub const ENV_PREFIX: &str = "RYHT_";
 
 // Environment variable names
-pub const ENV_CONFIG_PATH: &str = "CORTEX_CONFIG_PATH";
-pub const ENV_CONFIG_PROFILE: &str = "CORTEX_CONFIG_PROFILE";
+pub const ENV_CONFIG_PATH: &str = "RYHT_CONFIG_PATH";
+pub const ENV_CONFIG_PROFILE: &str = "RYHT_CONFIG_PROFILE";
 pub const ENV_LOG_LEVEL: &str = "CORTEX_LOG_LEVEL";
 pub const ENV_DB_MODE: &str = "CORTEX_DB_MODE";
 pub const ENV_DB_URL: &str = "CORTEX_DB_URL";
@@ -146,16 +151,31 @@ impl std::fmt::Display for ConfigProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalConfig {
     general: GeneralConfig,
-    database: DatabaseConfig,
-    pool: PoolConfig,
-    cache: CacheConfig,
-    vfs: VfsConfig,
-    ingestion: IngestionConfig,
-    mcp: McpConfig,
+    cortex: CortexSection,
+    axon: AxonSection,
     auth: AuthConfig,
     /// Configuration profile (dev, prod, test)
     #[serde(default)]
     profile: ConfigProfile,
+}
+
+/// Cortex-specific configuration section
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CortexSection {
+    pub database: DatabaseConfig,
+    pub pool: PoolConfig,
+    pub cache: CacheConfig,
+    pub vfs: VfsConfig,
+    pub ingestion: IngestionConfig,
+    pub mcp: McpConfig,
+}
+
+/// Axon-specific configuration section
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AxonSection {
+    pub server: ServerConfig,
+    pub runtime: RuntimeConfig,
+    pub mcp: McpConfig,
 }
 
 /// General configuration settings
@@ -265,6 +285,23 @@ pub struct McpConfig {
     pub log_level: String,
 }
 
+/// Axon REST API server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub workers: Option<usize>,
+}
+
+/// Axon agent runtime configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeConfig {
+    pub max_agents: usize,
+    pub agent_timeout_seconds: u64,
+    pub task_queue_size: usize,
+    pub enable_auto_recovery: bool,
+}
+
 /// Authentication and security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -359,19 +396,78 @@ impl Default for IngestionConfig {
 
 impl Default for McpConfig {
     fn default() -> Self {
-        let home = dirs::home_dir().unwrap_or_else(|| {
-            eprintln!("WARNING: Could not determine home directory, using /tmp as fallback");
-            std::path::PathBuf::from("/tmp")
-        });
-        let ryht_dir = home.join(".ryht").join("cortex").join("mcp");
-
         Self {
             server_bind: "127.0.0.1:3000".to_string(),
             cors_enabled: true,
             max_request_size_mb: 10,
-            log_file_stdio: ryht_dir.join("logs").join("mcp-stdio.log").to_string_lossy().to_string(),
-            log_file_http: ryht_dir.join("logs").join("mcp-http.log").to_string_lossy().to_string(),
+            log_file_stdio: String::new(), // Will be set based on context (cortex vs axon)
+            log_file_http: String::new(),
             log_level: "info".to_string(),
+        }
+    }
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 9090,
+            workers: None,
+        }
+    }
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        Self {
+            max_agents: 10,
+            agent_timeout_seconds: 300,
+            task_queue_size: 100,
+            enable_auto_recovery: true,
+        }
+    }
+}
+
+impl Default for CortexSection {
+    fn default() -> Self {
+        let home = dirs::home_dir().unwrap_or_else(|| {
+            eprintln!("WARNING: Could not determine home directory, using /tmp as fallback");
+            std::path::PathBuf::from("/tmp")
+        });
+        let cortex_dir = home.join(".ryht").join("cortex");
+
+        let mut mcp = McpConfig::default();
+        mcp.log_file_stdio = cortex_dir.join("logs").join("mcp-stdio.log").to_string_lossy().to_string();
+        mcp.log_file_http = cortex_dir.join("logs").join("mcp-http.log").to_string_lossy().to_string();
+
+        Self {
+            database: DatabaseConfig::default(),
+            pool: PoolConfig::default(),
+            cache: CacheConfig::default(),
+            vfs: VfsConfig::default(),
+            ingestion: IngestionConfig::default(),
+            mcp,
+        }
+    }
+}
+
+impl Default for AxonSection {
+    fn default() -> Self {
+        let home = dirs::home_dir().unwrap_or_else(|| {
+            eprintln!("WARNING: Could not determine home directory, using /tmp as fallback");
+            std::path::PathBuf::from("/tmp")
+        });
+        let axon_dir = home.join(".ryht").join("axon");
+
+        let mut mcp = McpConfig::default();
+        mcp.server_bind = "127.0.0.1:3001".to_string(); // Different port for Axon
+        mcp.log_file_stdio = axon_dir.join("logs").join("mcp-stdio.log").to_string_lossy().to_string();
+        mcp.log_file_http = axon_dir.join("logs").join("mcp-http.log").to_string_lossy().to_string();
+
+        Self {
+            server: ServerConfig::default(),
+            runtime: RuntimeConfig::default(),
+            mcp,
         }
     }
 }
@@ -394,12 +490,8 @@ impl Default for GlobalConfig {
     fn default() -> Self {
         Self {
             general: GeneralConfig::default(),
-            database: DatabaseConfig::default(),
-            pool: PoolConfig::default(),
-            cache: CacheConfig::default(),
-            vfs: VfsConfig::default(),
-            ingestion: IngestionConfig::default(),
-            mcp: McpConfig::default(),
+            cortex: CortexSection::default(),
+            axon: AxonSection::default(),
             auth: AuthConfig::default(),
             profile: ConfigProfile::default(),
         }
@@ -423,8 +515,8 @@ impl GlobalConfig {
         let mut config = Self::default();
         config.general.log_level = "debug".to_string();
         config.general.hot_reload = true;
-        config.pool.max_connections = 5;
-        config.cache.memory_size_mb = 256;
+        config.cortex.pool.max_connections = 5;
+        config.cortex.cache.memory_size_mb = 256;
         config
     }
 
@@ -433,8 +525,8 @@ impl GlobalConfig {
         let mut config = Self::default();
         config.general.log_level = "info".to_string();
         config.general.hot_reload = false;
-        config.pool.max_connections = 20;
-        config.cache.memory_size_mb = 2048;
+        config.cortex.pool.max_connections = 20;
+        config.cortex.cache.memory_size_mb = 2048;
         config
     }
 
@@ -443,10 +535,10 @@ impl GlobalConfig {
         let mut config = Self::default();
         config.general.log_level = "warn".to_string();
         config.general.hot_reload = false;
-        config.pool.max_connections = 2;
-        config.cache.memory_size_mb = 128;
-        config.database.namespace = "cortex_test".to_string();
-        config.database.database = "test".to_string();
+        config.cortex.pool.max_connections = 2;
+        config.cortex.cache.memory_size_mb = 128;
+        config.cortex.database.namespace = "cortex_test".to_string();
+        config.cortex.database.database = "test".to_string();
         config
     }
 
@@ -591,67 +683,87 @@ impl GlobalConfig {
             )));
         }
 
-        // Validate database mode
+        // Validate Cortex database mode
         let valid_db_modes = ["local", "remote", "hybrid"];
-        if !valid_db_modes.contains(&self.database.mode.as_str()) {
+        if !valid_db_modes.contains(&self.cortex.database.mode.as_str()) {
             return Err(CortexError::Config(format!(
                 "Invalid database mode '{}'. Must be one of: {}",
-                self.database.mode,
+                self.cortex.database.mode,
                 valid_db_modes.join(", ")
             )));
         }
 
         // Validate remote URLs are provided for remote/hybrid modes
-        if (self.database.mode == "remote" || self.database.mode == "hybrid")
-            && self.database.remote_urls.is_empty()
+        if (self.cortex.database.mode == "remote" || self.cortex.database.mode == "hybrid")
+            && self.cortex.database.remote_urls.is_empty()
         {
             return Err(CortexError::Config(
                 "Remote database URLs must be provided for remote/hybrid mode".to_string(),
             ));
         }
 
-        // Validate pool configuration
-        if self.pool.min_connections > self.pool.max_connections {
+        // Validate Cortex pool configuration
+        if self.cortex.pool.min_connections > self.cortex.pool.max_connections {
             return Err(CortexError::Config(
                 "min_connections cannot be greater than max_connections".to_string(),
             ));
         }
 
-        if self.pool.max_connections == 0 {
+        if self.cortex.pool.max_connections == 0 {
             return Err(CortexError::Config(
                 "max_connections must be greater than 0".to_string(),
             ));
         }
 
-        // Validate cache configuration
-        if self.cache.memory_size_mb == 0 {
+        // Validate Cortex cache configuration
+        if self.cortex.cache.memory_size_mb == 0 {
             warn!("Cache memory size is 0, caching will be disabled");
         }
 
-        // Validate VFS configuration
-        if self.vfs.max_file_size_mb == 0 {
+        // Validate Cortex VFS configuration
+        if self.cortex.vfs.max_file_size_mb == 0 {
             return Err(CortexError::Config(
                 "max_file_size_mb must be greater than 0".to_string(),
             ));
         }
 
-        // Validate ingestion configuration
-        if self.ingestion.parallel_workers == 0 {
+        // Validate Cortex ingestion configuration
+        if self.cortex.ingestion.parallel_workers == 0 {
             return Err(CortexError::Config(
                 "parallel_workers must be greater than 0".to_string(),
             ));
         }
 
-        if self.ingestion.chunk_size == 0 {
+        if self.cortex.ingestion.chunk_size == 0 {
             return Err(CortexError::Config(
                 "chunk_size must be greater than 0".to_string(),
             ));
         }
 
-        // Validate MCP configuration
-        if self.mcp.max_request_size_mb == 0 {
+        // Validate Cortex MCP configuration
+        if self.cortex.mcp.max_request_size_mb == 0 {
             return Err(CortexError::Config(
-                "max_request_size_mb must be greater than 0".to_string(),
+                "Cortex MCP max_request_size_mb must be greater than 0".to_string(),
+            ));
+        }
+
+        // Validate Axon MCP configuration
+        if self.axon.mcp.max_request_size_mb == 0 {
+            return Err(CortexError::Config(
+                "Axon MCP max_request_size_mb must be greater than 0".to_string(),
+            ));
+        }
+
+        // Validate Axon runtime configuration
+        if self.axon.runtime.max_agents == 0 {
+            return Err(CortexError::Config(
+                "max_agents must be greater than 0".to_string(),
+            ));
+        }
+
+        if self.axon.runtime.task_queue_size == 0 {
+            return Err(CortexError::Config(
+                "task_queue_size must be greater than 0".to_string(),
             ));
         }
 
@@ -673,60 +785,60 @@ impl GlobalConfig {
             self.general.log_level = log_level;
         }
 
-        // Database
+        // Cortex Database
         if let Ok(db_mode) = std::env::var(ENV_DB_MODE) {
             debug!("Overriding database mode from environment: {}", db_mode);
-            self.database.mode = db_mode;
+            self.cortex.database.mode = db_mode;
         }
 
         if let Ok(db_url) = std::env::var(ENV_DB_URL) {
             debug!("Overriding database URL from environment");
-            self.database.remote_urls = vec![db_url];
+            self.cortex.database.remote_urls = vec![db_url];
         }
 
         if let Ok(local_bind) = std::env::var(ENV_DB_LOCAL_BIND) {
             debug!("Overriding local bind from environment: {}", local_bind);
-            self.database.local_bind = local_bind;
+            self.cortex.database.local_bind = local_bind;
         }
 
         if let Ok(username) = std::env::var(ENV_DB_USERNAME) {
             debug!("Overriding database username from environment");
-            self.database.username = username;
+            self.cortex.database.username = username;
         }
 
         if let Ok(password) = std::env::var(ENV_DB_PASSWORD) {
             debug!("Overriding database password from environment");
-            self.database.password = password;
+            self.cortex.database.password = password;
         }
 
         if let Ok(namespace) = std::env::var(ENV_DB_NAMESPACE) {
             debug!("Overriding database namespace from environment: {}", namespace);
-            self.database.namespace = namespace;
+            self.cortex.database.namespace = namespace;
         }
 
         if let Ok(database) = std::env::var(ENV_DB_DATABASE) {
             debug!("Overriding database name from environment: {}", database);
-            self.database.database = database;
+            self.cortex.database.database = database;
         }
 
-        // MCP
+        // Cortex MCP
         if let Ok(server_bind) = std::env::var(ENV_MCP_SERVER_BIND) {
-            debug!("Overriding MCP server bind from environment: {}", server_bind);
-            self.mcp.server_bind = server_bind;
+            debug!("Overriding Cortex MCP server bind from environment: {}", server_bind);
+            self.cortex.mcp.server_bind = server_bind;
         }
 
-        // Cache
+        // Cortex Cache
         if let Ok(cache_size) = std::env::var(ENV_CACHE_SIZE_MB) {
             let size = cache_size.parse::<u64>().map_err(|e| {
                 CortexError::Config(format!("Invalid cache size in environment: {}", e))
             })?;
             debug!("Overriding cache size from environment: {} MB", size);
-            self.cache.memory_size_mb = size;
+            self.cortex.cache.memory_size_mb = size;
         }
 
         if let Ok(redis_url) = std::env::var(ENV_CACHE_REDIS_URL) {
             debug!("Overriding Redis URL from environment");
-            self.cache.redis_url = redis_url;
+            self.cortex.cache.redis_url = redis_url;
         }
 
         // Authentication
@@ -741,15 +853,9 @@ impl GlobalConfig {
     /// Ensure all required directories exist
     ///
     /// Creates the following directory structure:
-    /// - ~/.ryht/cortex/
-    /// - ~/.ryht/cortex/surrealdb/
-    /// - ~/.ryht/cortex/cache/
-    /// - ~/.ryht/cortex/sessions/
-    /// - ~/.ryht/cortex/temp/
-    /// - ~/.ryht/cortex/data/
-    /// - ~/.ryht/cortex/logs/
-    /// - ~/.ryht/cortex/run/
-    /// - ~/.ryht/cortex/workspaces/
+    /// - ~/.ryht/
+    /// - ~/.ryht/cortex/ (and all subdirectories)
+    /// - ~/.ryht/axon/ (and all subdirectories)
     ///
     /// # Errors
     ///
@@ -757,14 +863,19 @@ impl GlobalConfig {
     pub async fn ensure_directories() -> Result<()> {
         let dirs = vec![
             Self::base_dir()?,
+            Self::cortex_dir()?,
             Self::surrealdb_dir()?,
-            Self::cache_dir()?,
-            Self::sessions_dir()?,
-            Self::temp_dir()?,
-            Self::data_dir()?,
-            Self::logs_dir()?,
-            Self::run_dir()?,
-            Self::workspaces_dir()?,
+            Self::cortex_cache_dir()?,
+            Self::cortex_sessions_dir()?,
+            Self::cortex_temp_dir()?,
+            Self::cortex_data_dir()?,
+            Self::cortex_logs_dir()?,
+            Self::cortex_run_dir()?,
+            Self::cortex_workspaces_dir()?,
+            Self::axon_dir()?,
+            Self::axon_logs_dir()?,
+            Self::axon_agents_dir()?,
+            Self::axon_workflows_dir()?,
         ];
 
         for dir in dirs {
@@ -786,9 +897,9 @@ impl GlobalConfig {
         Ok(())
     }
 
-    /// Get the base Cortex directory path (~/.ryht/cortex/)
+    /// Get the base RYHT directory path (~/.ryht/)
     ///
-    /// Can be overridden with CORTEX_CONFIG_PATH environment variable
+    /// Can be overridden with RYHT_CONFIG_PATH environment variable
     ///
     /// # Errors
     ///
@@ -804,10 +915,10 @@ impl GlobalConfig {
         let base_dirs = BaseDirs::new()
             .ok_or_else(|| CortexError::Config("Could not determine home directory".to_string()))?;
 
-        Ok(base_dirs.home_dir().join(".ryht").join("cortex"))
+        Ok(base_dirs.home_dir().join(".ryht"))
     }
 
-    /// Get the configuration file path
+    /// Get the configuration file path (~/.ryht/config.toml)
     ///
     /// # Errors
     ///
@@ -820,13 +931,33 @@ impl GlobalConfig {
         Ok(Self::base_dir()?.join("config.toml"))
     }
 
-    /// Get the data directory path
+    /// Get the Cortex directory path (~/.ryht/cortex/)
     ///
     /// # Errors
     ///
     /// Returns an error if the path cannot be determined
-    pub fn data_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("data"))
+    pub fn cortex_dir() -> Result<PathBuf> {
+        Ok(Self::base_dir()?.join("cortex"))
+    }
+
+    /// Get the Axon directory path (~/.ryht/axon/)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn axon_dir() -> Result<PathBuf> {
+        Ok(Self::base_dir()?.join("axon"))
+    }
+
+    // Cortex-specific directory helpers
+
+    /// Get the Cortex data directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_data_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("data"))
     }
 
     /// Get the SurrealDB data directory path
@@ -835,61 +966,134 @@ impl GlobalConfig {
     ///
     /// Returns an error if the path cannot be determined
     pub fn surrealdb_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("surrealdb"))
+        Ok(Self::cortex_dir()?.join("surrealdb"))
     }
 
-    /// Get the cache directory path
+    /// Get the Cortex cache directory path
     ///
     /// # Errors
     ///
     /// Returns an error if the path cannot be determined
+    pub fn cortex_cache_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("cache"))
+    }
+
+    /// Get the Cortex sessions directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_sessions_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("sessions"))
+    }
+
+    /// Get the Cortex temp directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_temp_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("temp"))
+    }
+
+    /// Get the Cortex logs directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_logs_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("logs"))
+    }
+
+    /// Get the Cortex run directory path (for PID files)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_run_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("run"))
+    }
+
+    /// Get the Cortex workspaces directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn cortex_workspaces_dir() -> Result<PathBuf> {
+        Ok(Self::cortex_dir()?.join("workspaces"))
+    }
+
+    // Axon-specific directory helpers
+
+    /// Get the Axon logs directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn axon_logs_dir() -> Result<PathBuf> {
+        Ok(Self::axon_dir()?.join("logs"))
+    }
+
+    /// Get the Axon agents directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn axon_agents_dir() -> Result<PathBuf> {
+        Ok(Self::axon_dir()?.join("agents"))
+    }
+
+    /// Get the Axon workflows directory path
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be determined
+    pub fn axon_workflows_dir() -> Result<PathBuf> {
+        Ok(Self::axon_dir()?.join("workflows"))
+    }
+
+    // Legacy compatibility methods (deprecated but maintained for backward compatibility)
+
+    /// Get the data directory path (legacy, use cortex_data_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_data_dir instead")]
+    pub fn data_dir() -> Result<PathBuf> {
+        Self::cortex_data_dir()
+    }
+
+    /// Get the cache directory path (legacy, use cortex_cache_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_cache_dir instead")]
     pub fn cache_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("cache"))
+        Self::cortex_cache_dir()
     }
 
-    /// Get the sessions directory path
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the path cannot be determined
+    /// Get the sessions directory path (legacy, use cortex_sessions_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_sessions_dir instead")]
     pub fn sessions_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("sessions"))
+        Self::cortex_sessions_dir()
     }
 
-    /// Get the temp directory path
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the path cannot be determined
+    /// Get the temp directory path (legacy, use cortex_temp_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_temp_dir instead")]
     pub fn temp_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("temp"))
+        Self::cortex_temp_dir()
     }
 
-    /// Get the logs directory path
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the path cannot be determined
+    /// Get the logs directory path (legacy, use cortex_logs_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_logs_dir instead")]
     pub fn logs_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("logs"))
+        Self::cortex_logs_dir()
     }
 
-    /// Get the run directory path (for PID files)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the path cannot be determined
+    /// Get the run directory path (legacy, use cortex_run_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_run_dir instead")]
     pub fn run_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("run"))
+        Self::cortex_run_dir()
     }
 
-    /// Get the workspaces directory path
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the path cannot be determined
+    /// Get the workspaces directory path (legacy, use cortex_workspaces_dir)
+    #[deprecated(since = "0.1.0", note = "Use cortex_workspaces_dir instead")]
     pub fn workspaces_dir() -> Result<PathBuf> {
-        Ok(Self::base_dir()?.join("workspaces"))
+        Self::cortex_workspaces_dir()
     }
 
     // Accessor methods for configuration sections
@@ -904,64 +1108,24 @@ impl GlobalConfig {
         &mut self.general
     }
 
-    /// Get database configuration
-    pub fn database(&self) -> &DatabaseConfig {
-        &self.database
+    /// Get Cortex section
+    pub fn cortex(&self) -> &CortexSection {
+        &self.cortex
     }
 
-    /// Get mutable database configuration
-    pub fn database_mut(&mut self) -> &mut DatabaseConfig {
-        &mut self.database
+    /// Get mutable Cortex section
+    pub fn cortex_mut(&mut self) -> &mut CortexSection {
+        &mut self.cortex
     }
 
-    /// Get pool configuration
-    pub fn pool(&self) -> &PoolConfig {
-        &self.pool
+    /// Get Axon section
+    pub fn axon(&self) -> &AxonSection {
+        &self.axon
     }
 
-    /// Get mutable pool configuration
-    pub fn pool_mut(&mut self) -> &mut PoolConfig {
-        &mut self.pool
-    }
-
-    /// Get cache configuration
-    pub fn cache(&self) -> &CacheConfig {
-        &self.cache
-    }
-
-    /// Get mutable cache configuration
-    pub fn cache_mut(&mut self) -> &mut CacheConfig {
-        &mut self.cache
-    }
-
-    /// Get VFS configuration
-    pub fn vfs(&self) -> &VfsConfig {
-        &self.vfs
-    }
-
-    /// Get mutable VFS configuration
-    pub fn vfs_mut(&mut self) -> &mut VfsConfig {
-        &mut self.vfs
-    }
-
-    /// Get ingestion configuration
-    pub fn ingestion(&self) -> &IngestionConfig {
-        &self.ingestion
-    }
-
-    /// Get mutable ingestion configuration
-    pub fn ingestion_mut(&mut self) -> &mut IngestionConfig {
-        &mut self.ingestion
-    }
-
-    /// Get MCP configuration
-    pub fn mcp(&self) -> &McpConfig {
-        &self.mcp
-    }
-
-    /// Get mutable MCP configuration
-    pub fn mcp_mut(&mut self) -> &mut McpConfig {
-        &mut self.mcp
+    /// Get mutable Axon section
+    pub fn axon_mut(&mut self) -> &mut AxonSection {
+        &mut self.axon
     }
 
     /// Get authentication configuration
@@ -972,6 +1136,80 @@ impl GlobalConfig {
     /// Get mutable authentication configuration
     pub fn auth_mut(&mut self) -> &mut AuthConfig {
         &mut self.auth
+    }
+
+    // Legacy accessors for backward compatibility (deprecated)
+
+    /// Get database configuration (legacy, use cortex().database)
+    #[deprecated(since = "0.1.0", note = "Use cortex().database instead")]
+    pub fn database(&self) -> &DatabaseConfig {
+        &self.cortex.database
+    }
+
+    /// Get mutable database configuration (legacy, use cortex_mut().database)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().database instead")]
+    pub fn database_mut(&mut self) -> &mut DatabaseConfig {
+        &mut self.cortex.database
+    }
+
+    /// Get pool configuration (legacy, use cortex().pool)
+    #[deprecated(since = "0.1.0", note = "Use cortex().pool instead")]
+    pub fn pool(&self) -> &PoolConfig {
+        &self.cortex.pool
+    }
+
+    /// Get mutable pool configuration (legacy, use cortex_mut().pool)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().pool instead")]
+    pub fn pool_mut(&mut self) -> &mut PoolConfig {
+        &mut self.cortex.pool
+    }
+
+    /// Get cache configuration (legacy, use cortex().cache)
+    #[deprecated(since = "0.1.0", note = "Use cortex().cache instead")]
+    pub fn cache(&self) -> &CacheConfig {
+        &self.cortex.cache
+    }
+
+    /// Get mutable cache configuration (legacy, use cortex_mut().cache)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().cache instead")]
+    pub fn cache_mut(&mut self) -> &mut CacheConfig {
+        &mut self.cortex.cache
+    }
+
+    /// Get VFS configuration (legacy, use cortex().vfs)
+    #[deprecated(since = "0.1.0", note = "Use cortex().vfs instead")]
+    pub fn vfs(&self) -> &VfsConfig {
+        &self.cortex.vfs
+    }
+
+    /// Get mutable VFS configuration (legacy, use cortex_mut().vfs)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().vfs instead")]
+    pub fn vfs_mut(&mut self) -> &mut VfsConfig {
+        &mut self.cortex.vfs
+    }
+
+    /// Get ingestion configuration (legacy, use cortex().ingestion)
+    #[deprecated(since = "0.1.0", note = "Use cortex().ingestion instead")]
+    pub fn ingestion(&self) -> &IngestionConfig {
+        &self.cortex.ingestion
+    }
+
+    /// Get mutable ingestion configuration (legacy, use cortex_mut().ingestion)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().ingestion instead")]
+    pub fn ingestion_mut(&mut self) -> &mut IngestionConfig {
+        &mut self.cortex.ingestion
+    }
+
+    /// Get MCP configuration (legacy, use cortex().mcp or axon().mcp)
+    #[deprecated(since = "0.1.0", note = "Use cortex().mcp or axon().mcp instead")]
+    pub fn mcp(&self) -> &McpConfig {
+        &self.cortex.mcp
+    }
+
+    /// Get mutable MCP configuration (legacy, use cortex_mut().mcp or axon_mut().mcp)
+    #[deprecated(since = "0.1.0", note = "Use cortex_mut().mcp or axon_mut().mcp instead")]
+    pub fn mcp_mut(&mut self) -> &mut McpConfig {
+        &mut self.cortex.mcp
     }
 
     /// Export configuration to a JSON string

@@ -5,20 +5,18 @@
       "args": ["mcp", "stdio"],
       "env": {
         "PATH": "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
-        "RUST_LOG": "info",
-        "CORTEX_DB_PATH": "/Users/taaliman/.ryht/cortex/cortex.db"
+        "RUST_LOG": "info"
       },
-      "description": "Cortex cognitive memory system providing workspace management, VFS, semantic search, code analysis, and persistent knowledge storage"
+      "description": "Cortex cognitive memory system providing workspace management, VFS, semantic search, code analysis, and persistent knowledge storage. Config: ~/.ryht/config.toml"
     },
     "axon": {
       "command": "/Users/taaliman/projects/luxquant/ry-ht/ryht/dist/axon",
       "args": ["mcp", "stdio"],
       "env": {
         "PATH": "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
-        "RUST_LOG": "info",
-        "CORTEX_URL": "http://localhost:8081"
+        "RUST_LOG": "info"
       },
-      "description": "Axon multi-agent orchestration system with 7 specialized agents (developer, tester, reviewer, architect, researcher, optimizer, documenter) for complex task automation"
+      "description": "Axon multi-agent orchestration system with 7 specialized agents (developer, tester, reviewer, architect, researcher, optimizer, documenter). Config: ~/.ryht/config.toml"
     }
   }
 }

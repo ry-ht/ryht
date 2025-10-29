@@ -34,6 +34,7 @@ chrono = { workspace = true }
 
 # Local dependencies (within workspace)
 mcp-sdk = { path = "../crates/mcp-sdk" }
+cortex-core = { path = "../cortex/cortex-core" }
 schemars = { workspace = true }
 
 # External dependencies

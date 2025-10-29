@@ -1,9 +1,16 @@
 //! Configuration management for Cortex CLI.
 //!
+//! NOTE: This module is DEPRECATED. Cortex now uses the unified configuration
+//! system from cortex-core, which stores config at ~/.ryht/config.toml.
+//!
+//! This module is kept for backward compatibility with legacy code that may
+//! still reference it, but new code should use cortex_core::config::GlobalConfig
+//! directly.
+//!
 //! This module handles configuration loading from multiple sources:
 //! 1. Default values
-//! 2. System-wide config (~/.config/cortex/config.toml)
-//! 3. Project-specific config (.cortex/config.toml)
+//! 2. System-wide config (~/.ryht/config.toml) - UNIFIED CONFIG
+//! 3. Project-specific config (.cortex/config.toml) - DEPRECATED
 //! 4. Environment variables (CORTEX_*)
 //! 5. Command-line flags
 //!
@@ -120,10 +127,13 @@ impl Default for CortexConfig {
 
 impl CortexConfig {
     /// Get the default config file path
+    ///
+    /// DEPRECATED: Use cortex_core::config::GlobalConfig::config_path() instead.
+    /// This now points to the unified config at ~/.ryht/config.toml for compatibility.
     pub fn default_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| CortexError::config("Could not determine config directory"))?;
-        Ok(config_dir.join("cortex").join("config.toml"))
+        // Use the unified config path from cortex-core
+        cortex_core::config::GlobalConfig::config_path()
+            .map_err(|e| CortexError::config(format!("Failed to get config path: {}", e)))
     }
 
     /// Get the project-specific config path
