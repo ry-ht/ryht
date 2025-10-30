@@ -310,11 +310,10 @@ impl WorkspaceService {
 
         info!("Deleted {} vnodes from workspace", deleted_vnodes.len());
 
-        // Delete workspace using the SDK delete method (same pattern as other services)
-        // Note: We ignore the return value to avoid deserialization issues with Thing IDs
-        let _: Option<Workspace> = conn
-            .connection()
-            .delete(("workspace", workspace_id.to_string()))
+        // Use raw DELETE query instead of .delete() method to avoid Thing type deserialization
+        conn.connection()
+            .query("DELETE workspace WHERE id = $id")
+            .bind(("id", format!("workspace:{}", workspace_id)))
             .await?;
 
         info!("Deleted workspace: {}", workspace_id);

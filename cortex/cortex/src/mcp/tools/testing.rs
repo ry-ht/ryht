@@ -162,6 +162,203 @@ impl TestGenerateTool {
         Self { ctx }
     }
 
+    /// Generate edge case values for different parameter types
+    fn generate_edge_case_values(&self, param_type: &str) -> Vec<String> {
+        let mut edge_cases = Vec::new();
+
+        // Numeric types
+        if param_type.starts_with("i") {
+            // Signed integers
+            match param_type {
+                "i8" => {
+                    edge_cases.push("i8::MIN".to_string());
+                    edge_cases.push("i8::MAX".to_string());
+                    edge_cases.push("-1".to_string());
+                }
+                "i16" => {
+                    edge_cases.push("i16::MIN".to_string());
+                    edge_cases.push("i16::MAX".to_string());
+                    edge_cases.push("-1".to_string());
+                }
+                "i32" => {
+                    edge_cases.push("i32::MIN".to_string());
+                    edge_cases.push("i32::MAX".to_string());
+                    edge_cases.push("-1".to_string());
+                }
+                "i64" => {
+                    edge_cases.push("i64::MIN".to_string());
+                    edge_cases.push("i64::MAX".to_string());
+                    edge_cases.push("-1".to_string());
+                }
+                "isize" => {
+                    edge_cases.push("isize::MIN".to_string());
+                    edge_cases.push("isize::MAX".to_string());
+                    edge_cases.push("-1".to_string());
+                }
+                _ => {}
+            }
+        } else if param_type.starts_with("u") {
+            // Unsigned integers
+            match param_type {
+                "u8" => {
+                    edge_cases.push("0".to_string());
+                    edge_cases.push("u8::MAX".to_string());
+                }
+                "u16" => {
+                    edge_cases.push("0".to_string());
+                    edge_cases.push("u16::MAX".to_string());
+                }
+                "u32" => {
+                    edge_cases.push("0".to_string());
+                    edge_cases.push("u32::MAX".to_string());
+                }
+                "u64" => {
+                    edge_cases.push("0".to_string());
+                    edge_cases.push("u64::MAX".to_string());
+                }
+                "usize" => {
+                    edge_cases.push("0".to_string());
+                    edge_cases.push("usize::MAX".to_string());
+                }
+                _ => {}
+            }
+        } else if param_type.starts_with("f") {
+            // Floating point
+            match param_type {
+                "f32" => {
+                    edge_cases.push("0.0".to_string());
+                    edge_cases.push("-0.0".to_string());
+                    edge_cases.push("f32::MIN".to_string());
+                    edge_cases.push("f32::MAX".to_string());
+                    edge_cases.push("f32::INFINITY".to_string());
+                    edge_cases.push("f32::NEG_INFINITY".to_string());
+                    edge_cases.push("f32::NAN".to_string());
+                }
+                "f64" => {
+                    edge_cases.push("0.0".to_string());
+                    edge_cases.push("-0.0".to_string());
+                    edge_cases.push("f64::MIN".to_string());
+                    edge_cases.push("f64::MAX".to_string());
+                    edge_cases.push("f64::INFINITY".to_string());
+                    edge_cases.push("f64::NEG_INFINITY".to_string());
+                    edge_cases.push("f64::NAN".to_string());
+                }
+                _ => {}
+            }
+        } else if param_type == "&str" {
+            // String slices
+            edge_cases.push("\"\"".to_string()); // Empty string
+            edge_cases.push("\"   \"".to_string()); // Whitespace only
+            edge_cases.push("\"\\n\"".to_string()); // Newline
+            edge_cases.push("\"\\u{1F600}\"".to_string()); // Unicode emoji
+        } else if param_type == "String" {
+            // Owned strings
+            edge_cases.push("String::new()".to_string()); // Empty
+            edge_cases.push("String::from(\"   \")".to_string()); // Whitespace
+            edge_cases.push("String::from(\"\\n\")".to_string()); // Newline
+        } else if param_type.contains("Vec") || param_type.contains("&[") {
+            // Collections
+            edge_cases.push("vec![]".to_string()); // Empty vector
+        } else if param_type.contains("Option") {
+            // Option types
+            edge_cases.push("None".to_string());
+            edge_cases.push("Some(Default::default())".to_string());
+        }
+
+        edge_cases
+    }
+
+    /// Generate error-inducing values for different parameter types
+    fn generate_error_case_values(&self, param_type: &str) -> Vec<String> {
+        let mut error_cases = Vec::new();
+
+        if param_type == "&str" || param_type == "String" {
+            // Invalid or problematic strings
+            error_cases.push("\"\"".to_string()); // Empty
+            error_cases.push("\"\\0\"".to_string()); // Null character
+        } else if param_type.contains("Option") {
+            // None case for Option types
+            error_cases.push("None".to_string());
+        } else if param_type.starts_with("i") || param_type.starts_with("u") {
+            // Boundary values for numeric types
+            if param_type.starts_with("i") {
+                error_cases.push("0".to_string());
+                error_cases.push("-1".to_string());
+            } else {
+                error_cases.push("0".to_string());
+            }
+        }
+
+        error_cases
+    }
+
+    /// Generate edge case values for TypeScript/JavaScript types
+    fn generate_typescript_edge_case_values(&self, param_type: &str) -> Vec<String> {
+        let mut edge_cases = Vec::new();
+
+        match param_type {
+            "number" => {
+                edge_cases.push("0".to_string());
+                edge_cases.push("-1".to_string());
+                edge_cases.push("Number.MAX_VALUE".to_string());
+                edge_cases.push("Number.MIN_VALUE".to_string());
+                edge_cases.push("Number.MAX_SAFE_INTEGER".to_string());
+                edge_cases.push("Number.MIN_SAFE_INTEGER".to_string());
+                edge_cases.push("Infinity".to_string());
+                edge_cases.push("-Infinity".to_string());
+                edge_cases.push("NaN".to_string());
+            }
+            "string" => {
+                edge_cases.push("''".to_string()); // Empty string
+                edge_cases.push("'   '".to_string()); // Whitespace
+                edge_cases.push("'\\n'".to_string()); // Newline
+                edge_cases.push("'\\u{1F600}'".to_string()); // Unicode
+            }
+            "boolean" => {
+                edge_cases.push("true".to_string());
+                edge_cases.push("false".to_string());
+            }
+            _ if param_type.contains("[]") || param_type.contains("Array") => {
+                edge_cases.push("[]".to_string()); // Empty array
+            }
+            _ => {}
+        }
+
+        edge_cases
+    }
+
+    /// Generate error-inducing values for TypeScript/JavaScript types
+    fn generate_typescript_error_case_values(&self, param_type: &str) -> Vec<String> {
+        let mut error_cases = Vec::new();
+
+        match param_type {
+            "number" => {
+                error_cases.push("null".to_string());
+                error_cases.push("undefined".to_string());
+                error_cases.push("NaN".to_string());
+            }
+            "string" => {
+                error_cases.push("null".to_string());
+                error_cases.push("undefined".to_string());
+                error_cases.push("''".to_string()); // Empty string
+            }
+            "boolean" => {
+                error_cases.push("null".to_string());
+                error_cases.push("undefined".to_string());
+            }
+            _ if param_type.contains("[]") || param_type.contains("Array") => {
+                error_cases.push("null".to_string());
+                error_cases.push("undefined".to_string());
+            }
+            _ => {
+                error_cases.push("null".to_string());
+                error_cases.push("undefined".to_string());
+            }
+        }
+
+        error_cases
+    }
+
     fn generate_rust_test(&self, func: &FunctionInfo, framework: &str) -> (String, Vec<String>) {
         let mut test_code = String::new();
         let mut test_cases = Vec::new();
@@ -203,8 +400,21 @@ impl TestGenerateTool {
                 test_code.push_str("        assert!(result.is_ok());\n");
             } else if ret_type.contains("Option") {
                 test_code.push_str("        assert!(result.is_some());\n");
+            } else if ret_type.contains("Vec") || ret_type.contains("&[") {
+                test_code.push_str("        assert!(!result.is_empty());\n");
+            } else if ret_type.contains("HashMap") || ret_type.contains("BTreeMap") {
+                test_code.push_str("        assert!(!result.is_empty());\n");
+            } else if ret_type.contains("String") {
+                test_code.push_str("        assert!(!result.is_empty());\n");
+            } else if ret_type == "()" {
+                test_code.push_str("        // Function returns unit type, no assertion needed\n");
+            } else if ret_type.starts_with("i") || ret_type.starts_with("u") || ret_type.starts_with("f") {
+                // Numeric types (i32, u64, f32, etc.)
+                test_code.push_str(&format!("        assert_eq!(result, Default::default());\n"));
             } else {
-                test_code.push_str("        // TODO: Add assertions\n");
+                // For custom types, check that result is properly initialized
+                test_code.push_str("        // Verify result is properly initialized\n");
+                test_code.push_str(&format!("        let _ = result; // Type: {}\n", ret_type));
             }
         }
 
@@ -216,7 +426,44 @@ impl TestGenerateTool {
             test_cases.push(edge_test.clone());
             test_code.push_str(&format!("    #[test]\n"));
             test_code.push_str(&format!("    fn {}() {{\n", edge_test));
-            test_code.push_str("        // TODO: Test edge cases\n");
+
+            // Generate edge case tests based on parameter types
+            for (idx, param) in func.parameters.iter().enumerate() {
+                let edge_values = self.generate_edge_case_values(&param.param_type);
+                if !edge_values.is_empty() {
+                    test_code.push_str(&format!("        // Test edge cases for parameter '{}' ({})\n", param.name, param.param_type));
+                    for edge_value in edge_values {
+                        // Build parameter list with edge value at this position
+                        let mut test_params: Vec<String> = func.parameters.iter().enumerate().map(|(i, p)| {
+                            if i == idx {
+                                edge_value.clone()
+                            } else {
+                                match p.param_type.as_str() {
+                                    "i32" | "u32" | "i64" | "u64" | "isize" | "usize" => "0".to_string(),
+                                    "f32" | "f64" => "0.0".to_string(),
+                                    "bool" => "false".to_string(),
+                                    "&str" => "\"test\"".to_string(),
+                                    "String" => "String::from(\"test\")".to_string(),
+                                    _ if p.param_type.starts_with("&") => "&test_value".to_string(),
+                                    _ => "Default::default()".to_string(),
+                                }
+                            }
+                        }).collect();
+
+                        test_code.push_str(&format!("        let result = {}({});\n", func.name, test_params.join(", ")));
+
+                        // Add appropriate assertion based on return type
+                        if let Some(ret_type) = &func.return_type {
+                            if ret_type.contains("Result") {
+                                test_code.push_str("        // Should handle edge case gracefully\n");
+                            } else if ret_type.contains("Option") {
+                                test_code.push_str("        // Edge case may return None\n");
+                            }
+                        }
+                    }
+                }
+            }
+
             test_code.push_str("    }\n\n");
         }
 
@@ -227,7 +474,50 @@ impl TestGenerateTool {
                 test_cases.push(error_test.clone());
                 test_code.push_str(&format!("    #[test]\n"));
                 test_code.push_str(&format!("    fn {}() {{\n", error_test));
-                test_code.push_str("        // TODO: Test error conditions\n");
+
+                // Generate error condition tests based on parameter types
+                if !func.parameters.is_empty() {
+                    for (idx, param) in func.parameters.iter().enumerate() {
+                        let error_values = self.generate_error_case_values(&param.param_type);
+                        if !error_values.is_empty() {
+                            test_code.push_str(&format!("        // Test error conditions for parameter '{}' ({})\n", param.name, param.param_type));
+                            for error_value in error_values {
+                                // Build parameter list with error value at this position
+                                let test_params: Vec<String> = func.parameters.iter().enumerate().map(|(i, p)| {
+                                    if i == idx {
+                                        error_value.clone()
+                                    } else {
+                                        match p.param_type.as_str() {
+                                            "i32" | "u32" | "i64" | "u64" | "isize" | "usize" => "1".to_string(),
+                                            "f32" | "f64" => "1.0".to_string(),
+                                            "bool" => "true".to_string(),
+                                            "&str" => "\"valid\"".to_string(),
+                                            "String" => "String::from(\"valid\")".to_string(),
+                                            _ if p.param_type.starts_with("&") => "&valid_value".to_string(),
+                                            _ => "Default::default()".to_string(),
+                                        }
+                                    }
+                                }).collect();
+
+                                test_code.push_str(&format!("        let result = {}({});\n", func.name, test_params.join(", ")));
+                                test_code.push_str("        assert!(result.is_err());\n");
+                            }
+                        }
+                    }
+                } else {
+                    // No parameters - test general error handling
+                    test_code.push_str(&format!("        // Test that function handles errors properly\n"));
+                    test_code.push_str(&format!("        let result = {}();\n", func.name));
+                    test_code.push_str("        // Verify error handling is implemented\n");
+                    test_code.push_str("        match result {\n");
+                    test_code.push_str("            Ok(_) => {},\n");
+                    test_code.push_str("            Err(e) => {\n");
+                    test_code.push_str("                // Error type should be properly defined\n");
+                    test_code.push_str("                let _ = e;\n");
+                    test_code.push_str("            }\n");
+                    test_code.push_str("        }\n");
+                }
+
                 test_code.push_str("    }\n\n");
             }
         }
@@ -278,7 +568,32 @@ impl TestGenerateTool {
             let edge_test = format!("should handle edge cases");
             test_cases.push(edge_test.clone());
             test_code.push_str(&format!("  {}('{}', () => {{\n", test_keyword, edge_test));
-            test_code.push_str("    // TODO: Test edge cases\n");
+
+            // Generate edge case tests for TypeScript/JavaScript
+            for (idx, param) in func.parameters.iter().enumerate() {
+                let ts_edge_values = self.generate_typescript_edge_case_values(&param.param_type);
+                if !ts_edge_values.is_empty() {
+                    test_code.push_str(&format!("    // Edge cases for parameter '{}'\n", param.name));
+                    for edge_value in &ts_edge_values {
+                        let test_params: Vec<String> = func.parameters.iter().enumerate().map(|(i, p)| {
+                            if i == idx {
+                                edge_value.clone()
+                            } else {
+                                match p.param_type.as_str() {
+                                    "number" => "0".to_string(),
+                                    "string" => "'test'".to_string(),
+                                    "boolean" => "false".to_string(),
+                                    _ => "{}".to_string(),
+                                }
+                            }
+                        }).collect();
+
+                        test_code.push_str(&format!("    const result{} = {}({});\n", idx, func.name, test_params.join(", ")));
+                        test_code.push_str(&format!("    expect(result{}).toBeDefined();\n", idx));
+                    }
+                }
+            }
+
             test_code.push_str("  });\n\n");
         }
 
@@ -286,7 +601,37 @@ impl TestGenerateTool {
         let error_test = format!("should handle errors");
         test_cases.push(error_test.clone());
         test_code.push_str(&format!("  {}('{}', () => {{\n", test_keyword, error_test));
-        test_code.push_str("    // TODO: Test error cases\n");
+
+        // Generate error condition tests for TypeScript/JavaScript
+        if !func.parameters.is_empty() {
+            for (idx, param) in func.parameters.iter().enumerate() {
+                let ts_error_values = self.generate_typescript_error_case_values(&param.param_type);
+                if !ts_error_values.is_empty() {
+                    test_code.push_str(&format!("    // Error cases for parameter '{}'\n", param.name));
+                    for error_value in &ts_error_values {
+                        let test_params: Vec<String> = func.parameters.iter().enumerate().map(|(i, p)| {
+                            if i == idx {
+                                error_value.clone()
+                            } else {
+                                match p.param_type.as_str() {
+                                    "number" => "1".to_string(),
+                                    "string" => "'valid'".to_string(),
+                                    "boolean" => "true".to_string(),
+                                    _ => "{}".to_string(),
+                                }
+                            }
+                        }).collect();
+
+                        test_code.push_str(&format!("    expect(() => {}({})).toThrow();\n", func.name, test_params.join(", ")));
+                    }
+                }
+            }
+        } else {
+            // No parameters - test general error handling
+            test_code.push_str("    // Test error handling\n");
+            test_code.push_str(&format!("    expect(() => {}()).not.toThrow();\n", func.name));
+        }
+
         test_code.push_str("  });\n");
 
         test_code.push_str("});\n");

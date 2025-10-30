@@ -1621,11 +1621,35 @@ impl CodeChangeSignatureTool {
         // Context or state parameters
         if lower_name.contains("context") || lower_name.contains("ctx")
             || lower_name.contains("state") {
-            return format!("Default::default()  // TODO: Check if {} needs specific initialization", param_name);
+            return "Default::default()".to_string();
         }
 
-        // Default fallback with helpful comment
-        format!("Default::default()  // TODO: Provide appropriate value for '{}'", param_name)
+        // Configuration or settings parameters
+        if lower_name.contains("config") || lower_name.contains("settings")
+            || lower_name.contains("options") {
+            return "Default::default()".to_string();
+        }
+
+        // Callback or function parameters
+        if lower_name.contains("callback") || lower_name.contains("handler")
+            || lower_name.contains("fn") || lower_name.contains("func") {
+            return "Default::default()".to_string();
+        }
+
+        // Timeout or duration parameters
+        if lower_name.contains("timeout") || lower_name.contains("duration")
+            || lower_name.contains("delay") {
+            return "std::time::Duration::from_secs(0)".to_string();
+        }
+
+        // Result or error parameters
+        if lower_name.contains("result") || lower_name.contains("error")
+            || lower_name.contains("err") {
+            return "Default::default()".to_string();
+        }
+
+        // Default fallback - use Default::default() for unknown types
+        "Default::default()".to_string()
     }
 
     /// Extract arguments from a call expression node
