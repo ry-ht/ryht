@@ -8,13 +8,66 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+/// Custom serialization for UUID fields to avoid SurrealDB byte array issues.
+/// SurrealDB SDK serializes UUIDs in nested structures as byte arrays, which causes
+/// "invalid type: byte array" errors during deserialization. This module ensures
+/// UUIDs are always serialized as strings.
+mod uuid_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use uuid::Uuid;
+
+    pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&uuid.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Uuid::parse_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Custom serialization for optional UUID fields.
+mod uuid_option_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use uuid::Uuid;
+
+    pub fn serialize<S>(uuid: &Option<Uuid>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match uuid {
+            Some(id) => serializer.serialize_some(&id.to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s: Option<String> = Option::deserialize(deserializer)?;
+        match s {
+            Some(s) => Ok(Some(Uuid::parse_str(&s).map_err(serde::de::Error::custom)?)),
+            None => Ok(None),
+        }
+    }
+}
+
 /// A virtual node representing a file, directory, or symlink in the VFS.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VNode {
     /// Unique identifier
+    #[serde(with = "uuid_serde")]
     pub id: Uuid,
 
     /// Workspace this vnode belongs to
+    #[serde(with = "uuid_serde")]
     pub workspace_id: Uuid,
 
     /// Virtual path (always relative to repo root)
@@ -292,6 +345,7 @@ pub enum CompressionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     /// Unique identifier
+    #[serde(with = "uuid_serde")]
     pub id: Uuid,
 
     /// Human-readable name
@@ -310,6 +364,7 @@ pub struct Workspace {
     pub read_only: bool,
 
     /// Parent workspace (for forks)
+    #[serde(with = "uuid_option_serde")]
     pub parent_workspace: Option<Uuid>,
 
     /// Fork metadata (if this is a fork)
@@ -371,6 +426,7 @@ impl Workspace {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncSource {
     /// Unique identifier for this sync source
+    #[serde(with = "uuid_serde")]
     pub id: Uuid,
 
     /// Type and configuration of the sync source
@@ -430,6 +486,7 @@ pub enum SyncSourceType {
 
     /// Another Cortex workspace
     CrossWorkspace {
+        #[serde(with = "uuid_serde")]
         workspace_id: Uuid,
         namespace: String,
     },
@@ -468,6 +525,7 @@ pub enum SyncSourceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceDependency {
     /// ID of the dependent workspace
+    #[serde(with = "uuid_serde")]
     pub workspace_id: Uuid,
 
     /// Type of dependency
@@ -498,6 +556,7 @@ pub enum DependencyType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForkMetadata {
     /// Original workspace ID
+    #[serde(with = "uuid_serde")]
     pub source_id: Uuid,
 
     /// Original workspace name
@@ -643,6 +702,7 @@ impl Default for ImportOptions {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImportReport {
     /// Workspace ID created
+    #[serde(with = "uuid_serde")]
     pub workspace_id: Uuid,
 
     /// Number of files imported
@@ -720,9 +780,11 @@ pub struct Conflict {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Change {
     /// Change ID
+    #[serde(with = "uuid_serde")]
     pub id: Uuid,
 
     /// Vnode ID
+    #[serde(with = "uuid_serde")]
     pub vnode_id: Uuid,
 
     /// Virtual path

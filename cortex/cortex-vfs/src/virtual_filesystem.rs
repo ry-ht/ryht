@@ -370,15 +370,15 @@ impl VirtualFileSystem {
         // Use parameter binding for safety and consistency
         let query = "CREATE vnode CONTENT $vnode";
 
-        let mut response = conn.connection()
+        let _response = conn.connection()
             .query(query)
             .bind(("vnode", vnode_json))
             .await
             .map_err(|e| CortexError::storage(e.to_string()))?;
 
-        // Properly consume the response to ensure operation completed
-        let _result: Option<VNode> = response.take(0)
-            .map_err(|e| CortexError::storage(e.to_string()))?;
+        // Don't try to deserialize the response - CREATE operations in SurrealDB
+        // return Thing types that cause serialization errors. The .await? above
+        // already ensures the query executed successfully.
 
         // Cache the vnode (LRU will automatically evict oldest entries if needed)
         self.vnode_cache.lock().put(vnode.id, vnode.clone());
