@@ -76,14 +76,39 @@ impl WorkspaceService {
             updated_at: now,
         };
 
-        // Save to database
+        // Save to database using raw query with proper DateTime type casting
+        // This matches the proven pattern from virtual_filesystem.rs create_workspace()
         let conn = self.storage.acquire().await?;
-        let workspace_json = serde_json::to_value(&workspace)?;
+        let created_at_str = workspace.created_at.to_rfc3339();
+        let updated_at_str = workspace.updated_at.to_rfc3339();
 
-        let _: Option<serde_json::Value> = conn
-            .connection()
-            .create(("workspace", workspace_id.to_string()))
-            .content(workspace_json)
+        let query = format!(r#"
+            CREATE workspace:`{}` CONTENT {{
+                name: $name,
+                namespace: $namespace,
+                sync_sources: $sync_sources,
+                metadata: $metadata,
+                read_only: $read_only,
+                parent_workspace: $parent_workspace,
+                fork_metadata: $fork_metadata,
+                dependencies: $dependencies,
+                created_at: <datetime> $created_at,
+                updated_at: <datetime> $updated_at
+            }}
+        "#, workspace_id);
+
+        conn.connection()
+            .query(&query)
+            .bind(("name", workspace.name.clone()))
+            .bind(("namespace", workspace.namespace.clone()))
+            .bind(("sync_sources", workspace.sync_sources.clone()))
+            .bind(("metadata", workspace.metadata.clone()))
+            .bind(("read_only", workspace.read_only))
+            .bind(("parent_workspace", workspace.parent_workspace))
+            .bind(("fork_metadata", workspace.fork_metadata.clone()))
+            .bind(("dependencies", workspace.dependencies.clone()))
+            .bind(("created_at", created_at_str))
+            .bind(("updated_at", updated_at_str))
             .await?;
 
         info!("Created workspace: {} ({})", workspace.name, workspace_id);
@@ -97,12 +122,38 @@ impl WorkspaceService {
 
         let conn = self.storage.acquire().await?;
 
-        let workspace: Option<Workspace> = conn
+        // Use raw query with <string>meta::id(id) to avoid Thing deserialization issues
+        let query = "SELECT *, <string>meta::id(id) as id FROM workspace WHERE id = $id LIMIT 1";
+
+        let mut response = conn
             .connection()
-            .select(("workspace", workspace_id.to_string()))
+            .query(query)
+            .bind(("id", format!("workspace:{}", workspace_id)))
             .await?;
 
-        Ok(workspace.map(WorkspaceDetails::from_workspace))
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+        if let Some(w) = workspaces_raw.into_iter().next() {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+
+            let workspace: Workspace = serde_json::from_value(workspace_json)?;
+            Ok(Some(WorkspaceDetails::from_workspace(workspace)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// List all workspaces
@@ -154,14 +205,37 @@ impl WorkspaceService {
 
         let conn = self.storage.acquire().await?;
 
-        // Get existing workspace
-        let workspace: Option<Workspace> = conn
+        // Get existing workspace using raw query with proper Thing ID handling
+        let query = "SELECT *, <string>meta::id(id) as id FROM workspace WHERE id = $id LIMIT 1";
+
+        let mut response = conn
             .connection()
-            .select(("workspace", workspace_id.to_string()))
+            .query(query)
+            .bind(("id", format!("workspace:{}", workspace_id)))
             .await?;
 
-        let mut workspace = workspace
-            .ok_or_else(|| anyhow::anyhow!("Workspace {} not found", workspace_id))?;
+        // Parse with string IDs and convert to UUIDs
+        #[derive(serde::Deserialize)]
+        struct WorkspaceWithStringId {
+            id: String,
+            #[serde(flatten)]
+            rest: serde_json::Value,
+        }
+
+        let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+
+        let mut workspace = if let Some(w) = workspaces_raw.into_iter().next() {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+
+            serde_json::from_value::<Workspace>(workspace_json)?
+        } else {
+            return Err(anyhow::anyhow!("Workspace {} not found", workspace_id));
+        };
 
         // Update fields
         if let Some(name) = request.name {
@@ -181,13 +255,38 @@ impl WorkspaceService {
 
         workspace.updated_at = Utc::now();
 
-        // Save to database
-        let workspace_json = serde_json::to_value(&workspace)?;
+        // Save to database using raw query with proper DateTime type casting
+        let updated_at_str = workspace.updated_at.to_rfc3339();
 
-        let _: Option<serde_json::Value> = conn
-            .connection()
-            .update(("workspace", workspace_id.to_string()))
-            .content(workspace_json)
+        let update_query = format!(r#"
+            UPDATE workspace:`{}` CONTENT {{
+                name: $name,
+                namespace: $namespace,
+                sync_sources: $sync_sources,
+                metadata: $metadata,
+                read_only: $read_only,
+                parent_workspace: $parent_workspace,
+                fork_metadata: $fork_metadata,
+                dependencies: $dependencies,
+                created_at: <datetime> $created_at,
+                updated_at: <datetime> $updated_at
+            }}
+        "#, workspace_id);
+
+        let created_at_str = workspace.created_at.to_rfc3339();
+
+        conn.connection()
+            .query(&update_query)
+            .bind(("name", workspace.name.clone()))
+            .bind(("namespace", workspace.namespace.clone()))
+            .bind(("sync_sources", workspace.sync_sources.clone()))
+            .bind(("metadata", workspace.metadata.clone()))
+            .bind(("read_only", workspace.read_only))
+            .bind(("parent_workspace", workspace.parent_workspace))
+            .bind(("fork_metadata", workspace.fork_metadata.clone()))
+            .bind(("dependencies", workspace.dependencies.clone()))
+            .bind(("created_at", created_at_str))
+            .bind(("updated_at", updated_at_str))
             .await?;
 
         info!("Updated workspace: {}", workspace_id);

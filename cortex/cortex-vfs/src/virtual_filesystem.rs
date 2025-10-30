@@ -891,7 +891,7 @@ impl VirtualFileSystem {
             }}
         "#, workspace.id);
 
-        conn.connection()
+        let _response = conn.connection()
             .query(&query)
             .bind(("name", workspace.name.clone()))
             .bind(("namespace", workspace.namespace.clone()))
@@ -910,6 +910,10 @@ impl VirtualFileSystem {
                 error!("Error type: {:?}", e);
                 CortexError::storage(format!("Failed to create workspace in database: {}", e))
             })?;
+
+        // Don't try to deserialize the response - CREATE operations in SurrealDB
+        // return Thing types that cause serialization errors. The .await? above
+        // already ensures the query executed successfully.
 
         debug!("✓ Workspace created successfully: id={}, name={}", workspace.id, workspace.name);
 

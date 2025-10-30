@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
+use tracing::{debug, error};
 
 // ============================================================================
 // Logging Utilities
@@ -91,7 +92,7 @@ pub async fn init_workspace(
     let workspace_id = Uuid::new_v4();
 
     // Create metadata
-    let metadata = HashMap::new();
+    let metadata: HashMap<String, serde_json::Value> = HashMap::new();
 
     // Create sync source for local path
     let sync_sources = vec![SyncSource {
@@ -107,24 +108,35 @@ pub async fn init_workspace(
         metadata: HashMap::new(),
     }];
 
-    let workspace = Workspace {
-        id: workspace_id,
-        name: name.clone(),
-        namespace: format!("workspace_{}", workspace_id),
-        sync_sources,
-        metadata,
-        read_only: false,
-        parent_workspace: None,
-        fork_metadata: None,
-        dependencies: vec![],
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    };
-
-    // Save workspace metadata to database
+    // Save workspace metadata to database using raw query to avoid serialization issues
     let conn = storage.acquire().await?;
-    let _: Option<Workspace> = conn.connection().create("workspace")
-        .content(workspace)
+    let query = format!(r#"
+        CREATE workspace:`{}` CONTENT {{
+            name: $name,
+            namespace: $namespace,
+            sync_sources: $sync_sources,
+            metadata: $metadata,
+            read_only: $read_only,
+            parent_workspace: $parent_workspace,
+            fork_metadata: $fork_metadata,
+            dependencies: $dependencies,
+            created_at: <datetime> $created_at,
+            updated_at: <datetime> $updated_at
+        }}
+    "#, workspace_id);
+
+    conn.connection()
+        .query(&query)
+        .bind(("name", name.clone()))
+        .bind(("namespace", format!("workspace_{}", workspace_id)))
+        .bind(("sync_sources", sync_sources.clone()))
+        .bind(("metadata", metadata.clone()))
+        .bind(("read_only", false))
+        .bind(("parent_workspace", None::<Uuid>))
+        .bind(("fork_metadata", None::<String>))
+        .bind(("dependencies", Vec::<String>::new()))
+        .bind(("created_at", chrono::Utc::now().to_rfc3339()))
+        .bind(("updated_at", chrono::Utc::now().to_rfc3339()))
         .await
         .context("Failed to create workspace in database")?;
 
@@ -276,12 +288,22 @@ pub async fn workspace_list(status: Option<String>, limit: usize, format: Output
     // Fetch workspaces from database
     let conn = storage.acquire().await?;
 
-    // Build query with filters
+    debug!("Fetching workspaces using query with meta::id pattern");
+
+    // Select only specific fields to avoid serialization issues with complex nested types
     let query = if let Some(ref status_filter) = status {
-        format!("SELECT *, <string>meta::id(id) as id FROM workspace WHERE metadata.archived = $archived LIMIT {}", limit)
+        format!("SELECT <string>meta::id(id) as id, name, namespace, sync_sources, metadata, read_only, parent_workspace, fork_metadata, dependencies, created_at, updated_at FROM workspace WHERE metadata.archived = $archived LIMIT {}", limit)
     } else {
-        format!("SELECT *, <string>meta::id(id) as id FROM workspace LIMIT {}", limit)
+        format!("SELECT <string>meta::id(id) as id, name, namespace, sync_sources, metadata, read_only, parent_workspace, fork_metadata, dependencies, created_at, updated_at FROM workspace LIMIT {}", limit)
     };
+
+    // Intermediate struct to deserialize Thing IDs as strings
+    #[derive(serde::Deserialize)]
+    struct WorkspaceWithStringId {
+        id: String,
+        #[serde(flatten)]
+        rest: serde_json::Value,
+    }
 
     let mut response = if let Some(ref status_filter) = status {
         let archived = status_filter == "archived";
@@ -297,25 +319,32 @@ pub async fn workspace_list(status: Option<String>, limit: usize, format: Output
             .context("Failed to fetch workspaces from database")?
     };
 
-    // Parse with string IDs and convert to UUIDs
-    #[derive(serde::Deserialize)]
-    struct WorkspaceWithStringId {
-        id: String,
-        #[serde(flatten)]
-        rest: serde_json::Value,
-    }
+    let workspaces_raw: Vec<WorkspaceWithStringId> = match response.take::<Vec<WorkspaceWithStringId>>(0) {
+        Ok(records) => {
+            debug!("Successfully deserialized {} workspace records", records.len());
+            records
+        }
+        Err(e) => {
+            error!("Failed to deserialize workspaces: {}", e);
+            error!("Error details: {:?}", e);
+            Vec::new()
+        }
+    };
+    debug!("Fetched {} workspace records", workspaces_raw.len());
 
-    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
-
+    // Now convert to Workspace structs using the proven pattern
     let workspaces: Vec<Workspace> = workspaces_raw
         .into_iter()
         .filter_map(|w| {
             // Extract UUID from "workspace:uuid" format
             let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
             let mut workspace_json = w.rest;
+
+            // Insert the cleaned UUID
             if let Some(obj) = workspace_json.as_object_mut() {
                 obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
             }
+
             serde_json::from_value::<Workspace>(workspace_json).ok()
         })
         .collect();
@@ -639,9 +668,31 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
     let conn = storage.acquire().await?;
 
     // Get workspaces (projects are represented as workspaces in our system)
-    let mut workspaces: Vec<Workspace> = conn.connection().select("workspace")
-        .await
+    // Use raw query to avoid serialization issues with Thing IDs
+    let query = "SELECT *, <string>meta::id(id) as id FROM workspace";
+    let mut response = conn.connection().query(query).await
         .context("Failed to fetch workspaces from database")?;
+
+    #[derive(serde::Deserialize)]
+    struct WorkspaceWithStringId {
+        id: String,
+        #[serde(flatten)]
+        rest: serde_json::Value,
+    }
+
+    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+    let mut workspaces: Vec<Workspace> = workspaces_raw
+        .into_iter()
+        .filter_map(|w| {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+            serde_json::from_value::<Workspace>(workspace_json).ok()
+        })
+        .collect();
 
     // Filter by workspace name if specified
     if let Some(ref ws_name) = workspace_name {
@@ -1987,12 +2038,32 @@ async fn create_temp_session(
         .or_else(|| config.default_workspace.clone())
         .ok_or_else(|| anyhow::anyhow!("No workspace specified and no default workspace configured"))?;
 
-    // Get workspace ID from name
+    // Get workspace ID from name using raw query to avoid serialization issues
     let conn = storage.acquire().await?;
-    let workspaces: Vec<Workspace> = conn.connection()
-        .select("workspace")
-        .await
+    let query = "SELECT *, <string>meta::id(id) as id FROM workspace";
+    let mut response = conn.connection().query(query).await
         .context("Failed to fetch workspaces")?;
+
+    #[derive(serde::Deserialize)]
+    struct WorkspaceWithStringId {
+        id: String,
+        #[serde(flatten)]
+        rest: serde_json::Value,
+    }
+
+    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
+    let workspaces: Vec<Workspace> = workspaces_raw
+        .into_iter()
+        .filter_map(|w| {
+            // Extract UUID from "workspace:uuid" format
+            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
+            let mut workspace_json = w.rest;
+            if let Some(obj) = workspace_json.as_object_mut() {
+                obj.insert("id".to_string(), serde_json::Value::String(uuid_str.to_string()));
+            }
+            serde_json::from_value::<Workspace>(workspace_json).ok()
+        })
+        .collect();
 
     let workspace = workspaces.iter()
         .find(|w| w.name == workspace_to_use)
