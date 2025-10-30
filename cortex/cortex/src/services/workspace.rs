@@ -310,11 +310,20 @@ impl WorkspaceService {
 
         info!("Deleted {} vnodes from workspace", deleted_vnodes.len());
 
-        // Use raw DELETE query instead of .delete() method to avoid Thing type deserialization
-        conn.connection()
-            .query("DELETE workspace WHERE id = $id")
-            .bind(("id", format!("workspace:{}", workspace_id)))
+        // CRITICAL FIX: Use DELETE query with type::thing() to ensure proper record ID construction
+        // The SDK's .delete() method with tuple notation doesn't properly handle UUID strings,
+        // causing silent failures where the method reports success but the record isn't deleted.
+        // This is a known issue with SurrealDB 2.3.x when using UUIDs as record IDs.
+        let mut response = conn
+            .connection()
+            .query("DELETE type::thing('workspace', $workspace_id)")
+            .bind(("workspace_id", workspace_id.to_string()))
             .await?;
+
+        let deleted: Vec<serde_json::Value> = response.take(0)?;
+        if deleted.is_empty() {
+            return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
+        }
 
         info!("Deleted workspace: {}", workspace_id);
 

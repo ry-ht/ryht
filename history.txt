@@ -18,3 +18,26 @@ CREATE workspace:`test-uuid-123` CONTENT {    name: "test",    namespace: "test_
 SELECT * FROM workspace;
 SELECT *, <string>meta::id(id) as id FROM workspace LIMIT 100;
 SELECT * FROM workspace;
+INFO FOR TABLE workspace;
+INFO FOR DB;
+SELECT * FROM workspace LIMIT 5;
+DELETE workspace:`d7309e49-eb7e-49f0-b649-b10018f8f5c8`;
+SELECT * FROM workspace WHERE id = workspace:`d7309e49-eb7e-49f0-b649-b10018f8f5c8`;
+SELECT * FROM workspace LIMIT 5;
+SELECT * FROM workspace WHERE id = workspace:`e36f005b-2b7d-463e-bb93-21e2c8df284e`;
+-- Test different delete approaches
+LET $test_id = "e36f005b-2b7d-463e-bb93-21e2c8df284e";
+-- Show current state
+SELECT * FROM workspace:⟨e36f005b-2b7d-463e-bb93-21e2c8df284e⟩;
+-- Try deleting with string ID (this is what the code is doing)
+-- Create a test workspace with known ID
+CREATE workspace:`test-delete-fix` SET name = "test", created_at = time::now(), updated_at = time::now(), namespace = "test", sync_sources = [], metadata = {}, read_only = false, dependencies = [];
+DELETE type::thing("workspace", "test-delete-fix");
+SELECT * FROM workspace:`test-delete-fix`;
+SELECT * FROM workspace WHERE id = type::thing('workspace', 'e993b720-00bd-4dc9-8dff-3eea21128d5e');
+DELETE type::thing('workspace', 'e993b720-00bd-4dc9-8dff-3eea21128d5e');
+DELETE workspace WHERE id = type::thing('workspace', 'e993b720-00bd-4dc9-8dff-3eea21128d5e');
+DELETE workspace:`e993b720-00bd-4dc9-8dff-3eea21128d5e`;
+DELETE workspace:⟨e993b720-00bd-4dc9-8dff-3eea21128d5e⟩;
+DELETE workspace WHERE name = 'verify-fix';
+SELECT * FROM workspace;

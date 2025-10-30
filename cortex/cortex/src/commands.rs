@@ -446,7 +446,7 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
 
     // Delete all VNodes in this workspace
     let mut response = conn.connection()
-        .query("DELETE FROM vnode WHERE workspace_id = $workspace_id")
+        .query("DELETE vnode WHERE workspace_id = $workspace_id")
         .bind(("workspace_id", ws_id.to_string()))
         .await
         .context("Failed to delete workspace vnodes")?;
@@ -455,12 +455,20 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     let deleted_vnodes: Vec<serde_json::Value> = response.take(0)?;
     let vnode_count = deleted_vnodes.len();
 
-    // Use raw DELETE query instead of .delete() method to avoid Thing type deserialization
-    conn.connection()
-        .query("DELETE workspace WHERE id = $id")
-        .bind(("id", format!("workspace:{}", ws_id)))
+    // CRITICAL FIX: Use DELETE query with type::thing() to ensure proper record ID construction
+    // The SDK's .delete() method with tuple notation doesn't properly handle UUID strings,
+    // causing silent failures where the method reports success but the record isn't deleted.
+    // This is a known issue with SurrealDB 2.3.x when using UUIDs as record IDs.
+    let mut response = conn.connection()
+        .query("DELETE type::thing('workspace', $workspace_id)")
+        .bind(("workspace_id", ws_id.to_string()))
         .await
         .context("Failed to delete workspace from database")?;
+
+    let deleted: Vec<serde_json::Value> = response.take(0)?;
+    if deleted.is_empty() {
+        return Err(anyhow::anyhow!("Workspace not found: {}", workspace_id));
+    }
 
     spinner.finish_and_clear();
     output::success(format!("Deleted workspace: {} ({} vnodes deleted)", workspace_id, vnode_count));
