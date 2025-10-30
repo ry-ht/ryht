@@ -232,10 +232,16 @@ impl Tool for WorkspaceCreateTool {
 
         // Create sync source for local path if provided
         let sync_sources = if let Some(ref path) = root_path {
+            // Canonicalize path to ensure it's absolute
+            let canonical_path = path.canonicalize()
+                .map_err(|e| ToolError::ExecutionFailed(
+                    format!("Failed to canonicalize path {}: {}", path.display(), e)
+                ))?;
+
             vec![SyncSource {
                 id: Uuid::new_v4(),
                 source: SyncSourceType::LocalPath {
-                    path: path.display().to_string(),
+                    path: canonical_path.display().to_string(),
                     watch: false,
                 },
                 read_only: false,
@@ -284,6 +290,11 @@ impl Tool for WorkspaceCreateTool {
         // Import if requested and root_path is provided
         if input.auto_import && root_path.is_some() {
             let path = root_path.as_ref().unwrap();
+            // Use canonical path for import
+            let canonical_path = path.canonicalize()
+                .map_err(|e| ToolError::ExecutionFailed(
+                    format!("Failed to canonicalize path for import {}: {}", path.display(), e)
+                ))?;
             let vfs_opts = VfsImportOptions {
                 read_only: false,
                 create_fork: false,
@@ -304,7 +315,7 @@ impl Tool for WorkspaceCreateTool {
             };
 
             // Use import_into_workspace to import into the already created workspace
-            match self.ctx.loader.import_into_workspace(&workspace_id, path, vfs_opts).await {
+            match self.ctx.loader.import_into_workspace(&workspace_id, &canonical_path, vfs_opts).await {
                 Ok(report) => {
                     files_imported = report.files_imported;
                     directories_imported = report.directories_imported;

@@ -107,21 +107,28 @@ impl ExternalProjectLoader {
         options: ImportOptions,
     ) -> Result<ImportReport> {
         let start = Instant::now();
+
+        // Canonicalize source path to ensure it's absolute
+        let canonical_source = source_path.canonicalize()
+            .map_err(|e| CortexError::invalid_input(
+                format!("Failed to canonicalize source path {}: {}", source_path.display(), e)
+            ))?;
+
         info!(
             "Importing into workspace {} from: {}",
             workspace_id,
-            source_path.display()
+            canonical_source.display()
         );
 
         // Validate source path
-        if !source_path.exists() {
+        if !canonical_source.exists() {
             return Err(CortexError::not_found(
                 "SourcePath",
-                source_path.display().to_string()
+                canonical_source.display().to_string()
             ));
         }
 
-        if !source_path.is_dir() {
+        if !canonical_source.is_dir() {
             return Err(CortexError::invalid_input(
                 "Source path must be a directory"
             ));
@@ -144,8 +151,8 @@ impl ExternalProjectLoader {
 
         // Walk directory and import files
         self.import_directory(
-            source_path,
-            source_path,
+            &canonical_source,
+            &canonical_source,
             workspace_id,
             &options,
             &mut report,

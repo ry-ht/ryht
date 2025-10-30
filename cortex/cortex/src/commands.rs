@@ -180,10 +180,14 @@ pub async fn workspace_create(
 
     // Create sync source for local path if provided
     let sync_sources = if let Some(ref path) = root_path {
+        // Canonicalize path to ensure it's absolute
+        let canonical_path = path.canonicalize()
+            .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
+
         vec![SyncSource {
             id: Uuid::new_v4(),
             source: SyncSourceType::LocalPath {
-                path: path.display().to_string(),
+                path: canonical_path.display().to_string(),
                 watch: false,
             },
             read_only: false,
@@ -225,6 +229,9 @@ pub async fn workspace_create(
     // Import if requested and root_path is provided
     if auto_import && root_path.is_some() {
         let path = root_path.as_ref().unwrap();
+        // Use canonical path for import
+        let canonical_path = path.canonicalize()
+            .with_context(|| format!("Failed to canonicalize path for import: {}", path.display()))?;
         let loader = ExternalProjectLoader::new(vfs.clone());
 
         let vfs_opts = cortex_vfs::ImportOptions {
@@ -250,7 +257,7 @@ pub async fn workspace_create(
         let import_spinner = output::spinner("Importing project...");
 
         // Use import_into_workspace to import into the already created workspace
-        match loader.import_into_workspace(&workspace_id, path, vfs_opts).await {
+        match loader.import_into_workspace(&workspace_id, &canonical_path, vfs_opts).await {
             Ok(report) => {
                 import_spinner.finish_and_clear();
                 output::success(format!("Created workspace: {}", name));
