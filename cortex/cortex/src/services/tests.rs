@@ -625,6 +625,88 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_workspace_deletion_removes_vnodes() -> Result<()> {
+        let storage = setup_storage().await;
+        let vfs = Arc::new(VirtualFileSystem::new(storage.clone()));
+        let workspace_service = WorkspaceService::new(storage.clone(), vfs.clone());
+        let vfs_service = VfsService::new(vfs.clone());
+
+        // Create workspace
+        let workspace = workspace_service
+            .create_workspace(workspace::CreateWorkspaceRequest {
+                name: "Deletion Test".to_string(),
+                source_path: None,
+                sync_sources: None,
+                read_only: Some(false),
+                metadata: None,
+            })
+            .await?;
+
+        let workspace_id = Uuid::parse_str(&workspace.id)?;
+
+        // Create some files in the workspace
+        vfs_service
+            .create_file(
+                &workspace_id,
+                "/test1.txt".to_string(),
+                "test content 1".as_bytes().to_vec(),
+            )
+            .await?;
+
+        vfs_service
+            .create_file(
+                &workspace_id,
+                "/dir/test2.txt".to_string(),
+                "test content 2".as_bytes().to_vec(),
+            )
+            .await?;
+
+        // Verify files exist
+        let stats = workspace_service.get_workspace_stats(&workspace_id).await?;
+        assert!(stats.total_files > 0, "Should have files before deletion");
+
+        // Query vnodes directly to verify they exist
+        let conn = storage.acquire().await?;
+        let mut response = conn
+            .connection()
+            .query("SELECT * FROM vnode WHERE workspace_id = $workspace_id")
+            .bind(("workspace_id", workspace_id.to_string()))
+            .await?;
+
+        let vnodes_before: Vec<serde_json::Value> = response.take(0)?;
+        assert!(!vnodes_before.is_empty(), "Should have vnodes before deletion");
+
+        // Delete workspace
+        workspace_service.delete_workspace(&workspace_id).await?;
+
+        // Verify workspace is deleted
+        let deleted_workspace = workspace_service.get_workspace(&workspace_id).await?;
+        assert!(deleted_workspace.is_none(), "Workspace should be deleted");
+
+        // Verify vnodes are deleted
+        let mut response = conn
+            .connection()
+            .query("SELECT * FROM vnode WHERE workspace_id = $workspace_id")
+            .bind(("workspace_id", workspace_id.to_string()))
+            .await?;
+
+        let vnodes_after: Vec<serde_json::Value> = response.take(0)?;
+        assert!(vnodes_after.is_empty(), "All vnodes should be deleted with workspace");
+
+        // Verify workspace record is deleted from database
+        let mut response = conn
+            .connection()
+            .query("SELECT * FROM type::thing('workspace', $workspace_id)")
+            .bind(("workspace_id", workspace_id.to_string()))
+            .await?;
+
+        let workspace_records: Vec<serde_json::Value> = response.take(0)?;
+        assert!(workspace_records.is_empty(), "Workspace record should be deleted from database");
+
+        Ok(())
+    }
+
     // ========================================================================
     // VfsService Tests
     // ========================================================================

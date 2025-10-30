@@ -202,18 +202,20 @@ impl WorkspaceService {
         let conn = self.storage.acquire().await?;
 
         // Delete all vnodes in workspace
-        let _: Vec<serde_json::Value> = conn
+        let deleted_vnodes: Vec<serde_json::Value> = conn
             .connection()
             .query("DELETE vnode WHERE workspace_id = $workspace_id")
             .bind(("workspace_id", workspace_id.to_string()))
             .await?
             .take(0)?;
 
-        // Delete workspace using query to avoid deserialization issues with Thing
-        let mut _response = conn
+        info!("Deleted {} vnodes from workspace", deleted_vnodes.len());
+
+        // Delete workspace using the SDK delete method (same pattern as other services)
+        // Note: We ignore the return value to avoid deserialization issues with Thing IDs
+        let _: Option<Workspace> = conn
             .connection()
-            .query("DELETE FROM workspace WHERE id = $workspace_id")
-            .bind(("workspace_id", format!("workspace:{}", workspace_id)))
+            .delete(("workspace", workspace_id.to_string()))
             .await?;
 
         info!("Deleted workspace: {}", workspace_id);

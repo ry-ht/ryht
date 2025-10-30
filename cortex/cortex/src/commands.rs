@@ -416,21 +416,25 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
     };
 
     // Delete all VNodes in this workspace
-    let mut _response = conn.connection()
+    let mut response = conn.connection()
         .query("DELETE FROM vnode WHERE workspace_id = $workspace_id")
         .bind(("workspace_id", ws_id.to_string()))
         .await
         .context("Failed to delete workspace vnodes")?;
 
-    // Delete the workspace using query to avoid deserialization issues
-    let mut _response = conn.connection()
-        .query("DELETE FROM workspace WHERE id = $workspace_id")
-        .bind(("workspace_id", format!("workspace:{}", ws_id)))
+    // Get count of deleted vnodes
+    let deleted_vnodes: Vec<serde_json::Value> = response.take(0)?;
+    let vnode_count = deleted_vnodes.len();
+
+    // Delete the workspace using the SDK delete method (same pattern as other services)
+    // Note: We ignore the return value to avoid deserialization issues with Thing IDs
+    let _: Option<Workspace> = conn.connection()
+        .delete(("workspace", ws_id.to_string()))
         .await
         .context("Failed to delete workspace from database")?;
 
     spinner.finish_and_clear();
-    output::success(format!("Deleted workspace: {}", workspace_id));
+    output::success(format!("Deleted workspace: {} ({} vnodes deleted)", workspace_id, vnode_count));
 
     Ok(())
 }
