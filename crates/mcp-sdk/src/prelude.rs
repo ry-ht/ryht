@@ -38,7 +38,7 @@ pub use crate::server::{McpServer, ServerBuilder, ServerConfig};
 
 // Middleware
 pub use crate::middleware::{
-    Middleware, RequestContext,
+    Middleware, RequestContext, MiddlewareRegistry,
     LoggingMiddleware, MetricsMiddleware,
 };
 

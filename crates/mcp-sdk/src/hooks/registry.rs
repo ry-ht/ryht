@@ -161,6 +161,18 @@ impl HookRegistry {
         hooks.push(Arc::new(hook));
     }
 
+    /// Register an Arc-wrapped hook.
+    ///
+    /// This is useful when you already have an Arc-wrapped hook instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `hook` - Arc-wrapped hook to register
+    pub async fn register_arc(&self, hook: Arc<dyn Hook>) {
+        let mut hooks = self.hooks.write().await;
+        hooks.push(hook);
+    }
+
     /// Emit an event to all registered hooks.
     ///
     /// All hooks will receive the event. If a hook returns an error, it's logged

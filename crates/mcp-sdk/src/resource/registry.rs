@@ -149,6 +149,18 @@ impl ResourceRegistry {
         resources.push(Arc::new(resource));
     }
 
+    /// Registers an Arc-wrapped resource.
+    ///
+    /// This is useful when you already have an Arc-wrapped resource instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `resource` - Arc-wrapped resource to register
+    pub async fn register_arc(&self, resource: Arc<dyn Resource>) {
+        let mut resources = self.resources.write();
+        resources.push(resource);
+    }
+
     /// Finds the first resource that matches the given URI.
     ///
     /// Resources are checked in the order they were registered. The first

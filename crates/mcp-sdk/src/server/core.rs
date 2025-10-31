@@ -5,6 +5,9 @@
 use super::{ServerBuilder, ServerConfig};
 use crate::protocol::*;
 use crate::tool::{Tool, ToolContext, ToolRegistry};
+use crate::resource::{Resource, ResourceRegistry};
+use crate::middleware::{Middleware, MiddlewareRegistry};
+use crate::hooks::{Hook, HookRegistry};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -76,14 +79,29 @@ use std::sync::Arc;
 ///     assert!(response.is_success());
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct McpServer {
     config: ServerConfig,
     tools: Arc<ToolRegistry>,
+    resources: Arc<ResourceRegistry>,
+    middleware: Arc<MiddlewareRegistry>,
+    hooks: Arc<HookRegistry>,
+}
+
+impl std::fmt::Debug for McpServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("McpServer")
+            .field("config", &self.config)
+            .field("tools", &"<ToolRegistry>")
+            .field("resources", &"<ResourceRegistry>")
+            .field("middleware", &"<MiddlewareRegistry>")
+            .field("hooks", &"<HookRegistry>")
+            .finish()
+    }
 }
 
 impl McpServer {
-    /// Creates a new `McpServer` with the given configuration and tools.
+    /// Creates a new `McpServer` with the given configuration, tools, resources, middleware, and hooks.
     ///
     /// This is typically called by `ServerBuilder::build()` rather than directly.
     ///
@@ -91,6 +109,9 @@ impl McpServer {
     ///
     /// * `config` - Server configuration
     /// * `tools` - Vec of Arc-wrapped tools to register
+    /// * `resources` - Vec of Arc-wrapped resources to register
+    /// * `middleware` - Vec of Arc-wrapped middleware to register
+    /// * `hooks` - Vec of Arc-wrapped hooks to register
     ///
     /// # Examples
     ///
@@ -100,23 +121,65 @@ impl McpServer {
     ///
     /// let config = ServerConfig::new("my-server", "1.0.0");
     /// let tools = vec![];
-    /// let server = McpServer::new(config, tools);
+    /// let resources = vec![];
+    /// let middleware = vec![];
+    /// let hooks = vec![];
+    /// let server = McpServer::new(config, tools, resources, middleware, hooks);
     /// ```
-    pub fn new(config: ServerConfig, tools: Vec<Arc<dyn Tool>>) -> Self {
-        let registry = ToolRegistry::new();
+    pub fn new(
+        config: ServerConfig,
+        tools: Vec<Arc<dyn Tool>>,
+        resources: Vec<Arc<dyn Resource>>,
+        middleware: Vec<Arc<dyn Middleware>>,
+        hooks: Vec<Arc<dyn Hook>>,
+    ) -> Self {
+        let tool_registry = ToolRegistry::new();
+        let resource_registry = ResourceRegistry::new();
+        let middleware_registry = MiddlewareRegistry::new();
+        let hook_registry = HookRegistry::new();
 
         // Register all tools (ignoring errors for now as this is during construction)
         for tool in tools {
             let _ = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    registry.register_arc(tool).await
+                    tool_registry.register_arc(tool).await
+                })
+            });
+        }
+
+        // Register all resources
+        for resource in resources {
+            let _ = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    resource_registry.register_arc(resource).await
+                })
+            });
+        }
+
+        // Register all middleware
+        for mw in middleware {
+            let _ = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    middleware_registry.register_arc(mw).await
+                })
+            });
+        }
+
+        // Register all hooks
+        for hook in hooks {
+            let _ = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    hook_registry.register_arc(hook).await
                 })
             });
         }
 
         Self {
             config,
-            tools: Arc::new(registry),
+            tools: Arc::new(tool_registry),
+            resources: Arc::new(resource_registry),
+            middleware: Arc::new(middleware_registry),
+            hooks: Arc::new(hook_registry),
         }
     }
 
@@ -174,6 +237,69 @@ impl McpServer {
     /// ```
     pub fn tools(&self) -> &ToolRegistry {
         &self.tools
+    }
+
+    /// Returns a reference to the resource registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::McpServer;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let server = McpServer::builder()
+    ///         .name("test-server")
+    ///         .version("1.0.0")
+    ///         .build();
+    ///
+    ///     let resources = server.resources();
+    /// }
+    /// ```
+    pub fn resources(&self) -> &ResourceRegistry {
+        &self.resources
+    }
+
+    /// Returns a reference to the middleware registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::McpServer;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let server = McpServer::builder()
+    ///         .name("test-server")
+    ///         .version("1.0.0")
+    ///         .build();
+    ///
+    ///     let middleware = server.middleware();
+    /// }
+    /// ```
+    pub fn middleware(&self) -> &MiddlewareRegistry {
+        &self.middleware
+    }
+
+    /// Returns a reference to the hook registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::McpServer;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let server = McpServer::builder()
+    ///         .name("test-server")
+    ///         .version("1.0.0")
+    ///         .build();
+    ///
+    ///     let hooks = server.hooks();
+    /// }
+    /// ```
+    pub fn hooks(&self) -> &HookRegistry {
+        &self.hooks
     }
 
     /// Handles a JSON-RPC request and returns a response.
@@ -399,8 +525,20 @@ impl McpServer {
     ///
     /// * `request` - The resources/list request
     async fn handle_resources_list(&self, request: JsonRpcRequest) -> JsonRpcResponse {
-        // For now, return an empty list since resources aren't implemented yet
-        let result = ListResourcesResult { resources: vec![] };
+        let resource_definitions = self.resources.list().await;
+
+        // Convert resource registry definitions to protocol definitions
+        let result = ListResourcesResult {
+            resources: resource_definitions
+                .into_iter()
+                .map(|def| crate::protocol::ResourceDefinition {
+                    uri: def.uri,
+                    name: def.name,
+                    description: def.description,
+                    mime_type: def.mime_type,
+                })
+                .collect(),
+        };
 
         match serde_json::to_value(&result) {
             Ok(value) => JsonRpcResponse::success(request.id, value),
@@ -420,7 +558,7 @@ impl McpServer {
     /// * `request` - The resources/read request
     async fn handle_resources_read(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         // Parse read params
-        let _params = match request.params {
+        let params = match request.params {
             Some(ref p) => match serde_json::from_value::<ReadResourceParams>(p.clone()) {
                 Ok(params) => params,
                 Err(e) => {
@@ -438,8 +576,59 @@ impl McpServer {
             }
         };
 
-        // For now, return resource not found since resources aren't fully implemented
-        JsonRpcResponse::resource_not_found(request.id, "Resources not yet implemented")
+        // Find the resource by URI
+        let resource = match self.resources.find_by_uri(&params.uri).await {
+            Some(resource) => resource,
+            None => return JsonRpcResponse::resource_not_found(request.id, &params.uri),
+        };
+
+        // Create resource context
+        let context = crate::resource::ResourceContext::default();
+
+        // Read the resource
+        match resource.read(&params.uri, &context).await {
+            Ok(content) => {
+                // Convert resource content to protocol content
+                let protocol_content = match content {
+                    crate::resource::ResourceContent::Text { text, mime_type } => {
+                        crate::protocol::ResourceContent::Text {
+                            uri: params.uri.clone(),
+                            mime_type: Some(mime_type),
+                            text,
+                        }
+                    }
+                    crate::resource::ResourceContent::Blob { data, mime_type } => {
+                        crate::protocol::ResourceContent::Blob {
+                            uri: params.uri.clone(),
+                            mime_type: Some(mime_type),
+                            blob: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
+                        }
+                    }
+                };
+
+                let result = ReadResourceResult {
+                    contents: vec![protocol_content],
+                };
+
+                match serde_json::to_value(&result) {
+                    Ok(value) => JsonRpcResponse::success(request.id, value),
+                    Err(e) => JsonRpcResponse::internal_error(
+                        request.id,
+                        Some(format!("Failed to serialize resource content: {}", e)),
+                    ),
+                }
+            }
+            Err(e) => {
+                // Convert ResourceError -> error::JsonRpcError -> protocol::JsonRpcError
+                let error_json: crate::error::JsonRpcError = e.into();
+                let protocol_error = crate::protocol::JsonRpcError {
+                    code: error_json.code,
+                    message: error_json.message,
+                    data: error_json.data,
+                };
+                JsonRpcResponse::error(request.id, protocol_error)
+            }
+        }
     }
 
     /// Serves the MCP server using the provided transport.
@@ -549,7 +738,7 @@ mod tests {
     #[test]
     fn test_server_new() {
         let config = ServerConfig::new("test-server", "1.0.0");
-        let server = McpServer::new(config, vec![]);
+        let server = McpServer::new(config, vec![], vec![], vec![], vec![]);
         assert_eq!(server.config().name(), "test-server");
     }
 

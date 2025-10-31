@@ -81,11 +81,13 @@
 pub mod context;
 pub mod logging;
 pub mod metrics;
+pub mod registry;
 pub mod traits;
 
 pub use context::RequestContext;
 pub use logging::LoggingMiddleware;
 pub use metrics::MetricsMiddleware;
+pub use registry::MiddlewareRegistry;
 pub use traits::Middleware;
 
 #[cfg(test)]

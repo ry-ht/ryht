@@ -5,6 +5,9 @@
 
 use super::{McpServer, ServerConfig};
 use crate::tool::Tool;
+use crate::resource::Resource;
+use crate::middleware::Middleware;
+use crate::hooks::Hook;
 use std::sync::Arc;
 
 /// Builder for constructing an `McpServer` with a fluent API.
@@ -97,6 +100,9 @@ pub struct ServerBuilder {
     version: Option<String>,
     protocol_version: Option<String>,
     tools: Vec<Arc<dyn Tool>>,
+    resources: Vec<Arc<dyn Resource>>,
+    middleware: Vec<Arc<dyn Middleware>>,
+    hooks: Vec<Arc<dyn Hook>>,
 }
 
 impl std::fmt::Debug for ServerBuilder {
@@ -106,6 +112,9 @@ impl std::fmt::Debug for ServerBuilder {
             .field("version", &self.version)
             .field("protocol_version", &self.protocol_version)
             .field("tools", &format!("<{} tools>", self.tools.len()))
+            .field("resources", &format!("<{} resources>", self.resources.len()))
+            .field("middleware", &format!("<{} middleware>", self.middleware.len()))
+            .field("hooks", &format!("<{} hooks>", self.hooks.len()))
             .finish()
     }
 }
@@ -126,6 +135,9 @@ impl ServerBuilder {
             version: None,
             protocol_version: None,
             tools: Vec::new(),
+            resources: Vec::new(),
+            middleware: Vec::new(),
+            hooks: Vec::new(),
         }
     }
 
@@ -295,6 +307,144 @@ impl ServerBuilder {
         self
     }
 
+    /// Registers a resource with the server.
+    ///
+    /// Resources provide URI-addressable content that clients can read.
+    ///
+    /// # Arguments
+    ///
+    /// * `resource` - The resource to register
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::ServerBuilder;
+    /// use mcp_server::resource::{Resource, ResourceContent, ResourceContext};
+    /// use mcp_server::error::ResourceError;
+    /// use async_trait::async_trait;
+    ///
+    /// struct ConfigResource;
+    ///
+    /// #[async_trait]
+    /// impl Resource for ConfigResource {
+    ///     fn uri_pattern(&self) -> &str { "app://config" }
+    ///     async fn read(&self, _: &str, _: &ResourceContext) -> Result<ResourceContent, ResourceError> {
+    ///         Ok(ResourceContent::text("config", "application/json"))
+    ///     }
+    /// }
+    ///
+    /// let server = ServerBuilder::new()
+    ///     .name("my-server")
+    ///     .version("1.0.0")
+    ///     .resource(ConfigResource)
+    ///     .build();
+    /// ```
+    pub fn resource<R: Resource + 'static>(mut self, resource: R) -> Self {
+        self.resources.push(Arc::new(resource));
+        self
+    }
+
+    /// Registers multiple resources with the server.
+    ///
+    /// # Arguments
+    ///
+    /// * `resources` - An iterator of Arc-wrapped resources
+    pub fn resources<I>(mut self, resources: I) -> Self
+    where
+        I: IntoIterator<Item = Arc<dyn Resource>>,
+    {
+        self.resources.extend(resources);
+        self
+    }
+
+    /// Registers a middleware with the server.
+    ///
+    /// Middleware intercepts requests and responses for cross-cutting concerns
+    /// like logging, authentication, metrics, etc.
+    ///
+    /// # Arguments
+    ///
+    /// * `middleware` - The middleware to register
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::ServerBuilder;
+    /// use mcp_server::middleware::{Middleware, RequestContext, LoggingMiddleware};
+    ///
+    /// let server = ServerBuilder::new()
+    ///     .name("my-server")
+    ///     .version("1.0.0")
+    ///     .middleware(LoggingMiddleware::new())
+    ///     .build();
+    /// ```
+    pub fn middleware<M: Middleware + 'static>(mut self, middleware: M) -> Self {
+        self.middleware.push(Arc::new(middleware));
+        self
+    }
+
+    /// Registers multiple middleware with the server.
+    ///
+    /// # Arguments
+    ///
+    /// * `middleware` - An iterator of Arc-wrapped middleware
+    pub fn middlewares<I>(mut self, middleware: I) -> Self
+    where
+        I: IntoIterator<Item = Arc<dyn Middleware>>,
+    {
+        self.middleware.extend(middleware);
+        self
+    }
+
+    /// Registers a hook with the server.
+    ///
+    /// Hooks respond to server events for monitoring, auditing, and analytics.
+    ///
+    /// # Arguments
+    ///
+    /// * `hook` - The hook to register
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mcp_server::server::ServerBuilder;
+    /// use mcp_server::hooks::{Hook, HookEvent};
+    /// use mcp_server::error::MiddlewareError;
+    /// use async_trait::async_trait;
+    ///
+    /// struct MyHook;
+    ///
+    /// #[async_trait]
+    /// impl Hook for MyHook {
+    ///     async fn on_event(&self, _: &HookEvent) -> Result<(), MiddlewareError> {
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let server = ServerBuilder::new()
+    ///     .name("my-server")
+    ///     .version("1.0.0")
+    ///     .hook(MyHook)
+    ///     .build();
+    /// ```
+    pub fn hook<H: Hook + 'static>(mut self, hook: H) -> Self {
+        self.hooks.push(Arc::new(hook));
+        self
+    }
+
+    /// Registers multiple hooks with the server.
+    ///
+    /// # Arguments
+    ///
+    /// * `hooks` - An iterator of Arc-wrapped hooks
+    pub fn hooks<I>(mut self, hooks: I) -> Self
+    where
+        I: IntoIterator<Item = Arc<dyn Hook>>,
+    {
+        self.hooks.extend(hooks);
+        self
+    }
+
     /// Builds the `McpServer`.
     ///
     /// This consumes the builder and creates a new `McpServer` instance
@@ -325,7 +475,7 @@ impl ServerBuilder {
             protocol_version: self.protocol_version.unwrap_or_else(|| "2025-03-26".to_string()),
         };
 
-        McpServer::new(config, self.tools)
+        McpServer::new(config, self.tools, self.resources, self.middleware, self.hooks)
     }
 }
 
