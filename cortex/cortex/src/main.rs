@@ -694,6 +694,30 @@ enum DbCommands {
         #[arg(short, long, default_value = "both")]
         database: String,
     },
+
+    /// Reset databases (delete and recreate)
+    Reset {
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Backup both databases to a zip archive
+    Backup {
+        /// Output path for backup zip file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Restore both databases from a zip archive
+    Restore {
+        /// Path to backup zip file
+        backup: PathBuf,
+
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -860,17 +884,6 @@ enum QdrantCommands {
         skip_verify: bool,
     },
 
-    /// Check Qdrant health and statistics
-    Status {
-        /// Show detailed collection information
-        #[arg(short, long)]
-        detailed: bool,
-
-        /// Filter by collection name
-        #[arg(short, long)]
-        collection: Option<String>,
-    },
-
     /// Migrate data from HNSW to Qdrant
     Migrate {
         /// Source collection or path
@@ -913,27 +926,6 @@ enum QdrantCommands {
         /// Vector dimensionality for test data
         #[arg(short, long, default_value = "1536")]
         dimensions: usize,
-    },
-
-    /// Create a snapshot of Qdrant data
-    Snapshot {
-        /// Collection to snapshot (all if not specified)
-        #[arg(short, long)]
-        collection: Option<String>,
-
-        /// Output directory for snapshot
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
-
-    /// Restore from a snapshot
-    Restore {
-        /// Snapshot file or directory
-        snapshot: PathBuf,
-
-        /// Target collection (required if snapshot contains single collection)
-        #[arg(short, long)]
-        collection: Option<String>,
     },
 
     /// Optimize collection (trigger segment optimization)
@@ -1157,6 +1149,15 @@ async fn run() -> Result<()> {
             DbCommands::Install { database } => {
                 commands::db_install(database).await?;
             }
+            DbCommands::Reset { force } => {
+                commands::db_reset(force).await?;
+            }
+            DbCommands::Backup { output } => {
+                commands::db_backup(output).await?;
+            }
+            DbCommands::Restore { backup, force } => {
+                commands::db_restore(backup, force).await?;
+            }
         },
 
         Commands::Doctor(doctor_cmd) => match doctor_cmd {
@@ -1273,9 +1274,6 @@ async fn run() -> Result<()> {
             QdrantCommands::Init { force, skip_verify } => {
                 qdrant_commands::qdrant_init(force, skip_verify).await?;
             }
-            QdrantCommands::Status { detailed, collection } => {
-                qdrant_commands::qdrant_status(detailed, collection, format).await?;
-            }
             QdrantCommands::Migrate { source, target, batch_size, dry_run } => {
                 qdrant_commands::qdrant_migrate(source, target, batch_size, dry_run).await?;
             }
@@ -1284,12 +1282,6 @@ async fn run() -> Result<()> {
             }
             QdrantCommands::Benchmark { collection, num_queries, dimensions } => {
                 qdrant_commands::qdrant_benchmark(collection, num_queries, dimensions, format).await?;
-            }
-            QdrantCommands::Snapshot { collection, output } => {
-                qdrant_commands::qdrant_snapshot(collection, output).await?;
-            }
-            QdrantCommands::Restore { snapshot, collection } => {
-                qdrant_commands::qdrant_restore(snapshot, collection).await?;
             }
             QdrantCommands::Optimize { collection, wait } => {
                 qdrant_commands::qdrant_optimize(collection, wait).await?;

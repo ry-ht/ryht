@@ -102,6 +102,7 @@ reqwest = { version = "0.12.24", features = ["json"] }
 # Archive extraction
 flate2 = "1.1.5"
 tar = "0.4.44"
+zip = { version = "6.0.0", features = ["deflate"], default-features = false }
 
 # Shell command parsing
 shell-words = "1.1.0"

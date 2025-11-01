@@ -1645,6 +1645,453 @@ pub async fn db_status(detailed: bool) -> Result<()> {
     Ok(())
 }
 
+/// Reset databases - delete all data and recreate clean state
+pub async fn db_reset(force: bool) -> Result<()> {
+    output::header("Database Reset");
+    output::warning("This will delete ALL database data!");
+    println!();
+
+    // Load configuration for paths
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let surrealdb_dir = cortex_core::config::GlobalConfig::surrealdb_dir()?;
+    let qdrant_data_dir = cortex_core::config::GlobalConfig::cortex_data_dir()?.join("qdrant");
+
+    // Show what will be deleted
+    output::info("The following will be deleted:");
+    output::kv("  SurrealDB data", surrealdb_dir.display());
+    output::kv("  Qdrant data", qdrant_data_dir.display());
+    println!();
+
+    // Ask for confirmation if not forced
+    if !force {
+        use dialoguer::Confirm;
+        let confirmed = Confirm::new()
+            .with_prompt("Are you sure you want to delete all database data?")
+            .default(false)
+            .interact()?;
+
+        if !confirmed {
+            output::info("Reset cancelled");
+            return Ok(());
+        }
+    }
+
+    // Stop databases first
+    output::info("Stopping databases...");
+    let manager = crate::db_manager::create_from_global_config().await?;
+    if let Err(e) = manager.stop().await {
+        output::warning(format!("Failed to stop databases gracefully: {}", e));
+        output::info("Continuing with reset anyway...");
+    } else {
+        output::success("Databases stopped");
+    }
+    println!();
+
+    // Delete SurrealDB data
+    output::info("Deleting SurrealDB data...");
+    if surrealdb_dir.exists() {
+        std::fs::remove_dir_all(&surrealdb_dir)
+            .context("Failed to delete SurrealDB data directory")?;
+        output::success(format!("Deleted: {}", surrealdb_dir.display()));
+    } else {
+        output::info("SurrealDB data directory does not exist");
+    }
+
+    // Delete Qdrant data
+    output::info("Deleting Qdrant data...");
+    if qdrant_data_dir.exists() {
+        std::fs::remove_dir_all(&qdrant_data_dir)
+            .context("Failed to delete Qdrant data directory")?;
+        output::success(format!("Deleted: {}", qdrant_data_dir.display()));
+    } else {
+        output::info("Qdrant data directory does not exist");
+    }
+    println!();
+
+    // Recreate directories
+    output::info("Recreating directory structure...");
+    std::fs::create_dir_all(&surrealdb_dir)?;
+    std::fs::create_dir_all(&qdrant_data_dir)?;
+    output::success("Directories recreated");
+    println!();
+
+    // Restart databases
+    output::info("Starting databases with clean state...");
+    match manager.start().await {
+        Ok(_) => {
+            output::success("Databases restarted successfully");
+            println!();
+            output::info("Database reset complete - all data has been cleared");
+        }
+        Err(e) => {
+            output::error(format!("Failed to restart databases: {}", e));
+            output::warning("Data has been deleted but databases failed to start");
+            output::info("Run 'cortex db start' manually to start the databases");
+            return Err(e);
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a backup of both databases
+pub async fn db_backup(output_path: Option<PathBuf>) -> Result<()> {
+    use std::fs::File;
+    use std::io::Write;
+    use zip::write::{SimpleFileOptions, ZipWriter};
+    use zip::CompressionMethod;
+
+    output::header("Database Backup");
+    println!();
+
+    // Load configuration for paths
+    let global_config = cortex_core::config::GlobalConfig::load_or_create_default().await?;
+    let surrealdb_dir = cortex_core::config::GlobalConfig::surrealdb_dir()?;
+    let qdrant_data_dir = cortex_core::config::GlobalConfig::cortex_data_dir()?.join("qdrant");
+
+    // Verify both databases have data
+    if !surrealdb_dir.exists() {
+        output::warning("SurrealDB data directory does not exist - creating backup anyway");
+    }
+    if !qdrant_data_dir.exists() {
+        output::warning("Qdrant data directory does not exist - creating backup anyway");
+    }
+
+    // Determine backup path
+    let backup_path = if let Some(path) = output_path {
+        path.clone()
+    } else {
+        // Default path: ~/.ryht/backups/cortex-backup-{timestamp}.zip
+        let base_dir = cortex_core::config::GlobalConfig::base_dir()?;
+        let backups_dir = base_dir.join("backups");
+        std::fs::create_dir_all(&backups_dir)?;
+
+        let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        backups_dir.join(format!("cortex-backup-{}.zip", timestamp))
+    };
+
+    output::info(format!("Creating backup at: {}", backup_path.display()));
+    println!();
+
+    // Create ZIP file
+    let file = File::create(&backup_path)
+        .context("Failed to create backup file")?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    let spinner = output::spinner("Backing up databases...");
+
+    // Create metadata
+    let metadata = serde_json::json!({
+        "version": "1.0",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "cortex_version": env!("CARGO_PKG_VERSION"),
+        "databases": ["surrealdb", "qdrant"]
+    });
+
+    // Add metadata file
+    zip.start_file("metadata.json", options)?;
+    zip.write_all(serde_json::to_string_pretty(&metadata)?.as_bytes())?;
+
+    // Backup SurrealDB data (copy entire directory)
+    if surrealdb_dir.exists() {
+        output::info("Backing up SurrealDB data...");
+        add_directory_to_zip(&mut zip, &surrealdb_dir, "surrealdb", &options)?;
+        output::success("SurrealDB data backed up");
+    }
+
+    // Create Qdrant snapshot first
+    output::info("Creating Qdrant snapshot...");
+    let qdrant_snapshot_result = crate::qdrant_commands::qdrant_snapshot(None, None).await;
+
+    match qdrant_snapshot_result {
+        Ok(_) => {
+            output::success("Qdrant snapshot created");
+
+            // Backup Qdrant data directory (includes snapshots)
+            if qdrant_data_dir.exists() {
+                output::info("Backing up Qdrant data...");
+                add_directory_to_zip(&mut zip, &qdrant_data_dir, "qdrant", &options)?;
+                output::success("Qdrant data backed up");
+            }
+        }
+        Err(e) => {
+            output::warning(format!("Failed to create Qdrant snapshot: {}", e));
+            output::info("Backing up Qdrant data directory without snapshot...");
+            if qdrant_data_dir.exists() {
+                add_directory_to_zip(&mut zip, &qdrant_data_dir, "qdrant", &options)?;
+            }
+        }
+    }
+
+    // Finalize ZIP
+    zip.finish()?;
+    spinner.finish_and_clear();
+
+    println!();
+    output::success("Backup created successfully");
+    output::kv("Location", backup_path.display());
+
+    // Show backup size
+    if let Ok(metadata) = std::fs::metadata(&backup_path) {
+        output::kv("Size", format_bytes(metadata.len()));
+    }
+
+    Ok(())
+}
+
+/// Helper function to add a directory recursively to a ZIP archive
+fn add_directory_to_zip(
+    zip: &mut zip::ZipWriter<std::fs::File>,
+    dir: &PathBuf,
+    prefix: &str,
+    options: &zip::write::SimpleFileOptions,
+) -> Result<()> {
+    use std::fs::File;
+    use std::io::{Read, Write};
+    use walkdir::WalkDir;
+
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let name = path.strip_prefix(dir)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+
+        // Skip the root directory itself
+        if name.is_empty() {
+            continue;
+        }
+
+        let zip_path = format!("{}/{}", prefix, name);
+
+        if path.is_file() {
+            zip.start_file(&zip_path, *options)?;
+            let mut f = File::open(path)?;
+            let mut buffer = Vec::new();
+            f.read_to_end(&mut buffer)?;
+            zip.write_all(&buffer)?;
+        } else if path.is_dir() {
+            zip.add_directory(&zip_path, *options)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Restore databases from a backup
+pub async fn db_restore(backup_path: PathBuf, force: bool) -> Result<()> {
+    use std::fs::File;
+    use std::io::Read;
+    use zip::ZipArchive;
+
+    output::header("Database Restore");
+    println!();
+
+    // Verify backup file exists
+    if !backup_path.exists() {
+        return Err(anyhow::anyhow!("Backup file does not exist: {}", backup_path.display()));
+    }
+
+    output::info(format!("Restoring from: {}", backup_path.display()));
+
+    // Show backup file size
+    if let Ok(metadata) = std::fs::metadata(&backup_path) {
+        output::kv("Backup size", format_bytes(metadata.len()));
+    }
+
+    // Open and validate ZIP archive
+    let file = File::open(&backup_path)
+        .context("Failed to open backup file")?;
+    let mut archive = ZipArchive::new(file)
+        .context("Failed to read backup archive")?;
+
+    // Extract and validate metadata
+    output::info("Validating backup...");
+    let mut metadata_file = archive.by_name("metadata.json")
+        .context("Backup file is missing metadata.json - invalid backup")?;
+    let mut metadata_content = String::new();
+    metadata_file.read_to_string(&mut metadata_content)?;
+    let metadata: serde_json::Value = serde_json::from_str(&metadata_content)
+        .context("Failed to parse backup metadata")?;
+
+    drop(metadata_file);
+
+    output::kv("Backup version", metadata["version"].as_str().unwrap_or("unknown"));
+    output::kv("Backup created", metadata["timestamp"].as_str().unwrap_or("unknown"));
+    println!();
+
+    // Validate backup structure
+    let has_surrealdb = archive.by_name("surrealdb/").is_ok();
+    let has_qdrant = archive.by_name("qdrant/").is_ok();
+
+    if !has_surrealdb && !has_qdrant {
+        return Err(anyhow::anyhow!("Backup does not contain SurrealDB or Qdrant data"));
+    }
+
+    output::info("Backup contents:");
+    if has_surrealdb {
+        output::info("  ✓ SurrealDB data");
+    }
+    if has_qdrant {
+        output::info("  ✓ Qdrant data");
+    }
+    println!();
+
+    // Ask for confirmation if not forced
+    if !force {
+        use dialoguer::Confirm;
+        output::warning("This will REPLACE all existing database data!");
+        let confirmed = Confirm::new()
+            .with_prompt("Are you sure you want to restore from this backup?")
+            .default(false)
+            .interact()?;
+
+        if !confirmed {
+            output::info("Restore cancelled");
+            return Ok(());
+        }
+        println!();
+    }
+
+    // Stop databases
+    output::info("Stopping databases...");
+    let manager = crate::db_manager::create_from_global_config().await?;
+    if let Err(e) = manager.stop().await {
+        output::warning(format!("Failed to stop databases gracefully: {}", e));
+        output::info("Continuing with restore anyway...");
+    } else {
+        output::success("Databases stopped");
+    }
+    println!();
+
+    // Load configuration for paths
+    let surrealdb_dir = cortex_core::config::GlobalConfig::surrealdb_dir()?;
+    let qdrant_data_dir = cortex_core::config::GlobalConfig::cortex_data_dir()?.join("qdrant");
+
+    // Create temporary extraction directory
+    let temp_dir = std::env::temp_dir().join(format!("cortex-restore-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&temp_dir)?;
+
+    let spinner = output::spinner("Extracting backup...");
+
+    // Extract entire archive to temp directory
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let outpath = temp_dir.join(file.name());
+
+        if file.name().ends_with('/') {
+            std::fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            let mut outfile = File::create(&outpath)?;
+            std::io::copy(&mut file, &mut outfile)?;
+        }
+    }
+
+    spinner.finish_and_clear();
+    output::success("Backup extracted");
+    println!();
+
+    // Restore SurrealDB data
+    if has_surrealdb {
+        output::info("Restoring SurrealDB data...");
+
+        // Remove existing data
+        if surrealdb_dir.exists() {
+            std::fs::remove_dir_all(&surrealdb_dir)?;
+        }
+
+        // Copy restored data
+        let source = temp_dir.join("surrealdb");
+        if source.exists() {
+            copy_dir_recursive(&source, &surrealdb_dir)?;
+            output::success("SurrealDB data restored");
+        }
+    }
+
+    // Restore Qdrant data
+    if has_qdrant {
+        output::info("Restoring Qdrant data...");
+
+        // Remove existing data
+        if qdrant_data_dir.exists() {
+            std::fs::remove_dir_all(&qdrant_data_dir)?;
+        }
+
+        // Copy restored data
+        let source = temp_dir.join("qdrant");
+        if source.exists() {
+            copy_dir_recursive(&source, &qdrant_data_dir)?;
+            output::success("Qdrant data restored");
+        }
+    }
+
+    // Clean up temp directory
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir)?;
+    }
+
+    println!();
+
+    // Start databases
+    output::info("Starting databases...");
+    match manager.start().await {
+        Ok(_) => {
+            println!();
+            output::success("Databases started successfully");
+        }
+        Err(e) => {
+            output::error(format!("Failed to start databases: {}", e));
+            output::warning("Data has been restored but databases failed to start");
+            output::info("Run 'cortex db start' manually to start the databases");
+            return Err(e);
+        }
+    }
+
+    // Verify databases are healthy
+    output::info("Verifying database health...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+    let status = manager.status().await?;
+    if status.overall_healthy {
+        output::success("Both databases are healthy");
+        println!();
+        output::success("Restore completed successfully");
+    } else {
+        output::warning("Some databases may not be fully healthy yet");
+        output::info("Run 'cortex db status' to check detailed status");
+        println!();
+        output::success("Restore completed - databases may need a moment to initialize");
+    }
+
+    Ok(())
+}
+
+/// Helper function to recursively copy a directory
+fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if ty.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Install database binaries (SurrealDB and/or Qdrant)
 pub async fn db_install(database: String) -> Result<()> {
     let database_lower = database.to_lowercase();
