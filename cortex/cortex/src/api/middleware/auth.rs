@@ -384,11 +384,11 @@ where
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    fn from_request_parts(
+    async fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        let result = parts
+    ) -> Result<Self, Self::Rejection> {
+        parts
             .extensions
             .get::<Claims>()
             .cloned()
@@ -407,9 +407,7 @@ where
                         },
                     }),
                 )
-            });
-
-        async move { result }
+            })
     }
 }
 
@@ -420,11 +418,11 @@ where
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    fn from_request_parts(
+    async fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        let result = parts
+    ) -> Result<Self, Self::Rejection> {
+        parts
             .extensions
             .get::<AuthUser>()
             .cloned()
@@ -443,9 +441,7 @@ where
                         },
                     }),
                 )
-            });
-
-        async move { result }
+            })
     }
 }
 
@@ -456,11 +452,11 @@ where
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    fn from_request_parts(
+    async fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        let result = parts
+    ) -> Result<Self, Self::Rejection> {
+        parts
             .extensions
             .get::<BearerToken>()
             .cloned()
@@ -479,8 +475,6 @@ where
                         },
                     }),
                 )
-            });
-
-        async move { result }
+            })
     }
 }

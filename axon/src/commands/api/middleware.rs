@@ -185,11 +185,11 @@ where
 {
     type Rejection = (StatusCode, Json<AuthErrorResponse>);
 
-    fn from_request_parts(
+    async fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        let result = parts.extensions.get::<AuthUser>().cloned().ok_or_else(|| {
+    ) -> Result<Self, Self::Rejection> {
+        parts.extensions.get::<AuthUser>().cloned().ok_or_else(|| {
             (
                 StatusCode::UNAUTHORIZED,
                 Json(AuthErrorResponse {
@@ -197,9 +197,7 @@ where
                     message: "Authentication required".to_string(),
                 }),
             )
-        });
-
-        async move { result }
+        })
     }
 }
 

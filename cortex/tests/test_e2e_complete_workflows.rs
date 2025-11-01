@@ -425,7 +425,6 @@ pub struct AuthenticatedUser {
     pub user_id: String,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
     S: Send + Sync,
