@@ -401,6 +401,292 @@ impl AgentRuntime {
         stats
     }
 
+    /// Execute developer agent task
+    pub async fn execute_developer_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing developer task: {}", task);
+
+        // Create task delegation for developer agent
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["code_generation".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 5,
+            required_capabilities: vec!["code_generation".to_string()],
+            context: params.clone(),
+        };
+
+        // Find or spawn developer agent
+        let agent_id = self.find_or_spawn_agent(AgentType::Developer).await?;
+
+        // Execute task
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute reviewer agent task
+    pub async fn execute_reviewer_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing reviewer task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["code_review".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 5,
+            required_capabilities: vec!["code_review".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Reviewer).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute tester agent task
+    pub async fn execute_tester_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing tester task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["testing".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 5,
+            required_capabilities: vec!["test_generation".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Tester).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute optimizer agent task
+    pub async fn execute_optimizer_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing optimizer task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["optimization".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 7,
+            required_capabilities: vec!["performance_optimization".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Optimizer).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute architect agent task
+    pub async fn execute_architect_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing architect task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["architecture".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 8,
+            required_capabilities: vec!["system_design".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Architect).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute researcher agent task
+    pub async fn execute_researcher_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing researcher task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["research".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 5,
+            required_capabilities: vec!["information_gathering".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Researcher).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Execute documenter agent task
+    pub async fn execute_documenter_task(&self, task: &str, params: serde_json::Value) -> Result<serde_json::Value> {
+        debug!("Executing documenter task: {}", task);
+
+        let delegation = TaskDelegation {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            objective: task.to_string(),
+            output_format: crate::orchestration::strategy_library::OutputFormat {
+                format_type: "json".to_string(),
+                required_sections: Vec::new(),
+                optional_sections: Vec::new(),
+                schema: None,
+            },
+            allowed_tools: vec!["cortex_code".to_string()],
+            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+                scope: vec!["documentation".to_string()],
+                constraints: Vec::new(),
+                max_tool_calls: 100,
+                timeout: std::time::Duration::from_secs(300),
+            },
+            priority: 3,
+            required_capabilities: vec!["documentation".to_string()],
+            context: params.clone(),
+        };
+
+        let agent_id = self.find_or_spawn_agent(AgentType::Documenter).await?;
+        let result = self.execute_task(&agent_id, delegation).await?;
+
+        Ok(serde_json::json!({
+            "success": result.success,
+            "result": result.result,
+            "duration_ms": result.duration.as_millis(),
+            "tokens_used": result.tokens_used,
+            "cost_cents": result.cost_cents,
+        }))
+    }
+
+    /// Find an existing agent or spawn a new one
+    async fn find_or_spawn_agent(&self, agent_type: AgentType) -> Result<AgentId> {
+        let agents = self.active_agents.read().await;
+
+        // Try to find existing agent of the same type
+        for (id, info) in agents.iter() {
+            if info.agent_type == agent_type && info.status == AgentStatus::Ready {
+                return Ok(id.clone());
+            }
+        }
+
+        drop(agents);
+
+        // No suitable agent found, spawn a new one
+        let agent_name = format!("{:?}-{}", agent_type, uuid::Uuid::new_v4());
+        self.spawn_agent(
+            agent_name,
+            agent_type,
+            "cortex",
+            &["mcp".to_string(), "stdio".to_string()],
+        ).await
+    }
+
     /// Shutdown the runtime
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down Agent Runtime");

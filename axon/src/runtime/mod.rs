@@ -121,6 +121,7 @@ pub mod agent_process;
 pub mod mcp_integration;
 pub mod agent_executor;
 pub mod agent_runtime;
+pub mod sub_agent_tools;
 
 // Re-export main types
 pub use runtime_config::{
@@ -172,6 +173,22 @@ pub use agent_runtime::{
     RuntimeState,
     RuntimeStatistics,
     RuntimeError,
+};
+
+pub use sub_agent_tools::{
+    SubAgentManager,
+    SubAgentInstance,
+    SubAgentStatus,
+    SubAgentResult,
+    SubAgentMetrics,
+    SubAgentMessage,
+    MessageType,
+    SubAgentInfo,
+    LaunchSubAgentTool,
+    WaitForSubAgentTool,
+    GetSubAgentStatusTool,
+    ListSubAgentsTool,
+    CancelSubAgentTool,
 };
 
 // Re-export result types
