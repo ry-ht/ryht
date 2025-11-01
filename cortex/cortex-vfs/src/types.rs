@@ -813,6 +813,33 @@ pub enum ChangeType {
     Renamed,
 }
 
+/// Configuration for automatic file re-parsing.
+#[derive(Debug, Clone)]
+pub struct AutoReparseConfig {
+    /// Enable automatic re-parsing when files are modified
+    pub enabled: bool,
+
+    /// Debounce delay in milliseconds (wait after last change before parsing)
+    pub debounce_ms: u64,
+
+    /// Maximum number of pending file changes before forcing a parse
+    pub max_pending_changes: usize,
+
+    /// Whether to re-parse in the background (non-blocking)
+    pub background_parsing: bool,
+}
+
+impl Default for AutoReparseConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            debounce_ms: 500,
+            max_pending_changes: 10,
+            background_parsing: true,
+        }
+    }
+}
+
 /// Options for bidirectional filesystem sync.
 #[derive(Debug, Clone)]
 pub struct SyncOptions {

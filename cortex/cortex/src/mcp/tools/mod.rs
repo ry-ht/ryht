@@ -21,6 +21,7 @@
 //! - AI-Assisted Development (6 tools) - NEW
 //! - Advanced Testing (6 tools) - NEW
 //! - Architecture Analysis (5 tools) - NEW
+//! - Agent Notifications (3 tools) - NEW
 
 pub mod workspace;
 pub mod vfs;
@@ -42,6 +43,7 @@ pub mod type_analysis;
 pub mod ai_assisted;
 pub mod advanced_testing;
 pub mod architecture_analysis;
+pub mod agent_notifications;
 
 // Re-export all tools
 pub use workspace::*;
@@ -64,6 +66,7 @@ pub use type_analysis::*;
 pub use ai_assisted::*;
 pub use advanced_testing::*;
 pub use architecture_analysis::*;
+pub use agent_notifications::*;
 
 use mcp_sdk::tool::ToolDefinition;
 use mcp_sdk::Tool;

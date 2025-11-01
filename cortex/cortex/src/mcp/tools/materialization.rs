@@ -843,6 +843,8 @@ impl Tool for WatchStartTool {
             batch_interval: Duration::from_millis(500),
             max_batch_size: 100,
             coalesce_events: true,
+            enable_auto_reparse: false,
+            enable_auto_sync: false,
         };
 
         // Watch the first path (for multiple paths, we'd need multiple watchers or a common parent)

@@ -62,6 +62,7 @@ pub mod watcher;
 pub mod cache;
 pub mod dedup;
 pub mod ingestion;
+pub mod auto_reparse;
 
 // Re-export main types
 pub use path::{VirtualPath, VirtualPathError};
@@ -71,8 +72,9 @@ pub use content_cache::{ContentCache, CacheStatistics};
 pub use materialization::MaterializationEngine;
 pub use external_loader::ExternalProjectLoader;
 pub use fork_manager::ForkManager;
-pub use watcher::FileWatcher;
+pub use watcher::{FileWatcher, WatcherConfig, FileEvent};
 pub use ingestion::{FileIngestionPipeline, IngestionResult, WorkspaceIngestionResult};
+pub use auto_reparse::AutoReparseHandle;
 
 /// Prelude module with commonly used types.
 pub mod prelude {

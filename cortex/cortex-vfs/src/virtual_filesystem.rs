@@ -20,6 +20,7 @@ use uuid::Uuid;
 /// - Lazy materialization (files exist in memory until explicitly flushed)
 /// - Multi-workspace support with isolation
 /// - External project import with fork capability
+/// - Automatic re-parsing when files are modified
 #[derive(Clone)]
 pub struct VirtualFileSystem {
     /// Database connection manager
@@ -33,6 +34,9 @@ pub struct VirtualFileSystem {
 
     /// Path to VNode ID mapping cache with LRU eviction (max 10,000 entries)
     path_cache: Arc<Mutex<LruCache<(Uuid, String), Uuid>>>,
+
+    /// Auto-reparse handle (optional)
+    auto_reparse: Option<Arc<crate::auto_reparse::AutoReparseHandle>>,
 }
 
 impl VirtualFileSystem {
@@ -61,7 +65,75 @@ impl VirtualFileSystem {
             path_cache: Arc::new(Mutex::new(
                 LruCache::new(NonZeroUsize::new(vnode_cache_size).unwrap())
             )),
+            auto_reparse: None,
         }
+    }
+
+    /// Create with automatic re-parsing enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - Database connection manager
+    /// * `config` - Auto-reparse configuration
+    /// * `ingestion_pipeline` - Pipeline for parsing and storing code units
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use cortex_vfs::{VirtualFileSystem, AutoReparseConfig};
+    /// # use cortex_storage::ConnectionManager;
+    /// # use std::sync::Arc;
+    /// # async fn example() -> cortex_core::error::Result<()> {
+    /// let storage = Arc::new(ConnectionManager::default());
+    /// let config = AutoReparseConfig::default();
+    /// // You need to create a pipeline first
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_auto_reparse(
+        storage: Arc<ConnectionManager>,
+        config: AutoReparseConfig,
+        ingestion_pipeline: Arc<crate::ingestion::FileIngestionPipeline>,
+    ) -> Self {
+        let auto_reparse_handle = crate::auto_reparse::AutoReparseHandle::new(
+            config,
+            ingestion_pipeline,
+        );
+
+        Self {
+            storage: storage.clone(),
+            content_cache: ContentCache::new(512 * 1024 * 1024),
+            vnode_cache: Arc::new(Mutex::new(
+                LruCache::new(NonZeroUsize::new(10_000).unwrap())
+            )),
+            path_cache: Arc::new(Mutex::new(
+                LruCache::new(NonZeroUsize::new(10_000).unwrap())
+            )),
+            auto_reparse: Some(Arc::new(auto_reparse_handle)),
+        }
+    }
+
+    /// Enable auto-reparse on an existing VFS instance.
+    pub fn enable_auto_reparse(
+        &mut self,
+        config: AutoReparseConfig,
+        ingestion_pipeline: Arc<crate::ingestion::FileIngestionPipeline>,
+    ) {
+        let auto_reparse_handle = crate::auto_reparse::AutoReparseHandle::new(
+            config,
+            ingestion_pipeline,
+        );
+        self.auto_reparse = Some(Arc::new(auto_reparse_handle));
+    }
+
+    /// Disable auto-reparse.
+    pub fn disable_auto_reparse(&mut self) {
+        self.auto_reparse = None;
+    }
+
+    /// Check if auto-reparse is enabled.
+    pub fn is_auto_reparse_enabled(&self) -> bool {
+        self.auto_reparse.is_some()
     }
 
     // ============================================================================
@@ -1004,6 +1076,7 @@ impl VirtualFileSystem {
     ///
     /// This is a convenience method that updates a file and returns the updated VNode.
     /// It will increment the version and update the content hash.
+    /// If auto-reparse is enabled, this will trigger a re-parse of the file.
     pub async fn update_file(
         &self,
         workspace_id: &Uuid,
@@ -1044,6 +1117,12 @@ impl VirtualFileSystem {
 
         // Cache content
         self.content_cache.put(content_hash, content.to_vec());
+
+        // Trigger auto-reparse if enabled
+        if let Some(ref auto_reparse) = self.auto_reparse {
+            debug!("Triggering auto-reparse for: {}", path);
+            auto_reparse.notify_file_changed(*workspace_id, path.clone());
+        }
 
         Ok(vnode)
     }

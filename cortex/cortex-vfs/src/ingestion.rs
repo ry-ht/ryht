@@ -126,6 +126,44 @@ impl FileIngestionPipeline {
         }
     }
 
+    /// Get reference to the semantic memory system (for testing).
+    pub fn semantic_memory(&self) -> &Arc<SemanticMemorySystem> {
+        &self.semantic_memory
+    }
+
+    /// Mark old code units as replaced before re-parsing.
+    /// This prevents duplicate code units from accumulating in the database.
+    pub async fn mark_old_units_replaced(
+        &self,
+        workspace_id: &Uuid,
+        path: &VirtualPath,
+    ) -> Result<usize> {
+        debug!("Marking old code units as replaced for: {} in workspace {}", path, workspace_id);
+
+        // Query existing code units for this file
+        let file_path_str = path.to_string();
+        let old_units = self.semantic_memory
+            .query_units_by_file(workspace_id, &file_path_str)
+            .await?;
+
+        let count = old_units.len();
+        if count == 0 {
+            debug!("No old code units found for {}", path);
+            return Ok(0);
+        }
+
+        // Mark each old unit as replaced
+        for unit in old_units {
+            if let Err(e) = self.semantic_memory.mark_unit_replaced(&unit.id).await {
+                warn!("Failed to mark unit {} as replaced: {}", unit.id, e);
+                // Continue with other units
+            }
+        }
+
+        info!("Marked {} old code units as replaced for {}", count, path);
+        Ok(count)
+    }
+
     /// Ingest a single file: parse and store code units.
     pub async fn ingest_file(
         &self,

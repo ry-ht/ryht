@@ -12,6 +12,7 @@ use cortex_storage::ConnectionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info};
+use uuid::Uuid;
 
 /// Semantic memory system for code understanding
 pub struct SemanticMemorySystem {
@@ -232,6 +233,78 @@ impl SemanticMemorySystem {
 
         let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
         Self::process_unit_results(units)
+    }
+
+    /// Query active code units by file path and workspace.
+    /// Only returns units with status = Active.
+    pub async fn query_units_by_file(&self, _workspace_id: &Uuid, file_path: &str) -> Result<Vec<CodeUnit>> {
+        debug!(file_path, "Querying active units by file");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        let query = Self::build_select_query(
+            "WHERE file_path = $path AND status = 'active'",
+            Some("ORDER BY start_line ASC")
+        );
+        let mut result = conn
+            .connection()
+            .query(&query)
+            .bind(("path", file_path.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
+    }
+
+    /// Query all code units by file path and workspace, including replaced ones.
+    /// Returns units with any status.
+    pub async fn query_all_units_by_file(&self, _workspace_id: &Uuid, file_path: &str) -> Result<Vec<CodeUnit>> {
+        debug!(file_path, "Querying all units by file (including replaced)");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        let query = Self::build_select_query(
+            "WHERE file_path = $path",
+            Some("ORDER BY start_line ASC, created_at DESC")
+        );
+        let mut result = conn
+            .connection()
+            .query(&query)
+            .bind(("path", file_path.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(e.to_string()))?;
+
+        let units: Vec<serde_json::Value> = result.take(0).map_err(|e| CortexError::storage(e.to_string()))?;
+        Self::process_unit_results(units)
+    }
+
+    /// Mark a code unit as replaced.
+    /// This is used when a file is re-parsed to mark old units as replaced.
+    pub async fn mark_unit_replaced(&self, unit_id: &CortexId) -> Result<()> {
+        debug!(unit_id = %unit_id, "Marking unit as replaced");
+
+        let conn = self
+            .connection_manager
+            .acquire()
+            .await?;
+
+        let query = "UPDATE code_unit SET status = 'replaced', updated_at = time::now() WHERE cortex_id = $id";
+        conn
+            .connection()
+            .query(query)
+            .bind(("id", unit_id.to_string()))
+            .await
+            .map_err(|e| CortexError::storage(format!("Failed to mark unit as replaced: {}", e)))?;
+
+        debug!(unit_id = %unit_id, "Unit marked as replaced successfully");
+        Ok(())
     }
 
     /// Search units by qualified name (e.g., "module::Class::method")

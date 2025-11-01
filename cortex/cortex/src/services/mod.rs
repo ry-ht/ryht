@@ -14,6 +14,8 @@ pub mod auth;
 pub mod sessions;
 pub mod build;
 pub mod document;
+pub mod notifications;
+pub mod notification_integration;
 
 pub use workspace::WorkspaceService;
 pub use vfs::VfsService;
@@ -25,6 +27,8 @@ pub use auth::AuthService;
 pub use sessions::SessionService;
 pub use build::BuildService;
 pub use document::DocumentService;
+pub use notifications::{NotificationService, AgentNotification, EventType, Severity};
+pub use notification_integration::*;
 
 #[cfg(test)]
 mod tests;

@@ -497,6 +497,7 @@ pub enum CodeUnitStatus {
     Deprecated,
     Deleted,
     Moved,
+    Replaced,  // Unit was replaced by a newer version during re-parsing
 }
 
 impl CodeUnit {

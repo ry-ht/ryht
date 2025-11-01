@@ -7,21 +7,249 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use cortex_core::types::CodeUnit;
 use cortex_storage::ConnectionManager;
+use moka::future::Cache;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::{debug, info};
+use std::time::Duration;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Cache configuration for code units
+#[derive(Debug, Clone)]
+pub struct CacheConfig {
+    /// Maximum number of entries in the cache
+    pub max_capacity: u64,
+    /// Time-to-live for cache entries (in seconds)
+    pub ttl_seconds: u64,
+    /// Time-to-idle for cache entries (in seconds)
+    pub tti_seconds: u64,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            max_capacity: 10_000,
+            ttl_seconds: 300, // 5 minutes
+            tti_seconds: 60,  // 1 minute idle
+        }
+    }
+}
+
+/// Cache metrics for monitoring
+#[derive(Debug, Clone)]
+pub struct CacheMetrics {
+    hits: Arc<AtomicU64>,
+    misses: Arc<AtomicU64>,
+    invalidations: Arc<AtomicU64>,
+}
+
+impl CacheMetrics {
+    fn new() -> Self {
+        Self {
+            hits: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
+            invalidations: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn record_hit(&self) {
+        self.hits.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_miss(&self) {
+        self.misses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_invalidation(&self) {
+        self.invalidations.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn get_stats(&self) -> CacheStats {
+        let hits = self.hits.load(Ordering::Relaxed);
+        let misses = self.misses.load(Ordering::Relaxed);
+        let total = hits + misses;
+        let hit_rate = if total > 0 {
+            (hits as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        CacheStats {
+            hits,
+            misses,
+            total_requests: total,
+            hit_rate,
+            invalidations: self.invalidations.load(Ordering::Relaxed),
+        }
+    }
+
+    pub fn reset(&self) {
+        self.hits.store(0, Ordering::Relaxed);
+        self.misses.store(0, Ordering::Relaxed);
+        self.invalidations.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Cache statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub total_requests: u64,
+    pub hit_rate: f64,
+    pub invalidations: u64,
+}
 
 /// Code unit service for managing code units
 #[derive(Clone)]
 pub struct CodeUnitService {
     storage: Arc<ConnectionManager>,
+    /// Cache keyed by unit_id
+    cache_by_id: Cache<String, CodeUnitDetails>,
+    /// Cache keyed by qualified_name
+    cache_by_qualified_name: Cache<String, CodeUnitDetails>,
+    /// Cache metrics
+    metrics: CacheMetrics,
 }
 
 impl CodeUnitService {
-    /// Create a new code unit service
+    /// Create a new code unit service with default cache configuration
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
-        Self { storage }
+        Self::with_cache_config(storage, CacheConfig::default())
+    }
+
+    /// Create a new code unit service with custom cache configuration
+    pub fn with_cache_config(storage: Arc<ConnectionManager>, config: CacheConfig) -> Self {
+        let cache_by_id = Cache::builder()
+            .max_capacity(config.max_capacity)
+            .time_to_live(Duration::from_secs(config.ttl_seconds))
+            .time_to_idle(Duration::from_secs(config.tti_seconds))
+            .build();
+
+        let cache_by_qualified_name = Cache::builder()
+            .max_capacity(config.max_capacity)
+            .time_to_live(Duration::from_secs(config.ttl_seconds))
+            .time_to_idle(Duration::from_secs(config.tti_seconds))
+            .build();
+
+        Self {
+            storage,
+            cache_by_id,
+            cache_by_qualified_name,
+            metrics: CacheMetrics::new(),
+        }
+    }
+
+    /// Get cache statistics
+    pub fn cache_stats(&self) -> CacheStats {
+        self.metrics.get_stats()
+    }
+
+    /// Reset cache statistics
+    pub fn reset_cache_stats(&self) {
+        self.metrics.reset();
+    }
+
+    /// Clear all caches
+    pub async fn clear_cache(&self) {
+        self.cache_by_id.invalidate_all();
+        self.cache_by_qualified_name.invalidate_all();
+        // Wait for invalidation to complete
+        self.cache_by_id.run_pending_tasks().await;
+        self.cache_by_qualified_name.run_pending_tasks().await;
+        info!("Cache cleared");
+    }
+
+    /// Invalidate a specific code unit from cache
+    async fn invalidate_cache(&self, unit_id: &str, qualified_name: Option<&str>) {
+        self.cache_by_id.invalidate(unit_id).await;
+        if let Some(qname) = qualified_name {
+            self.cache_by_qualified_name.invalidate(qname).await;
+        }
+        self.metrics.record_invalidation();
+        debug!("Invalidated cache for unit: {}", unit_id);
+    }
+
+    /// Get code unit from cache or database
+    async fn get_cached_unit(&self, unit_id: &str) -> Result<CodeUnitDetails> {
+        // Try cache first
+        if let Some(cached) = self.cache_by_id.get(unit_id).await {
+            self.metrics.record_hit();
+            debug!("Cache hit for unit: {}", unit_id);
+            return Ok(cached);
+        }
+
+        // Cache miss - fetch from database
+        self.metrics.record_miss();
+        debug!("Cache miss for unit: {}", unit_id);
+
+        let details = self.fetch_unit_from_db(unit_id).await?;
+
+        // Populate both caches
+        self.cache_by_id.insert(unit_id.to_string(), details.clone()).await;
+        self.cache_by_qualified_name
+            .insert(details.qualified_name.clone(), details.clone())
+            .await;
+
+        Ok(details)
+    }
+
+    /// Fetch unit from database (helper method)
+    async fn fetch_unit_from_db(&self, unit_id: &str) -> Result<CodeUnitDetails> {
+        let pooled = self.storage.acquire().await?;
+        let conn = pooled.connection();
+
+        let query = format!("SELECT * FROM code_unit WHERE id = '{}'", unit_id);
+        let mut result = conn.query(&query).await?;
+        let units: Vec<CodeUnit> = result.take(0)?;
+
+        let unit = units
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Code unit not found: {}", unit_id))?;
+
+        Ok(CodeUnitDetails::from_code_unit(unit))
+    }
+
+    /// Get code unit by qualified name (with caching)
+    pub async fn get_by_qualified_name(&self, qualified_name: &str) -> Result<CodeUnitDetails> {
+        // Try cache first
+        if let Some(cached) = self.cache_by_qualified_name.get(qualified_name).await {
+            self.metrics.record_hit();
+            debug!("Cache hit for qualified_name: {}", qualified_name);
+            return Ok(cached);
+        }
+
+        // Cache miss - fetch from database
+        self.metrics.record_miss();
+        debug!("Cache miss for qualified_name: {}", qualified_name);
+
+        let pooled = self.storage.acquire().await?;
+        let conn = pooled.connection();
+
+        let query = format!(
+            "SELECT * FROM code_unit WHERE qualified_name = '{}'",
+            qualified_name
+        );
+        let mut result = conn.query(&query).await?;
+        let units: Vec<CodeUnit> = result.take(0)?;
+
+        let unit = units.into_iter().next().ok_or_else(|| {
+            anyhow::anyhow!("Code unit not found with qualified_name: {}", qualified_name)
+        })?;
+
+        let details = CodeUnitDetails::from_code_unit(unit);
+
+        // Populate both caches
+        self.cache_by_id
+            .insert(details.id.clone(), details.clone())
+            .await;
+        self.cache_by_qualified_name
+            .insert(qualified_name.to_string(), details.clone())
+            .await;
+
+        Ok(details)
     }
 
     /// List code units in a workspace with filters
@@ -83,23 +311,10 @@ impl CodeUnitService {
         Ok(details)
     }
 
-    /// Get a specific code unit by ID
+    /// Get a specific code unit by ID (with caching)
     pub async fn get_code_unit(&self, unit_id: &str) -> Result<CodeUnitDetails> {
         debug!("Getting code unit: {}", unit_id);
-
-        let pooled = self.storage.acquire().await?;
-        let conn = pooled.connection();
-
-        let query = format!("SELECT * FROM code_unit WHERE id = '{}'", unit_id);
-        let mut result = conn.query(&query).await?;
-        let units: Vec<CodeUnit> = result.take(0)?;
-
-        let unit = units
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Code unit not found: {}", unit_id))?;
-
-        Ok(CodeUnitDetails::from_code_unit(unit))
+        self.get_cached_unit(unit_id).await
     }
 
     /// Search code units with query and filters
@@ -235,7 +450,7 @@ impl CodeUnitService {
         Ok(details)
     }
 
-    /// Update code unit body and docstring
+    /// Update code unit body and docstring (with cache invalidation)
     pub async fn update_code_unit(
         &self,
         unit_id: &str,
@@ -257,6 +472,9 @@ impl CodeUnitService {
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("Code unit not found: {}", unit_id))?;
+
+        // Store qualified_name for cache invalidation
+        let qualified_name = unit.qualified_name.clone();
 
         // Check version if provided
         if let Some(expected_version) = expected_version {
@@ -297,6 +515,9 @@ impl CodeUnitService {
             .await?;
 
         info!("Updated code unit: {} to version {}", unit_id, unit.version);
+
+        // Invalidate cache for this unit
+        self.invalidate_cache(unit_id, Some(&qualified_name)).await;
 
         Ok(CodeUnitDetails::from_code_unit(unit))
     }

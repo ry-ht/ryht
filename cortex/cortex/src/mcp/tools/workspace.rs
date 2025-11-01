@@ -27,7 +27,8 @@ use regex;
 use cortex_vfs::{
     ExternalProjectLoader, FileIngestionPipeline, ImportOptions as VfsImportOptions,
     MaterializationEngine, VirtualFileSystem, VirtualPath, Workspace, SyncSource, SyncSourceType,
-    SyncSourceStatus, ForkManager, MergeStrategy,
+    SyncSourceStatus, ForkManager, MergeStrategy, FileWatcher, WatcherConfig, AutoReparseHandle,
+    AutoReparseConfig,
 };
 use cortex_memory::SemanticMemorySystem;
 use mcp_sdk::prelude::*;
@@ -37,7 +38,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, warn, error};
 use uuid::Uuid;
 
 // Import services
@@ -63,6 +64,10 @@ pub struct WorkspaceContext {
     fork_manager: Arc<ForkManager>,
     /// Workspace service
     workspace_service: Arc<WorkspaceService>,
+    /// Auto-reparse handle for FileWatcher integration
+    auto_reparse: Arc<AutoReparseHandle>,
+    /// Active file watchers (workspace_id -> watcher handle)
+    active_watchers: Arc<RwLock<HashMap<Uuid, Arc<tokio::sync::Mutex<FileWatcher>>>>>,
 }
 
 impl WorkspaceContext {
@@ -84,6 +89,15 @@ impl WorkspaceContext {
         // Create workspace service
         let workspace_service = Arc::new(WorkspaceService::new(storage.clone(), vfs.clone()));
 
+        // Create auto-reparse handle
+        let auto_reparse_config = AutoReparseConfig {
+            enabled: true,
+            debounce_ms: 500,
+            max_pending_changes: 10,
+            background_parsing: true,
+        };
+        let auto_reparse = Arc::new(AutoReparseHandle::new(auto_reparse_config, ingestion.clone()));
+
         Ok(Self {
             storage,
             vfs,
@@ -94,6 +108,8 @@ impl WorkspaceContext {
             ingestion,
             fork_manager,
             workspace_service,
+            auto_reparse,
+            active_watchers: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -123,6 +139,105 @@ impl WorkspaceContext {
             total_bytes: stats.total_bytes,
             languages: serde_json::to_value(stats.languages).unwrap(),
         })
+    }
+
+    /// Start FileWatcher for a workspace with auto-sync and auto-reparse.
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace_id` - Workspace ID to watch
+    /// * `root_path` - Physical filesystem path to watch
+    /// * `enable_auto_watch` - Whether to actually start the watcher
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(true) if watcher was started, Ok(false) if auto-watch is disabled
+    async fn start_file_watcher(
+        &self,
+        workspace_id: Uuid,
+        root_path: &Path,
+        enable_auto_watch: bool,
+    ) -> Result<bool> {
+        if !enable_auto_watch {
+            debug!("Auto-watch disabled for workspace {}", workspace_id);
+            return Ok(false);
+        }
+
+        // Check if watcher already exists
+        {
+            let watchers = self.active_watchers.read().unwrap();
+            if watchers.contains_key(&workspace_id) {
+                info!("FileWatcher already active for workspace {}", workspace_id);
+                return Ok(true);
+            }
+        }
+
+        // Configure watcher
+        let mut config = WatcherConfig::default();
+        config.enable_auto_sync = true;
+        config.enable_auto_reparse = true;
+        config.debounce_duration = std::time::Duration::from_millis(100);
+        config.batch_interval = std::time::Duration::from_millis(500);
+
+        // Create watcher with VFS integration
+        let watcher = FileWatcher::with_integration(
+            root_path,
+            workspace_id,
+            config,
+            self.vfs.clone(),
+            Some(self.auto_reparse.clone()),
+        )
+        .map_err(|e| CortexError::vfs(format!("Failed to create FileWatcher: {}", e)))?;
+
+        info!(
+            "Started FileWatcher for workspace {} at path: {}",
+            workspace_id,
+            root_path.display()
+        );
+
+        // Store watcher handle
+        let watcher = Arc::new(tokio::sync::Mutex::new(watcher));
+        {
+            let mut watchers = self.active_watchers.write().unwrap();
+            watchers.insert(workspace_id, watcher.clone());
+        }
+
+        // Spawn background task to process events
+        let watcher_clone = watcher.clone();
+        let workspace_id_clone = workspace_id;
+        tokio::spawn(async move {
+            let mut watcher = watcher_clone.lock().await;
+            loop {
+                match watcher.process_events().await {
+                    Some(events) => {
+                        if !events.is_empty() {
+                            debug!(
+                                "Processed {} file events for workspace {}",
+                                events.len(),
+                                workspace_id_clone
+                            );
+                        }
+                    }
+                    None => {
+                        info!("FileWatcher closed for workspace {}", workspace_id_clone);
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(true)
+    }
+
+    /// Stop FileWatcher for a workspace.
+    #[allow(dead_code)]
+    async fn stop_file_watcher(&self, workspace_id: &Uuid) -> Result<()> {
+        let mut watchers = self.active_watchers.write().unwrap();
+        if let Some(_watcher) = watchers.remove(workspace_id) {
+            info!("Stopped FileWatcher for workspace {}", workspace_id);
+            // Watcher will be dropped and cleaned up automatically
+        }
+        Ok(())
     }
 
 }
@@ -158,6 +273,9 @@ struct CreateInput {
     #[serde(default = "default_max_file_size")]
     #[allow(dead_code)]
     max_file_size_mb: u64,
+    /// Enable automatic file watching for this workspace
+    #[serde(default = "default_true")]
+    enable_auto_watch: bool,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -169,6 +287,7 @@ struct CreateOutput {
     total_bytes: usize,
     import_duration_ms: u64,
     warnings: Vec<String>,
+    watcher_started: bool,
 }
 
 fn default_true() -> bool {
@@ -348,6 +467,25 @@ impl Tool for WorkspaceCreateTool {
             }
         }
 
+        // Start FileWatcher if requested and root_path is provided
+        let watcher_started = if let Some(ref path) = root_path {
+            match self.ctx.start_file_watcher(workspace_id, path, input.enable_auto_watch).await {
+                Ok(started) => {
+                    if started {
+                        info!("FileWatcher auto-started for workspace {}", workspace_id);
+                    }
+                    started
+                }
+                Err(e) => {
+                    error!("Failed to start FileWatcher: {}", e);
+                    warnings.push(format!("Failed to start FileWatcher: {}", e));
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
         let duration = start.elapsed();
         info!(
             "Workspace created: {} ({} files, {} units in {:?})",
@@ -362,6 +500,7 @@ impl Tool for WorkspaceCreateTool {
             total_bytes,
             import_duration_ms: duration.as_millis() as u64,
             warnings,
+            watcher_started,
         })))
     }
 }
@@ -1175,6 +1314,11 @@ impl Tool for WorkspaceDeleteTool {
             .ok_or_else(|| ToolError::ExecutionFailed(format!("Workspace not found: {}", workspace_id)))?;
 
         warn!("Deleting workspace: {} ({})", workspace.name, workspace_id);
+
+        // Stop FileWatcher if running
+        if let Err(e) = self.ctx.stop_file_watcher(&workspace_id).await {
+            warn!("Failed to stop FileWatcher for workspace {}: {}", workspace_id, e);
+        }
 
         // Delete workspace and all associated data
         self.ctx.delete_workspace(&workspace_id).await
