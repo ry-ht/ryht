@@ -1,7 +1,7 @@
 //! Cortex MCP Tools
 //!
-//! This module provides 175+ MCP tools for Cortex, organized by category:
-//! - Workspace Management (8 tools)
+//! This module provides 182 MCP tools for Cortex, organized by category:
+//! - Workspace Management (12 tools)
 //! - Virtual Filesystem (17 tools)
 //! - Code Navigation (10 tools)
 //! - Code Manipulation (15 tools)
@@ -10,18 +10,17 @@
 //! - Code Quality (8 tools)
 //! - Version Control (10 tools)
 //! - Cognitive Memory (12 tools)
-//! - Multi-Agent Coordination (10 tools)
+//! - Multi-Agent Coordination (14 tools)
 //! - Materialization (8 tools)
-//! - Testing & Validation (10 tools)
-//! - Documentation (8 tools)
+//! - Testing & Validation (4 tools)
+//! - Documentation (26 tools)
 //! - Build & Execution (8 tools)
 //! - Monitoring & Analytics (10 tools)
-//! - Security Analysis (4 tools) - NEW
-//! - Type Analysis (4 tools) - NEW
-//! - AI-Assisted Development (6 tools) - NEW
-//! - Advanced Testing (6 tools) - NEW
-//! - Architecture Analysis (5 tools) - NEW
-//! - Agent Notifications (3 tools) - NEW
+//! - Security Analysis (4 tools)
+//! - Type Analysis (4 tools)
+//! - AI-Assisted Development (6 tools)
+//! - Advanced Testing (2 tools)
+//! - Architecture Analysis (5 tools)
 
 pub mod workspace;
 pub mod vfs;
@@ -43,7 +42,6 @@ pub mod type_analysis;
 pub mod ai_assisted;
 pub mod advanced_testing;
 pub mod architecture_analysis;
-pub mod agent_notifications;
 
 // Re-export all tools
 pub use workspace::*;
@@ -66,7 +64,6 @@ pub use type_analysis::*;
 pub use ai_assisted::*;
 pub use advanced_testing::*;
 pub use architecture_analysis::*;
-pub use agent_notifications::*;
 
 use mcp_sdk::tool::ToolDefinition;
 use mcp_sdk::Tool;

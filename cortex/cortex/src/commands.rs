@@ -2376,12 +2376,11 @@ pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
             "cortex.code.suggest_type_annotations",
             "cortex.code.analyze_type_coverage",
         ]),
-        ("AI-Assisted Development", 6, vec![
+        ("AI-Assisted Development", 5, vec![
             "cortex.ai.suggest_refactoring",
             "cortex.ai.explain_code",
             "cortex.ai.suggest_optimization",
             "cortex.ai.suggest_fix",
-            "cortex.ai.generate_docstring",
             "cortex.ai.review_code",
         ]),
         ("Advanced Testing", 6, vec![

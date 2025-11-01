@@ -121,7 +121,6 @@ impl CortexMcpServer {
 
         let vfs_ctx = VfsContext::new(vfs.clone());
         let code_ctx = CodeNavContext::new(storage.clone());
-        let code_manip_ctx = CodeManipulationContext::new(storage.clone());
         let semantic_ctx = SemanticSearchContext::new(storage.clone()).await?;
         let deps_ctx = DependencyAnalysisContext::new(storage.clone());
         let quality_ctx = CodeQualityContext::new(storage.clone());
@@ -185,22 +184,6 @@ impl CortexMcpServer {
             .tool(CodeGetTypeHierarchyTool::new(code_ctx.clone()))
             .tool(CodeGetImportsTool::new(code_ctx.clone()))
             .tool(CodeGetExportsTool::new(code_ctx.clone()))
-            // Code Manipulation Tools (15)
-            .tool(CodeCreateUnitTool::new(code_manip_ctx.clone()))
-            .tool(CodeUpdateUnitTool::new(code_manip_ctx.clone()))
-            .tool(CodeDeleteUnitTool::new(code_manip_ctx.clone()))
-            .tool(CodeMoveUnitTool::new(code_manip_ctx.clone()))
-            .tool(CodeRenameUnitTool::new(code_manip_ctx.clone()))
-            .tool(CodeExtractFunctionTool::new(code_manip_ctx.clone()))
-            .tool(CodeInlineFunctionTool::new(code_manip_ctx.clone()))
-            .tool(CodeChangeSignatureTool::new(code_manip_ctx.clone()))
-            .tool(CodeAddParameterTool::new(code_manip_ctx.clone()))
-            .tool(CodeRemoveParameterTool::new(code_manip_ctx.clone()))
-            .tool(CodeAddImportTool::new(code_manip_ctx.clone()))
-            .tool(CodeOptimizeImportsTool::new(code_manip_ctx.clone()))
-            .tool(CodeGenerateGetterSetterTool::new(code_manip_ctx.clone()))
-            .tool(CodeImplementInterfaceTool::new(code_manip_ctx.clone()))
-            .tool(CodeOverrideMethodTool::new(code_manip_ctx.clone()))
             // Semantic Search Tools (8) - REAL semantic search with embeddings
             .tool(SearchCodeTool::new(semantic_ctx.clone()))
             .tool(SearchSimilarTool::new(semantic_ctx.clone()))
@@ -278,17 +261,13 @@ impl CortexMcpServer {
             .tool(SyncResolveConflictTool::new(mat_ctx.clone()))
             .tool(WatchStartTool::new(mat_ctx.clone()))
             .tool(WatchStopTool::new(mat_ctx.clone()))
-            // Testing & Validation Tools (10)
-            .tool(TestGenerateTool::new(test_ctx.clone()))
+            // Testing & Validation Tools (4)
             .tool(TestValidateTool::new(test_ctx.clone()))
             .tool(TestFindMissingTool::new(test_ctx.clone()))
             .tool(TestAnalyzeCoverageTool::new(test_ctx.clone()))
             .tool(TestRunInMemoryTool::new(test_ctx.clone()))
-            .tool(ValidateSyntaxTool::new(test_ctx.clone()))
-            .tool(ValidateSemanticsTool::new(test_ctx.clone()))
-            .tool(ValidateContractsTool::new(test_ctx.clone()))
-            .tool(ValidateDependenciesTool::new(test_ctx.clone()))
-            .tool(ValidateStyleTool::new(test_ctx.clone()))
+            // REMOVED: Validation tools (ValidateSyntax, ValidateSemantics, ValidateContracts, ValidateDependencies, ValidateStyle)
+            // Use cortex.lint.run, external linters, or cortex.deps.check_constraints instead
             // Documentation Tools (26)
             // Document CRUD
             .tool(DocumentCreateTool::new(doc_ctx.clone()))
@@ -324,14 +303,14 @@ impl CortexMcpServer {
             // Legacy (to be migrated)
             // .tool(DocGenerateFromCodeTool::new(doc_ctx.clone()))
             // .tool(DocCheckConsistencyTool::new(doc_ctx.clone()))
-            // Build & Execution Tools (8)
+            // Build & Execution Tools (7)
             .tool(BuildTriggerTool::new(build_ctx.clone()))
             .tool(BuildConfigureTool::new(build_ctx.clone()))
             .tool(RunExecuteTool::new(build_ctx.clone()))
             .tool(RunScriptTool::new(build_ctx.clone()))
             .tool(TestExecuteTool::new(build_ctx.clone()))
             .tool(LintRunTool::new(build_ctx.clone()))
-            .tool(FormatCodeTool::new(build_ctx.clone()))
+            // REMOVED: FormatCodeTool - use external formatters via cortex.lint.run instead
             .tool(PackagePublishTool::new(build_ctx.clone()))
             // Monitoring & Analytics Tools (10)
             .tool(MonitorHealthTool::new(monitor_ctx.clone()))
@@ -354,18 +333,14 @@ impl CortexMcpServer {
             .tool(CodeCheckTypesTool::new(type_ctx.clone()))
             .tool(CodeSuggestTypeAnnotationsTool::new(type_ctx.clone()))
             .tool(CodeAnalyzeTypeCoverageTool::new(type_ctx.clone()))
-            // AI-Assisted Development Tools (6)
+            // AI-Assisted Development Tools (5)
             .tool(AiSuggestRefactoringTool::new(ai_ctx.clone()))
             .tool(AiExplainCodeTool::new(ai_ctx.clone()))
             .tool(AiSuggestOptimizationTool::new(ai_ctx.clone()))
             .tool(AiSuggestFixTool::new(ai_ctx.clone()))
-            .tool(AiGenerateDocstringTool::new(ai_ctx.clone()))
+            // REMOVED: AiGenerateDocstringTool - use cortex.ai.explain_code for documentation insights
             .tool(AiReviewCodeTool::new(ai_ctx.clone()))
-            // Advanced Testing Tools (6)
-            .tool(TestGeneratePropertyTool::new(adv_test_ctx.clone()))
-            .tool(TestGenerateMutationTool::new(adv_test_ctx.clone()))
-            .tool(TestGenerateBenchmarksTool::new(adv_test_ctx.clone()))
-            .tool(TestGenerateFuzzingTool::new(adv_test_ctx.clone()))
+            // Advanced Testing Tools (2)
             .tool(TestAnalyzeFlakyTool::new(adv_test_ctx.clone()))
             .tool(TestSuggestEdgeCasesTool::new(adv_test_ctx.clone()))
             // Architecture Analysis Tools (5)
@@ -377,7 +352,7 @@ impl CortexMcpServer {
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 192); // Total: 191 + 1 (merge tool) = 192
+        info!("Registered {} tools", 180); // Total: 187 - 7 (removed validation & AI gen tools) = 180
 
         Ok(server)
     }
