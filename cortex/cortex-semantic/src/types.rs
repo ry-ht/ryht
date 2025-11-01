@@ -121,6 +121,67 @@ pub fn normalize(v: &mut [f32]) {
     }
 }
 
+/// Agent-aware search result with cross-agent metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSearchResult {
+    pub id: DocumentId,
+    pub entity_type: EntityType,
+    pub content: String,
+    pub score: f32,
+    pub metadata: HashMap<String, String>,
+    pub explanation: Option<String>,
+    /// Agent that indexed this document
+    pub indexed_by: Option<String>,
+    /// Namespace where document exists
+    pub namespace: Option<String>,
+    /// Cross-agent relevance score
+    pub cross_agent_score: Option<f32>,
+}
+
+/// Multi-agent search statistics.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MultiAgentSearchStats {
+    /// Total agents queried
+    pub agents_queried: usize,
+    /// Namespaces searched
+    pub namespaces_searched: Vec<String>,
+    /// Results per agent
+    pub results_per_agent: HashMap<String, usize>,
+    /// Total search time across all agents
+    pub total_search_time_ms: u64,
+    /// Deduplication count
+    pub deduplicated_count: usize,
+    /// Cross-agent communication overhead (ms)
+    pub communication_overhead_ms: u64,
+}
+
+/// Federated search configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederatedSearchConfig {
+    /// Maximum namespaces to search
+    pub max_namespaces: usize,
+    /// Enable result deduplication
+    pub deduplicate_results: bool,
+    /// Deduplication similarity threshold
+    pub dedup_threshold: f32,
+    /// Enable cross-agent result aggregation
+    pub aggregate_results: bool,
+    /// Weight for cross-namespace results
+    pub cross_namespace_weight: f32,
+}
+
+impl Default for FederatedSearchConfig {
+    fn default() -> Self {
+        Self {
+            max_namespaces: 10,
+            deduplicate_results: true,
+            dedup_threshold: 0.95,
+            aggregate_results: true,
+            cross_namespace_weight: 0.8,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

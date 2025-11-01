@@ -285,6 +285,7 @@ impl SemanticSearchEngine {
                     content: doc.content.clone(),
                     semantic_score: result.score,
                     metadata: doc.metadata.clone(),
+                    embedding: Some(doc.embedding.clone()),
                 })
             })
             .collect();
@@ -379,6 +380,47 @@ impl SemanticSearchEngine {
     /// Get index statistics.
     pub async fn stats(&self) -> crate::qdrant::IndexStats {
         self.index.stats().await
+    }
+
+    /// Index a document with agent context.
+    pub async fn index_document_for_agent(
+        &self,
+        agent_id: &str,
+        doc_id: DocumentId,
+        content: String,
+        entity_type: EntityType,
+        mut metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        // Add agent metadata
+        metadata.insert("agent_id".to_string(), agent_id.to_string());
+        metadata.insert("namespace".to_string(), format!("agent::{}", agent_id));
+
+        self.index_document(doc_id, content, entity_type, metadata).await
+    }
+
+    /// Search with agent context and namespace filtering.
+    pub async fn search_for_agent(
+        &self,
+        agent_id: &str,
+        query: &str,
+        limit: usize,
+        include_cross_namespace: bool,
+    ) -> Result<Vec<SearchResult>> {
+        let filter = if include_cross_namespace {
+            // Search across all namespaces
+            SearchFilter::default()
+        } else {
+            // Restrict to agent's namespace
+            let mut metadata_filters = HashMap::new();
+            metadata_filters.insert("agent_id".to_string(), agent_id.to_string());
+
+            SearchFilter {
+                metadata_filters,
+                ..Default::default()
+            }
+        };
+
+        self.search_with_filter(query, limit, filter).await
     }
 
     /// Get document count.

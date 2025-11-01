@@ -1,9 +1,16 @@
 //! Query processing, expansion, and intent detection.
+//!
+//! Enhanced with query decomposition and multi-step reasoning based on 2025 RAG research.
+//!
+//! # References
+//! - "Decomposed Prompting: A Modular Approach for Solving Complex Tasks" (Khot et al., 2023)
+//! - "Self-Ask: Eliciting Reasoning via Self-Questioning" (Press et al., 2023)
+//! - "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models" (Zhou et al., 2023)
 
 use crate::error::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// Query intent classification.
@@ -33,6 +40,49 @@ pub struct ProcessedQuery {
     pub intent: QueryIntent,
     pub keywords: Vec<String>,
     pub filters: QueryFilters,
+    /// Decomposed sub-queries for complex reasoning
+    pub sub_queries: Vec<SubQuery>,
+    /// Dependency graph for sub-queries
+    pub query_graph: Option<QueryDependencyGraph>,
+}
+
+/// A sub-query extracted from a complex query.
+///
+/// Reference: "Decomposed Prompting" (Khot et al., 2023)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubQuery {
+    /// The sub-query text
+    pub text: String,
+    /// Priority/order of execution (lower = higher priority)
+    pub priority: usize,
+    /// IDs of sub-queries this depends on
+    pub dependencies: Vec<usize>,
+    /// Expected answer type
+    pub expected_type: AnswerType,
+}
+
+/// Expected type of answer for a sub-query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AnswerType {
+    /// Factual information
+    Fact,
+    /// Code snippet
+    Code,
+    /// Explanation
+    Explanation,
+    /// List of items
+    List,
+    /// Yes/No answer
+    Boolean,
+}
+
+/// Dependency graph for query execution planning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryDependencyGraph {
+    /// Adjacency list representation
+    pub edges: HashMap<usize, Vec<usize>>,
+    /// Execution order (topologically sorted)
+    pub execution_order: Vec<usize>,
 }
 
 /// Query filters extracted from the query.
@@ -47,12 +97,14 @@ pub struct QueryFilters {
 /// Query processor for parsing and expanding queries.
 pub struct QueryProcessor {
     expander: QueryExpander,
+    decomposer: QueryDecomposer,
 }
 
 impl QueryProcessor {
     pub fn new() -> Self {
         Self {
             expander: QueryExpander::new(),
+            decomposer: QueryDecomposer::new(),
         }
     }
 
@@ -64,6 +116,9 @@ impl QueryProcessor {
         let filters = self.extract_filters(query);
         let expanded = self.expander.expand(&normalized, &intent);
 
+        // Decompose complex queries into sub-queries
+        let (sub_queries, query_graph) = self.decomposer.decompose(&normalized, &intent);
+
         Ok(ProcessedQuery {
             original: query.to_string(),
             normalized,
@@ -71,6 +126,8 @@ impl QueryProcessor {
             intent,
             keywords,
             filters,
+            sub_queries,
+            query_graph,
         })
     }
 
@@ -298,6 +355,275 @@ impl Default for QueryExpander {
     }
 }
 
+/// Query decomposer for breaking complex queries into sub-queries.
+///
+/// Implements multi-step reasoning by decomposing complex queries into
+/// simpler, sequential sub-queries that can be answered independently.
+///
+/// # Example
+/// ```
+/// use cortex_semantic::query::{QueryDecomposer, QueryIntent};
+///
+/// let decomposer = QueryDecomposer::new();
+/// let (sub_queries, graph) = decomposer.decompose(
+///     "How do I implement authentication and then integrate it with the database?",
+///     &QueryIntent::Code
+/// );
+///
+/// assert!(sub_queries.len() > 1);
+/// ```
+pub struct QueryDecomposer {
+    // Future: Could include LLM client for more sophisticated decomposition
+}
+
+impl QueryDecomposer {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// Decompose a query into sub-queries with dependency tracking.
+    ///
+    /// Reference: "Least-to-Most Prompting" (Zhou et al., 2023)
+    /// Breaks down complex queries into simpler steps that build on each other.
+    pub fn decompose(
+        &self,
+        query: &str,
+        intent: &QueryIntent,
+    ) -> (Vec<SubQuery>, Option<QueryDependencyGraph>) {
+        // Detect if query is complex (contains conjunctions, sequential steps)
+        if !self.is_complex_query(query) {
+            return (vec![], None);
+        }
+
+        let sub_queries = match intent {
+            QueryIntent::Code => self.decompose_code_query(query),
+            QueryIntent::Documentation => self.decompose_doc_query(query),
+            QueryIntent::Examples => self.decompose_example_query(query),
+            _ => self.decompose_general_query(query),
+        };
+
+        let graph = if !sub_queries.is_empty() {
+            Some(self.build_dependency_graph(&sub_queries))
+        } else {
+            None
+        };
+
+        (sub_queries, graph)
+    }
+
+    /// Check if a query is complex enough to warrant decomposition.
+    fn is_complex_query(&self, query: &str) -> bool {
+        let query_lower = query.to_lowercase();
+
+        // Look for conjunctions and sequential markers
+        query_lower.contains(" and ")
+            || query_lower.contains(" then ")
+            || query_lower.contains(" after ")
+            || query_lower.contains(" also ")
+            || query_lower.contains(" first ")
+            || query_lower.contains(" next ")
+            || query_lower.contains(" finally ")
+            || query_lower.matches('?').count() > 1
+    }
+
+    /// Decompose a code-related query.
+    ///
+    /// Pattern: "Implement X and Y" -> ["Implement X", "Implement Y", "Integrate X and Y"]
+    fn decompose_code_query(&self, query: &str) -> Vec<SubQuery> {
+        let mut sub_queries = Vec::new();
+
+        // Split on "and then", "then", "and", "also"
+        let parts = self.split_on_conjunctions(query);
+
+        for (i, part) in parts.iter().enumerate() {
+            let dependencies = if i > 0 {
+                vec![i - 1] // Each step depends on the previous one
+            } else {
+                vec![]
+            };
+
+            sub_queries.push(SubQuery {
+                text: part.trim().to_string(),
+                priority: i,
+                dependencies,
+                expected_type: AnswerType::Code,
+            });
+        }
+
+        // Add integration step if multiple parts
+        if sub_queries.len() > 1 {
+            let integration = format!(
+                "How to integrate {}?",
+                parts.join(" and ")
+            );
+            sub_queries.push(SubQuery {
+                text: integration,
+                priority: sub_queries.len(),
+                dependencies: (0..sub_queries.len()).collect(),
+                expected_type: AnswerType::Explanation,
+            });
+        }
+
+        sub_queries
+    }
+
+    /// Decompose a documentation query.
+    fn decompose_doc_query(&self, query: &str) -> Vec<SubQuery> {
+        let mut sub_queries = Vec::new();
+        let parts = self.split_on_conjunctions(query);
+
+        for (i, part) in parts.iter().enumerate() {
+            sub_queries.push(SubQuery {
+                text: part.trim().to_string(),
+                priority: i,
+                dependencies: vec![],
+                expected_type: AnswerType::Explanation,
+            });
+        }
+
+        sub_queries
+    }
+
+    /// Decompose an example query.
+    fn decompose_example_query(&self, query: &str) -> Vec<SubQuery> {
+        let mut sub_queries = Vec::new();
+
+        // Pattern: "How to X and Y" -> ["How to X", "How to Y", "Complete example"]
+        let parts = self.split_on_conjunctions(query);
+
+        for (i, part) in parts.iter().enumerate() {
+            sub_queries.push(SubQuery {
+                text: part.trim().to_string(),
+                priority: i,
+                dependencies: if i > 0 { vec![i - 1] } else { vec![] },
+                expected_type: AnswerType::Code,
+            });
+        }
+
+        // Add synthesis step
+        if sub_queries.len() > 1 {
+            sub_queries.push(SubQuery {
+                text: format!("Complete example combining all steps"),
+                priority: sub_queries.len(),
+                dependencies: (0..sub_queries.len()).collect(),
+                expected_type: AnswerType::Code,
+            });
+        }
+
+        sub_queries
+    }
+
+    /// Decompose a general query.
+    fn decompose_general_query(&self, query: &str) -> Vec<SubQuery> {
+        let parts = self.split_on_conjunctions(query);
+
+        parts
+            .into_iter()
+            .enumerate()
+            .map(|(i, part)| SubQuery {
+                text: part.trim().to_string(),
+                priority: i,
+                dependencies: vec![],
+                expected_type: AnswerType::Fact,
+            })
+            .collect()
+    }
+
+    /// Split query on common conjunctions and sequential markers.
+    fn split_on_conjunctions(&self, query: &str) -> Vec<String> {
+        // Try to intelligently split on conjunctions while preserving meaning
+        // First try "and then" or "then"
+        if query.contains(" and then ") {
+            query.split(" and then ").map(|s| s.to_string()).collect()
+        } else if query.contains(" then ") {
+            query.split(" then ").map(|s| s.to_string()).collect()
+        } else if query.contains(" and ") {
+            // Split on "and" but be careful not to split things like "functions and methods"
+            // This is a simple heuristic - in production, use an LLM for better parsing
+            let potential_parts: Vec<&str> = query.split(" and ").collect();
+            if potential_parts.len() <= 3 {
+                // Only split if reasonable number of parts
+                potential_parts.into_iter().map(|s| s.to_string()).collect()
+            } else {
+                vec![query.to_string()]
+            }
+        } else {
+            vec![query.to_string()]
+        }
+    }
+
+    /// Build dependency graph from sub-queries.
+    ///
+    /// Creates a topological ordering for execution planning.
+    fn build_dependency_graph(&self, sub_queries: &[SubQuery]) -> QueryDependencyGraph {
+        let mut edges: HashMap<usize, Vec<usize>> = HashMap::new();
+
+        // Build adjacency list
+        for (i, sub_query) in sub_queries.iter().enumerate() {
+            for &dep in &sub_query.dependencies {
+                edges.entry(dep).or_insert_with(Vec::new).push(i);
+            }
+        }
+
+        // Topological sort using Kahn's algorithm
+        let execution_order = self.topological_sort(sub_queries, &edges);
+
+        QueryDependencyGraph {
+            edges,
+            execution_order,
+        }
+    }
+
+    /// Perform topological sort on the dependency graph.
+    fn topological_sort(
+        &self,
+        sub_queries: &[SubQuery],
+        edges: &HashMap<usize, Vec<usize>>,
+    ) -> Vec<usize> {
+        let mut in_degree = vec![0; sub_queries.len()];
+
+        // Calculate in-degrees
+        for sub_query in sub_queries {
+            for &dep in &sub_query.dependencies {
+                if dep < sub_queries.len() {
+                    in_degree[sub_query.priority] += 1;
+                }
+            }
+        }
+
+        // Queue of nodes with no incoming edges
+        let mut queue: Vec<usize> = in_degree
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &deg)| if deg == 0 { Some(i) } else { None })
+            .collect();
+
+        let mut result = Vec::new();
+
+        while let Some(node) = queue.pop() {
+            result.push(node);
+
+            // Reduce in-degree for neighbors
+            if let Some(neighbors) = edges.get(&node) {
+                for &neighbor in neighbors {
+                    in_degree[neighbor] -= 1;
+                    if in_degree[neighbor] == 0 {
+                        queue.push(neighbor);
+                    }
+                }
+            }
+        }
+
+        result
+    }
+}
+
+impl Default for QueryDecomposer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,5 +710,57 @@ mod tests {
         assert_eq!(processed.intent, QueryIntent::Code);
         assert!(!processed.keywords.is_empty());
         assert!(!processed.expanded.is_empty());
+    }
+
+    #[test]
+    fn test_query_decomposition() {
+        let decomposer = QueryDecomposer::new();
+
+        let (sub_queries, graph) = decomposer.decompose(
+            "How to implement authentication and then integrate it with the database?",
+            &QueryIntent::Code,
+        );
+
+        assert!(sub_queries.len() > 1);
+        assert!(graph.is_some());
+
+        let graph = graph.unwrap();
+        assert!(!graph.execution_order.is_empty());
+    }
+
+    #[test]
+    fn test_simple_query_no_decomposition() {
+        let decomposer = QueryDecomposer::new();
+
+        let (sub_queries, graph) = decomposer.decompose(
+            "What is authentication?",
+            &QueryIntent::Documentation,
+        );
+
+        assert_eq!(sub_queries.len(), 0);
+        assert!(graph.is_none());
+    }
+
+    #[test]
+    fn test_dependency_graph_building() {
+        let decomposer = QueryDecomposer::new();
+
+        let (sub_queries, graph) = decomposer.decompose(
+            "First create a user model, then add authentication, and finally test it",
+            &QueryIntent::Code,
+        );
+
+        assert!(sub_queries.len() >= 3);
+        assert!(graph.is_some());
+
+        // Check that execution order respects dependencies
+        let graph = graph.unwrap();
+        for (i, &node_id) in graph.execution_order.iter().enumerate() {
+            let node = &sub_queries[node_id];
+            for &dep in &node.dependencies {
+                // All dependencies should appear earlier in execution order
+                assert!(graph.execution_order[..i].contains(&dep));
+            }
+        }
     }
 }
