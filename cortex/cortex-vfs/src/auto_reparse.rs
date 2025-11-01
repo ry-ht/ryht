@@ -74,17 +74,22 @@ impl AutoReparseHandle {
     /// Create a new auto-reparse system and spawn the background task.
     pub fn new(
         config: AutoReparseConfig,
-        ingestion_pipeline: Arc<FileIngestionPipeline>,
+        ingestion_pipeline: Option<Arc<FileIngestionPipeline>>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         if config.enabled {
-            // Spawn background task
-            let config_clone = config.clone();
-            tokio::spawn(async move {
-                Self::reparse_worker(rx, config_clone, ingestion_pipeline, None).await;
-            });
-            info!("Auto-reparse system started with {}ms debounce", config.debounce_ms);
+            // Ensure pipeline is provided when enabled
+            if let Some(pipeline) = ingestion_pipeline {
+                // Spawn background task
+                let config_clone = config.clone();
+                tokio::spawn(async move {
+                    Self::reparse_worker(rx, config_clone, pipeline, None).await;
+                });
+                info!("Auto-reparse system started with {}ms debounce", config.debounce_ms);
+            } else {
+                warn!("Auto-reparse enabled but no ingestion pipeline provided");
+            }
         } else {
             debug!("Auto-reparse system disabled");
         }
@@ -99,19 +104,24 @@ impl AutoReparseHandle {
     /// Create a new auto-reparse system with notification support.
     pub fn with_notifications(
         config: AutoReparseConfig,
-        ingestion_pipeline: Arc<FileIngestionPipeline>,
+        ingestion_pipeline: Option<Arc<FileIngestionPipeline>>,
         notification_callback: NotificationCallback,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         if config.enabled {
-            // Spawn background task with notification support
-            let config_clone = config.clone();
-            let callback_clone = Arc::clone(&notification_callback);
-            tokio::spawn(async move {
-                Self::reparse_worker(rx, config_clone, ingestion_pipeline, Some(callback_clone)).await;
-            });
-            info!("Auto-reparse system started with notifications and {}ms debounce", config.debounce_ms);
+            // Ensure pipeline is provided when enabled
+            if let Some(pipeline) = ingestion_pipeline {
+                // Spawn background task with notification support
+                let config_clone = config.clone();
+                let callback_clone = Arc::clone(&notification_callback);
+                tokio::spawn(async move {
+                    Self::reparse_worker(rx, config_clone, pipeline, Some(callback_clone)).await;
+                });
+                info!("Auto-reparse system started with notifications and {}ms debounce", config.debounce_ms);
+            } else {
+                warn!("Auto-reparse enabled but no ingestion pipeline provided");
+            }
         } else {
             debug!("Auto-reparse system disabled");
         }
@@ -368,7 +378,7 @@ mod tests {
             background_parsing: true,
         };
 
-        let handle = AutoReparseHandle::new(auto_reparse_config, pipeline.clone());
+        let handle = AutoReparseHandle::new(auto_reparse_config, Some(pipeline.clone()));
         let workspace_id = Uuid::new_v4();
 
         (handle, pipeline, vfs, workspace_id)
@@ -384,7 +394,7 @@ mod tests {
         // Just ensure it doesn't panic when disabled
         let handle = AutoReparseHandle::new(
             config,
-            Arc::new(unsafe { std::mem::zeroed() }), // Never used when disabled
+            None, // No pipeline needed when disabled
         );
 
         let workspace_id = Uuid::new_v4();
@@ -398,9 +408,9 @@ mod tests {
     async fn test_file_change_notification() {
         let (handle, _pipeline, vfs, workspace_id) = create_test_setup().await;
 
-        // Create a test file
-        let path = VirtualPath::new("src/test.rs").unwrap();
-        let content = b"pub fn test() {}";
+        // Create a test document (VFS now only allows documents, not code files)
+        let path = VirtualPath::new("docs/test.md").unwrap();
+        let content = b"# Test Document\n\nThis is a test.";
 
         vfs.write_file(&workspace_id, &path, content).await.unwrap();
 

@@ -116,7 +116,7 @@ impl VirtualFileSystem {
     ) -> Self {
         let auto_reparse_handle = crate::auto_reparse::AutoReparseHandle::new(
             config,
-            ingestion_pipeline,
+            Some(ingestion_pipeline),
         );
 
         Self {
@@ -140,7 +140,7 @@ impl VirtualFileSystem {
     ) {
         let auto_reparse_handle = crate::auto_reparse::AutoReparseHandle::new(
             config,
-            ingestion_pipeline,
+            Some(ingestion_pipeline),
         );
         self.auto_reparse = Some(Arc::new(auto_reparse_handle));
     }

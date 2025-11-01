@@ -21,7 +21,7 @@ pub use workspace::WorkspaceService;
 pub use vfs::VfsService;
 pub use search::SearchService;
 pub use memory::MemoryService;
-pub use code_units::CodeUnitService;
+pub use code_units::{CodeUnitService, CacheStats};
 pub use dependencies::DependencyService;
 pub use auth::AuthService;
 pub use sessions::SessionService;

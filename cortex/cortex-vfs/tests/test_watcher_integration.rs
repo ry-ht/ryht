@@ -67,7 +67,7 @@ async fn create_test_env() -> (Arc<ConnectionManager>, Arc<VirtualFileSystem>, A
 
     let auto_reparse = Arc::new(cortex_vfs::AutoReparseHandle::new(
         auto_reparse_config,
-        pipeline.clone(),
+        Some(pipeline.clone()),
     ));
 
     let workspace_id = Uuid::new_v4();

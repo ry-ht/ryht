@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let auto_reparse = Arc::new(cortex_vfs::auto_reparse::AutoReparseHandle::with_notifications(
         auto_reparse_config,
-        ingestion_pipeline,
+        Some(ingestion_pipeline),
         reparse_callback,
     ));
 

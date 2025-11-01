@@ -355,6 +355,7 @@ async fn test_external_project_loading() {
         max_depth: None,
         process_code: true,
         generate_embeddings: false,
+        max_file_size_bytes: None,
     };
 
     let start = Instant::now();

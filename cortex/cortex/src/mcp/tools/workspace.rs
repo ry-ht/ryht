@@ -96,7 +96,7 @@ impl WorkspaceContext {
             max_pending_changes: 10,
             background_parsing: true,
         };
-        let auto_reparse = Arc::new(AutoReparseHandle::new(auto_reparse_config, ingestion.clone()));
+        let auto_reparse = Arc::new(AutoReparseHandle::new(auto_reparse_config, Some(ingestion.clone())));
 
         Ok(Self {
             storage,
