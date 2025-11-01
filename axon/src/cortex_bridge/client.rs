@@ -101,7 +101,7 @@ pub struct CortexConfig {
 impl Default for CortexConfig {
     fn default() -> Self {
         Self {
-            base_url: "http://localhost:8081".to_string(),
+            base_url: "http://localhost:8080".to_string(),
             api_version: "v3".to_string(),
             auth_token: None,
             cache_size_mb: 100,

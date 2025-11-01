@@ -80,7 +80,7 @@ impl CortexLauncher {
 
     /// Check if Cortex HTTP server is already running
     pub async fn is_running(&self) -> bool {
-        let url = format!("http://{}:{}/health", self.address, self.port);
+        let url = format!("http://{}:{}/api/v1/health", self.address, self.port);
 
         debug!("Checking Cortex health at: {}", url);
 
@@ -145,25 +145,39 @@ impl CortexLauncher {
 
         self.process = Some(child);
 
-        // Wait for server to be ready
-        let max_attempts = 30;
+        // Wait for server to be ready with exponential backoff
+        let max_attempts = 60; // Увеличено до 60 попыток (до 30 секунд)
         let mut attempts = 0;
+        let mut wait_ms = 500;
 
         while attempts < max_attempts {
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(wait_ms)).await;
 
             if self.is_running().await {
-                info!("Cortex HTTP server is ready!");
+                info!("Cortex HTTP server is ready after {} attempts!", attempts + 1);
                 return Ok(());
             }
 
             attempts += 1;
-            debug!("Waiting for Cortex to start... ({}/{})", attempts, max_attempts);
+
+            // Exponential backoff: 500ms, 500ms, 750ms, 1000ms, 1000ms...
+            if attempts == 2 {
+                wait_ms = 750;
+            } else if attempts >= 3 {
+                wait_ms = 1000;
+            }
+
+            if attempts % 5 == 0 {
+                info!("Still waiting for Cortex to start... ({}/{} attempts)", attempts, max_attempts);
+            } else {
+                debug!("Waiting for Cortex to start... ({}/{})", attempts, max_attempts);
+            }
         }
 
         // If we get here, server didn't start
+        warn!("Cortex HTTP server failed to start within timeout after {} attempts", max_attempts);
         self.stop();
-        anyhow::bail!("Cortex HTTP server failed to start within timeout")
+        anyhow::bail!("Cortex HTTP server failed to start within 30 seconds timeout")
     }
 
     /// Stop Cortex HTTP server
