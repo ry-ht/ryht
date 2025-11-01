@@ -38,7 +38,7 @@ use super::{
     messages::Message,
     Result,
 };
-use futures::stream::Stream;
+use futures::{stream::Stream, Future};
 use pin_project_lite::pin_project;
 use serde_json::Value;
 use std::collections::VecDeque;

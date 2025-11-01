@@ -40,10 +40,6 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
-    /// Configuration file path
-    #[arg(short, long, global = true)]
-    config: Option<PathBuf>,
-
     /// Output format (human, json, plain)
     #[arg(long, global = true, default_value = "human")]
     format: OutputFormatArg,

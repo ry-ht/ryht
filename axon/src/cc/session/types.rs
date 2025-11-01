@@ -115,13 +115,14 @@ impl SessionMetadata {
         self.last_updated = timestamp;
 
         // Capture first user message
-        if self.first_message.is_none()
-            && let Message::User { message: user_msg } = message {
+        if self.first_message.is_none() {
+            if let Message::User { message: user_msg } = message {
                 // Extract text content from user message
                 let text = user_msg.content.clone();
                 if !text.is_empty() {
                     self.first_message = Some(text);
                 }
             }
+        }
     }
 }

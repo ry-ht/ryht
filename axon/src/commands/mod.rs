@@ -1014,6 +1014,25 @@ pub async fn mcp_stdio() -> Result<()> {
     // Get Cortex URL from environment or use default
     let cortex_url = std::env::var("CORTEX_MCP_URL")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+    // Parse URL to get address and port
+    let url = url::Url::parse(&cortex_url)
+        .context("Failed to parse CORTEX_MCP_URL")?;
+    let address = url.host_str().unwrap_or("localhost").to_string();
+    let port = url.port().unwrap_or(3000);
+
+    // Try to start Cortex HTTP server if not running
+    let mut launcher = crate::cortex_launcher::CortexLauncher::new(
+        None, // Auto-detect cortex binary
+        address.clone(),
+        port,
+    )?;
+
+    // Start Cortex if needed
+    if let Err(e) = launcher.start().await {
+        tracing::warn!("Failed to start Cortex HTTP server: {}. Continuing anyway...", e);
+    }
+
     let working_dir = std::env::current_dir()?;
 
     // Create MCP server configuration

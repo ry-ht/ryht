@@ -35,6 +35,7 @@ pub mod runtime;
 
 // Cortex integration
 pub mod cortex_bridge;
+pub mod cortex_launcher;
 
 // CLI commands and server
 pub mod commands;

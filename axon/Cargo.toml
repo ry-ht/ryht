@@ -53,6 +53,7 @@ base64 = "0.22"
 
 # Cortex Bridge dependencies
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+url = "2.5.7"
 urlencoding = "2.1"
 
 # Token counting for context optimization
