@@ -1015,6 +1015,15 @@ pub async fn mcp_stdio() -> Result<()> {
     let cortex_url = std::env::var("CORTEX_MCP_URL")
         .unwrap_or_else(|_| "http://localhost:8080".to_string());
 
+    // Parse URL to extract host and port for auto-start
+    let parsed_url = url::Url::parse(&cortex_url)
+        .context("Failed to parse CORTEX_MCP_URL")?;
+    let host = parsed_url.host_str().unwrap_or("localhost");
+    let port = parsed_url.port().unwrap_or(8080);
+
+    // Ensure Cortex HTTP server is running (auto-start if needed)
+    ensure_cortex_server_running(&cortex_url, host, port).await?;
+
     let working_dir = std::env::current_dir()?;
 
     // Create MCP server configuration
@@ -1027,7 +1036,7 @@ pub async fn mcp_stdio() -> Result<()> {
         default_timeout_secs: 3600,
     };
 
-    // Initialize Cortex bridge (optional - may fail if cortex not running)
+    // Initialize Cortex bridge
     let cortex_config = crate::cortex_bridge::CortexConfig {
         base_url: cortex_url,
         ..Default::default()
@@ -1039,8 +1048,7 @@ pub async fn mcp_stdio() -> Result<()> {
             Arc::new(bridge)
         }
         Err(e) => {
-            tracing::warn!("Could not connect to Cortex: {}. Axon will work with reduced functionality.", e);
-            // Create a stub bridge that will fail gracefully
+            tracing::error!("Failed to connect to Cortex after auto-start: {}", e);
             return Err(anyhow::anyhow!("Cortex bridge initialization failed: {}", e));
         }
     };
@@ -1071,7 +1079,18 @@ pub async fn mcp_http(address: String, port: u16) -> Result<()> {
 
     // Get Cortex URL from environment or use default
     let cortex_url = std::env::var("CORTEX_MCP_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+
+    // Parse URL to extract host and port for auto-start
+    let parsed_url = url::Url::parse(&cortex_url)
+        .context("Failed to parse CORTEX_MCP_URL")?;
+    let cortex_host = parsed_url.host_str().unwrap_or("localhost");
+    let cortex_port = parsed_url.port().unwrap_or(8080);
+
+    // Ensure Cortex HTTP server is running (auto-start if needed)
+    println!("Checking Cortex HTTP server at {}...", cortex_url);
+    ensure_cortex_server_running(&cortex_url, cortex_host, cortex_port).await?;
+
     let working_dir = std::env::current_dir()?;
 
     // Create MCP server configuration
@@ -1179,4 +1198,116 @@ pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
     println!();
 
     Ok(())
+}
+
+// ============================================================================
+// Cortex Server Auto-Start Helpers
+// ============================================================================
+
+/// Check if Cortex HTTP server is available at the given URL
+async fn check_cortex_http_available(url: &str) -> bool {
+    let health_url = format!("{}/v3/health", url);
+
+    match reqwest::get(&health_url).await {
+        Ok(response) => {
+            if response.status().is_success() {
+                tracing::info!("Cortex HTTP server is available at {}", url);
+                true
+            } else {
+                tracing::debug!("Cortex HTTP server returned status: {}", response.status());
+                false
+            }
+        }
+        Err(e) => {
+            tracing::debug!("Cortex HTTP server not available at {}: {}", url, e);
+            false
+        }
+    }
+}
+
+/// Find the cortex binary in various locations
+fn find_cortex_binary() -> Result<PathBuf> {
+    // Check if cortex is in PATH
+    if let Ok(cortex_path) = which::which("cortex") {
+        tracing::info!("Found cortex binary in PATH: {}", cortex_path.display());
+        return Ok(cortex_path);
+    }
+
+    // Check common locations relative to current directory
+    let locations = vec![
+        PathBuf::from("./dist/cortex"),
+        PathBuf::from("./target/release/cortex"),
+        PathBuf::from("../dist/cortex"),
+        PathBuf::from("../target/release/cortex"),
+    ];
+
+    for location in locations {
+        if location.exists() {
+            tracing::info!("Found cortex binary at: {}", location.display());
+            return Ok(location);
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Cortex binary not found. Please ensure 'cortex' is in PATH or built in ./dist or ./target/release"
+    ))
+}
+
+/// Start the Cortex HTTP server in the background
+async fn start_cortex_server(host: &str, port: u16) -> Result<()> {
+    let cortex_binary = find_cortex_binary()?;
+
+    tracing::info!("Starting Cortex HTTP server on {}:{}", host, port);
+
+    // Start cortex server in background
+    let child = Command::new(&cortex_binary)
+        .arg("server")
+        .arg("start")
+        .arg("--host")
+        .arg(host)
+        .arg("--port")
+        .arg(port.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .context("Failed to spawn cortex server process")?;
+
+    let pid = child.id().unwrap_or(0);
+    tracing::info!("Cortex HTTP server started with PID: {}", pid);
+
+    Ok(())
+}
+
+/// Ensure Cortex HTTP server is running, starting it if necessary
+async fn ensure_cortex_server_running(url: &str, host: &str, port: u16) -> Result<()> {
+    // First check if already running
+    if check_cortex_http_available(url).await {
+        tracing::info!("Cortex HTTP server is already running at {}", url);
+        return Ok(());
+    }
+
+    tracing::info!("Cortex HTTP server not detected at {}, attempting to start it...", url);
+
+    // Start the server
+    start_cortex_server(host, port).await?;
+
+    // Wait for server to become available (max 30 seconds)
+    let max_attempts = 30;
+    let delay_secs = 1;
+
+    for attempt in 1..=max_attempts {
+        tracing::debug!("Checking if Cortex is ready (attempt {}/{})", attempt, max_attempts);
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(delay_secs)).await;
+
+        if check_cortex_http_available(url).await {
+            tracing::info!("Cortex HTTP server is now running at {}", url);
+            return Ok(());
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Timeout waiting for Cortex HTTP server to start at {}. Check logs for details.",
+        url
+    ))
 }
