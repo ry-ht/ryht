@@ -10,7 +10,9 @@ use cortex_core::config::GlobalConfig;
 use cortex_code_analysis::{RustParser, DependencyExtractor};
 use cortex_storage::{ConnectionManager, Credentials, DatabaseConfig, PoolConfig, PoolConnectionMode};
 use std::sync::Arc;
+use std::collections::HashSet;
 use tempfile::tempdir;
+use serde_json;
 
 const TEST_RUST_CODE: &str = r#"
 use std::collections::HashMap;
@@ -152,7 +154,105 @@ async fn test_end_to_end_dependency_workflow() {
 
     println!("Extracted {} dependencies to store", dependencies.len());
 
-    // TODO: Store dependencies in database using DependencyAnalysisContext
-    // TODO: Build graph from database
-    // TODO: Run analysis tools
+    // Create DependencyAnalysisContext for database operations
+    let ctx = cortex::mcp::tools::dependency_analysis::DependencyAnalysisContext::new(storage.clone());
+
+    // Step 1: Store code units first (dependencies reference these)
+    println!("Step 1: Creating code units in database...");
+    let conn = storage.acquire().await.expect("Failed to acquire connection");
+
+    // Collect all unique unit names from dependencies
+    let mut unit_names = std::collections::HashSet::new();
+    for dep in &dependencies {
+        unit_names.insert(dep.from_unit.clone());
+        unit_names.insert(dep.to_unit.clone());
+    }
+
+    // Create code_unit records for each unique unit
+    for unit_name in &unit_names {
+        let query = r#"
+            CREATE code_unit CONTENT {
+                id: $id,
+                name: $name,
+                qualified_name: $qualified_name,
+                unit_type: 'function',
+                file_path: 'test.rs',
+                visibility: 'public',
+                start_line: 1,
+                end_line: 1,
+                source_code: ''
+            }
+        "#;
+
+        let _ = conn.connection()
+            .query(query)
+            .bind(("id", unit_name.clone()))
+            .bind(("name", unit_name.split("::").last().unwrap_or(unit_name)))
+            .bind(("qualified_name", unit_name.clone()))
+            .await
+            .expect("Failed to create code unit");
+    }
+
+    println!("Created {} code units", unit_names.len());
+
+    // Step 2: Store dependencies in database
+    println!("Step 2: Storing dependencies in database...");
+    let stored_count = ctx.store_dependencies(dependencies.clone())
+        .await
+        .expect("Failed to store dependencies");
+
+    println!("Stored {}/{} dependencies", stored_count, dependencies.len());
+    assert!(stored_count > 0, "Should have stored at least some dependencies");
+
+    // Step 3: Build graph from database
+    println!("Step 3: Building dependency graph from database...");
+    let graph = ctx.build_graph(Some("test.rs"))
+        .await
+        .expect("Failed to build graph from database");
+
+    println!("Graph has {} nodes and {} edges",
+             graph.nodes.len(),
+             graph.adjacency.values().map(|v| v.len()).sum::<usize>());
+
+    // Verify graph is not empty
+    assert!(!graph.nodes.is_empty(), "Graph should have nodes");
+    assert!(graph.adjacency.values().any(|v| !v.is_empty()), "Graph should have edges");
+
+    // Step 4: Run analysis tools to verify everything works
+    println!("Step 4: Running dependency analysis tools...");
+
+    // Tool 1: Find cycles
+    use cortex::mcp::tools::dependency_analysis::*;
+    let find_cycles_tool = DepsFindCyclesTool::new(ctx.clone());
+    let cycles_input = serde_json::json!({
+        "scope_path": "test.rs",
+        "max_cycle_length": 10
+    });
+    let cycles_result = find_cycles_tool.execute_impl(
+        serde_json::from_value(cycles_input).unwrap()
+    ).await.expect("Failed to find cycles");
+
+    println!("Found {} cycles", cycles_result.total_cycles);
+
+    // Tool 2: Get dependency metrics
+    let metrics_tool = DepsDependencyMetricsTool::new(ctx.clone());
+    let metrics_input = serde_json::json!({
+        "scope_path": "test.rs"
+    });
+    let metrics_result = metrics_tool.execute_impl(
+        serde_json::from_value(metrics_input).unwrap()
+    ).await.expect("Failed to get metrics");
+
+    println!("Dependency metrics:");
+    println!("  Total units: {}", metrics_result.total_units);
+    println!("  Total dependencies: {}", metrics_result.total_dependencies);
+    println!("  Avg dependencies per unit: {:.2}", metrics_result.avg_dependencies_per_unit);
+    println!("  Max dependencies: {}", metrics_result.max_dependencies);
+    println!("  Circular dependency count: {}", metrics_result.circular_dependency_count);
+
+    // Verify metrics make sense
+    assert!(metrics_result.total_units > 0, "Should have analyzed some units");
+    assert!(metrics_result.total_dependencies > 0, "Should have some dependencies");
+
+    println!("✓ End-to-end dependency workflow completed successfully!");
 }

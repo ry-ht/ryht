@@ -245,7 +245,7 @@ impl EfficiencyReport {
 
         println!("## Overall Summary\n");
         println!("| Metric | Value |");
-        println!"|--------|------:|");
+        println!("|--------|------:|");
         println!("| Traditional Tokens | {:,} |", self.total.traditional_tokens);
         println!("| Cortex Tokens | {:,} |", self.total.cortex_tokens);
         println!("| Tokens Saved | {:,} |", self.total.savings_tokens);
