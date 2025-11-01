@@ -45,6 +45,8 @@ pub struct SearchResult {
     pub score: f32,
     pub metadata: HashMap<String, String>,
     pub explanation: Option<String>,
+    /// Embedding vector for similarity calculations (optional for deduplication)
+    pub embedding: Option<Vector>,
 }
 
 impl SemanticSearchEngine {
@@ -325,6 +327,7 @@ impl SemanticSearchEngine {
                     score: ranked.final_score,
                     metadata: doc.metadata.clone(),
                     explanation: ranked.explanation,
+                    embedding: Some(doc.embedding.clone()),
                 })
             })
             .collect();
@@ -516,6 +519,7 @@ impl SemanticSearchEngine {
                     score: *score,
                     metadata: doc.metadata.clone(),
                     explanation: None,
+                    embedding: Some(doc.embedding.clone()),
                 })
             })
             .collect();

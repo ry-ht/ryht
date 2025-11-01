@@ -146,17 +146,22 @@ impl OpenAIProvider {
             SemanticError::Config("OpenAI API key not configured".to_string())
         })?;
 
+        // Build headers with proper error handling
+        let mut headers = reqwest::header::HeaderMap::new();
+
+        let auth_header = format!("Bearer {}", api_key)
+            .parse()
+            .map_err(|e| SemanticError::Config(format!("Invalid authorization header: {}", e)))?;
+        headers.insert("Authorization", auth_header);
+
+        let content_type = "application/json"
+            .parse()
+            .map_err(|e| SemanticError::Config(format!("Invalid content-type header: {}", e)))?;
+        headers.insert("Content-Type", content_type);
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
-            .default_headers({
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(
-                    "Authorization",
-                    format!("Bearer {}", api_key).parse().unwrap(),
-                );
-                headers.insert("Content-Type", "application/json".parse().unwrap());
-                headers
-            })
+            .default_headers(headers)
             .build()?;
 
         let dimension = config.dimension.unwrap_or_else(|| {

@@ -374,7 +374,15 @@ impl MemoryPool {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        // Safe sorting that handles NaN values by treating them as less than any other value
+        results.sort_by(|a, b| {
+            match (a.1.is_nan(), b.1.is_nan()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Greater,  // NaN goes to end
+                (false, true) => std::cmp::Ordering::Less,
+                (false, false) => b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            }
+        });
         results.truncate(limit);
 
         Ok(results)

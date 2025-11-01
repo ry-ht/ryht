@@ -112,6 +112,7 @@ pub mod orchestration;
 pub mod context;
 pub mod hyde;
 pub mod eval;
+pub mod ragas;
 
 pub use config::{
     SemanticConfig, EmbeddingProviderConfig, IndexConfig, SearchConfig, QdrantConfig,
@@ -128,6 +129,7 @@ pub use ranking::{
 pub use context::{ContextCompressor, CompressionConfig, ContextChunk, CompressedContext, TokenAwareChunker};
 pub use hyde::{HydeProcessor, HydeConfig, HypotheticalDocument, HydeResult};
 pub use eval::{MetricEvaluator, QueryEvaluation, Metrics, AggregatedMetrics, MetricsTimeSeries};
+pub use ragas::{RagasEvaluator, RagasConfig, RagasEvaluation, EvaluationDetails};
 pub use types::{Vector, DocumentId, EmbeddingModel, EntityType, AgentSearchResult, MultiAgentSearchStats, FederatedSearchConfig};
 pub use error::{SemanticError, Result};
 pub use agent::{
@@ -155,6 +157,7 @@ pub mod prelude {
     pub use crate::context::{ContextCompressor, CompressionConfig};
     pub use crate::hyde::{HydeProcessor, HydeConfig};
     pub use crate::eval::{MetricEvaluator, QueryEvaluation};
+    pub use crate::ragas::{RagasEvaluator, RagasConfig, RagasEvaluation};
     pub use crate::ranking::{MMRReranker, AdvancedRanker};
     pub use crate::query::{QueryDecomposer, SubQuery};
 }

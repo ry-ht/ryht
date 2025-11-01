@@ -136,6 +136,8 @@ pub struct AgentSearchResult {
     pub namespace: Option<String>,
     /// Cross-agent relevance score
     pub cross_agent_score: Option<f32>,
+    /// Embedding vector for similarity calculations (optional for deduplication)
+    pub embedding: Option<Vector>,
 }
 
 /// Multi-agent search statistics.
@@ -168,6 +170,8 @@ pub struct FederatedSearchConfig {
     pub aggregate_results: bool,
     /// Weight for cross-namespace results
     pub cross_namespace_weight: f32,
+    /// Maximum concurrent searches to prevent DoS (rate limiting)
+    pub max_concurrent_searches: Option<usize>,
 }
 
 impl Default for FederatedSearchConfig {
@@ -178,6 +182,7 @@ impl Default for FederatedSearchConfig {
             dedup_threshold: 0.95,
             aggregate_results: true,
             cross_namespace_weight: 0.8,
+            max_concurrent_searches: Some(10),  // Default rate limit to prevent DoS
         }
     }
 }
