@@ -37,6 +37,7 @@ pub mod documenter;
 pub mod architect;
 pub mod researcher;
 pub mod optimizer;
+pub mod tool_registry;
 
 pub use types::*;
 pub use capabilities::*;
@@ -49,6 +50,7 @@ pub use documenter::DocumenterAgent;
 pub use architect::ArchitectAgent;
 pub use researcher::ResearcherAgent;
 pub use optimizer::OptimizerAgent;
+pub use tool_registry::{ToolRegistry, ToolRegistryStats};
 
 /// Core Agent trait that all agent types implement
 pub trait Agent: Send + Sync {
