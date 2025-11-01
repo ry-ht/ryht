@@ -39,6 +39,25 @@ pub struct VirtualFileSystem {
     auto_reparse: Option<Arc<crate::auto_reparse::AutoReparseHandle>>,
 }
 
+/// Check if a path represents a code file that should not be edited via VFS.
+///
+/// VFS is designed for documents, reports, and configuration files.
+/// Code files should be edited directly in the filesystem to ensure proper
+/// IDE support, syntax checking, and integration with development workflows.
+fn is_code_file(path: &VirtualPath) -> bool {
+    if let Some(ext) = path.extension() {
+        matches!(
+            ext,
+            "rs" | "ts" | "js" | "jsx" | "tsx" | "py" | "go" | "java" |
+            "cpp" | "c" | "h" | "hpp" | "cs" | "rb" | "php" | "swift" |
+            "kt" | "scala" | "r" | "m" | "mm" | "dart" | "lua" | "pl" |
+            "sh" | "bash" | "zsh" | "fish"
+        )
+    } else {
+        false
+    }
+}
+
 impl VirtualFileSystem {
     /// Create a new virtual filesystem.
     pub fn new(storage: Arc<ConnectionManager>) -> Self {
@@ -184,6 +203,18 @@ impl VirtualFileSystem {
         content: &[u8],
     ) -> Result<()> {
         debug!("Writing file: {} in workspace {}", path, workspace_id);
+
+        // Reject code files - VFS is only for documents, reports, and configuration
+        if is_code_file(path) {
+            return Err(CortexError::invalid_input(
+                format!(
+                    "VFS write operations are not allowed for code files ({}). \
+                     AI agents should edit code files directly in the filesystem. \
+                     VFS is only for documents, reports, and configuration files.",
+                    path
+                )
+            ));
+        }
 
         // Calculate content hash
         let content_hash = Self::hash_content(content);
@@ -1012,6 +1043,18 @@ impl VirtualFileSystem {
     ) -> Result<VNode> {
         debug!("Creating file: {} in workspace {}", path, workspace_id);
 
+        // Reject code files - VFS is only for documents, reports, and configuration
+        if is_code_file(path) {
+            return Err(CortexError::invalid_input(
+                format!(
+                    "VFS write operations are not allowed for code files ({}). \
+                     AI agents should edit code files directly in the filesystem. \
+                     VFS is only for documents, reports, and configuration files.",
+                    path
+                )
+            ));
+        }
+
         // Check if file already exists
         if self.exists(workspace_id, path).await? {
             return Err(CortexError::invalid_input(
@@ -1084,6 +1127,18 @@ impl VirtualFileSystem {
         content: &[u8],
     ) -> Result<VNode> {
         debug!("Updating file: {} in workspace {}", path, workspace_id);
+
+        // Reject code files - VFS is only for documents, reports, and configuration
+        if is_code_file(path) {
+            return Err(CortexError::invalid_input(
+                format!(
+                    "VFS write operations are not allowed for code files ({}). \
+                     AI agents should edit code files directly in the filesystem. \
+                     VFS is only for documents, reports, and configuration files.",
+                    path
+                )
+            ));
+        }
 
         // Get existing vnode
         let mut vnode = self.get_vnode(workspace_id, path).await?

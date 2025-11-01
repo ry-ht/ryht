@@ -43,9 +43,9 @@ async fn test_create_file_helper() {
     let (vfs, _storage) = create_test_vfs().await;
     let workspace_id = Uuid::new_v4();
 
-    // Create a file
-    let path = VirtualPath::new("test.rs").unwrap();
-    let content = b"fn main() {}";
+    // Create a file (using a document file, not a code file)
+    let path = VirtualPath::new("test.md").unwrap();
+    let content = b"# Test Document";
 
     let result = vfs.create_file(&workspace_id, &path, content).await;
     assert!(result.is_ok(), "create_file should succeed");
@@ -72,9 +72,9 @@ async fn test_get_file_helper() {
     let (vfs, _storage) = create_test_vfs().await;
     let workspace_id = Uuid::new_v4();
 
-    // Create a file using write_file
-    let path = VirtualPath::new("src/lib.rs").unwrap();
-    let content = b"pub fn hello() {}";
+    // Create a file using write_file (using a document file)
+    let path = VirtualPath::new("docs/guide.md").unwrap();
+    let content = b"# User Guide\n\nWelcome!";
 
     vfs.write_file(&workspace_id, &path, content).await.unwrap();
 
@@ -88,7 +88,7 @@ async fn test_get_file_helper() {
     assert!(vnode.is_file());
 
     // Try to get non-existent file
-    let missing_path = VirtualPath::new("missing.rs").unwrap();
+    let missing_path = VirtualPath::new("missing.md").unwrap();
     let missing_result = vfs.get_file(&workspace_id, &missing_path).await;
     assert!(missing_result.is_err(), "getting non-existent file should fail");
 }
@@ -99,9 +99,9 @@ async fn test_update_file_helper() {
     let (vfs, _storage) = create_test_vfs().await;
     let workspace_id = Uuid::new_v4();
 
-    // Create initial file
-    let path = VirtualPath::new("config.rs").unwrap();
-    let initial_content = b"const VERSION: &str = \"1.0\";";
+    // Create initial file (using a config file)
+    let path = VirtualPath::new("config.json").unwrap();
+    let initial_content = b"{\"version\": \"1.0\"}";
 
     let create_result = vfs.create_file(&workspace_id, &path, initial_content).await;
     assert!(create_result.is_ok());
@@ -109,7 +109,7 @@ async fn test_update_file_helper() {
     let initial_version = initial_vnode.version;
 
     // Update the file
-    let updated_content = b"const VERSION: &str = \"2.0\";";
+    let updated_content = b"{\"version\": \"2.0\"}";
     let update_result = vfs.update_file(&workspace_id, &path, updated_content).await;
     assert!(update_result.is_ok(), "update_file should succeed");
 
@@ -124,7 +124,7 @@ async fn test_update_file_helper() {
     assert_eq!(read_content, updated_content);
 
     // Try to update non-existent file
-    let missing_path = VirtualPath::new("missing.rs").unwrap();
+    let missing_path = VirtualPath::new("missing.json").unwrap();
     let missing_result = vfs.update_file(&workspace_id, &missing_path, b"content").await;
     assert!(missing_result.is_err(), "updating non-existent file should fail");
 }
@@ -135,11 +135,11 @@ async fn test_file_workflow() {
     let (vfs, _storage) = create_test_vfs().await;
     let workspace_id = Uuid::new_v4();
 
-    // Complete workflow: create -> get -> update -> get
-    let path = VirtualPath::new("workflow.rs").unwrap();
+    // Complete workflow: create -> get -> update -> get (using a text file)
+    let path = VirtualPath::new("workflow.txt").unwrap();
 
     // 1. Create
-    let create_result = vfs.create_file(&workspace_id, &path, b"// Step 1").await;
+    let create_result = vfs.create_file(&workspace_id, &path, b"Step 1").await;
     assert!(create_result.is_ok());
 
     // 2. Get
@@ -149,7 +149,7 @@ async fn test_file_workflow() {
     assert_eq!(vnode.version, 1);
 
     // 3. Update
-    let update_result = vfs.update_file(&workspace_id, &path, b"// Step 2").await;
+    let update_result = vfs.update_file(&workspace_id, &path, b"Step 2").await;
     assert!(update_result.is_ok());
 
     // 4. Get again
@@ -160,5 +160,5 @@ async fn test_file_workflow() {
 
     // Verify content
     let content = vfs.read_file(&workspace_id, &path).await.unwrap();
-    assert_eq!(content, b"// Step 2");
+    assert_eq!(content, b"Step 2");
 }

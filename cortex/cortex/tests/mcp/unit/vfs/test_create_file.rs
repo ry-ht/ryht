@@ -126,7 +126,7 @@ async fn test_create_file_json_content() {
 }
 
 #[tokio::test]
-async fn test_create_file_code_content() {
+async fn test_create_file_code_content_rejected() {
     let fixture = VfsTestFixture::new().await;
 
     let tool = VfsCreateFileTool::new(fixture.ctx.clone());
@@ -137,7 +137,14 @@ async fn test_create_file_code_content() {
     });
 
     let (result, _) = fixture.execute_tool(&tool, input).await;
-    assert!(result.is_ok(), "Failed to create code file");
+    // Code files should be rejected by VFS
+    assert!(result.is_err(), "Code files should be rejected by VFS");
+
+    // Check that the error message is helpful
+    if let Err(ToolError::ExecutionFailed(msg)) = result {
+        assert!(msg.contains("VFS write operations are not allowed for code files"));
+        assert!(msg.contains("AI agents should edit code files directly in the filesystem"));
+    }
 }
 
 #[tokio::test]

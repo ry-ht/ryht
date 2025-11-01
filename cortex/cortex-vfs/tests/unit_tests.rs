@@ -9,8 +9,8 @@ use cortex_vfs::path::VirtualPath;
 
 #[test]
 fn test_virtual_path_creation() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    assert_eq!(path.to_string(), "workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    assert_eq!(path.to_string(), "workspace/docs/readme.md");
 }
 
 #[test]
@@ -22,10 +22,10 @@ fn test_virtual_path_root() {
 
 #[test]
 fn test_virtual_path_parent() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
     let parent = path.parent();
     assert!(parent.is_some());
-    assert_eq!(parent.unwrap().to_string(), "workspace/src");
+    assert_eq!(parent.unwrap().to_string(), "workspace/docs");
 }
 
 #[test]
@@ -36,14 +36,14 @@ fn test_virtual_path_root_parent() {
 
 #[test]
 fn test_virtual_path_file_name() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    assert_eq!(path.file_name(), Some("main.rs"));
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    assert_eq!(path.file_name(), Some("readme.md"));
 }
 
 #[test]
 fn test_virtual_path_extension() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    assert_eq!(path.extension(), Some("rs"));
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    assert_eq!(path.extension(), Some("md"));
 
     let no_ext = VirtualPath::new("/workspace/Makefile").unwrap();
     assert_eq!(no_ext.extension(), None);
@@ -52,21 +52,21 @@ fn test_virtual_path_extension() {
 #[test]
 fn test_virtual_path_join() {
     let base = VirtualPath::new("/workspace").unwrap();
-    let joined = base.join("src/main.rs").unwrap();
-    assert_eq!(joined.to_string(), "workspace/src/main.rs");
+    let joined = base.join("docs/readme.md").unwrap();
+    assert_eq!(joined.to_string(), "workspace/docs/readme.md");
 }
 
 #[test]
 fn test_virtual_path_normalization() {
-    let path = VirtualPath::new("/workspace/../src/./main.rs").unwrap();
+    let path = VirtualPath::new("/workspace/../docs/./readme.md").unwrap();
     let normalized = path.normalize();
-    assert_eq!(normalized.to_string(), "src/main.rs");
+    assert_eq!(normalized.to_string(), "docs/readme.md");
 }
 
 #[test]
 fn test_virtual_path_is_ancestor_of() {
-    let parent = VirtualPath::new("/workspace/src").unwrap();
-    let child = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let parent = VirtualPath::new("/workspace/docs").unwrap();
+    let child = VirtualPath::new("/workspace/docs/readme.md").unwrap();
 
     assert!(parent.starts_with(&parent));
     assert!(child.starts_with(&parent));
@@ -74,23 +74,23 @@ fn test_virtual_path_is_ancestor_of() {
 
 #[test]
 fn test_virtual_path_components() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
     let segments = path.segments();
 
-    assert_eq!(segments, &["workspace", "src", "main.rs"]);
+    assert_eq!(segments, &["workspace", "docs", "readme.md"]);
 }
 
 #[test]
 fn test_virtual_path_display() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    assert_eq!(format!("{}", path), "workspace/src/main.rs");
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    assert_eq!(format!("{}", path), "workspace/docs/readme.md");
 }
 
 #[test]
 fn test_virtual_path_equality() {
-    let path1 = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    let path2 = VirtualPath::new("/workspace/src/main.rs").unwrap();
-    let path3 = VirtualPath::new("/workspace/src/lib.rs").unwrap();
+    let path1 = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    let path2 = VirtualPath::new("/workspace/docs/readme.md").unwrap();
+    let path3 = VirtualPath::new("/workspace/docs/guide.md").unwrap();
 
     assert_eq!(path1, path2);
     assert_ne!(path1, path3);
@@ -133,13 +133,13 @@ fn test_vnode_metadata() {
     use serde_json::Value;
 
     let workspace_id = Uuid::new_v4();
-    let path = VirtualPath::new("main.rs").unwrap();
+    let path = VirtualPath::new("readme.md").unwrap();
     let mut node = VNode::new_file(workspace_id, path, "hash123".to_string(), 2048);
 
-    node.metadata.insert("language".to_string(), Value::String("rust".to_string()));
+    node.metadata.insert("format".to_string(), Value::String("markdown".to_string()));
 
     assert_eq!(node.size_bytes, 2048);
-    assert_eq!(node.metadata.get("language"), Some(&Value::String("rust".to_string())));
+    assert_eq!(node.metadata.get("format"), Some(&Value::String("markdown".to_string())));
 }
 
 #[test]
@@ -219,13 +219,13 @@ fn test_path_depth() {
     let path2 = VirtualPath::new("/workspace").unwrap();
     assert_eq!(path2.len(), 1);
 
-    let path3 = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path3 = VirtualPath::new("/workspace/docs/readme.md").unwrap();
     assert_eq!(path3.len(), 3);
 }
 
 #[test]
 fn test_path_starts_with() {
-    let path = VirtualPath::new("/workspace/src/main.rs").unwrap();
+    let path = VirtualPath::new("/workspace/docs/readme.md").unwrap();
     let prefix = VirtualPath::new("/workspace").unwrap();
 
     assert!(path.starts_with(&prefix));
@@ -384,7 +384,7 @@ fn test_merge_report_default() {
 
 #[test]
 fn test_conflict_creation() {
-    let path = VirtualPath::new("src/main.rs").unwrap();
+    let path = VirtualPath::new("docs/readme.md").unwrap();
     let conflict = Conflict {
         path: path.clone(),
         fork_content: "fork version".to_string(),
@@ -400,7 +400,7 @@ fn test_conflict_creation() {
 
 #[test]
 fn test_conflict_with_resolution() {
-    let path = VirtualPath::new("src/main.rs").unwrap();
+    let path = VirtualPath::new("docs/readme.md").unwrap();
     let conflict = Conflict {
         path,
         fork_content: "fork version".to_string(),

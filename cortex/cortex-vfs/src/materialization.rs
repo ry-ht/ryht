@@ -1,4 +1,23 @@
 //! Materialization engine for flushing VFS content to physical filesystem.
+//!
+//! ## Document-Optimized Design
+//!
+//! This materialization engine has been simplified for document-only workflows.
+//! Documents are typically:
+//! - Smaller than code files (KB vs MB)
+//! - Less frequently flushed
+//! - Have simpler conflict resolution (content-based, no AST merging)
+//! - Don't require code formatting, import optimization, or syntax validation
+//!
+//! Key features retained:
+//! - Atomic operations with backup/rollback
+//! - Bidirectional sync for filesystem monitoring
+//! - Conflict detection for concurrent edits
+//!
+//! Code-specific features removed:
+//! - AST/tree-sitter integration (not needed for documents)
+//! - Complex code formatting hooks (documents use plain text)
+//! - Import/syntax optimization (N/A for documents)
 
 use crate::path::VirtualPath;
 use crate::types::*;
@@ -14,11 +33,12 @@ use uuid::Uuid;
 
 /// Engine for materializing virtual filesystem to physical disk.
 ///
-/// Supports:
+/// Optimized for document-only workflows:
 /// - Target path specification (materialize anywhere)
 /// - Atomic operations with rollback
-/// - Parallel materialization for performance
+/// - Optional parallel materialization (small document sets may not benefit)
 /// - Change tracking and incremental sync
+/// - Simple content-based conflict detection
 pub struct MaterializationEngine {
     vfs: VirtualFileSystem,
 }
@@ -199,6 +219,11 @@ impl MaterializationEngine {
     }
 
     /// Flush changes to disk.
+    ///
+    /// For document-only workflows, we use a simpler strategy:
+    /// - Always process deletes first (order matters)
+    /// - Use parallel processing only for larger document sets (>10 files)
+    /// - Documents are typically small enough that parallel overhead may not help
     async fn flush_changes(
         &self,
         creates_and_updates: &[&VNode],
@@ -223,7 +248,10 @@ impl MaterializationEngine {
         }
 
         // Process creates and updates
-        if options.parallel && creates_and_updates.len() > 1 {
+        // For documents, only use parallel processing for larger sets (>10 files)
+        const PARALLEL_THRESHOLD: usize = 10;
+        if options.parallel && creates_and_updates.len() > PARALLEL_THRESHOLD {
+            debug!("Using parallel materialization for {} documents", creates_and_updates.len());
             self.flush_parallel(creates_and_updates, target_path, options, report).await
         } else {
             self.flush_sequential_inner(creates_and_updates, target_path, options, report).await
@@ -501,6 +529,14 @@ impl MaterializationEngine {
     /// - Files deleted from disk → VNodes marked as Deleted
     /// - Conflict detection when both VFS and FS have changed
     ///
+    /// ## Document-Specific Conflict Detection
+    ///
+    /// For documents, conflict detection is simpler than for code:
+    /// - No AST merging required (documents are plain text/markdown)
+    /// - Hash-based comparison (content changed on both sides = conflict)
+    /// - Auto-resolve can safely prefer filesystem version (no broken imports)
+    /// - Manual resolution typically involves human review of text changes
+    ///
     /// # Arguments
     ///
     /// * `workspace_id` - The workspace to sync into
@@ -517,15 +553,17 @@ impl MaterializationEngine {
     /// ```no_run
     /// # use cortex_vfs::{MaterializationEngine, VirtualFileSystem, VirtualPath, SyncOptions};
     /// # use cortex_storage::ConnectionManager;
+    /// # use cortex_storage::connection_pool::DatabaseConfig;
     /// # use std::sync::Arc;
     /// # use std::path::Path;
     /// # async fn example() -> cortex_core::error::Result<()> {
-    /// let storage = Arc::new(ConnectionManager::default());
+    /// let config = DatabaseConfig::default();
+    /// let storage = Arc::new(ConnectionManager::new(config).await.unwrap());
     /// let vfs = VirtualFileSystem::new(storage);
     /// let engine = MaterializationEngine::new(vfs);
     ///
     /// let workspace_id = uuid::Uuid::new_v4();
-    /// let fs_path = Path::new("/home/user/project");
+    /// let fs_path = Path::new("/home/user/documents");
     /// let virtual_prefix = VirtualPath::root();
     ///
     /// let report = engine.sync_from_filesystem(
@@ -840,6 +878,14 @@ impl MaterializationEngine {
     }
 
     /// Sync an existing file (already in VFS).
+    ///
+    /// ## Document Conflict Detection
+    ///
+    /// For document-only workflows, conflict detection is straightforward:
+    /// 1. Compare content hashes (filesystem vs VFS)
+    /// 2. If both changed since last sync → conflict
+    /// 3. For documents, we can safely store both versions and let user choose
+    /// 4. No risk of breaking imports/references (unlike code files)
     async fn sync_existing_file(
         &self,
         _workspace_id: &Uuid,
@@ -865,10 +911,11 @@ impl MaterializationEngine {
         // Content has changed on filesystem
         debug!("File changed on filesystem: {}", virtual_path);
 
-        // Check if VFS also has changes (conflict detection)
+        // Simple conflict detection for documents: check if VFS also has unsaved changes
         let is_conflict = match existing_vnode.status {
             SyncStatus::Modified | SyncStatus::Created => {
                 // VFS has unsaved changes AND filesystem has changed = CONFLICT
+                // For documents, this is a simple content conflict (no AST to worry about)
                 warn!("Conflict detected for {}: both VFS and filesystem modified", virtual_path);
                 true
             }
@@ -877,10 +924,11 @@ impl MaterializationEngine {
 
         if is_conflict && !options.auto_resolve_conflicts {
             // Mark as conflict and store both versions
+            // For documents, we simply preserve both versions for manual resolution
             let mut vnode = existing_vnode.clone();
             vnode.status = SyncStatus::Conflict;
 
-            // Store filesystem version in metadata
+            // Store filesystem version in metadata for later resolution
             vnode.metadata.insert(
                 "fs_content_hash".to_string(),
                 serde_json::Value::String(new_hash.to_string()),
@@ -925,7 +973,8 @@ impl MaterializationEngine {
         if !is_conflict {
             vnode.mark_modified();
         } else {
-            // Auto-resolve: prefer filesystem version
+            // Auto-resolve: for documents, we safely prefer filesystem version
+            // (no risk of breaking imports or code dependencies)
             vnode.status = SyncStatus::Modified;
             vnode.version += 1;
             vnode.updated_at = Utc::now();
@@ -980,11 +1029,34 @@ use std::sync::Arc;
 mod tests {
     use super::*;
     use cortex_storage::ConnectionManager;
+    use cortex_storage::connection_pool::{ConnectionMode, Credentials, DatabaseConfig, PoolConfig, RetryPolicy};
+    use std::time::Duration;
     use tempfile::TempDir;
     use tokio::fs;
 
     async fn setup_test_vfs() -> (VirtualFileSystem, Arc<ConnectionManager>) {
-        let storage = Arc::new(ConnectionManager::default());
+        let config = DatabaseConfig {
+            connection_mode: ConnectionMode::InMemory,
+            credentials: Credentials {
+                username: None,
+                password: None,
+            },
+            pool_config: PoolConfig {
+                min_connections: 0,
+                max_connections: 5,
+                connection_timeout: Duration::from_secs(5),
+                idle_timeout: Some(Duration::from_secs(30)),
+                max_lifetime: Some(Duration::from_secs(60)),
+                retry_policy: RetryPolicy::default(),
+                warm_connections: false,
+                validate_on_checkout: false,
+                recycle_after_uses: Some(10000),
+                shutdown_grace_period: Duration::from_secs(30),
+            },
+            namespace: "test".to_string(),
+            database: "test".to_string(),
+        };
+        let storage = Arc::new(ConnectionManager::new(config).await.unwrap());
         let vfs = VirtualFileSystem::new(storage.clone());
         (vfs, storage)
     }

@@ -356,6 +356,23 @@ struct CreateFileOutput {
     version: u64,
 }
 
+/// Check if a path represents a code file.
+/// This duplicates the logic from VFS to provide early feedback.
+fn is_code_file(path: &str) -> bool {
+    if let Some(ext) = std::path::Path::new(path).extension() {
+        if let Some(ext_str) = ext.to_str() {
+            return matches!(
+                ext_str,
+                "rs" | "ts" | "js" | "jsx" | "tsx" | "py" | "go" | "java" |
+                "cpp" | "c" | "h" | "hpp" | "cs" | "rb" | "php" | "swift" |
+                "kt" | "scala" | "r" | "m" | "mm" | "dart" | "lua" | "pl" |
+                "sh" | "bash" | "zsh" | "fish"
+            );
+        }
+    }
+    false
+}
+
 #[async_trait]
 impl Tool for VfsCreateFileTool {
     fn name(&self) -> &str {
@@ -363,7 +380,11 @@ impl Tool for VfsCreateFileTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Creates a new file in the virtual filesystem")
+        Some("Creates a new file in the virtual filesystem. \
+              Note: VFS is for documents, reports, and configuration files only. \
+              Code files (.rs, .ts, .py, etc.) should be edited directly in the filesystem \
+              using standard file editing tools to ensure proper IDE support, syntax checking, \
+              and integration with development workflows.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -460,7 +481,11 @@ impl Tool for VfsUpdateFileTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Updates file content with automatic parsing")
+        Some("Updates file content with automatic parsing. \
+              Note: VFS is for documents, reports, and configuration files only. \
+              Code files (.rs, .ts, .py, etc.) should be edited directly in the filesystem \
+              using standard file editing tools to ensure proper IDE support, syntax checking, \
+              and integration with development workflows.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -561,7 +586,10 @@ impl Tool for VfsDeleteNodeTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Deletes a file or directory")
+        Some("Deletes a file or directory from VFS. \
+              Note: VFS typically contains documents, reports, and configuration files. \
+              Code files are usually edited directly in the filesystem and should be deleted \
+              using standard filesystem operations.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -642,7 +670,10 @@ impl Tool for VfsMoveNodeTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Moves or renames a node")
+        Some("Moves or renames a node in VFS. \
+              Note: VFS typically contains documents, reports, and configuration files. \
+              Code files are usually edited directly in the filesystem and should be moved/renamed \
+              using standard filesystem operations.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -734,7 +765,10 @@ impl Tool for VfsCopyNodeTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Copies a node to a new location")
+        Some("Copies a node to a new location in VFS. \
+              Note: VFS typically contains documents, reports, and configuration files. \
+              Code files are usually edited directly in the filesystem and should be copied \
+              using standard filesystem operations.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -1926,6 +1960,8 @@ struct BatchCreateFilesOutput {
     created: Vec<FileCreationResult>,
     total_created: usize,
     total_failed: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skipped_code_files: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -1945,7 +1981,11 @@ impl Tool for VfsBatchCreateFilesTool {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Creates multiple files atomically in a single operation")
+        Some("Creates multiple files atomically in a single operation. \
+              Note: VFS is for documents, reports, and configuration files only. \
+              Code files (.rs, .ts, .py, etc.) will be automatically skipped with a warning. \
+              Code files should be edited directly in the filesystem using standard file editing tools \
+              to ensure proper IDE support, syntax checking, and integration with development workflows.")
     }
 
     fn input_schema(&self) -> serde_json::Value {
@@ -1970,11 +2010,23 @@ impl Tool for VfsBatchCreateFilesTool {
 
         info!("Batch creating {} files in workspace {}", input.files.len(), workspace_id);
 
+        // Separate code files from documents
+        let (document_files, code_files): (Vec<_>, Vec<_>) = input.files
+            .into_iter()
+            .partition(|f| !is_code_file(&f.path));
+
+        // Track skipped code files
+        let skipped_code_files = if !code_files.is_empty() {
+            Some(code_files.iter().map(|f| f.path.clone()).collect())
+        } else {
+            None
+        };
+
         let mut results = Vec::new();
         let mut total_created = 0;
         let mut total_failed = 0;
 
-        for file_spec in input.files {
+        for file_spec in document_files {
             let path_result = VirtualPath::new(&file_spec.path);
 
             match path_result {
@@ -2024,6 +2076,7 @@ impl Tool for VfsBatchCreateFilesTool {
             created: results,
             total_created,
             total_failed,
+            skipped_code_files,
         };
 
         Ok(ToolResult::success_json(serde_json::to_value(output).unwrap()))

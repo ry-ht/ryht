@@ -11,19 +11,19 @@ use uuid::Uuid;
 #[test]
 fn test_virtual_path_operations() {
     // Test basic path operations
-    let path = VirtualPath::new("src/main.rs").unwrap();
-    assert_eq!(path.to_string(), "src/main.rs");
-    assert_eq!(path.file_name(), Some("main.rs"));
-    assert_eq!(path.extension(), Some("rs"));
+    let path = VirtualPath::new("docs/readme.md").unwrap();
+    assert_eq!(path.to_string(), "docs/readme.md");
+    assert_eq!(path.file_name(), Some("readme.md"));
+    assert_eq!(path.extension(), Some("md"));
 
     // Test path joining
-    let base = VirtualPath::new("src").unwrap();
-    let joined = base.join("lib/mod.rs").unwrap();
-    assert_eq!(joined.to_string(), "src/lib/mod.rs");
+    let base = VirtualPath::new("docs").unwrap();
+    let joined = base.join("api/spec.json").unwrap();
+    assert_eq!(joined.to_string(), "docs/api/spec.json");
 
     // Test parent
     let parent = joined.parent().unwrap();
-    assert_eq!(parent.to_string(), "src/lib");
+    assert_eq!(parent.to_string(), "docs/api");
 
     // Test root
     let root = VirtualPath::root();
@@ -33,27 +33,27 @@ fn test_virtual_path_operations() {
 
 #[test]
 fn test_virtual_path_normalization() {
-    let path = VirtualPath::new("src/../lib/./main.rs").unwrap();
+    let path = VirtualPath::new("docs/../content/./readme.md").unwrap();
     let normalized = path.normalize();
-    assert_eq!(normalized.to_string(), "lib/main.rs");
+    assert_eq!(normalized.to_string(), "content/readme.md");
 }
 
 #[test]
 fn test_virtual_path_to_physical() {
-    let vpath = VirtualPath::new("src/main.rs").unwrap();
+    let vpath = VirtualPath::new("docs/readme.md").unwrap();
     let base = PathBuf::from("/home/user/project");
     let physical = vpath.to_physical(&base);
-    assert_eq!(physical, PathBuf::from("/home/user/project/src/main.rs"));
+    assert_eq!(physical, PathBuf::from("/home/user/project/docs/readme.md"));
 }
 
 #[test]
 fn test_virtual_path_from_physical() {
     use std::path::Path;
 
-    let physical = Path::new("/home/user/project/src/main.rs");
+    let physical = Path::new("/home/user/project/docs/readme.md");
     let base = Path::new("/home/user/project");
     let vpath = VirtualPath::from_physical(physical, base).unwrap();
-    assert_eq!(vpath.to_string(), "src/main.rs");
+    assert_eq!(vpath.to_string(), "docs/readme.md");
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn test_content_cache_lru_order() {
 #[test]
 fn test_flush_scope() {
     let workspace_id = Uuid::new_v4();
-    let path = VirtualPath::new("src/main.rs").unwrap();
+    let path = VirtualPath::new("docs/readme.md").unwrap();
 
     // Test different flush scopes
     let _scope_all = FlushScope::All;
@@ -305,13 +305,13 @@ mod async_tests {
         let vfs = VirtualFileSystem::new(storage);
         let workspace_id = Uuid::new_v4();
 
-        let dir_path = VirtualPath::new("src").unwrap();
+        let dir_path = VirtualPath::new("docs").unwrap();
         vfs.create_directory(&workspace_id, &dir_path, false).await.unwrap();
 
         assert!(vfs.exists(&workspace_id, &dir_path).await.unwrap());
 
-        let file_path = dir_path.join("main.rs").unwrap();
-        vfs.write_file(&workspace_id, &file_path, b"fn main() {}").await.unwrap();
+        let file_path = dir_path.join("readme.md").unwrap();
+        vfs.write_file(&workspace_id, &file_path, b"# Readme").await.unwrap();
 
         let entries = vfs.list_directory(&workspace_id, &dir_path, false).await.unwrap();
         assert_eq!(entries.len(), 1);

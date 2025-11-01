@@ -272,12 +272,12 @@ async fn test_update_file_content_to_empty() {
 async fn test_update_file_with_reparse() {
     let fixture = VfsTestFixture::new().await;
 
-    fixture.create_test_file("code.rs", "fn old() {}").await.unwrap();
+    fixture.create_test_file("document.md", "# Old Content").await.unwrap();
 
     let tool = VfsUpdateFileTool::new(fixture.ctx.clone());
     let input = json!({
-        "path": "code.rs",
-        "content": fixtures::RUST_CODE,
+        "path": "document.md",
+        "content": "# Updated Content\n\nThis is a markdown document.",
         "expected_version": 1,
         "workspace_id": fixture.workspace_id.to_string(),
         "reparse": true,

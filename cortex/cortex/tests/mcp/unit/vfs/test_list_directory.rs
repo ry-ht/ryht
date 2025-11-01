@@ -291,7 +291,7 @@ async fn test_list_directory_mixed_content() {
     // Create mixed content types
     fixture.create_test_directory("mixed/subdir").await.unwrap();
     fixture.create_test_file("mixed/text.txt", "text").await.unwrap();
-    fixture.create_test_file("mixed/code.rs", "fn main() {}").await.unwrap();
+    fixture.create_test_file("mixed/document.md", "# Document").await.unwrap();
     fixture.create_test_file("mixed/data.json", "{}").await.unwrap();
 
     let tool = VfsListDirectoryTool::new(fixture.ctx.clone());
