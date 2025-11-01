@@ -16,7 +16,7 @@ use tokio::time::sleep;
 async fn create_test_cortex() -> Arc<CortexBridge> {
     let config = CortexConfig {
         base_url: std::env::var("CORTEX_URL")
-            .unwrap_or_else(|_| "http://localhost:8081".to_string()),
+            .unwrap_or_else(|_| "http://localhost:8080".to_string()),
         api_version: "v3".to_string(),
         request_timeout_secs: 10,
         max_retries: 3,

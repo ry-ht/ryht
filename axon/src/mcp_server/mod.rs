@@ -14,7 +14,8 @@
 //! - `session_create` - Create isolated work sessions
 //! - `session_merge` - Merge session changes
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use cortex_core::config::GlobalConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -46,15 +47,45 @@ pub struct McpServerConfig {
 }
 
 impl Default for McpServerConfig {
+    /// Create a default McpServerConfig with hardcoded fallback values.
+    ///
+    /// **Important**: This uses fallback defaults and should only be used
+    /// when GlobalConfig is not available. Prefer using `McpServerConfig::from_global_config()`
+    /// to get configuration from GlobalConfig.
     fn default() -> Self {
         Self {
             name: "axon-mcp-server".to_string(),
             version: crate::VERSION.to_string(),
-            cortex_url: "http://localhost:8081".to_string(),
+            cortex_url: "http://localhost:8080".to_string(), // Cortex API server default port
             working_dir: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
             max_concurrent_agents: 10,
             default_timeout_secs: 3600, // 1 hour
         }
+    }
+}
+
+impl McpServerConfig {
+    /// Create a McpServerConfig from GlobalConfig
+    ///
+    /// This is the preferred way to create a McpServerConfig as it reads
+    /// from the global configuration file.
+    pub async fn from_global_config() -> Result<Self> {
+        let config = GlobalConfig::load_or_create_default()
+            .await
+            .context("Failed to load GlobalConfig")?;
+
+        Ok(Self {
+            name: "axon-mcp-server".to_string(),
+            version: crate::VERSION.to_string(),
+            cortex_url: format!(
+                "http://{}:{}",
+                config.cortex().server.host,
+                config.cortex().server.port
+            ),
+            working_dir: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            max_concurrent_agents: config.axon().runtime.max_agents,
+            default_timeout_secs: config.axon().runtime.agent_timeout_seconds,
+        })
     }
 }
 

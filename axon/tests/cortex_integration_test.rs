@@ -24,7 +24,7 @@ use std::sync::Arc;
 /// Helper to create a test CortexBridge (assumes Cortex is running)
 async fn create_cortex_bridge() -> Arc<CortexBridge> {
     let config = CortexConfig {
-        base_url: std::env::var("CORTEX_URL").unwrap_or_else(|_| "http://localhost:8081".to_string()),
+        base_url: std::env::var("CORTEX_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
         ..Default::default()
     };
 

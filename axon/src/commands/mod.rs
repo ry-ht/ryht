@@ -8,6 +8,7 @@ pub mod server_manager;
 pub mod api;
 
 use anyhow::{Context, Result};
+use cortex_core::config::GlobalConfig;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
@@ -1000,29 +1001,36 @@ fn init_file_logging(log_file: &str, log_level: &str) -> Result<()> {
 
 /// Start MCP server in stdio mode
 pub async fn mcp_stdio() -> Result<()> {
-    // Get log file path - use a default location in the user's home directory
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let log_file = format!("{}/.axon/logs/mcp-stdio.log", home);
+    // Load global configuration
+    let config = GlobalConfig::load_or_create_default()
+        .await
+        .context("Failed to load GlobalConfig")?;
+
+    // Get log file path from GlobalConfig
+    let log_dir = GlobalConfig::axon_logs_dir()
+        .context("Failed to get axon logs directory")?;
+    let log_file = log_dir.join("mcp-stdio.log");
     let log_level = "axon=info,warn";
 
     // Initialize file logging for stdio mode (NO stdout/stderr output!)
-    init_file_logging(&log_file, log_level)?;
+    init_file_logging(&log_file.to_string_lossy(), log_level)?;
 
     tracing::info!("Starting Axon MCP Server (stdio mode)");
-    tracing::info!("Log file: {}", log_file);
+    tracing::info!("Log file: {}", log_file.display());
 
-    // Get Cortex URL from environment or use default
-    let cortex_url = std::env::var("CORTEX_MCP_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
-
-    // Parse URL to extract host and port for auto-start
-    let parsed_url = url::Url::parse(&cortex_url)
-        .context("Failed to parse CORTEX_MCP_URL")?;
-    let host = parsed_url.host_str().unwrap_or("localhost");
-    let port = parsed_url.port().unwrap_or(8080);
+    // Get Cortex URL from GlobalConfig
+    let cortex_url = format!(
+        "http://{}:{}",
+        config.cortex().server.host,
+        config.cortex().server.port
+    );
 
     // Ensure Cortex HTTP server is running (auto-start if needed)
-    ensure_cortex_server_running(&cortex_url, host, port).await?;
+    ensure_cortex_server_running(
+        &cortex_url,
+        &config.cortex().server.host,
+        config.cortex().server.port,
+    ).await?;
 
     let working_dir = std::env::current_dir()?;
 
@@ -1064,32 +1072,39 @@ pub async fn mcp_stdio() -> Result<()> {
 
 /// Start MCP server in HTTP mode
 pub async fn mcp_http(address: String, port: u16) -> Result<()> {
-    // Get log file path
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let log_file = format!("{}/.axon/logs/mcp-http.log", home);
+    // Load global configuration
+    let config = GlobalConfig::load_or_create_default()
+        .await
+        .context("Failed to load GlobalConfig")?;
+
+    // Get log file path from GlobalConfig
+    let log_dir = GlobalConfig::axon_logs_dir()
+        .context("Failed to get axon logs directory")?;
+    let log_file = log_dir.join("mcp-http.log");
     let log_level = "axon=info,warn";
 
     // Initialize file logging for HTTP mode
-    init_file_logging(&log_file, log_level)?;
+    init_file_logging(&log_file.to_string_lossy(), log_level)?;
 
     println!("Starting Axon MCP Server (HTTP mode)");
     println!("Address: {}", address);
     println!("Port: {}", port);
     println!("Initializing server...");
 
-    // Get Cortex URL from environment or use default
-    let cortex_url = std::env::var("CORTEX_MCP_URL")
-        .unwrap_or_else(|_| "http://localhost:8080".to_string());
-
-    // Parse URL to extract host and port for auto-start
-    let parsed_url = url::Url::parse(&cortex_url)
-        .context("Failed to parse CORTEX_MCP_URL")?;
-    let cortex_host = parsed_url.host_str().unwrap_or("localhost");
-    let cortex_port = parsed_url.port().unwrap_or(8080);
+    // Get Cortex URL from GlobalConfig
+    let cortex_url = format!(
+        "http://{}:{}",
+        config.cortex().server.host,
+        config.cortex().server.port
+    );
 
     // Ensure Cortex HTTP server is running (auto-start if needed)
     println!("Checking Cortex HTTP server at {}...", cortex_url);
-    ensure_cortex_server_running(&cortex_url, cortex_host, cortex_port).await?;
+    ensure_cortex_server_running(
+        &cortex_url,
+        &config.cortex().server.host,
+        config.cortex().server.port,
+    ).await?;
 
     let working_dir = std::env::current_dir()?;
 
@@ -1117,11 +1132,11 @@ pub async fn mcp_http(address: String, port: u16) -> Result<()> {
 
     println!("✓ MCP server started successfully");
     println!("Listening on http://{}", bind_addr);
-    println!("Log file: {}", log_file);
+    println!("Log file: {}", log_file.display());
     println!("Press Ctrl+C to stop");
 
     tracing::info!("MCP HTTP server started on {}", bind_addr);
-    tracing::info!("Log file: {}", log_file);
+    tracing::info!("Log file: {}", log_file.display());
 
     server.serve_http(&bind_addr).await?;
     Ok(())

@@ -17,7 +17,7 @@ use axon::cortex_bridge::*;
 #[test]
 fn test_cortex_config_default() {
     let config = CortexConfig::default();
-    assert_eq!(config.base_url, "http://localhost:8081");
+    assert_eq!(config.base_url, "http://localhost:8080");
     assert_eq!(config.api_version, "v3");
     assert_eq!(config.request_timeout_secs, 30);
 }

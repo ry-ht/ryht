@@ -216,7 +216,7 @@ async fn coordinated_work(bridge: &CortexBridge) -> Result<()> {
 
 ```rust
 CortexConfig {
-    base_url: "http://localhost:8081",
+    base_url: "http://localhost:8080",
     api_version: "v3",
     auth_token: None,
     cache_size_mb: 100,

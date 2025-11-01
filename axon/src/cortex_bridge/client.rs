@@ -4,6 +4,7 @@
 //! and response unwrapping for the Cortex API.
 
 use super::models::*;
+use cortex_core::config::GlobalConfig;
 use reqwest::{Client as HttpClient, Response};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::time::Duration;
@@ -99,6 +100,11 @@ pub struct CortexConfig {
 }
 
 impl Default for CortexConfig {
+    /// Create a default CortexConfig with hardcoded fallback values.
+    ///
+    /// **Important**: This uses fallback defaults and should only be used
+    /// when GlobalConfig is not available. Prefer using `CortexConfig::from_global_config()`
+    /// to get configuration from GlobalConfig.
     fn default() -> Self {
         Self {
             base_url: "http://localhost:8080".to_string(),
@@ -113,6 +119,36 @@ impl Default for CortexConfig {
             enable_websocket: true,
             reconnect_websocket: true,
         }
+    }
+}
+
+impl CortexConfig {
+    /// Create a CortexConfig from GlobalConfig
+    ///
+    /// This is the preferred way to create a CortexConfig as it reads
+    /// from the global configuration file.
+    pub async fn from_global_config() -> Result<Self> {
+        let config = GlobalConfig::load_or_create_default()
+            .await
+            .map_err(|e| CortexError::CortexError(format!("Failed to load GlobalConfig: {}", e)))?;
+
+        Ok(Self {
+            base_url: format!(
+                "http://{}:{}",
+                config.cortex().server.host,
+                config.cortex().server.port
+            ),
+            api_version: "v3".to_string(),
+            auth_token: None,
+            cache_size_mb: config.cortex().cache.memory_size_mb as usize,
+            cache_ttl_seconds: config.cortex().cache.ttl_seconds,
+            connection_pool_size: config.cortex().pool.max_connections as usize,
+            request_timeout_secs: 30,
+            max_retries: 3,
+            retry_delay_ms: 1000,
+            enable_websocket: true,
+            reconnect_websocket: true,
+        })
     }
 }
 
@@ -323,7 +359,7 @@ mod tests {
     #[test]
     fn test_config_default() {
         let config = CortexConfig::default();
-        assert_eq!(config.base_url, "http://localhost:8081");
+        assert_eq!(config.base_url, "http://localhost:8080");
         assert_eq!(config.api_version, "v3");
         assert_eq!(config.request_timeout_secs, 30);
         assert_eq!(config.max_retries, 3);

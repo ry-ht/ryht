@@ -8,6 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
+use cortex_core::config::GlobalConfig;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -105,8 +106,9 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
         info!("Workers: {}", w);
     }
 
-    // Load configuration
+    // Load configurations
     let config = AxonConfig::load()?;
+    let global_config = GlobalConfig::load_or_create_default().await?;
 
     // Create runtime manager
     let runtime = Arc::new(RwLock::new(AgentRuntimeManager::new(config.clone())?));
@@ -164,7 +166,14 @@ pub async fn start_server(host: String, port: u16, workers: Option<usize>) -> Re
     // Create auth proxy routes (forward to Cortex)
     let cortex_api_url = config.cortex.api_url
         .clone()
-        .unwrap_or_else(|| "http://127.0.0.1:8080".to_string());
+        .unwrap_or_else(|| {
+            // Use GlobalConfig if not specified in workspace config
+            format!(
+                "http://{}:{}",
+                global_config.cortex().server.host,
+                global_config.cortex().server.port
+            )
+        });
 
     let auth_proxy_state = auth_proxy::AuthProxyState::new(cortex_api_url.clone());
     let auth_routes = Router::new()
