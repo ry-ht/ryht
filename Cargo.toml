@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 tracing-appender = "0.2.3"
 
 # HTTP/Web
-axum = { version = "0.8.6", features = ["macros"] }
+axum = { version = "0.7.9", features = ["macros"] }
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
@@ -83,6 +83,7 @@ sha2 = "0.10.9"
 # Embeddings and ML
 ort = { version = "1.16.3", features = ["load-dynamic"] }
 tokenizers = { version = "0.19.1", default-features = false, features = ["onig"] }
+
 
 # File watching
 notify = "8.2.0"

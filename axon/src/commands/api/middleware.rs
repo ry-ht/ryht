@@ -179,6 +179,7 @@ pub async fn optional_auth(
 }
 
 /// Extractor for authenticated requests
+#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,

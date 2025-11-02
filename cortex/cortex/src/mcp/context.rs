@@ -147,18 +147,11 @@ mod tests {
         let session_id = CortexId::new();
         let workspace_id = Uuid::new_v4();
 
-        let mut metadata = HashMap::new();
-        metadata.insert("session_id".to_string(), json!(session_id.to_string()));
-        metadata.insert("workspace_id".to_string(), json!(workspace_id.to_string()));
-        metadata.insert("agent_id".to_string(), json!("test-agent"));
-
-        let tool_context = ToolContext {
-            metadata: serde_json::Value::Object(
-                metadata.into_iter()
-                    .map(|(k, v)| (k, v))
-                    .collect()
-            ),
-        };
+        let tool_context = ToolContext::builder()
+            .metadata("session_id", json!(session_id.to_string()))
+            .metadata("workspace_id", json!(workspace_id.to_string()))
+            .metadata("agent_id", json!("test-agent"))
+            .build();
 
         let ctx = CortexToolContext::from_mcp_context(&tool_context);
 
@@ -170,9 +163,7 @@ mod tests {
 
     #[test]
     fn test_from_mcp_context_empty() {
-        let tool_context = ToolContext {
-            metadata: json!({}),
-        };
+        let tool_context = ToolContext::new();
 
         let ctx = CortexToolContext::from_mcp_context(&tool_context);
 

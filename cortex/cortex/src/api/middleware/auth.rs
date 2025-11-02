@@ -378,6 +378,7 @@ fn forbidden_response(message: &str) -> (StatusCode, Json<AuthErrorResponse>) {
 }
 
 /// Extractor for authenticated requests - extracts Claims
+#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
@@ -412,6 +413,7 @@ where
 }
 
 /// Extractor for authenticated requests - extracts AuthUser
+#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
@@ -446,6 +448,7 @@ where
 }
 
 /// Extractor for bearer token - extracts raw token string
+#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for BearerToken
 where
     S: Send + Sync,

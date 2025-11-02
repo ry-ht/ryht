@@ -647,18 +647,18 @@ mod tests {
 
         // Create some files in the workspace
         vfs_service
-            .create_file(
+            .write_file(
                 &workspace_id,
-                "/test1.txt".to_string(),
-                "test content 1".as_bytes().to_vec(),
+                "/test1.txt",
+                "test content 1".as_bytes(),
             )
             .await?;
 
         vfs_service
-            .create_file(
+            .write_file(
                 &workspace_id,
-                "/dir/test2.txt".to_string(),
-                "test content 2".as_bytes().to_vec(),
+                "/dir/test2.txt",
+                "test content 2".as_bytes(),
             )
             .await?;
 
