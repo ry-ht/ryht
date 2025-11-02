@@ -6,7 +6,6 @@ use crate::agents::{
     developer::DeveloperAgent,
     reviewer::ReviewerAgent,
     tester::TesterAgent,
-    orchestrator::OrchestratorAgent,
 };
 use std::sync::Arc;
 use tokio::time::{timeout, Duration as TokioDuration};
@@ -232,14 +231,6 @@ impl AgentPool {
         self.agents.insert(test_id.clone(), test_agent);
         self.agent_states.insert(test_id.clone(), AgentPoolState::Idle);
         matcher.register_agent(test_id, test_caps);
-
-        // Create orchestrator agent
-        let orch_agent = Box::new(OrchestratorAgent::new("Orchestrator-1".to_string()));
-        let orch_id = orch_agent.id().clone();
-        let orch_caps = orch_agent.capabilities().clone();
-        self.agents.insert(orch_id.clone(), orch_agent);
-        self.agent_states.insert(orch_id.clone(), AgentPoolState::Idle);
-        matcher.register_agent(orch_id, orch_caps);
     }
 
     async fn execute_with_agent(
@@ -269,7 +260,6 @@ impl AgentPool {
             AgentType::Developer => self.execute_developer_task(task),
             AgentType::Reviewer => self.execute_reviewer_task(task),
             AgentType::Tester => self.execute_tester_task(task),
-            AgentType::Orchestrator => self.execute_orchestrator_task(task),
             _ => self.execute_generic_task(task),
         };
 
@@ -328,16 +318,6 @@ impl AgentPool {
             "tests_passed": 9,
             "tests_failed": 1,
             "coverage_percentage": 85.5,
-            "status": "completed"
-        }))
-    }
-
-    fn execute_orchestrator_task(&self, task: &Task) -> std::result::Result<serde_json::Value, String> {
-        Ok(serde_json::json!({
-            "task_type": "orchestration",
-            "task_id": task.id,
-            "subtasks_created": 5,
-            "delegation_complete": true,
             "status": "completed"
         }))
     }

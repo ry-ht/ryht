@@ -95,7 +95,6 @@ pub fn create_test_agent(
         AgentType::Architect => Box::new(ArchitectAgent::new(name.to_string())),
         AgentType::Researcher => Box::new(ResearcherAgent::new(name.to_string())),
         AgentType::Optimizer => Box::new(OptimizerAgent::new(name.to_string())),
-        AgentType::Orchestrator => Box::new(OrchestratorAgent::new(name.to_string())),
         _ => Box::new(DeveloperAgent::new(name.to_string())),
     }
 }

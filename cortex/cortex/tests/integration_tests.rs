@@ -21,46 +21,46 @@ fn setup_test_env() -> TempDir {
 
 #[tokio::test]
 async fn test_config_operations() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
     let _temp = setup_test_env();
 
     // Test default config
-    let config = CortexConfig::default();
-    assert_eq!(config.database.namespace, "cortex");
-    assert_eq!(config.database.database, "main");
-    assert_eq!(config.mcp.port, 3000);
+    let config = GlobalConfig::default();
+    assert_eq!(config.cortex.db.namespace, "cortex");
+    assert_eq!(config.cortex.db.database, "main");
+    assert_eq!(config.cortex.mcp.port, 3000);
 
     // Test get/set
-    let mut config = CortexConfig::default();
-    assert_eq!(config.get("database.namespace"), Some("cortex".to_string()));
+    let mut config = GlobalConfig::default();
+    assert_eq!(config.get("cortex.db.namespace"), Some("cortex".to_string()));
 
-    config.set("database.namespace", "test").unwrap();
-    assert_eq!(config.get("database.namespace"), Some("test".to_string()));
+    config.set("cortex.db.namespace", "test").unwrap();
+    assert_eq!(config.get("cortex.db.namespace"), Some("test".to_string()));
 
-    config.set("mcp.port", "4000").unwrap();
-    assert_eq!(config.get("mcp.port"), Some("4000".to_string()));
+    config.set("cortex.mcp.port", "4000").unwrap();
+    assert_eq!(config.get("cortex.mcp.port"), Some("4000".to_string()));
 }
 
 #[tokio::test]
 async fn test_config_save_load() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
     let temp = setup_test_env();
     let config_path = temp.path().join("test_config.toml");
 
     // Create and save config
-    let mut config = CortexConfig::default();
-    config.database.namespace = "test_namespace".to_string();
-    config.storage.cache_size_mb = 2048;
+    let mut config = GlobalConfig::default();
+    config.cortex.db.namespace = "test_namespace".to_string();
+    config.cortex.storage.cache_size_mb = 2048;
 
     config.save(&config_path).unwrap();
     assert!(config_path.exists());
 
     // Load and verify
-    let loaded = CortexConfig::from_file(&config_path).unwrap();
-    assert_eq!(loaded.database.namespace, "test_namespace");
-    assert_eq!(loaded.storage.cache_size_mb, 2048);
+    let loaded = GlobalConfig::from_file(&config_path).unwrap();
+    assert_eq!(loaded.cortex.db.namespace, "test_namespace");
+    assert_eq!(loaded.cortex.storage.cache_size_mb, 2048);
 }
 
 #[tokio::test]
@@ -75,11 +75,11 @@ async fn test_config_env_overrides() {
     }
 
     // Load config with env overrides
-    let config = cortex::config::CortexConfig::load().unwrap();
+    let config = cortex_core::config::GlobalConfig::load().unwrap();
 
-    assert_eq!(config.database.namespace, "env_namespace");
-    assert_eq!(config.database.pool_size, 20);
-    assert_eq!(config.storage.cache_size_mb, 512);
+    assert_eq!(config.cortex.db.namespace, "env_namespace");
+    assert_eq!(config.cortex.db.pool_size, 20);
+    assert_eq!(config.cortex.storage.cache_size_mb, 512);
 
     // Clean up
     unsafe {
@@ -140,24 +140,24 @@ async fn test_init_workspace_creation() {
 
 #[tokio::test]
 async fn test_config_get_invalid_key() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = CortexConfig::default();
+    let config = GlobalConfig::default();
     assert_eq!(config.get("invalid.key"), None);
 }
 
 #[tokio::test]
 async fn test_config_set_invalid_value() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let mut config = CortexConfig::default();
+    let mut config = GlobalConfig::default();
 
     // Try to set invalid pool size
-    let result = config.set("database.pool_size", "not_a_number");
+    let result = config.set("cortex.db.pool_size", "not_a_number");
     assert!(result.is_err());
 
     // Try to set invalid boolean
-    let result = config.set("mcp.enabled", "not_a_bool");
+    let result = config.set("cortex.mcp.enabled", "not_a_bool");
     assert!(result.is_err());
 }
 
@@ -528,9 +528,9 @@ fn test_benchmark_result_creation() {
 
 #[tokio::test]
 async fn test_config_validation() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = CortexConfig::default();
+    let config = GlobalConfig::default();
 
     // Test basic validation
     assert!(!config.database.namespace.is_empty());
@@ -541,7 +541,7 @@ async fn test_config_validation() {
 
 #[test]
 fn test_config_merge() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
     let mut base = CortexConfig::default();
     base.database.namespace = "test1".to_string();
@@ -570,10 +570,10 @@ fn test_export_to_all_formats() {
 
 #[tokio::test]
 async fn test_error_handling() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
     // Test invalid config operations
-    let mut config = CortexConfig::default();
+    let mut config = GlobalConfig::default();
 
     let result = config.set("database.pool_size", "invalid");
     assert!(result.is_err());
@@ -614,15 +614,15 @@ fn test_format_utilities() {
 
 #[tokio::test]
 async fn test_full_config_lifecycle() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
     let temp = setup_test_env();
     let config_path = temp.path().join("test_config.toml");
 
     // Create config
-    let mut config = CortexConfig::default();
-    config.database.namespace = "test_lifecycle".to_string();
-    config.storage.cache_size_mb = 512;
+    let mut config = GlobalConfig::default();
+    config.cortex.db.namespace = "test_lifecycle".to_string();
+    config.cortex.storage.cache_size_mb = 512;
 
     // Save
     assert!(config.save(&config_path).is_ok());
@@ -661,7 +661,7 @@ fn test_csv_escaping() {
 
 #[tokio::test]
 async fn test_concurrent_operations() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
     use tokio::task;
 
     let _temp = setup_test_env();
@@ -698,7 +698,7 @@ fn test_output_format_conversions() {
 
 #[tokio::test]
 async fn test_memory_safety() {
-    use cortex::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
     use std::sync::Arc;
 
     let config = Arc::new(CortexConfig::default());

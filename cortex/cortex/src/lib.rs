@@ -1,7 +1,6 @@
 //! Library for Cortex CLI utilities and shared functionality.
 
 pub mod commands;
-pub mod config;
 pub mod db_manager;
 pub mod doctor;
 pub mod export;
@@ -16,7 +15,6 @@ pub mod services;
 pub mod conversions;
 
 pub use commands::*;
-pub use config::*;
 pub use doctor::*;
 pub use export::*;
 pub use interactive::*;

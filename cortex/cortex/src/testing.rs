@@ -199,13 +199,12 @@ async fn test_storage_read_write() -> TestResult {
 }
 
 async fn test_storage_impl() -> Result<()> {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = CortexConfig::load().unwrap_or_default();
-    let data_dir = &config.storage.data_dir;
+    let data_dir = GlobalConfig::cortex_data_dir()?;
 
     // Test directory creation
-    std::fs::create_dir_all(data_dir).context("Failed to create data directory")?;
+    std::fs::create_dir_all(&data_dir).context("Failed to create data directory")?;
 
     // Test file write
     let test_file = data_dir.join("test.txt");
@@ -346,9 +345,9 @@ async fn test_end_to_end_workflow() -> TestResult {
 async fn test_e2e_impl() -> Result<()> {
     // This would test: init -> ingest -> search -> retrieve
     // For now, just a basic check
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let _config = CortexConfig::load().unwrap_or_default();
+    let _config = GlobalConfig::load().await.unwrap_or_default();
 
     // Would perform actual E2E test here
     Ok(())

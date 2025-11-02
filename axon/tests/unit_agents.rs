@@ -214,28 +214,6 @@ fn test_optimizer_agent_capabilities() {
 }
 
 // ============================================================================
-// Orchestrator Agent Tests
-// ============================================================================
-
-#[test]
-fn test_orchestrator_agent_creation() {
-    let agent = OrchestratorAgent::new("test-orch".to_string());
-    assert_eq!(agent.name(), "test-orch");
-    assert_eq!(agent.agent_type(), AgentType::Orchestrator);
-}
-
-#[test]
-fn test_orchestrator_agent_capabilities() {
-    let agent = OrchestratorAgent::new("orch-1".to_string());
-    let caps = agent.capabilities();
-
-    // Orchestrator should have orchestration capabilities
-    assert!(caps.contains(&Capability::TaskDecomposition));
-    assert!(caps.contains(&Capability::WorkflowManagement));
-    assert!(caps.contains(&Capability::AgentCoordination));
-}
-
-// ============================================================================
 // Agent Metrics Tests
 // ============================================================================
 

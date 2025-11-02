@@ -13,7 +13,6 @@
 //!
 //! # Agent Types
 //!
-//! - `OrchestratorAgent` - Coordinates task delegation and workflow management
 //! - `DeveloperAgent` - Code generation, modification, and refactoring
 //! - `ReviewerAgent` - Code review, quality assessment, and validation
 //! - `TesterAgent` - Test generation, execution, and coverage analysis
@@ -32,7 +31,6 @@ pub mod lifecycle;
 pub mod developer;
 pub mod reviewer;
 pub mod tester;
-pub mod orchestrator;
 pub mod documenter;
 pub mod architect;
 pub mod researcher;
@@ -45,7 +43,6 @@ pub use lifecycle::*;
 pub use developer::DeveloperAgent;
 pub use reviewer::ReviewerAgent;
 pub use tester::TesterAgent;
-pub use orchestrator::OrchestratorAgent;
 pub use documenter::DocumenterAgent;
 pub use architect::ArchitectAgent;
 pub use researcher::ResearcherAgent;

@@ -307,7 +307,7 @@ pub struct IngestionConfig {
 
 /// Interactive search interface
 pub async fn interactive_search() -> Result<()> {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
     use cortex_semantic::SemanticSearchEngine;
 
     let session = InteractiveSession::new();
@@ -316,7 +316,7 @@ pub async fn interactive_search() -> Result<()> {
     session.banner("Interactive Search")?;
 
     // Initialize semantic search engine
-    let config = CortexConfig::load()?;
+    let _config = GlobalConfig::load().await?;
     let search_engine = SemanticSearchEngine::new(
         cortex_semantic::config::SemanticConfig::default(),
     ).await?;

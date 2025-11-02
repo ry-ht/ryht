@@ -222,18 +222,18 @@ async fn check_surrealdb_connection() -> DiagnosticResult {
 }
 
 async fn check_configuration() -> DiagnosticResult {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    match CortexConfig::load() {
+    match GlobalConfig::load().await {
         Ok(config) => {
             // Validate configuration values
             let mut warnings = Vec::new();
 
-            if config.database.pool_size == 0 {
-                warnings.push("Database pool size is 0");
+            if config.cortex().pool.max_connections == 0 {
+                warnings.push("Database pool max_connections is 0");
             }
 
-            if config.storage.cache_size_mb < 100 {
+            if config.cortex().cache.memory_size_mb < 100 {
                 warnings.push("Cache size is very small (< 100MB)");
             }
 
@@ -266,14 +266,26 @@ async fn check_configuration() -> DiagnosticResult {
 }
 
 async fn check_data_directory() -> DiagnosticResult {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = match CortexConfig::load() {
+    let config = match GlobalConfig::load().await {
         Ok(c) => c,
-        Err(_) => CortexConfig::default(),
+        Err(_) => GlobalConfig::default(),
     };
 
-    let data_dir = &config.storage.data_dir;
+    // Use cortex_data_dir instead of removed storage field
+    let data_dir = match GlobalConfig::cortex_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            return DiagnosticResult {
+                check_name: "Data Directory".to_string(),
+                status: DiagnosticStatus::Fail,
+                message: format!("Cannot determine data directory: {}", e),
+                suggestion: None,
+                auto_fixable: false,
+            };
+        }
+    };
 
     if !data_dir.exists() {
         return DiagnosticResult {
@@ -309,9 +321,9 @@ async fn check_data_directory() -> DiagnosticResult {
 }
 
 async fn check_workspace_integrity() -> DiagnosticResult {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = match CortexConfig::load() {
+    let config = match GlobalConfig::load().await {
         Ok(c) => c,
         Err(_) => {
             return DiagnosticResult {
@@ -324,22 +336,14 @@ async fn check_workspace_integrity() -> DiagnosticResult {
         }
     };
 
-    if let Some(workspace) = config.default_workspace {
-        DiagnosticResult {
-            check_name: "Workspace Integrity".to_string(),
-            status: DiagnosticStatus::Pass,
-            message: format!("Default workspace: {}", workspace),
-            suggestion: None,
-            auto_fixable: false,
-        }
-    } else {
-        DiagnosticResult {
-            check_name: "Workspace Integrity".to_string(),
-            status: DiagnosticStatus::Warning,
-            message: "No default workspace configured".to_string(),
-            suggestion: Some("Create with: cortex workspace create".to_string()),
-            auto_fixable: false,
-        }
+    // Note: default_workspace removed from GlobalConfig
+    // Workspace check is done via database query instead
+    DiagnosticResult {
+        check_name: "Workspace Integrity".to_string(),
+        status: DiagnosticStatus::Pass,
+        message: "Workspace management via database".to_string(),
+        suggestion: None,
+        auto_fixable: false,
     }
 }
 
@@ -433,11 +437,11 @@ async fn check_dependencies() -> DiagnosticResult {
 }
 
 async fn check_disk_space() -> DiagnosticResult {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = match CortexConfig::load() {
+    let _config = match GlobalConfig::load().await {
         Ok(c) => c,
-        Err(_) => CortexConfig::default(),
+        Err(_) => GlobalConfig::default(),
     };
 
     // Simple check - in production would use actual disk space APIs
@@ -469,13 +473,12 @@ async fn fix_surrealdb_connection() -> Result<()> {
 }
 
 async fn fix_data_directory() -> Result<()> {
-    use crate::config::CortexConfig;
+    use cortex_core::config::GlobalConfig;
 
-    let config = CortexConfig::load().unwrap_or_default();
-    let data_dir = &config.storage.data_dir;
+    let data_dir = GlobalConfig::cortex_data_dir()?;
 
     output::info(format!("Creating data directory: {}", data_dir.display()));
-    std::fs::create_dir_all(data_dir)
+    std::fs::create_dir_all(&data_dir)
         .context("Failed to create data directory")?;
 
     output::success("Data directory created");

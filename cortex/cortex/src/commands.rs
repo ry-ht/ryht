@@ -2,7 +2,7 @@
 //!
 //! This module contains the complete implementation of all Cortex CLI commands.
 
-use crate::config::CortexConfig;
+use cortex_core::config::GlobalConfig;
 use crate::mcp::CortexMcpServer;
 use crate::output::{self, format_bytes, OutputFormat, TableBuilder};
 use anyhow::{Context, Result};
@@ -67,7 +67,7 @@ pub async fn init_workspace(
 ) -> Result<()> {
     let spinner = output::spinner("Initializing Cortex workspace...");
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let workspace_path = path.unwrap_or_else(|| PathBuf::from("."));
 
     // Create workspace directory
@@ -79,10 +79,8 @@ pub async fn init_workspace(
     std::fs::create_dir_all(&cortex_dir)
         .context("Failed to create .cortex directory")?;
 
-    // Create workspace config
-    let mut workspace_config = config.clone();
-    workspace_config.default_workspace = Some(name.clone());
-    workspace_config.save_project()?;
+    // Note: GlobalConfig no longer has default_workspace field
+    // Workspace association is now managed through the database/VFS
 
     // Initialize storage
     let storage = create_storage(&config).await?;
@@ -172,7 +170,7 @@ pub async fn workspace_create(
 ) -> Result<()> {
     let spinner = output::spinner("Creating workspace...");
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let vfs = VirtualFileSystem::new(storage.clone());
 
@@ -288,7 +286,7 @@ pub async fn workspace_create(
 
 /// List all workspaces
 pub async fn workspace_list(status: Option<String>, limit: usize, format: OutputFormat) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let _vfs = VirtualFileSystem::new(storage.clone());
 
@@ -416,7 +414,7 @@ pub async fn workspace_delete(workspace_id: String, confirm: bool) -> Result<()>
 
     let spinner = output::spinner("Deleting workspace...");
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let _vfs = VirtualFileSystem::new(storage.clone());
 
@@ -493,7 +491,7 @@ pub async fn ingest_path(
     workspace: Option<String>,
     recursive: bool,
 ) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
     let storage = create_storage(&config).await?;
 
@@ -564,8 +562,9 @@ pub async fn search_memory(
     limit: usize,
     format: OutputFormat,
 ) -> Result<()> {
-    let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.default_workspace.clone());
+    let config = GlobalConfig::load().await?;
+    // Note: default_workspace removed - workspace must be explicitly specified
+    let workspace_name = workspace;
 
     let spinner = output::spinner("Searching...");
 
@@ -676,8 +675,9 @@ pub async fn search_memory(
 
 /// List projects in workspace
 pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> Result<()> {
-    let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.default_workspace.clone());
+    let config = GlobalConfig::load().await?;
+    // Note: default_workspace removed - workspace must be explicitly specified
+    let workspace_name = workspace;
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -741,8 +741,9 @@ pub async fn list_projects(workspace: Option<String>, format: OutputFormat) -> R
 
 /// List documents in workspace
 pub async fn list_documents(workspace: Option<String>, format: OutputFormat) -> Result<()> {
-    let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.default_workspace.clone());
+    let config = GlobalConfig::load().await?;
+    // Note: default_workspace removed - workspace must be explicitly specified
+    let workspace_name = workspace;
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -821,8 +822,9 @@ pub async fn list_episodes(
     limit: usize,
     format: OutputFormat,
 ) -> Result<()> {
-    let config = CortexConfig::load()?;
-    let workspace_name = workspace.or(config.default_workspace.clone());
+    let config = GlobalConfig::load().await?;
+    // Note: default_workspace removed - workspace must be explicitly specified
+    let workspace_name = workspace;
 
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
@@ -886,7 +888,7 @@ pub async fn serve_mcp(address: String, port: u16) -> Result<()> {
     output::kv("Address", &address);
     output::kv("Port", port);
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
     // Start MCP server
     let server = CortexMcpServer::new().await?;
@@ -911,7 +913,7 @@ pub async fn flush_vfs(
     target_path: PathBuf,
     scope: FlushScope,
 ) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
     output::header("Flushing VFS to disk");
     output::kv("Workspace", &workspace);
@@ -961,7 +963,7 @@ pub async fn flush_vfs(
 
 /// Show system statistics
 pub async fn show_stats(format: OutputFormat) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
 
     let spinner = output::spinner("Gathering statistics...");
@@ -1013,62 +1015,81 @@ pub async fn show_stats(format: OutputFormat) -> Result<()> {
 
 /// Get a configuration value
 pub async fn config_get(key: String) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
-    match config.get(&key) {
-        Some(value) => {
-            println!("{}", value);
-            Ok(())
-        }
-        None => {
+    // GlobalConfig no longer has generic get() method
+    // Access configuration through accessor methods
+    let value = match key.as_str() {
+        "database.mode" => config.cortex().database.mode.to_string(),
+        "database.namespace" => config.cortex().database.namespace.clone(),
+        "database.database" => config.cortex().database.database.clone(),
+        "log_level" => config.general().log_level.clone(),
+        "mcp.server_bind" => config.cortex().mcp.server_bind.clone(),
+        _ => {
             output::error(format!("Unknown configuration key: {}", key));
-            Err(anyhow::anyhow!("Unknown key"))
+            return Err(anyhow::anyhow!("Unknown key"));
         }
-    }
+    };
+
+    println!("{}", value);
+    Ok(())
 }
 
 /// Set a configuration value
-pub async fn config_set(key: String, value: String, global: bool) -> Result<()> {
-    let mut config = CortexConfig::load()?;
+pub async fn config_set(key: String, value: String, _global: bool) -> Result<()> {
+    let mut config = GlobalConfig::load().await?;
 
-    config.set(&key, &value)?;
-
-    if global {
-        config.save_default()?;
-        output::success(format!("Set {} = {} (global)", key, value));
-    } else {
-        config.save_project()?;
-        output::success(format!("Set {} = {} (project)", key, value));
+    // GlobalConfig no longer has generic set() method
+    // Access configuration through mutable accessor methods
+    match key.as_str() {
+        "database.mode" => config.cortex_mut().database.mode = value.clone(),
+        "database.namespace" => config.cortex_mut().database.namespace = value.clone(),
+        "database.database" => config.cortex_mut().database.database = value.clone(),
+        "log_level" => config.general_mut().log_level = value.clone(),
+        "mcp.server_bind" => config.cortex_mut().mcp.server_bind = value.clone(),
+        _ => {
+            output::error(format!("Unknown configuration key: {}", key));
+            return Err(anyhow::anyhow!("Unknown key"));
+        }
     }
+
+    // Save configuration (no more save_default vs save_project distinction)
+    config.save().await?;
+    output::success(format!("Set {} = {}", key, value));
 
     Ok(())
 }
 
 /// List all configuration values
 pub async fn config_list() -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
     output::header("Configuration");
 
-    println!("\nDatabase:");
-    println!("  connection_string: {}", config.database.connection_string);
-    println!("  namespace: {}", config.database.namespace);
-    println!("  database: {}", config.database.database);
-    println!("  pool_size: {}", config.database.pool_size);
+    println!("\nGeneral:");
+    println!("  log_level: {}", config.general().log_level);
+    println!("  version: {}", config.general().version);
 
-    println!("\nStorage:");
-    println!("  data_dir: {}", config.storage.data_dir.display());
-    println!("  cache_size_mb: {}", config.storage.cache_size_mb);
-    println!("  compression_enabled: {}", config.storage.compression_enabled);
+    println!("\nDatabase:");
+    println!("  mode: {}", config.cortex().database.mode);
+    println!("  local_bind: {}", config.cortex().database.local_bind);
+    println!("  namespace: {}", config.cortex().database.namespace);
+    println!("  database: {}", config.cortex().database.database);
+
+    println!("\nPool:");
+    println!("  max_connections: {}", config.cortex().pool.max_connections);
+    println!("  min_connections: {}", config.cortex().pool.min_connections);
+
+    println!("\nCache:");
+    println!("  memory_size_mb: {}", config.cortex().cache.memory_size_mb);
+    println!("  ttl_seconds: {}", config.cortex().cache.ttl_seconds);
 
     println!("\nMCP:");
-    println!("  enabled: {}", config.mcp.enabled);
-    println!("  address: {}", config.mcp.address);
-    println!("  port: {}", config.mcp.port);
+    println!("  server_bind: {}", config.cortex().mcp.server_bind);
+    println!("  cors_enabled: {}", config.cortex().mcp.cors_enabled);
+    println!("  max_request_size_mb: {}", config.cortex().mcp.max_request_size_mb);
 
-    if let Some(workspace) = &config.default_workspace {
-        println!("\nDefault Workspace: {}", workspace);
-    }
+    // Note: default_workspace field removed from GlobalConfig
 
     Ok(())
 }
@@ -1081,7 +1102,7 @@ pub async fn config_list() -> Result<()> {
 pub async fn agent_create(name: String, agent_type: String) -> Result<()> {
     let spinner = output::spinner("Creating agent session...");
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
 
@@ -1113,7 +1134,7 @@ pub async fn agent_create(name: String, agent_type: String) -> Result<()> {
 
 /// List agent sessions
 pub async fn agent_list(format: OutputFormat) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
 
@@ -1163,7 +1184,7 @@ pub async fn agent_delete(session_id: String) -> Result<()> {
 
     let spinner = output::spinner("Deleting agent session...");
 
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let conn = storage.acquire().await?;
 
@@ -1190,8 +1211,9 @@ pub async fn memory_consolidate(
     _archive_old: bool,
     _threshold_days: i32,
 ) -> Result<()> {
-    let config = CortexConfig::load()?;
-    let _workspace_name = workspace.or(config.default_workspace.clone());
+    let config = GlobalConfig::load().await?;
+    // Note: default_workspace removed - workspace must be explicitly specified
+    let _workspace_name = workspace;
 
     let spinner = output::spinner("Consolidating memory...");
 
@@ -1216,7 +1238,7 @@ pub async fn memory_consolidate(
 
 /// Forget (delete) old memory
 pub async fn memory_forget(before_date: String, workspace: Option<String>) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
 
     if !output::confirm(format!("Delete all memory before {}?", before_date))? {
         output::info("Cancelled");
@@ -2447,23 +2469,23 @@ async fn install_qdrant_docker() -> Result<()> {
 // ============================================================================
 
 /// Create a storage connection manager from config
-async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>> {
+async fn create_storage(config: &GlobalConfig) -> Result<Arc<ConnectionManager>> {
     use cortex_storage::connection_pool::ConnectionMode;
     use std::time::Duration;
 
     let db_config = DatabaseConfig {
         connection_mode: ConnectionMode::Local {
-            endpoint: config.database.connection_string.clone(),
+            endpoint: config.cortex().database.local_bind.clone(),
         },
         credentials: Credentials {
-            username: config.database.username.clone(),
-            password: config.database.password.clone(),
+            username: Some(config.cortex().database.username.clone()),
+            password: Some(config.cortex().database.password.clone()),
         },
         pool_config: PoolConfig {
-            max_connections: config.database.pool_size,
-            min_connections: 2,
-            connection_timeout: Duration::from_secs(10),
-            idle_timeout: Some(Duration::from_secs(300)),
+            max_connections: config.cortex().pool.max_connections as usize,
+            min_connections: config.cortex().pool.min_connections as usize,
+            connection_timeout: Duration::from_millis(config.cortex().pool.connection_timeout_ms),
+            idle_timeout: Some(Duration::from_millis(config.cortex().pool.idle_timeout_ms)),
             max_lifetime: Some(Duration::from_secs(1800)),
             retry_policy: cortex_storage::connection_pool::RetryPolicy {
                 max_attempts: 3,
@@ -2476,8 +2498,8 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
             recycle_after_uses: Some(10000),
             shutdown_grace_period: Duration::from_secs(30),
         },
-        namespace: config.database.namespace.clone(),
-        database: config.database.database.clone(),
+        namespace: config.cortex().database.namespace.clone(),
+        database: config.cortex().database.database.clone(),
     };
 
     let manager = ConnectionManager::new(db_config)
@@ -2491,14 +2513,13 @@ async fn create_storage(config: &CortexConfig) -> Result<Arc<ConnectionManager>>
 async fn create_temp_session(
     storage: Arc<ConnectionManager>,
     workspace_name: Option<String>,
-    config: &CortexConfig,
+    config: &GlobalConfig,
 ) -> Result<(cortex_storage::session::SessionId, Uuid, String)> {
     use cortex_storage::session::{AgentSession, SessionManager, SessionState};
 
     // Determine which workspace to use
     let workspace_to_use = workspace_name
-        .or_else(|| config.default_workspace.clone())
-        .ok_or_else(|| anyhow::anyhow!("No workspace specified and no default workspace configured"))?;
+        .ok_or_else(|| anyhow::anyhow!("No workspace specified"))?;
 
     // Get workspace ID from name using raw query to avoid serialization issues
     let conn = storage.acquire().await?;
@@ -2566,11 +2587,10 @@ async fn create_temp_session(
 /// Get workspace name to use for command
 fn get_workspace_name(
     specified: Option<String>,
-    config: &CortexConfig,
+    config: &GlobalConfig,
 ) -> Result<String> {
     specified
-        .or_else(|| config.default_workspace.clone())
-        .ok_or_else(|| anyhow::anyhow!("No workspace specified and no default workspace configured"))
+        .ok_or_else(|| anyhow::anyhow!("No workspace specified"))
 }
 
 // ============================================================================
@@ -3018,38 +3038,9 @@ async fn resolve_workspace_id(storage: &Arc<ConnectionManager>, workspace: Optio
             .transpose()?
             .ok_or_else(|| anyhow::anyhow!("Workspace not found: {}", name))
     } else {
-        // Use default workspace from config
-        let config = CortexConfig::load()?;
-        config.default_workspace
-            .ok_or_else(|| anyhow::anyhow!("No workspace specified. Use --workspace flag or set default_workspace in config"))
-            .and_then(|name| {
-                // Resolve default workspace name to ID
-                futures::executor::block_on(async {
-                    let conn = storage.acquire().await?;
-                    let mut response = conn.connection()
-                        .query("SELECT *, <string>meta::id(id) as id FROM workspace WHERE name = $name")
-                        .bind(("name", name.clone()))
-                        .await?;
-
-                    // Parse with string IDs and convert to UUIDs
-                    #[derive(serde::Deserialize)]
-                    struct WorkspaceWithStringId {
-                        id: String,
-                        #[serde(flatten)]
-                        rest: serde_json::Value,
-                    }
-
-                    let workspaces_raw: Vec<WorkspaceWithStringId> = response.take(0)?;
-                    workspaces_raw.first()
-                        .map(|w| {
-                            // Extract UUID from "workspace:uuid" format
-                            let uuid_str = w.id.split(':').nth(1).unwrap_or(&w.id);
-                            Uuid::parse_str(uuid_str)
-                        })
-                        .transpose()?
-                        .ok_or_else(|| anyhow::anyhow!("Default workspace not found: {}", name))
-                })
-            })
+        // Note: default_workspace removed from GlobalConfig
+        // Workspace must be explicitly specified
+        Err(anyhow::anyhow!("No workspace specified. Use --workspace flag to specify a workspace"))
     }
 }
 
@@ -3061,7 +3052,7 @@ pub async fn vfs_ls(
     format: OutputFormat,
 ) -> Result<()> {
     let spinner = output::spinner("Listing directory...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3095,7 +3086,7 @@ pub async fn vfs_ls(
 }
 
 pub async fn vfs_cat(path: String, workspace: Option<String>) -> Result<()> {
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3115,7 +3106,7 @@ pub async fn vfs_tree(
     format: OutputFormat,
 ) -> Result<()> {
     let spinner = output::spinner("Building tree...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3151,7 +3142,7 @@ pub async fn vfs_tree(
 
 pub async fn vfs_rm(path: String, workspace: Option<String>, recursive: bool) -> Result<()> {
     let spinner = output::spinner("Deleting...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3172,7 +3163,7 @@ pub async fn vfs_cp(
     _overwrite: bool,
 ) -> Result<()> {
     let spinner = output::spinner("Copying...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3196,7 +3187,7 @@ pub async fn vfs_mv(
     _overwrite: bool,
 ) -> Result<()> {
     let spinner = output::spinner("Moving...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3216,7 +3207,7 @@ pub async fn vfs_mv(
 
 pub async fn vfs_mkdir(path: String, workspace: Option<String>, parents: bool) -> Result<()> {
     let spinner = output::spinner("Creating directory...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
@@ -3231,7 +3222,7 @@ pub async fn vfs_mkdir(path: String, workspace: Option<String>, parents: bool) -
 
 pub async fn vfs_write(path: String, content: String, workspace: Option<String>) -> Result<()> {
     let spinner = output::spinner("Writing file...");
-    let config = CortexConfig::load()?;
+    let config = GlobalConfig::load().await?;
     let storage = create_storage(&config).await?;
     let workspace_id = resolve_workspace_id(&storage, workspace).await?;
 
