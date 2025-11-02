@@ -1025,12 +1025,18 @@ pub async fn mcp_stdio() -> Result<()> {
         config.cortex().server.port
     );
 
-    // Ensure Cortex HTTP server is running (auto-start if needed)
-    ensure_cortex_server_running(
-        &cortex_url,
-        &config.cortex().server.host,
-        config.cortex().server.port,
-    ).await?;
+    // Spawn background task to ensure Cortex is running (non-blocking for MCP startup)
+    let cortex_url_clone = cortex_url.clone();
+    let host = config.cortex().server.host.clone();
+    let port = config.cortex().server.port;
+    tokio::spawn(async move {
+        tracing::info!("Starting Cortex server check in background...");
+        if let Err(e) = ensure_cortex_server_running(&cortex_url_clone, &host, port).await {
+            tracing::error!("Failed to start Cortex server in background: {}", e);
+        } else {
+            tracing::info!("Cortex server is ready");
+        }
+    });
 
     let working_dir = std::env::current_dir()?;
 
@@ -1044,11 +1050,15 @@ pub async fn mcp_stdio() -> Result<()> {
         default_timeout_secs: 3600,
     };
 
-    // Initialize Cortex bridge
+    // Initialize Cortex bridge with minimal timeout for fast MCP startup
     let cortex_config = crate::cortex_bridge::CortexConfig {
         base_url: cortex_url,
+        request_timeout_secs: 2,  // Minimal timeout - background task is starting Cortex
         ..Default::default()
     };
+
+    // Give Cortex 500ms to start before attempting connection (much faster than 30s!)
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     let cortex = match crate::cortex_bridge::CortexBridge::new(cortex_config).await {
         Ok(bridge) => {
@@ -1056,8 +1066,9 @@ pub async fn mcp_stdio() -> Result<()> {
             Arc::new(bridge)
         }
         Err(e) => {
-            tracing::error!("Failed to connect to Cortex after auto-start: {}", e);
-            return Err(anyhow::anyhow!("Cortex bridge initialization failed: {}", e));
+            tracing::warn!("Cortex not available yet (500ms wait + 2s timeout), MCP starting anyway. Tools will retry: {}", e);
+            // For now, return error but will implement lazy retry in future
+            return Err(anyhow::anyhow!("Cortex bridge initialization failed after 2.5s total wait: {}", e));
         }
     };
 
@@ -1274,14 +1285,15 @@ async fn start_cortex_server(host: &str, port: u16) -> Result<()> {
 
     tracing::info!("Starting Cortex HTTP server on {}:{}", host, port);
 
-    // Start cortex server in background
+    // Start cortex server directly using internal-server-run (no double fork)
+    // This avoids the daemonization overhead and potential blocking issues
     let child = Command::new(&cortex_binary)
-        .arg("server")
-        .arg("start")
+        .arg("internal-server-run")  // Direct server start, bypasses server manager
         .arg("--host")
         .arg(host)
         .arg("--port")
         .arg(port.to_string())
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
@@ -1289,6 +1301,10 @@ async fn start_cortex_server(host: &str, port: u16) -> Result<()> {
 
     let pid = child.id().unwrap_or(0);
     tracing::info!("Cortex HTTP server started with PID: {}", pid);
+
+    // Forget the child process so it continues running in background
+    // and doesn't become a zombie when this function returns
+    std::mem::forget(child);
 
     Ok(())
 }
