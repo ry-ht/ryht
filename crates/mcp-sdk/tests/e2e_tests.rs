@@ -12,10 +12,10 @@
 //! - Multiple sequential requests
 //! - State persistence across requests
 
-use mcp_server::prelude::*;
-use mcp_server::transport::MockTransport;
+use mcp_sdk::prelude::*;
+use mcp_sdk::transport::MockTransport;
 // Import the correct ResourceContent from resource module (not protocol)
-use mcp_server::resource::ResourceContent as ResourceContentImpl;
+use mcp_sdk::resource::ResourceContent as ResourceContentImpl;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -429,23 +429,21 @@ async fn test_e2e_invalid_tool_params() {
     assert!(error.code < 0, "Expected negative error code but got: {}", error.code);
 }
 
-// TODO: Re-enable when ServerBuilder.resource() is implemented
-#[tokio::test]
-#[ignore]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_e2e_list_resources() {
     let mut transport = MockTransport::new();
 
     let server = McpServer::builder()
         .name("test-server")
         .version("1.0.0")
-        // .resource(StaticResource {
-        //     uri: "file:///config.txt".to_string(),
-        //     content: "Configuration data".to_string(),
-        // })
-        // .resource(StaticResource {
-        //     uri: "file:///readme.txt".to_string(),
-        //     content: "README content".to_string(),
-        // })
+        .resource(StaticResource {
+            uri: "file:///config.txt".to_string(),
+            content: "Configuration data".to_string(),
+        })
+        .resource(StaticResource {
+            uri: "file:///readme.txt".to_string(),
+            content: "README content".to_string(),
+        })
         .build();
 
     // Send list resources request
@@ -472,19 +470,17 @@ async fn test_e2e_list_resources() {
     assert!(uris.contains(&"file:///readme.txt"));
 }
 
-// TODO: Re-enable when ServerBuilder.resource() is implemented
-#[tokio::test]
-#[ignore]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_e2e_read_resource_success() {
     let mut transport = MockTransport::new();
 
     let server = McpServer::builder()
         .name("test-server")
         .version("1.0.0")
-        // .resource(StaticResource {
-        //     uri: "file:///data.txt".to_string(),
-        //     content: "Resource content here".to_string(),
-        // })
+        .resource(StaticResource {
+            uri: "file:///data.txt".to_string(),
+            content: "Resource content here".to_string(),
+        })
         .build();
 
     // Send read resource request
@@ -508,9 +504,7 @@ async fn test_e2e_read_resource_success() {
     assert_eq!(contents[0]["text"], "Resource content here");
 }
 
-// TODO: Re-enable when ServerBuilder.resource() is implemented
-#[tokio::test]
-#[ignore]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_e2e_resource_not_found() {
     let mut transport = MockTransport::new();
 
@@ -569,11 +563,10 @@ async fn test_e2e_sequential_requests() {
         .version("1.0.0")
         .tool(EchoTool)
         .tool(CalculatorTool)
-        // TODO: Re-enable when resources are implemented
-        // .resource(StaticResource {
-        //     uri: "file:///data.txt".to_string(),
-        //     content: "test data".to_string(),
-        // })
+        .resource(StaticResource {
+            uri: "file:///data.txt".to_string(),
+            content: "test data".to_string(),
+        })
         .build();
 
     // Queue multiple requests
@@ -585,9 +578,8 @@ async fn test_e2e_sequential_requests() {
         "calculator",
         json!({"operation": "multiply", "a": 5.0, "b": 3.0}),
     ));
-    // TODO: Re-enable resource tests when implemented
-    // transport.push_request(create_list_resources_request(5));
-    // transport.push_request(create_read_resource_request(6, "file:///data.txt"));
+    transport.push_request(create_list_resources_request(5));
+    transport.push_request(create_read_resource_request(6, "file:///data.txt"));
 
     // Process all requests
     let mut request_count = 0;
@@ -598,11 +590,11 @@ async fn test_e2e_sequential_requests() {
     }
 
     // Verify all requests were processed
-    assert_eq!(request_count, 4); // Was 6, now 4 without resource tests
+    assert_eq!(request_count, 6);
 
     // Verify all responses
     let responses = transport.responses();
-    assert_eq!(responses.len(), 4);
+    assert_eq!(responses.len(), 6);
 
     // All should be successful
     for response in &responses {
@@ -614,9 +606,8 @@ async fn test_e2e_sequential_requests() {
     assert_eq!(responses[1].id, Some(json!(2))); // list tools
     assert_eq!(responses[2].id, Some(json!(3))); // echo
     assert_eq!(responses[3].id, Some(json!(4))); // calculator
-    // TODO: Re-enable when resources are implemented
-    // assert_eq!(responses[4].id, Some(json!(5))); // list resources
-    // assert_eq!(responses[5].id, Some(json!(6))); // read resource
+    assert_eq!(responses[4].id, Some(json!(5))); // list resources
+    assert_eq!(responses[5].id, Some(json!(6))); // read resource
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -669,11 +660,10 @@ async fn test_e2e_full_protocol_flow() {
         .protocol_version("2025-03-26")
         .tool(EchoTool)
         .tool(CalculatorTool)
-        // TODO: Re-enable when resources are implemented
-        // .resource(StaticResource {
-        //     uri: "app://config".to_string(),
-        //     content: "configuration".to_string(),
-        // })
+        .resource(StaticResource {
+            uri: "app://config".to_string(),
+            content: "configuration".to_string(),
+        })
         .build();
 
     // 1. Initialize
@@ -692,13 +682,13 @@ async fn test_e2e_full_protocol_flow() {
     assert!(response.is_success());
     assert_eq!(response.result.as_ref().unwrap()["tools"].as_array().unwrap().len(), 2);
 
-    // 3. List resources - TODO: Re-enable when resources are implemented
-    // transport.push_request(create_list_resources_request(3));
-    // let request = transport.recv().await.unwrap();
-    // let response = process_request(&server, request).await;
-    // transport.send(response.clone()).await.unwrap();
-    // assert!(response.is_success());
-    // assert_eq!(response.result.as_ref().unwrap()["resources"].as_array().unwrap().len(), 1);
+    // 3. List resources
+    transport.push_request(create_list_resources_request(3));
+    let request = transport.recv().await.unwrap();
+    let response = process_request(&server, request).await;
+    transport.send(response.clone()).await.unwrap();
+    assert!(response.is_success());
+    assert_eq!(response.result.as_ref().unwrap()["resources"].as_array().unwrap().len(), 1);
 
     // 4. Call a tool
     transport.push_request(create_call_tool_request(4, "echo", json!({"message": "test"})));
@@ -718,15 +708,15 @@ async fn test_e2e_full_protocol_flow() {
     transport.send(response.clone()).await.unwrap();
     assert!(response.is_success());
 
-    // 6. Read a resource - TODO: Re-enable when resources are implemented
-    // transport.push_request(create_read_resource_request(6, "app://config"));
-    // let request = transport.recv().await.unwrap();
-    // let response = process_request(&server, request).await;
-    // transport.send(response.clone()).await.unwrap();
-    // assert!(response.is_success());
+    // 6. Read a resource
+    transport.push_request(create_read_resource_request(6, "app://config"));
+    let request = transport.recv().await.unwrap();
+    let response = process_request(&server, request).await;
+    transport.send(response.clone()).await.unwrap();
+    assert!(response.is_success());
 
     // Verify all responses were recorded
-    assert_eq!(transport.response_count(), 4); // Was 6, now 4 without resource tests
+    assert_eq!(transport.response_count(), 6);
 }
 
 #[tokio::test(flavor = "multi_thread")]
