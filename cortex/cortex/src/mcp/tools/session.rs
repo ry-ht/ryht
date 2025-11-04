@@ -1,15 +1,12 @@
 //! Session Management Tools
 //!
-//! TODO (Phase 6): Implement actual session management
-//! Currently stubs that return success
+//! TODO (Phase 6): Remove cortex_bridge, use cortex-vfs session types
 
+use crate::cortex_bridge::{AgentId, CortexBridge, MergeStrategy, SessionId, SessionScope, WorkspaceId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-
-// ============================================================================
-// Session Create
-// ============================================================================
+use std::sync::Arc;
+use tracing::{info, warn};
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SessionCreateInput {
@@ -21,79 +18,49 @@ pub struct SessionCreateOutput {
     pub session_id: String,
 }
 
-pub struct SessionCreateContext;
-
-impl SessionCreateContext {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for SessionCreateContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub struct SessionCreateTool {
-    context: SessionCreateContext,
+    cortex: Arc<CortexBridge>,
 }
 
 impl SessionCreateTool {
-    pub fn new(context: SessionCreateContext) -> Self {
-        Self { context }
+    /// Create a new SessionCreateTool with CortexBridge
+    pub fn new(cortex: Arc<CortexBridge>) -> Self {
+        Self { cortex }
     }
 
     pub async fn create(&self, input: SessionCreateInput) -> Result<SessionCreateOutput> {
-        let session_id = format!("session-{}", uuid::Uuid::new_v4());
+        // Ensure Cortex is initialized
+        self.cortex.ensure_initialized().await?;
 
-        tracing::info!(
-            workspace_id = %input.workspace_id,
-            session_id = %session_id,
-            "Session create requested (STUB)"
+        // Generate a unique agent ID for this session
+        let agent_id = AgentId::new();
+
+        // Create workspace ID from input
+        let workspace_id = WorkspaceId::from(input.workspace_id.clone());
+
+        // Create default session scope (all paths accessible)
+        let scope = SessionScope {
+            paths: vec!["/".to_string()],
+            read_only_paths: vec![],
+        };
+
+        info!(
+            "Creating session for workspace {} with agent {}",
+            workspace_id, agent_id
         );
 
-        Ok(SessionCreateOutput { session_id })
-    }
-}
+        // Create session via CortexBridge
+        let session_id = self.cortex
+            .create_session(agent_id.clone(), workspace_id, scope)
+            .await?;
 
-impl mcp_sdk::Tool for SessionCreateTool {
-    fn name(&self) -> &str {
-        "axon_session_create"
-    }
+        info!("Created session {} successfully", session_id);
 
-    fn description(&self) -> Option<&str> {
-        Some("Create an isolated work session for experimental changes. Sessions allow agents to work without affecting the main workspace.")
-    }
-
-    fn input_schema(&self) -> serde_json::Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "workspace_id": {
-                    "type": "string",
-                    "description": "The workspace ID to create a session for"
-                }
-            },
-            "required": ["workspace_id"]
+        Ok(SessionCreateOutput {
+            session_id: session_id.0,
         })
     }
-
-    async fn call(&self, arguments: serde_json::Value) -> Result<serde_json::Value, mcp_sdk::Error> {
-        let input: SessionCreateInput = serde_json::from_value(arguments)
-            .map_err(|e| mcp_sdk::Error::InvalidParams(e.to_string()))?;
-
-        let output = self.create(input).await
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))?;
-
-        serde_json::to_value(output)
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))
-    }
 }
-
-// ============================================================================
-// Session Merge
-// ============================================================================
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SessionMergeInput {
@@ -107,70 +74,48 @@ pub struct SessionMergeOutput {
     pub conflicts_resolved: u32,
 }
 
-pub struct SessionMergeContext;
-
-impl SessionMergeContext {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for SessionMergeContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub struct SessionMergeTool {
-    context: SessionMergeContext,
+    cortex: Arc<CortexBridge>,
 }
 
 impl SessionMergeTool {
-    pub fn new(context: SessionMergeContext) -> Self {
-        Self { context }
+    /// Create a new SessionMergeTool with CortexBridge
+    pub fn new(cortex: Arc<CortexBridge>) -> Self {
+        Self { cortex }
     }
 
     pub async fn merge(&self, input: SessionMergeInput) -> Result<SessionMergeOutput> {
-        tracing::info!(session_id = %input.session_id, "Session merge requested (STUB)");
+        // Ensure Cortex is initialized
+        self.cortex.ensure_initialized().await?;
+
+        let session_id = SessionId::from(input.session_id.clone());
+
+        info!("Merging session {}", session_id);
+
+        // Use Auto merge strategy by default
+        let strategy = MergeStrategy::Auto;
+
+        // Merge session via CortexBridge
+        let merge_report = self.cortex
+            .merge_session(&session_id, strategy)
+            .await?;
+
+        if merge_report.conflicts_resolved > 0 {
+            warn!(
+                "Session {} merged with {} conflicts resolved",
+                session_id, merge_report.conflicts_resolved
+            );
+        } else {
+            info!(
+                "Session {} merged successfully with {} changes",
+                session_id, merge_report.changes_merged
+            );
+        }
 
         Ok(SessionMergeOutput {
             success: true,
-            changes_merged: 0,
-            conflicts_resolved: 0,
+            changes_merged: merge_report.changes_merged,
+            conflicts_resolved: merge_report.conflicts_resolved,
         })
-    }
-}
-
-impl mcp_sdk::Tool for SessionMergeTool {
-    fn name(&self) -> &str {
-        "axon_session_merge"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Merge a session's changes back into the main workspace. Handles conflict detection and resolution.")
-    }
-
-    fn input_schema(&self) -> serde_json::Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The session ID to merge"
-                }
-            },
-            "required": ["session_id"]
-        })
-    }
-
-    async fn call(&self, arguments: serde_json::Value) -> Result<serde_json::Value, mcp_sdk::Error> {
-        let input: SessionMergeInput = serde_json::from_value(arguments)
-            .map_err(|e| mcp_sdk::Error::InvalidParams(e.to_string()))?;
-
-        let output = self.merge(input).await
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))?;
-
-        serde_json::to_value(output)
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))
     }
 }

@@ -1,11 +1,11 @@
 //! Agent Status Tool
 //!
-//! TODO (Phase 6): Implement actual agent status tracking
-//! Currently a stub that returns "not found" for all agents
+//! TODO (Phase 6): Update imports to use cortex-runtime::AgentRegistry
 
+use crate::mcp_server::{AgentRegistry};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct AgentStatusInput {
@@ -20,71 +20,24 @@ pub struct AgentStatusOutput {
     pub error: Option<String>,
 }
 
-pub struct AgentStatusContext;
-
-impl AgentStatusContext {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for AgentStatusContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub struct AgentStatusTool {
-    context: AgentStatusContext,
+    registry: Arc<AgentRegistry>,
 }
 
 impl AgentStatusTool {
-    pub fn new(context: AgentStatusContext) -> Self {
-        Self { context }
+    pub fn new(registry: Arc<AgentRegistry>) -> Self {
+        Self { registry }
     }
 
     pub async fn check_status(&self, input: AgentStatusInput) -> Result<AgentStatusOutput> {
-        tracing::info!(agent_id = %input.agent_id, "Agent status check requested (STUB)");
+        let execution = self.registry.get(&input.agent_id).await
+            .ok_or_else(|| anyhow::anyhow!("Agent not found: {}", input.agent_id))?;
 
         Ok(AgentStatusOutput {
-            agent_id: input.agent_id.clone(),
-            status: "not_found".to_string(),
-            result: None,
-            error: Some("Agent status tracking not yet implemented. This is a stub.".to_string()),
+            agent_id: execution.agent_id,
+            status: execution.status.to_string(),
+            result: execution.result,
+            error: execution.error,
         })
-    }
-}
-
-impl mcp_sdk::Tool for AgentStatusTool {
-    fn name(&self) -> &str {
-        "axon_agent_status"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Check the status of a running agent by agent_id. Returns current status, progress, and results if completed.")
-    }
-
-    fn input_schema(&self) -> serde_json::Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "agent_id": {
-                    "type": "string",
-                    "description": "The agent ID to check status for"
-                }
-            },
-            "required": ["agent_id"]
-        })
-    }
-
-    async fn call(&self, arguments: serde_json::Value) -> Result<serde_json::Value, mcp_sdk::Error> {
-        let input: AgentStatusInput = serde_json::from_value(arguments)
-            .map_err(|e| mcp_sdk::Error::InvalidParams(e.to_string()))?;
-
-        let output = self.check_status(input).await
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))?;
-
-        serde_json::to_value(output)
-            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))
     }
 }
