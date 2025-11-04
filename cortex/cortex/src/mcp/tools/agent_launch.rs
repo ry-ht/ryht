@@ -3,7 +3,7 @@
 //! Direct integration with Cortex subsystems (no HTTP bridge).
 
 use crate::mcp::tools::agent_registry::{AgentExecution, AgentRegistry, ExecutionStatus};
-use crate::cortex_bridge::CortexBridge;
+use cortex_intelligence::CortexBridge;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -177,9 +177,6 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        // Ensure Cortex is initialized before executing agent
-        cortex.ensure_initialized().await?;
-
         match agent_type {
             "developer" => {
                 Self::execute_developer(task, workspace_id, params, cortex).await
@@ -212,8 +209,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::developer::{DeveloperAgent, CodeSpec};
-        use crate::cortex_bridge::WorkspaceId;
+        use cortex_agents::developer::{DeveloperAgent, CodeSpec};
+        use cortex_types::WorkspaceId;
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -273,8 +270,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::tester::{TesterAgent, TestSpec, TestType};
-        use crate::cortex_bridge::WorkspaceId;
+        use cortex_agents::tester::{TesterAgent, TestSpec, TestType};
+        use cortex_types::WorkspaceId;
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -377,8 +374,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::reviewer::ReviewerAgent;
-        use crate::cortex_bridge::{WorkspaceId, SessionId};
+        use cortex_agents::reviewer::ReviewerAgent;
+        use cortex_types::{WorkspaceId, SessionId};
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -440,8 +437,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::architect::{ArchitectAgent, SystemRequirements, ScaleRequirements, QualityAttribute};
-        use crate::cortex_bridge::WorkspaceId;
+        use cortex_agents::architect::{ArchitectAgent, SystemRequirements, ScaleRequirements, QualityAttribute};
+        use cortex_types::WorkspaceId;
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -560,8 +557,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::researcher::{ResearcherAgent, ResearchQuery, QueryType, ResearchScope};
-        use crate::cortex_bridge::WorkspaceId;
+        use cortex_agents::researcher::{ResearcherAgent, ResearchQuery, QueryType, ResearchScope};
+        use cortex_types::WorkspaceId;
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -650,7 +647,7 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         _cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::optimizer::{OptimizerAgent, OptimizationTarget, OptimizationType, PerformanceMetrics};
+        use cortex_agents::optimizer::{OptimizerAgent, OptimizationTarget, OptimizationType, PerformanceMetrics};
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));
@@ -784,8 +781,8 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
-        use crate::agents::documenter::{DocumenterAgent, DocType};
-        use crate::cortex_bridge::WorkspaceId;
+        use cortex_agents::documenter::{DocumenterAgent, DocType};
+        use cortex_types::WorkspaceId;
 
         // Parse parameters
         let params = params.unwrap_or(serde_json::json!({}));

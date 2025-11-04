@@ -14,7 +14,9 @@ use tracing::{info, error};
 use mcp_sdk::prelude::*;
 use async_trait::async_trait;
 
-use crate::cortex_bridge::{CortexBridge, WorkspaceId, SessionId};
+// Import CortexBridge from cortex-intelligence (direct API access version)
+use cortex_intelligence::CortexBridge;
+use cortex_types::{WorkspaceId, SessionId};
 use cortex_orchestration::{
     LeadAgent,
     LeadAgentConfig,
@@ -186,8 +188,8 @@ impl OrchestrateTool {
     pub async fn orchestrate(&self, input: OrchestrateInput) -> Result<OrchestrateOutput> {
         info!("Orchestrating task: {}", input.task);
 
-        // Ensure Cortex is initialized
-        self.context.cortex.ensure_initialized().await?;
+        // Note: Intelligence CortexBridge is already initialized with all dependencies
+        // No need for separate initialization step
 
         // Load learned strategies now that Cortex is available (only loads once)
         if let Err(e) = self.strategy_library.ensure_learned_strategies_loaded().await {

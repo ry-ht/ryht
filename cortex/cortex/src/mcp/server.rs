@@ -146,21 +146,44 @@ impl CortexMcpServer {
         // Initialize semantic memory system
         let semantic_memory = Arc::new(cortex_memory::SemanticMemorySystem::new(storage.clone()));
 
+        // Initialize episodic memory system (required by CortexBridge)
+        let episodic_memory = Arc::new(cortex_memory::EpisodicMemorySystem::new(storage.clone()));
+
+        // Initialize cognitive manager (required by CortexBridge)
+        let cognitive_manager = Arc::new(cortex_memory::CognitiveManager::new(storage.clone()));
+
         // Initialize agent registry
         let agent_registry = Arc::new(crate::mcp::tools::AgentRegistry::new(storage.clone()));
 
         // Initialize session manager (from cortex-storage)
         use cortex_storage::session::SessionManager;
-        let session_manager = Arc::new(SessionManager::new(storage.clone()));
+        // Note: We need to pass the DB connection directly, not the ConnectionManager
+        // We use from_connection_manager_with_ns to create the SessionManager
+        let session_manager = Arc::new(
+            SessionManager::from_connection_manager_with_ns(
+                &storage,
+                "cortex".to_string(),
+                "main".to_string(),
+            ).await?
+        );
 
         // Initialize lock manager (from cortex-storage)
         use cortex_storage::locks::LockManager;
-        let lock_manager = Arc::new(LockManager::new(storage.clone()));
+        let lock_manager = Arc::new(LockManager::new(
+            std::time::Duration::from_secs(300),  // default_timeout: 5 minutes
+            std::time::Duration::from_secs(10),   // detection_interval: 10 seconds
+        ));
 
-        // Create CortexBridge for legacy agent support (temporary)
-        let cortex_bridge = Arc::new(crate::cortex_bridge::CortexBridge::new(
-            crate::cortex_bridge::CortexConfig::default()
-        ).await?);
+        // Create CortexBridge for orchestration (intelligence version with direct API access)
+        // This provides in-process integration with Cortex subsystems without HTTP overhead
+        let cortex_bridge = Arc::new(cortex_intelligence::CortexBridge::new(
+            episodic_memory.clone(),
+            cognitive_manager.clone(),
+            None, // No semantic search engine yet
+            vfs.clone(),
+            session_manager.clone(),
+            storage.clone(),
+        ));
 
         // Create Axon contexts with proper dependencies
         let session_ctx = crate::mcp::tools::session::SessionContext::new(
@@ -409,7 +432,7 @@ impl CortexMcpServer {
             .tool(AgentLaunchTool::new(agent_launch_ctx))
             .tool(AgentStatusTool::new(agent_status_ctx))
             .tool(AgentStopTool::new(agent_stop_ctx))
-            .tool(OrchestrateTool::new(orchestrate_ctx))
+            .tool(OrchestrateTool::new(orchestrate_ctx).await?)
             .tool(CortexQueryTool::new(cortex_query_ctx))
             .tool(super::tools::session::SessionCreateTool::new(session_ctx.clone()))
             .tool(super::tools::session::SessionMergeTool::new(session_ctx.clone()))
