@@ -593,7 +593,7 @@ fn init_logging(verbose: bool) {
         EnvFilter::new("axon=debug,info")
     } else {
         EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("axon=info,warn"))
+            .unwrap_or_else(|_| EnvFilter::new("axon=info"))
     };
 
     tracing_subscriber::registry()

@@ -53,7 +53,6 @@ impl AxonMcpServer {
     /// Build MCP server with all tools registered
     async fn build_server(&self) -> Result<mcp_sdk::McpServer> {
         use super::tools::*;
-        use mcp_sdk::prelude::*;
 
         tracing::info!("Registering Axon MCP tools");
 
@@ -65,10 +64,10 @@ impl AxonMcpServer {
         );
         let agent_status = AgentStatusTool::new(self.registry.clone());
         let agent_stop = AgentStopTool::new(self.registry.clone());
-        let orchestrate = OrchestrateTool;
-        let cortex_query = CortexQueryTool;
-        let session_create = SessionCreateTool;
-        let session_merge = SessionMergeTool;
+        let orchestrate = OrchestrateTool::new(self.cortex.clone()).await?;
+        let cortex_query = CortexQueryTool::new(self.cortex.clone());
+        let session_create = SessionCreateTool::new(self.cortex.clone());
+        let session_merge = SessionMergeTool::new(self.cortex.clone());
 
         // Build server
         let server = mcp_sdk::McpServer::builder()
@@ -128,7 +127,6 @@ impl AxonMcpServer {
 
 use async_trait::async_trait;
 use mcp_sdk::prelude::*;
-use schemars::JsonSchema;
 
 // Agent Launch Tool Wrapper
 pub struct AxonAgentLaunchToolWrapper {

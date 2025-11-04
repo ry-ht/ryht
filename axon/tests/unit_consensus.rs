@@ -126,7 +126,9 @@ fn test_supermajority_requires_two_thirds() {
 
     match result {
         ConsensusResult::Accepted { support, .. } => {
-            assert!(support >= 0.67);
+            // With exactly 2/3 support, should be >= threshold (2.0/3.0)
+            assert!(support >= 2.0 / 3.0);
+            assert!((support - 2.0 / 3.0).abs() < 0.0001); // Should be approximately 2/3
         }
         _ => panic!("Expected Accepted result"),
     }

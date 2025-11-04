@@ -23,7 +23,7 @@ async fn create_test_cortex() -> Arc<CortexBridge> {
     };
 
     Arc::new(
-        CortexBridge::new(config)
+        CortexBridge::new(config, false)
             .await
             .expect("Failed to create Cortex bridge")
     )

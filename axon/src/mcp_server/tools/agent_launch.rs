@@ -92,8 +92,17 @@ impl AgentLaunchTool {
         let cortex = Arc::clone(&self.cortex);
         let agent_id_clone = agent_id.clone();
 
+        // Update status to Running before spawning execution
+        if let Err(e) = self.registry.update_status(&agent_id, ExecutionStatus::Running).await {
+            tracing::error!(agent_id = %agent_id, error = %e, "Failed to update agent status to Running");
+            return Err(e);
+        }
+        tracing::info!(agent_id = %agent_id, agent_type = %agent_type, "Agent status updated to Running");
+
         // Spawn agent task
         tokio::spawn(async move {
+            tracing::info!(agent_id = %agent_id_clone, agent_type = %agent_type_str, "Agent execution task started");
+
             let result = Self::execute_agent(
                 &agent_type_str,
                 &task,
@@ -105,13 +114,26 @@ impl AgentLaunchTool {
 
             match result {
                 Ok(output) => {
-                    let _ = registry.update_status(&agent_id_clone, ExecutionStatus::Completed).await;
-                    let _ = registry.set_result(&agent_id_clone, output).await;
+                    tracing::info!(agent_id = %agent_id_clone, "Agent execution completed successfully");
+
+                    if let Err(e) = registry.update_status(&agent_id_clone, ExecutionStatus::Completed).await {
+                        tracing::error!(agent_id = %agent_id_clone, error = %e, "Failed to update agent status to Completed");
+                    }
+
+                    if let Err(e) = registry.set_result(&agent_id_clone, output).await {
+                        tracing::error!(agent_id = %agent_id_clone, error = %e, "Failed to set agent result");
+                    }
                 }
                 Err(e) => {
-                    let _ = registry.set_error(&agent_id_clone, e.to_string()).await;
+                    tracing::error!(agent_id = %agent_id_clone, error = %e, "Agent execution failed");
+
+                    if let Err(err) = registry.set_error(&agent_id_clone, e.to_string()).await {
+                        tracing::error!(agent_id = %agent_id_clone, error = %err, "Failed to set agent error");
+                    }
                 }
             }
+
+            tracing::info!(agent_id = %agent_id_clone, "Agent execution task finished");
         });
 
         Ok(AgentLaunchOutput {
@@ -130,6 +152,9 @@ impl AgentLaunchTool {
         params: Option<serde_json::Value>,
         cortex: Arc<CortexBridge>,
     ) -> Result<serde_json::Value> {
+        // Ensure Cortex is initialized before executing agent
+        cortex.ensure_initialized().await?;
+
         match agent_type {
             "developer" => {
                 Self::execute_developer(task, workspace_id, params, cortex).await

@@ -75,10 +75,10 @@ pub use dag::*;
 
 // Re-export Orchestrator-Worker types
 pub use lead_agent::{LeadAgent, LeadAgentConfig, QueryComplexity, QueryAnalysis, ExecutionState, WorkerResult};
-pub use strategy_library::{StrategyLibrary, ExecutionStrategy, PatternType, OutputFormat, SuccessCriteria};
-pub use worker_registry::{WorkerRegistry, WorkerHandle, WorkerInfo, WorkerStatus};
+pub use strategy_library::{StrategyLibrary, StrategyLibraryConfig, ExecutionStrategy, PatternType, OutputFormat, SuccessCriteria};
+pub use worker_registry::{WorkerRegistry, WorkerRegistryConfig, WorkerHandle, WorkerInfo, WorkerStatus};
 pub use task_delegation::{TaskDelegation, TaskBoundaries, TaskTemplates};
-pub use result_synthesizer::{ResultSynthesizer, SynthesizedResult, Finding, Recommendation, QualityMetrics};
+pub use result_synthesizer::{ResultSynthesizer, SynthesizerConfig, SynthesizedResult, Finding, Recommendation, QualityMetrics};
 pub use execution_plan::{ExecutionPlan, ResourceAllocation, ExecutionProgress};
 pub use runtime_integration::{RuntimeIntegration, LeadAgentWithRuntime};
 pub use parallel_tool_executor::{ParallelToolExecutor, ToolCall, ToolResult, ExecutionStats};

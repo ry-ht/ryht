@@ -20,16 +20,15 @@ use tokio::time::sleep;
 
 /// Create a test Cortex bridge (mock or real depending on environment)
 async fn create_test_cortex() -> Arc<CortexBridge> {
-    let config = CortexConfig {
-        base_url: std::env::var("CORTEX_URL")
-            .unwrap_or_else(|_| "http://localhost:8080".to_string()),
-        api_version: "v3".to_string(),
-        request_timeout_secs: 10,
-        max_retries: 3,
-    };
+    let mut config = CortexConfig::default();
+    config.base_url = std::env::var("CORTEX_URL")
+        .unwrap_or_else(|_| "http://localhost:8080".to_string());
+    config.api_version = "v3".to_string();
+    config.request_timeout_secs = 10;
+    config.max_retries = 3;
 
     Arc::new(
-        CortexBridge::new(config)
+        CortexBridge::new(config, false)
             .await
             .expect("Failed to create Cortex bridge")
     )
@@ -48,7 +47,7 @@ async fn create_test_bus(cortex: Arc<CortexBridge>) -> Arc<UnifiedMessageBus> {
         default_message_ttl: Duration::from_secs(300),
     };
 
-    Arc::new(UnifiedMessageBus::new(cortex, config))
+    Arc::new(UnifiedMessageBus::new_with_cortex(cortex, config))
 }
 
 // ==============================================================================
@@ -357,7 +356,7 @@ async fn test_knowledge_sharing() {
 
     match received.payload {
         Message::KnowledgeShare { episode_id: recv_id, summary, insights } => {
-            assert_eq!(recv_id, episode_id);
+            assert_eq!(recv_id.to_string(), episode_id);
             assert_eq!(summary, "Learned how to refactor efficiently");
             assert_eq!(insights.len(), 2);
         }

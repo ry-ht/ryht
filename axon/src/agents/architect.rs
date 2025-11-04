@@ -557,7 +557,68 @@ impl ArchitectAgent {
                     dependencies: vec![],
                 },
             ],
-            _ => vec![],
+            ArchitecturalStyle::EventDriven => vec![
+                Component {
+                    name: "Event Producer".to_string(),
+                    description: "Generates and publishes events".to_string(),
+                    responsibilities: vec!["Event generation".to_string(), "Event publishing".to_string()],
+                    dependencies: vec!["Event Bus".to_string()],
+                },
+                Component {
+                    name: "Event Bus".to_string(),
+                    description: "Central event distribution mechanism".to_string(),
+                    responsibilities: vec!["Event routing".to_string(), "Event persistence".to_string()],
+                    dependencies: vec![],
+                },
+                Component {
+                    name: "Event Consumer".to_string(),
+                    description: "Subscribes to and processes events".to_string(),
+                    responsibilities: vec!["Event handling".to_string(), "Business logic execution".to_string()],
+                    dependencies: vec!["Event Bus".to_string()],
+                },
+            ],
+            ArchitecturalStyle::Microservices => vec![
+                Component {
+                    name: "API Gateway".to_string(),
+                    description: "Entry point for all client requests".to_string(),
+                    responsibilities: vec!["Request routing".to_string(), "Load balancing".to_string()],
+                    dependencies: vec![],
+                },
+                Component {
+                    name: "Service A".to_string(),
+                    description: "Independent microservice".to_string(),
+                    responsibilities: vec!["Specific business capability".to_string()],
+                    dependencies: vec!["Service Registry".to_string()],
+                },
+                Component {
+                    name: "Service Registry".to_string(),
+                    description: "Service discovery and registration".to_string(),
+                    responsibilities: vec!["Service registration".to_string(), "Service discovery".to_string()],
+                    dependencies: vec![],
+                },
+            ],
+            ArchitecturalStyle::Hexagonal => vec![
+                Component {
+                    name: "Domain Core".to_string(),
+                    description: "Core business logic and domain model".to_string(),
+                    responsibilities: vec!["Business rules".to_string(), "Domain logic".to_string()],
+                    dependencies: vec![],
+                },
+                Component {
+                    name: "Adapters".to_string(),
+                    description: "Input/output adapters for external interactions".to_string(),
+                    responsibilities: vec!["External integration".to_string(), "Protocol translation".to_string()],
+                    dependencies: vec!["Domain Core".to_string()],
+                },
+            ],
+            _ => vec![
+                Component {
+                    name: "Application".to_string(),
+                    description: "Main application component".to_string(),
+                    responsibilities: vec!["Core functionality".to_string()],
+                    dependencies: vec![],
+                },
+            ],
         }
     }
 

@@ -157,26 +157,21 @@ impl ContextOptimizer {
         // Count original tokens
         let original_tokens = self.count_tokens(&content).await?;
 
-        // If already within target, return as-is
-        if original_tokens <= target_tokens {
+        // Parse and rank content parts
+        let ranked_parts = self.parse_and_rank_content(&content).await?;
+
+        // If already within target and strategy is None, return as-is
+        if original_tokens <= target_tokens && matches!(strategy, OptimizationStrategy::None) {
             let result = OptimizedContext {
                 content: content.clone(),
                 token_count: original_tokens,
                 optimization_ratio: 1.0,
-                ranked_parts: vec![ContextPart {
-                    content: content.clone(),
-                    importance: 1.0,
-                    token_count: original_tokens,
-                    part_type: PartType::Unknown,
-                }],
+                ranked_parts: ranked_parts.clone(),
                 applied_optimizations: vec!["none - within target".to_string()],
             };
             self.cache.write().await.insert(hash, result.clone());
             return Ok(result);
         }
-
-        // Parse and rank content parts
-        let ranked_parts = self.parse_and_rank_content(&content).await?;
 
         // Apply optimization strategy
         let result = match strategy {
@@ -273,6 +268,11 @@ impl ContextOptimizer {
     fn classify_line(&self, line: &str) -> PartType {
         let trimmed = line.trim();
 
+        // Check for test code first (before function signatures)
+        if trimmed.starts_with("#[test]") || trimmed.contains("test_") {
+            return PartType::TestCode;
+        }
+
         // Code patterns
         if trimmed.starts_with("fn ")
             || trimmed.starts_with("pub fn ")
@@ -300,16 +300,13 @@ impl ContextOptimizer {
             return PartType::ImportStatement;
         }
 
-        if trimmed.starts_with("//") || trimmed.starts_with("#") {
-            return PartType::Comment;
-        }
-
+        // Check documentation before comments (/// starts with //)
         if trimmed.starts_with("///") || trimmed.starts_with("/**") {
             return PartType::Documentation;
         }
 
-        if trimmed.starts_with("#[test]") || trimmed.contains("test_") {
-            return PartType::TestCode;
+        if trimmed.starts_with("//") || trimmed.starts_with("#") {
+            return PartType::Comment;
         }
 
         // Check for code vs documentation
@@ -452,6 +449,11 @@ impl ContextOptimizer {
             format!("min_importance_{:.2}", min_importance),
         ];
 
+        // Check if already within target
+        if original_tokens <= target_tokens {
+            optimizations.push("within target".to_string());
+        }
+
         // Filter by minimum importance
         ranked_parts.retain(|p| p.importance >= min_importance);
 
@@ -500,10 +502,11 @@ impl ContextOptimizer {
             "aggressive_compression".to_string(),
             "remove_all_comments".to_string(),
             "remove_imports".to_string(),
+            "remove_tests".to_string(),
             "keep_only_critical".to_string(),
         ];
 
-        // Keep only the most important parts
+        // Keep only the most important parts, excluding comments, imports, tests, and documentation
         let critical_parts: Vec<_> = ranked_parts
             .into_iter()
             .filter(|p| {

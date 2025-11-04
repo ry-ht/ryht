@@ -10,13 +10,12 @@
 //! - Collaborative memory sharing
 
 use axon::agents::{
-    developer::{CodeSpec, DeveloperAgent, RefactoringType},
+    developer::{CodeSpec, DeveloperAgent},
     reviewer::ReviewerAgent,
     tester::{TestSpec, TestType, TesterAgent},
-    Agent,
 };
 use axon::cortex_bridge::{
-    CortexBridge, CortexConfig, EpisodeType, PatternType, SessionScope, WorkspaceId,
+    AgentId, CortexBridge, CortexConfig, PatternType, SessionScope, WorkspaceId,
     WorkingMemoryItem,
 };
 use std::sync::Arc;
@@ -29,7 +28,7 @@ async fn create_cortex_bridge() -> Arc<CortexBridge> {
     };
 
     Arc::new(
-        CortexBridge::new(config)
+        CortexBridge::new(config, false)
             .await
             .expect("Failed to create CortexBridge"),
     )
@@ -168,7 +167,7 @@ async fn test_tester_agent_with_semantic_memory() {
 #[ignore]
 async fn test_working_memory_operations() {
     let cortex = create_cortex_bridge().await;
-    let agent_id = "test-agent".to_string().into();
+    let agent_id: AgentId = "test-agent".to_string().into();
     let session_id = cortex
         .create_session(
             agent_id.clone(),
@@ -223,7 +222,7 @@ async fn test_working_memory_operations() {
 #[ignore]
 async fn test_memory_consolidation() {
     let cortex = create_cortex_bridge().await;
-    let agent_id = "test-agent".to_string().into();
+    let agent_id: AgentId = "test-agent".to_string().into();
     let workspace_id = WorkspaceId::from("test-workspace".to_string());
     let session_id = cortex
         .create_session(
@@ -302,8 +301,8 @@ async fn test_pattern_extraction() {
 #[ignore]
 async fn test_collaborative_memory_sharing() {
     let cortex = create_cortex_bridge().await;
-    let agent1_id = "agent-1".to_string().into();
-    let agent2_id = "agent-2".to_string().into();
+    let agent1_id: AgentId = "agent-1".to_string().into();
+    let agent2_id: AgentId = "agent-2".to_string().into();
     let workspace_id = WorkspaceId::from("test-workspace".to_string());
 
     // Create a developer agent that stores an episode
@@ -360,7 +359,7 @@ async fn test_collaborative_memory_sharing() {
 #[ignore]
 async fn test_knowledge_graph_queries() {
     let cortex = create_cortex_bridge().await;
-    let workspace_id = WorkspaceId::from("test-workspace".to_string());
+    let _workspace_id = WorkspaceId::from("test-workspace".to_string());
 
     // Query knowledge graph
     let query = r#"

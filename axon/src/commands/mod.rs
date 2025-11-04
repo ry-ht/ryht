@@ -1010,12 +1010,12 @@ pub async fn mcp_stdio() -> Result<()> {
     let log_dir = GlobalConfig::axon_logs_dir()
         .context("Failed to get axon logs directory")?;
     let log_file = log_dir.join("mcp-stdio.log");
-    let log_level = "axon=info,warn";
+    let log_level = "axon=info";
 
     // Initialize file logging for stdio mode (NO stdout/stderr output!)
     init_file_logging(&log_file.to_string_lossy(), log_level)?;
 
-    tracing::info!("Starting Axon MCP Server (stdio mode)");
+    tracing::info!("Starting Axon MCP Server (stdio mode) with lazy Cortex initialization");
     tracing::info!("Log file: {}", log_file.display());
 
     // Get Cortex URL from GlobalConfig
@@ -1025,23 +1025,24 @@ pub async fn mcp_stdio() -> Result<()> {
         config.cortex().server.port
     );
 
-    // Spawn background task to ensure Cortex is running (non-blocking for MCP startup)
+    let cortex_host = config.cortex().server.host.clone();
+    let cortex_port = config.cortex().server.port;
+
+    // Start Cortex server in background (non-blocking)
+    tracing::info!("Starting Cortex HTTP server in background at {}...", cortex_url);
     let cortex_url_clone = cortex_url.clone();
-    let host = config.cortex().server.host.clone();
-    let port = config.cortex().server.port;
     tokio::spawn(async move {
-        tracing::info!("Starting Cortex server check in background...");
-        if let Err(e) = ensure_cortex_server_running(&cortex_url_clone, &host, port).await {
-            tracing::error!("Failed to start Cortex server in background: {}", e);
+        if let Err(e) = ensure_cortex_server_running(&cortex_url_clone, &cortex_host, cortex_port).await {
+            tracing::error!("Failed to start Cortex HTTP server: {}", e);
         } else {
-            tracing::info!("Cortex server is ready");
+            tracing::info!("Cortex HTTP server is ready");
         }
     });
 
     let working_dir = std::env::current_dir()?;
 
     // Create MCP server configuration
-    let config = crate::mcp_server::McpServerConfig {
+    let mcp_config = crate::mcp_server::McpServerConfig {
         name: "axon-mcp".to_string(),
         version: crate::VERSION.to_string(),
         cortex_url: cortex_url.clone(),
@@ -1050,32 +1051,45 @@ pub async fn mcp_stdio() -> Result<()> {
         default_timeout_secs: 3600,
     };
 
-    // Initialize Cortex bridge with minimal timeout for fast MCP startup
+    // Initialize Cortex bridge with LAZY initialization (don't wait for Cortex)
     let cortex_config = crate::cortex_bridge::CortexConfig {
         base_url: cortex_url,
-        request_timeout_secs: 2,  // Minimal timeout - background task is starting Cortex
+        request_timeout_secs: 30,
         ..Default::default()
     };
 
-    // Give Cortex 500ms to start before attempting connection (much faster than 30s!)
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let cortex = crate::cortex_bridge::CortexBridge::new(cortex_config, true)
+        .await
+        .context("Failed to initialize Cortex bridge")?;
+    tracing::info!("CortexBridge created with lazy initialization - connection will be established on first use");
+    let cortex = Arc::new(cortex);
 
-    let cortex = match crate::cortex_bridge::CortexBridge::new(cortex_config).await {
-        Ok(bridge) => {
-            tracing::info!("Successfully connected to Cortex");
-            Arc::new(bridge)
+    // Setup graceful shutdown handler
+    let cortex_shutdown = cortex.clone();
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                tracing::info!("Received Ctrl+C signal, shutting down gracefully...");
+                if let Err(e) = cortex_shutdown.shutdown().await {
+                    tracing::warn!("Error during Cortex bridge shutdown: {}", e);
+                }
+                // Try to stop Cortex server
+                if let Err(e) = stop_cortex_server().await {
+                    tracing::warn!("Error stopping Cortex server: {}", e);
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                tracing::error!("Error setting up Ctrl+C handler: {}", e);
+            }
         }
-        Err(e) => {
-            tracing::warn!("Cortex not available yet (500ms wait + 2s timeout), MCP starting anyway. Tools will retry: {}", e);
-            // For now, return error but will implement lazy retry in future
-            return Err(anyhow::anyhow!("Cortex bridge initialization failed after 2.5s total wait: {}", e));
-        }
-    };
+    });
 
     // Create and run MCP server
-    let server = crate::mcp_server::AxonMcpServer::new(config, cortex);
+    let server = crate::mcp_server::AxonMcpServer::new(mcp_config, cortex);
 
     tracing::info!("MCP server started successfully, listening on stdio");
+    tracing::info!("Cortex will be initialized on first tool call");
 
     server.run().await?;
     Ok(())
@@ -1092,7 +1106,7 @@ pub async fn mcp_http(address: String, port: u16) -> Result<()> {
     let log_dir = GlobalConfig::axon_logs_dir()
         .context("Failed to get axon logs directory")?;
     let log_file = log_dir.join("mcp-http.log");
-    let log_level = "axon=info,warn";
+    let log_level = "axon=info";
 
     // Initialize file logging for HTTP mode
     init_file_logging(&log_file.to_string_lossy(), log_level)?;
@@ -1129,12 +1143,12 @@ pub async fn mcp_http(address: String, port: u16) -> Result<()> {
         default_timeout_secs: 3600,
     };
 
-    // Initialize Cortex bridge
+    // Initialize Cortex bridge (not lazy for HTTP mode, we need it ready)
     let cortex_config = crate::cortex_bridge::CortexConfig {
         base_url: cortex_url,
         ..Default::default()
     };
-    let cortex = Arc::new(crate::cortex_bridge::CortexBridge::new(cortex_config).await?);
+    let cortex = Arc::new(crate::cortex_bridge::CortexBridge::new(cortex_config, false).await?);
 
     // Create MCP server
     let server = crate::mcp_server::AxonMcpServer::new(config, cortex);
@@ -1232,9 +1246,15 @@ pub async fn mcp_info(detailed: bool, category: Option<String>) -> Result<()> {
 
 /// Check if Cortex HTTP server is available at the given URL
 async fn check_cortex_http_available(url: &str) -> bool {
-    let health_url = format!("{}/v3/health", url);
+    let health_url = format!("{}/health", url);
 
-    match reqwest::get(&health_url).await {
+    // Use a timeout to avoid hanging indefinitely
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap();
+
+    match client.get(&health_url).send().await {
         Ok(response) => {
             if response.status().is_success() {
                 tracing::info!("Cortex HTTP server is available at {}", url);
@@ -1259,23 +1279,29 @@ fn find_cortex_binary() -> Result<PathBuf> {
         return Ok(cortex_path);
     }
 
-    // Check common locations relative to current directory
+    // Check common locations (both relative and absolute paths)
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let locations = vec![
+        // Relative paths
         PathBuf::from("./dist/cortex"),
         PathBuf::from("./target/release/cortex"),
         PathBuf::from("../dist/cortex"),
         PathBuf::from("../target/release/cortex"),
+        // Absolute path based on current directory
+        cwd.join("dist/cortex"),
     ];
 
     for location in locations {
         if location.exists() {
-            tracing::info!("Found cortex binary at: {}", location.display());
-            return Ok(location);
+            let abs_path = location.canonicalize().unwrap_or(location.clone());
+            tracing::info!("Found cortex binary at: {}", abs_path.display());
+            return Ok(abs_path);
         }
     }
 
     Err(anyhow::anyhow!(
-        "Cortex binary not found. Please ensure 'cortex' is in PATH or built in ./dist or ./target/release"
+        "Cortex binary not found. Please ensure 'cortex' is in PATH or built in ./dist or ./target/release. Current directory: {}",
+        cwd.display()
     ))
 }
 
@@ -1285,10 +1311,10 @@ async fn start_cortex_server(host: &str, port: u16) -> Result<()> {
 
     tracing::info!("Starting Cortex HTTP server on {}:{}", host, port);
 
-    // Start cortex server directly using internal-server-run (no double fork)
-    // This avoids the daemonization overhead and potential blocking issues
+    // Start cortex server using the 'server start' command
     let child = Command::new(&cortex_binary)
-        .arg("internal-server-run")  // Direct server start, bypasses server manager
+        .arg("server")
+        .arg("start")
         .arg("--host")
         .arg(host)
         .arg("--port")
@@ -1341,4 +1367,34 @@ async fn ensure_cortex_server_running(url: &str, host: &str, port: u16) -> Resul
         "Timeout waiting for Cortex HTTP server to start at {}. Check logs for details.",
         url
     ))
+}
+
+/// Stop the Cortex HTTP server gracefully
+async fn stop_cortex_server() -> Result<()> {
+    let cortex_binary = match find_cortex_binary() {
+        Ok(binary) => binary,
+        Err(e) => {
+            tracing::warn!("Could not find cortex binary to stop server: {}", e);
+            return Ok(()); // Not an error if we can't find it
+        }
+    };
+
+    tracing::info!("Stopping Cortex HTTP server...");
+
+    // Execute cortex server stop
+    let output = Command::new(&cortex_binary)
+        .arg("server")
+        .arg("stop")
+        .output()
+        .await?;
+
+    if output.status.success() {
+        tracing::info!("Cortex HTTP server stopped successfully");
+        Ok(())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        tracing::warn!("Failed to stop Cortex server: {}", error);
+        // Don't return error, just log it
+        Ok(())
+    }
 }

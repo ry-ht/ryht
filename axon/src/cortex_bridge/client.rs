@@ -108,7 +108,7 @@ impl Default for CortexConfig {
     fn default() -> Self {
         Self {
             base_url: "http://localhost:8080".to_string(),
-            api_version: "v3".to_string(),
+            api_version: "v1".to_string(),
             auth_token: None,
             cache_size_mb: 100,
             cache_ttl_seconds: 3600,
@@ -138,7 +138,7 @@ impl CortexConfig {
                 config.cortex().server.host,
                 config.cortex().server.port
             ),
-            api_version: "v3".to_string(),
+            api_version: "v1".to_string(),
             auth_token: None,
             cache_size_mb: config.cortex().cache.memory_size_mb as usize,
             cache_ttl_seconds: config.cortex().cache.ttl_seconds,
@@ -168,7 +168,7 @@ impl CortexClient {
             .pool_max_idle_per_host(config.connection_pool_size)
             .build()?;
 
-        let base_url = format!("{}/{}", config.base_url, config.api_version);
+        let base_url = format!("{}/api/{}", config.base_url, config.api_version);
 
         Ok(Self {
             client,
@@ -360,7 +360,7 @@ mod tests {
     fn test_config_default() {
         let config = CortexConfig::default();
         assert_eq!(config.base_url, "http://localhost:8080");
-        assert_eq!(config.api_version, "v3");
+        assert_eq!(config.api_version, "v1");
         assert_eq!(config.request_timeout_secs, 30);
         assert_eq!(config.max_retries, 3);
     }

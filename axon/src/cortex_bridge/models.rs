@@ -32,6 +32,29 @@ impl From<String> for SessionId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AgentId(pub String);
 
+impl AgentId {
+    /// Create a new unique agent ID using UUID
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
+    /// Create from string (for deserialization/testing)
+    pub fn from_string(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+
+    /// System agent ID for framework operations
+    pub fn system() -> Self {
+        Self("system".to_string())
+    }
+}
+
+impl Default for AgentId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl fmt::Display for AgentId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -119,6 +142,15 @@ pub struct SessionScope {
     pub paths: Vec<String>,
     /// Read-only paths
     pub read_only_paths: Vec<String>,
+}
+
+impl Default for SessionScope {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            read_only_paths: Vec::new(),
+        }
+    }
 }
 
 /// Session status information
@@ -549,13 +581,16 @@ pub enum LockType {
     Shared,
     /// Exclusive lock (single writer)
     Exclusive,
+    /// Alias for Exclusive (for compatibility)
+    #[serde(rename = "exclusive")]
+    Write,
 }
 
 impl fmt::Display for LockType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LockType::Shared => write!(f, "shared"),
-            LockType::Exclusive => write!(f, "exclusive"),
+            LockType::Exclusive | LockType::Write => write!(f, "exclusive"),
         }
     }
 }

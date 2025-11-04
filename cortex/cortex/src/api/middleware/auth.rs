@@ -378,106 +378,109 @@ fn forbidden_response(message: &str) -> (StatusCode, Json<AuthErrorResponse>) {
 }
 
 /// Extractor for authenticated requests - extracts Claims
-#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    async fn from_request_parts(
+    fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<Claims>()
-            .cloned()
-            .ok_or_else(|| {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    [(
-                        WWW_AUTHENTICATE,
-                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
-                    )],
-                    Json(AuthErrorResponse {
-                        success: false,
-                        error: AuthErrorDetail {
-                            code: "UNAUTHORIZED".to_string(),
-                            message: "Missing or invalid authentication token".to_string(),
-                        },
-                    }),
-                )
-            })
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        async move {
+            parts
+                .extensions
+                .get::<Claims>()
+                .cloned()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            WWW_AUTHENTICATE,
+                            HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                        )],
+                        Json(AuthErrorResponse {
+                            success: false,
+                            error: AuthErrorDetail {
+                                code: "UNAUTHORIZED".to_string(),
+                                message: "Missing or invalid authentication token".to_string(),
+                            },
+                        }),
+                    )
+                })
+        }
     }
 }
 
 /// Extractor for authenticated requests - extracts AuthUser
-#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    async fn from_request_parts(
+    fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<AuthUser>()
-            .cloned()
-            .ok_or_else(|| {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    [(
-                        WWW_AUTHENTICATE,
-                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
-                    )],
-                    Json(AuthErrorResponse {
-                        success: false,
-                        error: AuthErrorDetail {
-                            code: "UNAUTHORIZED".to_string(),
-                            message: "Missing or invalid authentication token".to_string(),
-                        },
-                    }),
-                )
-            })
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        async move {
+            parts
+                .extensions
+                .get::<AuthUser>()
+                .cloned()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            WWW_AUTHENTICATE,
+                            HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                        )],
+                        Json(AuthErrorResponse {
+                            success: false,
+                            error: AuthErrorDetail {
+                                code: "UNAUTHORIZED".to_string(),
+                                message: "Missing or invalid authentication token".to_string(),
+                            },
+                        }),
+                    )
+                })
+        }
     }
 }
 
 /// Extractor for bearer token - extracts raw token string
-#[async_trait::async_trait]
 impl<S> FromRequestParts<S> for BearerToken
 where
     S: Send + Sync,
 {
     type Rejection = (StatusCode, [(axum::http::HeaderName, HeaderValue); 1], Json<AuthErrorResponse>);
 
-    async fn from_request_parts(
+    fn from_request_parts(
         parts: &mut Parts,
         _state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<BearerToken>()
-            .cloned()
-            .ok_or_else(|| {
-                (
-                    StatusCode::UNAUTHORIZED,
-                    [(
-                        WWW_AUTHENTICATE,
-                        HeaderValue::from_static("Bearer realm=\"Cortex API\""),
-                    )],
-                    Json(AuthErrorResponse {
-                        success: false,
-                        error: AuthErrorDetail {
-                            code: "UNAUTHORIZED".to_string(),
-                            message: "Missing or invalid authentication token".to_string(),
-                        },
-                    }),
-                )
-            })
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        async move {
+            parts
+                .extensions
+                .get::<BearerToken>()
+                .cloned()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            WWW_AUTHENTICATE,
+                            HeaderValue::from_static("Bearer realm=\"Cortex API\""),
+                        )],
+                        Json(AuthErrorResponse {
+                            success: false,
+                            error: AuthErrorDetail {
+                                code: "UNAUTHORIZED".to_string(),
+                                message: "Missing or invalid authentication token".to_string(),
+                            },
+                        }),
+                    )
+                })
+        }
     }
 }

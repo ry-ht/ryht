@@ -234,8 +234,26 @@ impl Default for StrategyLibraryConfig {
 
 impl StrategyLibrary {
     /// Create a new strategy library
-    pub async fn new(cortex: Arc<CortexBridge>, config: StrategyLibraryConfig) -> Result<Self> {
-        info!("Initializing Strategy Library");
+    ///
+    /// # Arguments
+    /// * `cortex` - Cortex bridge for memory operations
+    /// * `config` - Strategy library configuration
+    /// * `lazy` - If true, skip loading learned strategies during initialization (default: false)
+    ///
+    /// When `lazy` is true, only built-in default strategies are loaded. Learned strategies
+    /// from Cortex can be loaded later using `load_learned_strategies()`. This is useful
+    /// when initializing in environments where Cortex may not be immediately available
+    /// (e.g., MCP stdio mode with lazy Cortex initialization).
+    pub async fn new(
+        cortex: Arc<CortexBridge>,
+        config: StrategyLibraryConfig,
+        lazy: bool,
+    ) -> Result<Self> {
+        if lazy {
+            info!("Initializing Strategy Library in lazy mode (skipping learned strategies)");
+        } else {
+            info!("Initializing Strategy Library");
+        }
 
         let library = Self {
             strategies: Arc::new(RwLock::new(HashMap::new())),
@@ -247,8 +265,12 @@ impl StrategyLibrary {
         // Load default strategies
         library.load_default_strategies().await?;
 
-        // Load learned strategies from Cortex
-        library.load_learned_strategies().await?;
+        // Load learned strategies from Cortex (skip if lazy mode)
+        if !lazy {
+            library.load_learned_strategies().await?;
+        } else {
+            debug!("Skipping learned strategies loading due to lazy initialization");
+        }
 
         info!("Strategy Library initialized with {} strategies",
               library.strategies.read().await.len());
@@ -627,8 +649,12 @@ impl StrategyLibrary {
     }
 
     /// Load learned strategies from Cortex episodic memory
-    async fn load_learned_strategies(&self) -> Result<()> {
+    ///
+    /// This method can be called after initialization to load learned strategies
+    /// when using lazy initialization mode. It's safe to call multiple times.
+    pub async fn load_learned_strategies(&self) -> Result<()> {
         if !self.config.auto_learning {
+            debug!("Auto-learning disabled, skipping learned strategies");
             return Ok(());
         }
 
@@ -1094,6 +1120,34 @@ impl StrategyLibrary {
     pub async fn get_strategy(&self, id: &str) -> Option<ExecutionStrategy> {
         self.strategies.read().await.get(id).cloned()
     }
+
+    /// Ensure learned strategies are loaded (useful after lazy initialization)
+    ///
+    /// This method can be called to trigger loading of learned strategies after
+    /// lazy initialization. It's safe to call multiple times - if strategies are
+    /// already loaded, it will return immediately.
+    ///
+    /// # Returns
+    /// Returns Ok(true) if strategies were loaded, Ok(false) if they were already loaded,
+    /// or an error if loading failed.
+    pub async fn ensure_learned_strategies_loaded(&self) -> Result<bool> {
+        // Check if we already have some learned strategies (strategies with "learned_" prefix)
+        let has_learned = {
+            let strategies = self.strategies.read().await;
+            strategies.keys().any(|k| k.starts_with("learned_strategy_"))
+        };
+
+        if has_learned {
+            debug!("Learned strategies already loaded");
+            return Ok(false);
+        }
+
+        // Load learned strategies
+        info!("Loading learned strategies on demand");
+        self.load_learned_strategies().await?;
+
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -1112,4 +1166,7 @@ mod tests {
         assert_eq!(format.format_type, "markdown");
         assert!(format.required_sections.contains(&"summary".to_string()));
     }
+
+    // Note: Integration tests for lazy initialization are in the MCP server tests
+    // to avoid issues with CortexBridge Drop implementation in unit test context
 }

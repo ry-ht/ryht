@@ -25,7 +25,7 @@ repository = "https://github.com/ry-ht/ryht"
 [workspace.dependencies]
 # Async runtime
 tokio = { version = "1.48.0", features = ["full"] }
-tokio-util = { version = "0.7.16", features = ["full"] }
+tokio-util = { version = "0.7.17", features = ["full"] }
 async-trait = "0.1.89"
 futures = "0.3.31"
 async-stream = "0.3.6"
@@ -33,8 +33,8 @@ async-stream = "0.3.6"
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-schemars = { version = "1.0.4", features = ["preserve_order"] }
-bincode = { version = "2.0.1", features = ["serde"] }
+schemars = { version = "1.0.5", features = ["preserve_order"] }
+bincode = "2.0.1"
 
 # Error handling
 anyhow = "1.0.100"
@@ -46,26 +46,26 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 tracing-appender = "0.2.3"
 
 # HTTP/Web
-axum = { version = "0.7.9", features = ["macros"] }
+axum = { version = "0.8.6", features = ["macros"] }
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
 
 # Database
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
-surrealdb = { version = "2.3.10", features = ["kv-mem", "kv-rocksdb"] }
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
+surrealdb = { version = "2.1.1", features = ["kv-mem", "kv-rocksdb"] }
 
 # Configuration
 config = "0.15.18"
 toml = "0.9.8"
 
 # CLI
-clap = { version = "4.5.50", features = ["derive", "env"] }
+clap = { version = "4.5.22", features = ["derive", "env"] }
 
 # Utilities
-uuid = { version = "1.10", features = ["serde", "v4"] }
-chrono = { version = "0.4.42", features = ["serde"] }
-time = { version = "0.3.44", features = ["serde", "macros"] }
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
+chrono = { version = "0.4.39", features = ["serde"] }
+time = { version = "0.3.37", features = ["serde", "macros"] }
 dashmap = "6.1.0"
 parking_lot = "0.12.5"
 once_cell = "1.21.3"
@@ -73,12 +73,12 @@ tempfile = "3.23.0"
 regex = "1.12.2"
 unicode-segmentation = "1.12.0"
 crossbeam = "0.8.4"
-rayon = "1.11.0"
+rayon = "1.10.0"
 dirs = "6.0.0"
 
 # Hashing and crypto
-blake3 = "1.8.2"
-sha2 = "0.10.9"
+blake3 = "1.5.5"
+sha2 = "0.10.8"
 
 # Embeddings and ML
 ort = { version = "1.16.3", features = ["load-dynamic"] }
@@ -87,11 +87,11 @@ tokenizers = { version = "0.19.1", default-features = false, features = ["onig"]
 
 # File watching
 notify = "8.2.0"
-ignore = "0.4.24"
+ignore = "0.4.25"
 
 # Testing
 mockall = "0.13.1"
-proptest = "1.8.0"
+proptest = "1.9.0"
 
 # Benchmarking
 criterion = { version = "0.7.0", features = ["html_reports"] }

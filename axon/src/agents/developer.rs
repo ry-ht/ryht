@@ -786,7 +786,6 @@ impl DeveloperAgent {
     }
 
     fn validate_rust_syntax(&self, code: &str) -> Result<()> {
-        use std::io::Write;
         use std::process::{Command, Stdio};
 
         debug!("Validating Rust syntax with rustc");

@@ -22,7 +22,7 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let cortex = Arc::new(CortexBridge::new(Default::default()).await?);
+//!     let cortex = Arc::new(CortexBridge::new(Default::default(), false).await?);
 //!     let agent = DocumenterAgent::new("doc-agent".to_string(), cortex);
 //!
 //!     // Generate documentation for a module
@@ -941,7 +941,7 @@ mod tests {
             tokio::runtime::Runtime::new()
                 .unwrap()
                 .block_on(async {
-                    CortexBridge::new(Default::default()).await
+                    CortexBridge::new(Default::default(), true).await
                 })
                 .unwrap_or_else(|_| panic!("Failed to create CortexBridge"))
         );
@@ -972,7 +972,7 @@ mod tests {
             tokio::runtime::Runtime::new()
                 .unwrap()
                 .block_on(async {
-                    CortexBridge::new(Default::default()).await
+                    CortexBridge::new(Default::default(), true).await
                 })
                 .unwrap_or_else(|_| panic!("Failed to create CortexBridge"))
         );

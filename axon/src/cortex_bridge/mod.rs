@@ -88,6 +88,12 @@ pub struct CortexBridge {
 
     /// Configuration
     config: CortexConfig,
+
+    /// Initialization state tracking for lazy initialization
+    initialized: Arc<RwLock<bool>>,
+
+    /// Maximum time to wait for Cortex to become available (seconds)
+    initialization_timeout_secs: u64,
 }
 
 impl CortexBridge {
@@ -107,18 +113,22 @@ impl CortexBridge {
     ///         ..Default::default()
     ///     };
     ///
-    ///     let bridge = CortexBridge::new(config).await?;
+    ///     let bridge = CortexBridge::new(config, false).await?;
     ///     Ok(())
     /// }
     /// ```
-    pub async fn new(config: CortexConfig) -> Result<Self> {
-        info!("Initializing CortexBridge with base_url: {}", config.base_url);
+    pub async fn new(config: CortexConfig, lazy: bool) -> Result<Self> {
+        info!("Initializing CortexBridge with base_url: {} (lazy: {})", config.base_url, lazy);
 
         let client = Arc::new(CortexClient::new(config.clone())?);
 
-        // Verify connection
-        client.health_check().await?;
-        info!("Cortex health check passed");
+        // If not lazy, verify connection immediately
+        if !lazy {
+            client.health_check().await?;
+            info!("Cortex health check passed");
+        } else {
+            info!("Lazy initialization enabled - skipping initial health check");
+        }
 
         // Create managers
         let session_manager = SessionManager::new(client.as_ref().clone());
@@ -138,6 +148,8 @@ impl CortexBridge {
             consolidation_manager,
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
             config,
+            initialized: Arc::new(RwLock::new(!lazy)),
+            initialization_timeout_secs: 30,
         })
     }
 
@@ -146,13 +158,110 @@ impl CortexBridge {
         &self.config
     }
 
+    /// Ensure Cortex is initialized and ready
+    ///
+    /// This method is used for lazy initialization. It checks if Cortex is already
+    /// initialized, and if not, waits for it to become available (with timeout).
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) if Cortex is ready, or an error if it fails to initialize
+    /// within the timeout period.
+    pub async fn ensure_initialized(&self) -> Result<()> {
+        // Fast path: already initialized
+        if *self.initialized.read().await {
+            return Ok(());
+        }
+
+        // Slow path: need to initialize
+        let mut initialized = self.initialized.write().await;
+
+        // Double-check after acquiring write lock
+        if *initialized {
+            return Ok(());
+        }
+
+        info!("Performing lazy initialization of Cortex connection...");
+
+        // Wait for Cortex to become available
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(self.initialization_timeout_secs);
+        let mut attempt = 0;
+
+        loop {
+            attempt += 1;
+
+            match self.client.health_check().await {
+                Ok(health) => {
+                    info!(
+                        "Cortex initialized successfully after {:.2}s ({} attempts): status={}",
+                        start.elapsed().as_secs_f64(),
+                        attempt,
+                        health.status
+                    );
+                    *initialized = true;
+                    return Ok(());
+                }
+                Err(e) => {
+                    if start.elapsed() >= timeout {
+                        return Err(CortexError::CortexUnavailable(format!(
+                            "Cortex failed to initialize within {}s timeout. Last error: {}. \
+                            Please ensure Cortex server is running and accessible at {}",
+                            self.initialization_timeout_secs,
+                            e,
+                            self.config.base_url
+                        )));
+                    }
+
+                    // Log progress every few attempts
+                    if attempt % 5 == 0 {
+                        info!(
+                            "Waiting for Cortex to become available... (attempt {}, elapsed: {:.1}s)",
+                            attempt,
+                            start.elapsed().as_secs_f64()
+                        );
+                    }
+
+                    // Wait before retrying
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
     // ========================================================================
     // Health & Status
     // ========================================================================
 
     /// Perform health check on Cortex
     pub async fn health_check(&self) -> Result<HealthStatus> {
+        self.ensure_initialized().await?;
         self.client.health_check().await
+    }
+
+    // ========================================================================
+    // Workspace Management
+    // ========================================================================
+
+    /// Create a new workspace
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the workspace to create
+    ///
+    /// # Returns
+    ///
+    /// Returns the ID of the created workspace
+    ///
+    /// # Note
+    ///
+    /// This is a stub implementation. Full workspace creation should be implemented
+    /// to properly integrate with Cortex workspace API.
+    pub async fn create_workspace(&self, name: &str) -> Result<WorkspaceId> {
+        // TODO: Implement full workspace creation via Cortex API
+        // For now, return a deterministic workspace ID based on the name
+        let workspace_id = format!("ws_{}", name.replace("-", "_"));
+        Ok(WorkspaceId::from(workspace_id))
     }
 
     // ========================================================================
@@ -637,12 +746,16 @@ impl CortexBridge {
 
 impl Drop for CortexBridge {
     fn drop(&mut self) {
-        if !self.active_sessions.blocking_read().is_empty() {
-            warn!(
-                "CortexBridge dropped with {} active sessions. Call shutdown() for clean closure.",
-                self.active_sessions.blocking_read().len()
-            );
+        // Try to read without blocking (safe in async context)
+        if let Ok(sessions) = self.active_sessions.try_read() {
+            if !sessions.is_empty() {
+                warn!(
+                    "CortexBridge dropped with {} active sessions. Call shutdown() for clean closure.",
+                    sessions.len()
+                );
+            }
         }
+        // If try_read fails, we're already in a bad state, so just skip the warning
     }
 }
 
@@ -654,7 +767,7 @@ mod tests {
     fn test_cortex_config_default() {
         let config = CortexConfig::default();
         assert_eq!(config.base_url, "http://localhost:8080");
-        assert_eq!(config.api_version, "v3");
+        assert_eq!(config.api_version, "v1");
         assert_eq!(config.request_timeout_secs, 30);
     }
 

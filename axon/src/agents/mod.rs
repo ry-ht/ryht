@@ -37,6 +37,9 @@ pub mod researcher;
 pub mod optimizer;
 pub mod tool_registry;
 
+// Re-export AgentId from cortex_bridge as the canonical type
+pub use crate::cortex_bridge::models::AgentId;
+
 pub use types::*;
 pub use capabilities::*;
 pub use lifecycle::*;

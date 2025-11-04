@@ -4,7 +4,6 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use super::*;
     use crate::cc::core::SessionId;
     use crate::cc::messages::{Message, UserMessage};
     use crate::cc::session::{
@@ -15,7 +14,6 @@ mod integration_tests {
     use crate::Project;
     use chrono::{Duration, Utc};
     use std::path::PathBuf;
-    use tempfile::TempDir;
 
     // Helper function to create a test user message
     fn create_test_user_message(content: &str) -> Message {

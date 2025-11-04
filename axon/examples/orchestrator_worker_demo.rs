@@ -27,17 +27,16 @@ use axon::orchestration::{
     LeadAgent,
     LeadAgentConfig,
     StrategyLibrary,
+    StrategyLibraryConfig,
     WorkerRegistry,
     WorkerRegistryConfig,
     ResultSynthesizer,
     SynthesizerConfig,
     ParallelToolExecutor,
-    QueryComplexity,
 };
 
 use axon::coordination::{
     UnifiedMessageBus,
-    MessageBusConfig,
     MessageCoordinator,
 };
 
@@ -48,30 +47,29 @@ use axon::cortex_bridge::{
     WorkspaceId,
 };
 
-use axon::agents::{AgentId, AgentType, Capability};
+use axon::agents::{AgentId, AgentType};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!("Orchestrator-Worker Pattern Demo");
     println!("Based on Anthropic's Multi-Agent Research System Architecture");
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!();
 
     // Step 1: Initialize Cortex Bridge for cognitive memory
     println!("Step 1: Initializing Cortex Bridge for cognitive memory...");
     let cortex_config = CortexConfig::default();
-    let cortex = Arc::new(CortexBridge::new(cortex_config).await?);
+    let cortex = Arc::new(CortexBridge::new(cortex_config, false).await?);
     println!("  ✓ Cortex Bridge initialized");
     println!();
 
     // Step 2: Initialize Unified Message Bus
     println!("Step 2: Initializing Unified Message Bus...");
-    let message_bus_config = MessageBusConfig::default();
-    let message_bus = Arc::new(UnifiedMessageBus::new(cortex.clone(), message_bus_config));
+    let message_bus = Arc::new(UnifiedMessageBus::new());
     println!("  ✓ Message Bus initialized");
     println!();
 
@@ -83,8 +81,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Step 4: Initialize Strategy Library
     println!("Step 4: Initializing Strategy Library...");
-    let strategy_config = axon::orchestration::strategy_library::StrategyLibraryConfig::default();
-    let strategy_library = Arc::new(StrategyLibrary::new(cortex.clone(), strategy_config).await?);
+    let strategy_config = StrategyLibraryConfig::default();
+    // Use lazy: false to load learned strategies from Cortex immediately
+    let strategy_library = Arc::new(StrategyLibrary::new(cortex.clone(), strategy_config, false).await?);
     println!("  ✓ Strategy Library initialized with default strategies");
     println!();
 
@@ -180,9 +179,9 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Demo: Execute queries of different complexities
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!("Demo: Executing Queries with Different Complexity Levels");
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!();
 
     let workspace_id = WorkspaceId::from("demo-workspace".to_string());
@@ -190,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Demo 1: Simple Query
     println!("Demo 1: Simple Query (1 worker, 3-10 tool calls)");
-    println!("-".repeat(80));
+    println!("{}", "-".repeat(80));
     let simple_query = "What is the current version of Rust?";
     println!("Query: {}", simple_query);
     println!();
@@ -215,7 +214,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Demo 2: Medium Query
     println!("Demo 2: Medium Query (2-4 workers, 10-15 calls each)");
-    println!("-".repeat(80));
+    println!("{}", "-".repeat(80));
     let medium_query = "Compare async/await in Rust vs JavaScript, analyze performance implications";
     println!("Query: {}", medium_query);
     println!();
@@ -241,7 +240,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Demo 3: Complex Query
     println!("Demo 3: Complex Query (10+ workers with delegation)");
-    println!("-".repeat(80));
+    println!("{}", "-".repeat(80));
     let complex_query = "\
         Research and analyze multi-agent orchestration patterns in distributed systems. \
         Compare Anthropic's approach with alternatives like AutoGPT, LangChain agents, \
@@ -277,7 +276,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Demo 4: Parallel Tool Execution
     println!("Demo 4: Parallel Tool Execution (90% time reduction)");
-    println!("-".repeat(80));
+    println!("{}", "-".repeat(80));
 
     use axon::orchestration::ToolCall;
 
@@ -347,9 +346,9 @@ async fn main() -> anyhow::Result<()> {
     println!();
 
     // Summary
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!("Demo Complete");
-    println!("=".repeat(80));
+    println!("{}", "=".repeat(80));
     println!();
     println!("Key Takeaways:");
     println!("  1. Query complexity determines resource allocation automatically");

@@ -72,12 +72,14 @@ impl ConsensusProtocol {
             .get(strategy_name)
             .ok_or_else(|| ConsensusError::StrategyNotFound(strategy_name.to_string()))?;
 
-        // Check quorum
-        let required_quorum = (participants.len() as f32 * strategy.required_quorum()).ceil() as usize;
+        // Check quorum - ensure we have minimum required participants
+        let min_quorum_ratio = strategy.required_quorum();
 
-        if participants.len() < required_quorum {
+        // For a meaningful consensus, we need at least 2 participants
+        // and the quorum ratio must be satisfiable
+        if participants.len() < 2 {
             return Err(ConsensusError::InsufficientQuorum {
-                required: required_quorum as f32,
+                required: min_quorum_ratio,
                 available: participants.len(),
             });
         }
@@ -324,7 +326,8 @@ impl ConsensusStrategy for WeightedVoting {
 
     fn evaluate_votes(&self, votes: Vec<Vote>) -> Result<ConsensusResult> {
         let mut weighted_accept = 0.0;
-        let mut total_weight = 0.0;
+        let mut weighted_reject = 0.0;
+        let mut total_weighted_support = 0.0;
 
         for vote in &votes {
             let weight = self.weights
@@ -332,15 +335,25 @@ impl ConsensusStrategy for WeightedVoting {
                 .copied()
                 .unwrap_or(1.0);
 
-            total_weight += weight;
-
-            if matches!(vote.decision, Decision::Accept) {
-                weighted_accept += weight * vote.confidence;
+            match vote.decision {
+                Decision::Accept => {
+                    let weighted_vote = weight * vote.confidence;
+                    weighted_accept += weighted_vote;
+                    total_weighted_support += weighted_vote;
+                }
+                Decision::Reject => {
+                    let weighted_vote = weight * vote.confidence;
+                    weighted_reject += weighted_vote;
+                    total_weighted_support += weighted_vote;
+                }
+                Decision::Abstain | Decision::Conditional(_) => {
+                    // Abstentions don't contribute to support calculation
+                }
             }
         }
 
-        let support = if total_weight > 0.0 {
-            weighted_accept / total_weight
+        let support = if total_weighted_support > 0.0 {
+            weighted_accept / total_weighted_support
         } else {
             0.0
         };
@@ -367,7 +380,7 @@ pub struct SuperMajority {
 impl Default for SuperMajority {
     fn default() -> Self {
         Self {
-            threshold: 0.67, // 2/3 majority
+            threshold: 2.0 / 3.0, // 2/3 majority
             min_participation: 0.6,
         }
     }

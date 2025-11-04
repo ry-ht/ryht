@@ -2,43 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 
-/// Unique identifier for an agent
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct AgentId(String);
-
-impl AgentId {
-    /// Create a new unique agent ID
-    pub fn new() -> Self {
-        Self(Uuid::new_v4().to_string())
-    }
-
-    /// Create from string (for deserialization/testing)
-    pub fn from_string(s: impl Into<String>) -> Self {
-        Self(s.into())
-    }
-
-    /// System agent ID for framework operations
-    pub fn system() -> Self {
-        Self("system".to_string())
-    }
-}
-
-impl Default for AgentId {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Display for AgentId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+// AgentId is defined in cortex_bridge::models and re-exported from agents::mod
+use crate::cortex_bridge::models::AgentId;
 
 /// Classification of agent types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

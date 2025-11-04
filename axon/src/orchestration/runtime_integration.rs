@@ -173,8 +173,6 @@ impl LeadAgentWithRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_runtime_integration_creation() {
         // Test would require actual runtime initialization
