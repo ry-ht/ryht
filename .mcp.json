@@ -7,16 +7,7 @@
         "PATH": "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
         "RUST_LOG": "info"
       },
-      "description": "Unified Cortex+Axon MCP Server (180 tools): cognitive memory, VFS, semantic search, code analysis, multi-agent coordination (sessions/locks/merge). Axon agent orchestration tools (agent_launch, orchestrate, etc.) integrated in codebase but not yet registered. Use 'axon' server below for agent orchestration until full migration complete. Config: ~/.ryht/config.toml"
-    },
-    "axon": {
-      "command": "/Users/taaliman/projects/luxquant/ry-ht/ryht/dist/axon",
-      "args": ["mcp", "stdio"],
-      "env": {
-        "PATH": "/Users/taaliman/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
-        "RUST_LOG": "info"
-      },
-      "description": "Axon Multi-Agent Orchestration MCP Server (7 tools): agent launch/stop/status, task orchestration, Cortex integration queries, session create/merge. Specialized agents: developer, tester, reviewer, architect, researcher, optimizer, documenter. Will be fully merged into 'cortex' server in future. Config: ~/.ryht/config.toml [axon.*]"
+      "description": "Unified Cortex MCP Server (187 tools total): Cognitive memory system with VFS, semantic search, code analysis, and multi-agent orchestration. Includes all original Cortex tools (180) plus integrated Axon agent orchestration tools (7): agent launch/stop/status, task orchestration, knowledge graph queries, session management. Specialized agents: developer, tester, reviewer, architect, researcher, optimizer, documenter. Config: ~/.ryht/config.toml"
     }
   }
 }

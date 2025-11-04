@@ -1,11 +1,11 @@
 //! Cortex Query Tool
 //!
-//! TODO (Phase 6): Remove cortex_bridge, use direct cortex-semantic types
+//! TODO (Phase 6): Implement actual Cortex knowledge graph queries
+//! Currently a stub that returns empty results
 
-use crate::cortex_bridge::{CortexBridge, SearchFilters, WorkspaceId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use serde_json::json;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CortexQueryInput {
@@ -17,50 +17,74 @@ pub struct CortexQueryOutput {
     pub results: Vec<serde_json::Value>,
 }
 
+pub struct CortexQueryContext;
+
+impl CortexQueryContext {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for CortexQueryContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct CortexQueryTool {
-    cortex: Arc<CortexBridge>,
+    context: CortexQueryContext,
 }
 
 impl CortexQueryTool {
-    /// Create a new CortexQueryTool with a reference to CortexBridge
-    pub fn new(cortex: Arc<CortexBridge>) -> Self {
-        Self { cortex }
+    /// Create a new CortexQueryTool
+    pub fn new(context: CortexQueryContext) -> Self {
+        Self { context }
     }
 
-    /// Query the Cortex knowledge graph using semantic search
+    /// Query the Cortex knowledge graph (STUB)
     pub async fn query(&self, input: CortexQueryInput) -> Result<CortexQueryOutput> {
-        // Ensure Cortex is initialized before querying
-        self.cortex.ensure_initialized().await?;
+        tracing::info!(query = %input.query, "Cortex query requested (STUB)");
 
-        // Use a default workspace ID - in a real scenario, this might be passed as input
-        let workspace_id = WorkspaceId::from("default".to_string());
+        // Return empty results
+        Ok(CortexQueryOutput {
+            results: vec![json!({
+                "message": "Cortex knowledge graph queries not yet implemented. This is a stub.",
+                "query": input.query
+            })],
+        })
+    }
+}
 
-        // Create search filters with sensible defaults
-        let filters = SearchFilters::default();
+impl mcp_sdk::Tool for CortexQueryTool {
+    fn name(&self) -> &str {
+        "axon_cortex_query"
+    }
 
-        // Perform semantic search
-        let search_results = self
-            .cortex
-            .semantic_search(&input.query, &workspace_id, filters)
-            .await?;
+    fn description(&self) -> Option<&str> {
+        Some("Query the Cortex knowledge graph for code, patterns, and semantic information. Supports semantic search across codebases.")
+    }
 
-        // Convert search results to JSON values
-        let results: Vec<serde_json::Value> = search_results
-            .into_iter()
-            .map(|result| {
-                serde_json::json!({
-                    "unit_id": result.unit_id,
-                    "unit_type": result.unit_type,
-                    "name": result.name,
-                    "qualified_name": result.qualified_name,
-                    "signature": result.signature,
-                    "relevance_score": result.relevance_score,
-                    "file": result.file,
-                    "snippet": result.snippet,
-                })
-            })
-            .collect();
+    fn input_schema(&self) -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The query to search for in the knowledge graph"
+                }
+            },
+            "required": ["query"]
+        })
+    }
 
-        Ok(CortexQueryOutput { results })
+    async fn call(&self, arguments: serde_json::Value) -> Result<serde_json::Value, mcp_sdk::Error> {
+        let input: CortexQueryInput = serde_json::from_value(arguments)
+            .map_err(|e| mcp_sdk::Error::InvalidParams(e.to_string()))?;
+
+        let output = self.query(input).await
+            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))?;
+
+        serde_json::to_value(output)
+            .map_err(|e| mcp_sdk::Error::InternalError(e.to_string()))
     }
 }

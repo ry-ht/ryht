@@ -7,6 +7,8 @@ use super::tools::{
     code_manipulation::*, code_nav::*, code_quality::*, cognitive_memory::*, dependency_analysis::*,
     documentation::*, materialization::*, monitoring::*, multi_agent::*, security_analysis::*,
     semantic_search::*, testing::*, type_analysis::*, version_control::*, vfs::*, workspace::*,
+    // Axon integration tools (agent orchestration)
+    agent_launch::*, agent_status::*, agent_stop::*, orchestrate::*, cortex_query::*, session::*,
 };
 use anyhow::Result;
 use cortex_core::config::GlobalConfig;
@@ -137,6 +139,15 @@ impl CortexMcpServer {
         let ai_ctx = AiAssistedContext::new(storage.clone());
         let adv_test_ctx = AdvancedTestingContext::new(storage.clone());
         let arch_ctx = ArchitectureAnalysisContext::new(storage.clone());
+
+        // Axon integration contexts (stubs for now)
+        let agent_launch_ctx = AgentLaunchContext::new();
+        let agent_status_ctx = AgentStatusContext::new();
+        let agent_stop_ctx = AgentStopContext::new();
+        let orchestrate_ctx = OrchestrateContext::new();
+        let cortex_query_ctx = CortexQueryContext::new();
+        let session_create_ctx = SessionCreateContext::new();
+        let session_merge_ctx = SessionMergeContext::new();
 
         // Build server with all tools
         let server = mcp_sdk::McpServer::builder()
@@ -349,10 +360,18 @@ impl CortexMcpServer {
             .tool(ArchSuggestBoundariesTool::new(arch_ctx.clone()))
             .tool(ArchCheckViolationsTool::new(arch_ctx.clone()))
             .tool(ArchAnalyzeDriftTool::new(arch_ctx.clone()))
+            // Agent Orchestration Tools (7) - Axon integration (STUBS for now)
+            .tool(AgentLaunchTool::new(agent_launch_ctx))
+            .tool(AgentStatusTool::new(agent_status_ctx))
+            .tool(AgentStopTool::new(agent_stop_ctx))
+            .tool(OrchestrateTool::new(orchestrate_ctx))
+            .tool(CortexQueryTool::new(cortex_query_ctx))
+            .tool(SessionCreateTool::new(session_create_ctx))
+            .tool(SessionMergeTool::new(session_merge_ctx))
             // Note: Middleware support may be added in future versions
             .build();
 
-        info!("Registered {} tools", 180); // Total: 187 - 7 (removed validation & AI gen tools) = 180
+        info!("Registered {} tools", 187); // Total: 180 (existing) + 7 (Axon orchestration stubs) = 187
 
         Ok(server)
     }
