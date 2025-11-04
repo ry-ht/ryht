@@ -530,41 +530,53 @@ impl ResearcherAgent {
         if let (Some(cortex), Some(workspace_id)) = (&self.cortex, &self.workspace_id) {
             // Configure search filters based on strategy
             let filters = match strategy {
-                SearchStrategy::Semantic => SearchFilters {
-                    types: vec![
+                SearchStrategy::Semantic => SearchFilters {                    limit: Some(10),
+                    workspace_id: None,
+
+                    types: Some(vec![
                         "function".to_string(),
                         "class".to_string(),
                         "module".to_string(),
                         "interface".to_string(),
-                    ],
+                    ]),
                     min_relevance: Some(query.quality_threshold),
                     ..Default::default()
-                },
-                SearchStrategy::BroadKeyword => SearchFilters {
-                    types: vec![],
+                                },
+                SearchStrategy::BroadKeyword => SearchFilters {                    limit: Some(10),
+                    workspace_id: None,
+
+                    types: Some(vec![]),
                     min_relevance: Some(query.quality_threshold * 0.8), // Lower threshold for broad search
                     ..Default::default()
-                },
-                SearchStrategy::DomainExpert => SearchFilters {
-                    types: vec!["class".to_string(), "interface".to_string()],
+                                },
+                SearchStrategy::DomainExpert => SearchFilters {                    limit: Some(10),
+                    workspace_id: None,
+
+                    types: Some(vec!["class".to_string(), "interface".to_string()]),
                     min_relevance: Some(query.quality_threshold * 1.1), // Higher threshold for expert search
                     ..Default::default()
-                },
-                SearchStrategy::Citation => SearchFilters {
-                    types: vec!["documentation".to_string(), "comment".to_string()],
+                                },
+                SearchStrategy::Citation => SearchFilters {                    limit: Some(10),
+                    workspace_id: None,
+
+                    types: Some(vec!["documentation".to_string(), "comment".to_string()]),
                     min_relevance: Some(query.quality_threshold),
                     ..Default::default()
-                },
-                SearchStrategy::TrendingTopics => SearchFilters {
-                    types: vec![],
+                                },
+                SearchStrategy::TrendingTopics => SearchFilters {                    limit: Some(10),
+                    workspace_id: None,
+
+                    types: Some(vec![]),
                     min_relevance: Some(query.quality_threshold * 0.9),
                     ..Default::default()
-                },
+                                },
             };
 
             // Perform semantic search
+            let mut filters_with_ws = filters.clone();
+            filters_with_ws.workspace_id = Some(workspace_id.to_string());
             match cortex
-                .semantic_search(&query.query, workspace_id, filters)
+                .semantic_search(&query.query, filters_with_ws)
                 .await
             {
                 Ok(results) => {
@@ -573,17 +585,17 @@ impl ResearcherAgent {
                     // Convert search results to findings
                     for result in results.into_iter().take(query.max_results) {
                         // Filter by relevance threshold
-                        if result.relevance_score >= query.quality_threshold {
+                        if result.score >= query.quality_threshold {
                             findings.push(RawFinding {
                                 content: format!(
                                     "{}\n\nFile: {}\nSignature: {}\nSnippet:\n{}",
-                                    result.name,
-                                    result.file,
-                                    result.signature,
-                                    result.snippet
+                                    result.item.name,
+                                    result.item.file_path,
+                                    result.item.signature,
+                                    result.item.signature
                                 ),
-                                source: result.file.clone(),
-                                relevance: result.relevance_score,
+                                source: result.item.file_path.clone(),
+                                relevance: result.score,
                             });
                         }
                     }
@@ -632,10 +644,11 @@ impl ResearcherAgent {
             if matches!(strategy, SearchStrategy::TrendingTopics) {
                 match cortex
                     .get_code_units(
-                        workspace_id,
+                        workspace_id.clone(),
                         UnitFilters {
-                            unit_type: None,
                             language: None,
+                            limit: Some(100),
+                            unit_type: None,
                             visibility: Some("public".to_string()),
                         },
                     )
@@ -647,7 +660,7 @@ impl ResearcherAgent {
                         // Analyze unit types distribution for trends
                         let mut type_counts: HashMap<String, usize> = HashMap::new();
                         for unit in units.iter().take(100) {
-                            *type_counts.entry(unit.unit_type.clone()).or_insert(0) += 1;
+                            *type_counts.entry(format!("{:?}", unit.unit_type)).or_insert(0) += 1;
                         }
 
                         let trend_summary = type_counts

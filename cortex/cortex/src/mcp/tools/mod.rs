@@ -45,6 +45,7 @@ pub mod advanced_testing;
 pub mod architecture_analysis;
 
 // Agent Orchestration tools (from Axon)
+pub mod agent_registry;
 pub mod agent_launch;
 pub mod agent_status;
 pub mod agent_stop;
@@ -75,6 +76,7 @@ pub use advanced_testing::*;
 pub use architecture_analysis::*;
 
 // Agent Orchestration tools
+pub use agent_registry::*;
 pub use agent_launch::*;
 pub use agent_status::*;
 pub use agent_stop::*;

@@ -255,7 +255,7 @@ impl ReviewerAgent {
 
         // 1. Read file from session
         let code = cortex
-            .read_file(session_id, file_path)
+            .read_file(session_id.clone(), file_path)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -281,10 +281,11 @@ impl ReviewerAgent {
 
         let units = cortex
             .get_code_units(
-                workspace_id,
+                workspace_id.clone(),
                 UnitFilters {
-                    unit_type: None,
                     language: Some(language.to_string()),
+                    limit: Some(100),
+                    unit_type: None,
                     visibility: None,
                 },
             )
@@ -350,13 +351,14 @@ impl ReviewerAgent {
         let tests = cortex
             .semantic_search(
                 &format!("tests for {}", file_path),
-                workspace_id,
                 SearchFilters {
-                    types: vec!["function".to_string()],
-                    languages: vec!["rust".to_string()],
+                    workspace_id: Some(workspace_id.to_string()),
+                    limit: Some(10),
+                    types: Some(vec!["function".to_string()]),
+                    languages: Some(vec!["rust".to_string()]),
                     visibility: None,
-                    min_relevance: 0.6,
-                },
+                    min_relevance: Some( 0.6),
+                                },
             )
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
@@ -382,11 +384,11 @@ impl ReviewerAgent {
         // 10. Store review episode for learning
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
+            episode_type: Some("Task".to_lowercase()),
             task_description: format!("Review code in {}", file_path),
             agent_id: self.id.to_string(),
             session_id: Some(session_id.to_string()),
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             entities_created: vec![],
             entities_modified: vec![],
             entities_deleted: vec![],
@@ -399,22 +401,24 @@ impl ReviewerAgent {
             } else {
                 EpisodeOutcome::Partial
             },
-            success_metrics: serde_json::json!({
-                "issues_found": report.issues.len(),
-                "quality_score": report.quality_score,
-                "test_coverage": report.test_coverage,
-                "review_time_ms": review_time_ms,
-            }),
+            success_metrics: {
+                let mut map = std::collections::HashMap::new();
+                map.insert("issues_found".to_string(), serde_json::json!(report.issues.len()));
+                map.insert("quality_score".to_string(), serde_json::json!(report.quality_score));
+                map.insert("test_coverage".to_string(), serde_json::json!(report.test_coverage));
+                map.insert("review_time_ms".to_string(), serde_json::json!(review_time_ms));
+                map
+            },
             errors_encountered: vec![],
             lessons_learned: report
                 .issues
                 .iter()
                 .map(|i| format!("{}: {}", i.category, i.pattern_name))
                 .collect(),
-            duration_seconds: (review_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            duration_seconds: Some((review_time_ms as f64 / 1000.0) / 1000.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -460,21 +464,19 @@ impl ReviewerAgent {
             RETURN DISTINCT affected.qualified_name AS name, affected.file AS file
         "#;
 
-        let params = serde_json::json!({
-            "changed_files": changed_files,
-        });
+        let mut params = HashMap::new();
+        params.insert("changed_files".to_string(), serde_json::json!(changed_files));
 
-        let graph_result = cortex
+        let graph_results = cortex
             .query_graph(query, params)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
-        debug!("Knowledge graph query returned {} results", graph_result.results.len());
+        debug!("Knowledge graph query returned {} results", graph_results.len());
 
         // Extract affected entities
         let directly_affected: Vec<String> = changed_files.clone();
-        let transitively_affected: Vec<String> = graph_result
-            .results
+        let transitively_affected: Vec<String> = graph_results
             .iter()
             .filter_map(|r| r.get("name").and_then(|v| v.as_str()))
             .map(|s| s.to_string())
@@ -509,11 +511,11 @@ impl ReviewerAgent {
         // Store episode
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
+            episode_type: Some("Task".to_lowercase()),
             task_description: format!("Impact analysis for {} files", changed_files.len()),
             agent_id: self.id.to_string(),
             session_id: None,
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             entities_created: vec![],
             entities_modified: vec![],
             entities_deleted: vec![],
@@ -522,18 +524,20 @@ impl ReviewerAgent {
             tools_used: vec![],
             solution_summary: description.clone(),
             outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "directly_affected": directly_affected.len(),
-                "transitively_affected": transitively_affected.len(),
-                "risk_level": format!("{:?}", risk_level),
-                "analysis_time_ms": analysis_time_ms,
-            }),
+            success_metrics: {
+                let mut map = std::collections::HashMap::new();
+                map.insert("directly_affected".to_string(), serde_json::json!(directly_affected.len()));
+                map.insert("transitively_affected".to_string(), serde_json::json!(transitively_affected.len()));
+                map.insert("risk_level".to_string(), serde_json::json!(format!("{:?}", risk_level)));
+                map.insert("analysis_time_ms".to_string(), serde_json::json!(analysis_time_ms));
+                map
+            },
             errors_encountered: vec![],
             lessons_learned: vec!["Impact analysis using knowledge graph".to_string()],
-            duration_seconds: (analysis_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            duration_seconds: Some((analysis_time_ms as f64 / 1000.0) / 1000.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -580,7 +584,7 @@ impl ReviewerAgent {
 
         // Read file
         let code = cortex
-            .read_file(session_id, file_path)
+            .read_file(session_id.clone(), file_path)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -655,8 +659,8 @@ impl ReviewerAgent {
                     "High cyclomatic complexity: {}",
                     unit.complexity.cyclomatic
                 ),
-                file_path: unit.file.clone(),
-                line_number: Some(unit.lines.start),
+                file_path: unit.file_path.clone(),
+                line_number: Some((unit.end_line - unit.start_line) as u32),
                 suggestion: Some("Consider refactoring to reduce complexity".to_string()),
                 pattern_name: "high_complexity".to_string(),
             });
@@ -810,8 +814,8 @@ impl ReviewerAgent {
                     "High cognitive complexity may indicate performance bottleneck in {}",
                     unit.name
                 ),
-                file_path: unit.file.clone(),
-                line_number: Some(unit.lines.start),
+                file_path: unit.file_path.clone(),
+                line_number: Some((unit.end_line - unit.start_line) as u32),
                 suggestion: Some("Consider optimization or refactoring".to_string()),
                 pattern_name: "high_cognitive_complexity".to_string(),
             });

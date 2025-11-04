@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod cortex_bridge;
 pub mod patterns;
 pub mod topology;
 pub mod unified_message_bus;

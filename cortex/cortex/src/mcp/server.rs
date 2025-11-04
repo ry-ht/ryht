@@ -140,14 +140,65 @@ impl CortexMcpServer {
         let adv_test_ctx = AdvancedTestingContext::new(storage.clone());
         let arch_ctx = ArchitectureAnalysisContext::new(storage.clone());
 
-        // Axon integration contexts (stubs for now)
-        let agent_launch_ctx = AgentLaunchContext::new();
-        let agent_status_ctx = AgentStatusContext::new();
-        let agent_stop_ctx = AgentStopContext::new();
-        let orchestrate_ctx = OrchestrateContext::new();
-        let cortex_query_ctx = CortexQueryContext::new();
-        let session_create_ctx = SessionCreateContext::new();
-        let session_merge_ctx = SessionMergeContext::new();
+        // Axon integration contexts - Initialize subsystems
+        info!("Initializing Axon subsystems");
+
+        // Initialize semantic memory system
+        let semantic_memory = Arc::new(cortex_memory::SemanticMemorySystem::new(storage.clone()));
+
+        // Initialize agent registry
+        let agent_registry = Arc::new(crate::mcp::tools::AgentRegistry::new(storage.clone()));
+
+        // Initialize session manager (from cortex-storage)
+        use cortex_storage::session::SessionManager;
+        let session_manager = Arc::new(SessionManager::new(storage.clone()));
+
+        // Initialize lock manager (from cortex-storage)
+        use cortex_storage::locks::LockManager;
+        let lock_manager = Arc::new(LockManager::new(storage.clone()));
+
+        // Create CortexBridge for legacy agent support (temporary)
+        let cortex_bridge = Arc::new(crate::cortex_bridge::CortexBridge::new(
+            crate::cortex_bridge::CortexConfig::default()
+        ).await?);
+
+        // Create Axon contexts with proper dependencies
+        let session_ctx = crate::mcp::tools::session::SessionContext::new(
+            session_manager.clone(),
+            lock_manager.clone(),
+            storage.clone(),
+        );
+
+        let cortex_query_ctx = crate::mcp::tools::cortex_query::CortexQueryContext::new(
+            semantic_memory.clone(),
+            vfs.clone(),
+        );
+
+        let agent_launch_ctx = crate::mcp::tools::agent_launch::AgentLaunchContext::new(
+            agent_registry.clone(),
+            vfs.clone(),
+            semantic_memory.clone(),
+            storage.clone(),
+            cortex_bridge.clone(),
+        );
+
+        let agent_status_ctx = crate::mcp::tools::agent_status::AgentStatusContext::new(
+            agent_registry.clone(),
+        );
+
+        let agent_stop_ctx = crate::mcp::tools::agent_stop::AgentStopContext::new(
+            agent_registry.clone(),
+        );
+
+        let orchestrate_ctx = crate::mcp::tools::orchestrate::OrchestrateContext::new(
+            agent_registry.clone(),
+            vfs.clone(),
+            semantic_memory.clone(),
+            storage.clone(),
+            cortex_bridge.clone(),
+        );
+
+        info!("Axon subsystems initialized successfully");
 
         // Build server with all tools
         let server = mcp_sdk::McpServer::builder()
@@ -248,11 +299,9 @@ impl CortexMcpServer {
             .tool(MemoryImportKnowledgeTool::new(memory_ctx.clone()))
             .tool(MemoryGetRecommendationsTool::new(memory_ctx.clone()))
             .tool(MemoryLearnFromFeedbackTool::new(memory_ctx.clone()))
-            // Multi-Agent Coordination Tools (14)
-            .tool(SessionCreateTool::new(agent_ctx.clone()))
+            // Multi-Agent Coordination Tools (12) - Note: SessionCreate/Merge moved to Axon section
             .tool(SessionListTool::new(agent_ctx.clone()))
             .tool(SessionUpdateTool::new(agent_ctx.clone()))
-            .tool(SessionMergeTool::new(agent_ctx.clone()))
             .tool(SessionAbandonTool::new(agent_ctx.clone()))
             .tool(LockAcquireTool::new(agent_ctx.clone()))
             .tool(LockReleaseTool::new(agent_ctx.clone()))
@@ -360,14 +409,14 @@ impl CortexMcpServer {
             .tool(ArchSuggestBoundariesTool::new(arch_ctx.clone()))
             .tool(ArchCheckViolationsTool::new(arch_ctx.clone()))
             .tool(ArchAnalyzeDriftTool::new(arch_ctx.clone()))
-            // Agent Orchestration Tools (7) - Axon integration (STUBS for now)
+            // Agent Orchestration Tools (7) - Axon integration with direct subsystems
             .tool(AgentLaunchTool::new(agent_launch_ctx))
             .tool(AgentStatusTool::new(agent_status_ctx))
             .tool(AgentStopTool::new(agent_stop_ctx))
             .tool(OrchestrateTool::new(orchestrate_ctx))
             .tool(CortexQueryTool::new(cortex_query_ctx))
-            .tool(SessionCreateTool::new(session_create_ctx))
-            .tool(SessionMergeTool::new(session_merge_ctx))
+            .tool(SessionCreateTool::new(session_ctx.clone()))
+            .tool(SessionMergeTool::new(session_ctx.clone()))
             // Note: Middleware support may be added in future versions
             .build();
 

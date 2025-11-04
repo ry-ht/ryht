@@ -1,12 +1,41 @@
 //! Session Management Tools
 //!
-//! TODO (Phase 6): Remove cortex_bridge, use cortex-vfs session types
+//! Direct integration with Cortex subsystems (no HTTP bridge).
 
-use crate::cortex_bridge::{AgentId, CortexBridge, MergeStrategy, SessionId, SessionScope, WorkspaceId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{info, warn};
+use cortex_storage::{ConnectionManager, SessionManager, WorkspaceId, SessionId, AgentSession, IsolationLevel, SessionScope};
+use cortex_storage::locks::LockManager;
+use mcp_sdk::prelude::*;
+use async_trait::async_trait;
+
+/// Context for session management with direct subsystem references
+#[derive(Clone)]
+pub struct SessionContext {
+    /// Session manager for creating and managing sessions
+    pub sessions: Arc<SessionManager>,
+    /// Lock manager for resource coordination
+    pub locks: Arc<LockManager>,
+    /// Storage backend
+    pub storage: Arc<ConnectionManager>,
+}
+
+impl SessionContext {
+    /// Create a new SessionContext
+    pub fn new(
+        sessions: Arc<SessionManager>,
+        locks: Arc<LockManager>,
+        storage: Arc<ConnectionManager>,
+    ) -> Self {
+        Self {
+            sessions,
+            locks,
+            storage,
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct SessionCreateInput {
@@ -19,23 +48,20 @@ pub struct SessionCreateOutput {
 }
 
 pub struct SessionCreateTool {
-    cortex: Arc<CortexBridge>,
+    context: SessionContext,
 }
 
 impl SessionCreateTool {
-    /// Create a new SessionCreateTool with CortexBridge
-    pub fn new(cortex: Arc<CortexBridge>) -> Self {
-        Self { cortex }
+    /// Create a new SessionCreateTool with SessionContext
+    pub fn new(context: SessionContext) -> Self {
+        Self { context }
     }
 
     pub async fn create(&self, input: SessionCreateInput) -> Result<SessionCreateOutput> {
-        // Ensure Cortex is initialized
-        self.cortex.ensure_initialized().await?;
-
         // Generate a unique agent ID for this session
-        let agent_id = AgentId::new();
+        let agent_id = format!("agent-{}", uuid::Uuid::new_v4());
 
-        // Create workspace ID from input
+        // Parse workspace ID from input
         let workspace_id = WorkspaceId::from(input.workspace_id.clone());
 
         // Create default session scope (all paths accessible)
@@ -49,15 +75,56 @@ impl SessionCreateTool {
             workspace_id, agent_id
         );
 
-        // Create session via CortexBridge
-        let session_id = self.cortex
-            .create_session(agent_id.clone(), workspace_id, scope)
-            .await?;
+        // Create session directly via SessionManager
+        let session = AgentSession::new(
+            agent_id.clone(),
+            workspace_id.clone(),
+            IsolationLevel::Snapshot,
+            scope,
+        );
+
+        // Store session
+        let session_id = self.context.sessions.create_session(session).await?;
 
         info!("Created session {} successfully", session_id);
 
         Ok(SessionCreateOutput {
-            session_id: session_id.0,
+            session_id: session_id.to_string(),
+        })
+    }
+}
+
+#[async_trait]
+impl Tool for SessionCreateTool {
+    fn name(&self) -> &str {
+        "axon.session.create"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Create an isolated work session for an agent")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(SessionCreateInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: SessionCreateInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let output = self.create(input).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let json_output = serde_json::to_string_pretty(&output)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        Ok(ToolResult {
+            content: vec![ToolContent::text(json_output)],
+            is_error: false,
         })
     }
 }
@@ -75,47 +142,82 @@ pub struct SessionMergeOutput {
 }
 
 pub struct SessionMergeTool {
-    cortex: Arc<CortexBridge>,
+    context: SessionContext,
 }
 
 impl SessionMergeTool {
-    /// Create a new SessionMergeTool with CortexBridge
-    pub fn new(cortex: Arc<CortexBridge>) -> Self {
-        Self { cortex }
+    /// Create a new SessionMergeTool with SessionContext
+    pub fn new(context: SessionContext) -> Self {
+        Self { context }
     }
 
     pub async fn merge(&self, input: SessionMergeInput) -> Result<SessionMergeOutput> {
-        // Ensure Cortex is initialized
-        self.cortex.ensure_initialized().await?;
-
         let session_id = SessionId::from(input.session_id.clone());
 
         info!("Merging session {}", session_id);
 
         // Use Auto merge strategy by default
-        let strategy = MergeStrategy::Auto;
+        let strategy = cortex_storage::merge::MergeStrategy::Auto;
 
-        // Merge session via CortexBridge
-        let merge_report = self.cortex
+        // Merge session directly via SessionManager
+        let merge_result = self.context.sessions
             .merge_session(&session_id, strategy)
             .await?;
 
-        if merge_report.conflicts_resolved > 0 {
+        let conflicts_count = merge_result.conflicts.len() as u32;
+        let changes_count = merge_result.merged_entities.len() as u32;
+
+        if conflicts_count > 0 {
             warn!(
-                "Session {} merged with {} conflicts resolved",
-                session_id, merge_report.conflicts_resolved
+                "Session {} merged with {} conflicts",
+                session_id, conflicts_count
             );
         } else {
             info!(
                 "Session {} merged successfully with {} changes",
-                session_id, merge_report.changes_merged
+                session_id, changes_count
             );
         }
 
         Ok(SessionMergeOutput {
-            success: true,
-            changes_merged: merge_report.changes_merged,
-            conflicts_resolved: merge_report.conflicts_resolved,
+            success: merge_result.success,
+            changes_merged: changes_count,
+            conflicts_resolved: conflicts_count,
+        })
+    }
+}
+
+#[async_trait]
+impl Tool for SessionMergeTool {
+    fn name(&self) -> &str {
+        "axon.session.merge"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Merge an isolated session back into the main workspace")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(SessionMergeInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: SessionMergeInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let output = self.merge(input).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let json_output = serde_json::to_string_pretty(&output)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        Ok(ToolResult {
+            content: vec![ToolContent::text(json_output)],
+            is_error: false,
         })
     }
 }

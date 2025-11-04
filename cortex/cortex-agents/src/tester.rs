@@ -159,8 +159,7 @@ impl TesterAgent {
         let test_patterns = cortex
             .search_patterns(
                 &format!("test {:?}", spec.test_type),
-                None,
-                10,
+                Some(10),
             )
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
@@ -181,11 +180,12 @@ impl TesterAgent {
         // 3. Get code units to analyze testability
         let units = cortex
             .get_code_units(
-                &spec.workspace_id,
+                spec.workspace_id.clone(),
                 UnitFilters {
-                    unit_type: None,
-                    language: Some("rust".to_string()),
                     visibility: None,
+                    language: Some("rust".to_string()),
+                    unit_type: None,
+                    limit: Some(100),
                 },
             )
             .await
@@ -197,12 +197,13 @@ impl TesterAgent {
         let existing_tests = cortex
             .semantic_search(
                 &format!("tests for {}", spec.target_path),
-                &spec.workspace_id,
                 SearchFilters {
-                    types: vec!["function".to_string()],
-                    languages: vec!["rust".to_string()],
+                    workspace_id: Some(spec.workspace_id.to_string()),
+                    limit: Some(10),
+                    types: Some(vec!["function".to_string()]),
+                    languages: Some(vec!["rust".to_string()]),
                     visibility: None,
-                    min_relevance: 0.6,
+                    min_relevance: Some(0.6),
                 },
             )
             .await
@@ -225,36 +226,37 @@ impl TesterAgent {
         let generation_time_ms = start_time.elapsed().as_millis() as u64;
 
         // 6. Store episode for future learning
+        let mut success_metrics = HashMap::new();
+        success_metrics.insert("test_count".to_string(), serde_json::json!(test_count));
+        success_metrics.insert("estimated_coverage".to_string(), serde_json::json!(estimated_coverage));
+        success_metrics.insert("patterns_used".to_string(), serde_json::json!(test_patterns.len()));
+        success_metrics.insert("generation_time_ms".to_string(), serde_json::json!(generation_time_ms));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Feature,
-            task_description: format!("Generate {:?} tests for {}", spec.test_type, spec.target_path),
             agent_id: self.id.to_string(),
+            outcome: EpisodeOutcome::Success,
+            success_metrics,
+            workspace_id: Some(spec.workspace_id.to_string()),
             session_id: None,
-            workspace_id: spec.workspace_id.to_string(),
-            entities_created: vec![test_path.clone()],
-            entities_modified: vec![],
-            entities_deleted: vec![],
-            files_touched: vec![test_path.clone()],
-            queries_made: vec![format!("test patterns for {:?}", spec.test_type)],
-            tools_used: vec![],
+            task_description: format!("Generate {:?} tests for {}", spec.test_type, spec.target_path),
             solution_summary: format!(
                 "Generated {} {:?} tests with {:.1}% estimated coverage",
                 test_count, spec.test_type, estimated_coverage * 100.0
             ),
-            outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "test_count": test_count,
-                "estimated_coverage": estimated_coverage,
-                "patterns_used": test_patterns.len(),
-                "generation_time_ms": generation_time_ms,
-            }),
+            files_touched: vec![test_path.clone()],
+            tools_used: vec![],
+            queries_made: vec![format!("test patterns for {:?}", spec.test_type)],
             errors_encountered: vec![],
             lessons_learned: vec![format!("{:?} test generation patterns", spec.test_type)],
-            duration_seconds: (generation_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            tokens_used: 0,
+            episode_type: Some("test_generation".to_string()),
+            entities_created: vec![test_path.clone()],
+            entities_modified: vec![],
+            entities_deleted: vec![],
+            embedding: None,
+            duration_seconds: Some((generation_time_ms as f64) / 1000.0),
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -307,45 +309,46 @@ impl TesterAgent {
             .ok_or_else(|| AgentError::CortexError("Cortex not configured".to_string()))?;
 
         // Store episode for test execution
+        let mut success_metrics = HashMap::new();
+        success_metrics.insert("passed".to_string(), serde_json::json!(passed));
+        success_metrics.insert("failed".to_string(), serde_json::json!(failed));
+        success_metrics.insert("skipped".to_string(), serde_json::json!(skipped));
+        success_metrics.insert("coverage".to_string(), serde_json::json!(coverage));
+        success_metrics.insert("execution_time_ms".to_string(), serde_json::json!(execution_time_ms));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
-            task_description: format!("Execute tests in {}", test_suite_path),
             agent_id: self.id.to_string(),
-            session_id: None,
-            workspace_id: workspace_id.to_string(),
-            entities_created: vec![],
-            entities_modified: vec![],
-            entities_deleted: vec![],
-            files_touched: vec![test_suite_path.to_string()],
-            queries_made: vec![],
-            tools_used: vec![],
-            solution_summary: format!(
-                "Executed tests: {} passed, {} failed, {:.1}% coverage",
-                passed, failed, coverage * 100.0
-            ),
             outcome: if failed == 0 {
                 EpisodeOutcome::Success
             } else {
                 EpisodeOutcome::Partial
             },
-            success_metrics: serde_json::json!({
-                "passed": passed,
-                "failed": failed,
-                "skipped": skipped,
-                "coverage": coverage,
-                "execution_time_ms": execution_time_ms,
-            }),
+            success_metrics,
+            workspace_id: Some(workspace_id.to_string()),
+            session_id: None,
+            task_description: format!("Execute tests in {}", test_suite_path),
+            solution_summary: format!(
+                "Executed tests: {} passed, {} failed, {:.1}% coverage",
+                passed, failed, coverage * 100.0
+            ),
+            files_touched: vec![test_suite_path.to_string()],
+            tools_used: vec![],
+            queries_made: vec![],
             errors_encountered: vec![],
             lessons_learned: if failed > 0 {
                 vec![format!("{} test failures to analyze", failed)]
             } else {
                 vec!["All tests passed successfully".to_string()]
             },
-            duration_seconds: (execution_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            tokens_used: 0,
+            episode_type: Some("test_execution".to_string()),
+            entities_created: vec![],
+            entities_modified: vec![],
+            entities_deleted: vec![],
+            embedding: None,
+            duration_seconds: Some((execution_time_ms as f64) / 1000.0),
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -399,7 +402,7 @@ impl TesterAgent {
             for unit in units.iter().take(10) {
                 prompt.push_str(&format!(
                     "- {} {}: {} (complexity: {})\n",
-                    unit.unit_type, unit.name,
+                    format!("{:?}", unit.unit_type), unit.name,
                     unit.signature,
                     unit.complexity.cyclomatic
                 ));
@@ -420,9 +423,9 @@ impl TesterAgent {
         if !existing_tests.is_empty() {
             prompt.push_str("Existing test examples (for style reference):\n");
             for (i, test) in existing_tests.iter().take(3).enumerate() {
-                prompt.push_str(&format!("{}. {}\n", i + 1, test.name));
-                if !test.snippet.is_empty() {
-                    prompt.push_str(&format!("   {}\n", test.snippet));
+                prompt.push_str(&format!("{}. {}\n", i + 1, test.item.name));
+                if !test.item.signature.is_empty() {
+                    prompt.push_str(&format!("   {}\n", test.item.signature));
                 }
             }
             prompt.push('\n');
@@ -690,37 +693,24 @@ impl TesterAgent {
             )
             .build();
 
-        let mut response_stream = query(prompt, Some(options))
+        let mut response_stream = query(prompt, options)
             .await
             .map_err(|e| AgentError::CortexError(format!("Claude query failed: {}", e)))?;
 
         let mut collected_text = String::new();
 
-        while let Some(msg_result) = response_stream.next().await {
-            match msg_result {
-                Ok(Message::Assistant { message }) => {
-                    for content_block in &message.content {
-                        if let ContentBlock::Text(text_content) = content_block {
-                            collected_text.push_str(&text_content.text);
-                        }
-                    }
-                }
-                Ok(Message::Result { result, is_error, .. }) => {
-                    if is_error {
-                        if let Some(err_msg) = result {
-                            return Err(AgentError::CortexError(format!("Claude error: {}", err_msg)));
-                        }
-                    }
-                    debug!("Claude query completed");
-                }
-                Ok(_) => {
-                    // Ignore other message types
+        while let Some(block_result) = response_stream.next().await {
+            match block_result {
+                Ok(content_block) => {
+                    collected_text.push_str(&content_block.text);
                 }
                 Err(e) => {
-                    return Err(AgentError::CortexError(format!("Stream error: {}", e)));
+                    return Err(AgentError::CortexError(format!("Claude error: {}", e)));
                 }
             }
         }
+
+        // Placeholder removed - not needed with simplified stream handling
 
         if collected_text.is_empty() {
             return Err(AgentError::CortexError("No response from Claude".to_string()));

@@ -1,16 +1,18 @@
 //! Agent Launch Tool - Launch specialized agents for tasks
 //!
-//! TODO (Phase 6): Update imports to use cortex-* crates
-//! - Replace mcp_server types with cortex-runtime equivalents
-//! - Replace cortex_bridge::CortexBridge with direct Cortex types
-//! - Update agent references to use cortex-agents
+//! Direct integration with Cortex subsystems (no HTTP bridge).
 
-use crate::mcp_server::{AgentExecution, AgentRegistry, ExecutionStatus, McpServerConfig};
+use crate::mcp::tools::agent_registry::{AgentExecution, AgentRegistry, ExecutionStatus};
 use crate::cortex_bridge::CortexBridge;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+use cortex_storage::ConnectionManager;
+use cortex_vfs::VirtualFileSystem;
+use cortex_memory::SemanticMemorySystem;
+use mcp_sdk::prelude::*;
+use async_trait::async_trait;
 
 /// Agent launch tool input
 #[derive(Debug, Deserialize, Serialize, schemars::JsonSchema)]
@@ -44,25 +46,49 @@ pub struct AgentLaunchOutput {
     pub message: String,
 }
 
+/// Context for agent launch with direct subsystem references
+#[derive(Clone)]
+pub struct AgentLaunchContext {
+    /// Agent registry for tracking executions
+    pub registry: Arc<AgentRegistry>,
+    /// Virtual filesystem for file access
+    pub vfs: Arc<VirtualFileSystem>,
+    /// Semantic memory system
+    pub memory: Arc<SemanticMemorySystem>,
+    /// Storage backend
+    pub storage: Arc<ConnectionManager>,
+    /// Legacy bridge for agent execution (temporary)
+    pub cortex: Arc<CortexBridge>,
+}
+
+impl AgentLaunchContext {
+    /// Create a new AgentLaunchContext
+    pub fn new(
+        registry: Arc<AgentRegistry>,
+        vfs: Arc<VirtualFileSystem>,
+        memory: Arc<SemanticMemorySystem>,
+        storage: Arc<ConnectionManager>,
+        cortex: Arc<CortexBridge>,
+    ) -> Self {
+        Self {
+            registry,
+            vfs,
+            memory,
+            storage,
+            cortex,
+        }
+    }
+}
+
 /// Agent launch tool
 pub struct AgentLaunchTool {
-    config: Arc<McpServerConfig>,
-    registry: Arc<AgentRegistry>,
-    cortex: Arc<CortexBridge>,
+    context: AgentLaunchContext,
 }
 
 impl AgentLaunchTool {
     /// Create new agent launch tool
-    pub fn new(
-        config: Arc<McpServerConfig>,
-        registry: Arc<AgentRegistry>,
-        cortex: Arc<CortexBridge>,
-    ) -> Self {
-        Self {
-            config,
-            registry,
-            cortex,
-        }
+    pub fn new(context: AgentLaunchContext) -> Self {
+        Self { context }
     }
 
     /// Launch agent
@@ -70,20 +96,15 @@ impl AgentLaunchTool {
         let agent_id = format!("{}-{}", input.agent_type, Uuid::new_v4());
 
         // Create execution record
-        let execution = AgentExecution {
-            agent_id: agent_id.clone(),
-            agent_type: input.agent_type.clone(),
-            task: input.task.clone(),
-            workspace_id: input.workspace_id.clone(),
-            session_id: None,
-            status: ExecutionStatus::Queued,
-            started_at: chrono::Utc::now(),
-            ended_at: None,
-            result: None,
-            error: None,
-        };
+        let execution = AgentExecution::new(
+            agent_id.clone(),
+            input.agent_type.clone(),
+            input.task.clone(),
+            input.workspace_id.clone(),
+            None,
+        );
 
-        self.registry.register(execution).await?;
+        self.context.registry.register(execution).await?;
 
         // Launch agent based on type
         let agent_type = input.agent_type.clone();
@@ -92,13 +113,12 @@ impl AgentLaunchTool {
         let workspace_id = input.workspace_id.clone();
         let params = input.params.clone();
 
-        let config = Arc::clone(&self.config);
-        let registry = Arc::clone(&self.registry);
-        let cortex = Arc::clone(&self.cortex);
+        let registry = Arc::clone(&self.context.registry);
+        let cortex = Arc::clone(&self.context.cortex);
         let agent_id_clone = agent_id.clone();
 
         // Update status to Running before spawning execution
-        if let Err(e) = self.registry.update_status(&agent_id, ExecutionStatus::Running).await {
+        if let Err(e) = self.context.registry.update_status(&agent_id, ExecutionStatus::Running).await {
             tracing::error!(agent_id = %agent_id, error = %e, "Failed to update agent status to Running");
             return Err(e);
         }
@@ -826,5 +846,40 @@ impl AgentLaunchTool {
                 },
             }
         }))
+    }
+}
+
+#[async_trait]
+impl Tool for AgentLaunchTool {
+    fn name(&self) -> &str {
+        "axon.agent.launch"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Launch a specialized agent for a specific task")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(AgentLaunchInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: AgentLaunchInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let output = self.launch(input).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let json_output = serde_json::to_string_pretty(&output)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        Ok(ToolResult {
+            content: vec![ToolContent::text(json_output)],
+            is_error: false,
+        })
     }
 }

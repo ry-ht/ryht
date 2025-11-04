@@ -10,9 +10,10 @@
 
 use super::*;
 use crate::{
-    CortexBridge, Episode, EpisodeOutcome, EpisodeType, PatternType,
+    CortexBridge, Episode, EpisodeOutcome, PatternType,
     SearchFilters, WorkspaceId,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -346,12 +347,13 @@ impl ArchitectAgent {
             match cortex
                 .semantic_search(
                     &search_query,
-                    workspace_id,
                     SearchFilters {
-                        types: vec!["architecture".to_string(), "pattern".to_string()],
-                        min_relevance: 0.7,
+                        workspace_id: Some(workspace_id.to_string()),
+                        limit: Some(10),
+                        types: Some(vec!["architecture".to_string(), "pattern".to_string()]),
+                        min_relevance: Some( 0.7),
                         ..Default::default()
-                    },
+                                    },
                 )
                 .await
             {
@@ -362,7 +364,7 @@ impl ArchitectAgent {
                     for result in results.iter().take(3) {
                         recommendations.push(format!(
                             "Consider pattern: {} (relevance: {:.2})",
-                            result.name, result.relevance_score
+                            result.item.name, result.score
                         ));
                     }
                 }
@@ -399,13 +401,18 @@ impl ArchitectAgent {
             }
 
             // Store this analysis as an episode for future learning
+            let mut success_metrics = HashMap::new();
+            success_metrics.insert("total_modules".to_string(), serde_json::json!(modules.len()));
+            success_metrics.insert("circular_deps".to_string(), serde_json::json!(circular_dependencies.len()));
+            success_metrics.insert("max_depth".to_string(), serde_json::json!(max_depth));
+
             let episode = Episode {
                 id: uuid::Uuid::new_v4().to_string(),
-                episode_type: EpisodeType::Exploration,
+                episode_type: Some("exploration".to_string()),
                 task_description: format!("Dependency analysis for {} modules", modules.len()),
                 agent_id: self.id.to_string(),
                 session_id: None,
-                workspace_id: workspace_id.to_string(),
+                workspace_id: Some(workspace_id.to_string()),
                 entities_created: vec![],
                 entities_modified: modules.clone(),
                 entities_deleted: vec![],
@@ -423,21 +430,17 @@ impl ArchitectAgent {
                 } else {
                     EpisodeOutcome::Partial
                 },
-                success_metrics: serde_json::json!({
-                    "total_modules": modules.len(),
-                    "circular_deps": circular_dependencies.len(),
-                    "max_depth": max_depth,
-                }),
+                success_metrics,
                 errors_encountered: vec![],
                 lessons_learned: if !circular_dependencies.is_empty() {
                     vec!["Circular dependencies detected - refactoring recommended".to_string()]
                 } else {
                     vec!["Clean dependency graph - no circular dependencies".to_string()]
                 },
-                duration_seconds: 0,
-                tokens_used: Default::default(),
-                embedding: vec![],
-                created_at: chrono::Utc::now(),
+                duration_seconds: Some(0.0),
+                tokens_used: 0,
+                embedding: None,
+                created_at: Some(chrono::Utc::now()),
                 completed_at: Some(chrono::Utc::now()),
             };
 

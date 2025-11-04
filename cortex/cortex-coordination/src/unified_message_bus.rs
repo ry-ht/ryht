@@ -740,39 +740,37 @@ impl UnifiedMessageBus {
             return Ok(()); // Silently skip if no Cortex
         };
 
-        use crate::cortex_bridge::{EpisodeType, EpisodeOutcome, TokenUsage, ToolUsage};
+        use crate::cortex_bridge::EpisodeOutcome;
 
         // Create episode from message for episodic memory
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
+            episode_type: Some("task".to_string()),
             task_description: format!("Message from {} to {:?}", envelope.from, envelope.to),
             agent_id: envelope.from.to_string(),
             session_id: Some(envelope.session_id.to_string()),
-            workspace_id: envelope.workspace_id.to_string(),
+            workspace_id: Some(envelope.workspace_id.to_string()),
             entities_created: vec![],
             entities_modified: vec![],
             entities_deleted: vec![],
             files_touched: vec![],
             queries_made: vec![],
-            tools_used: vec![ToolUsage {
-                tool_name: format!("message_bus::{:?}", envelope.payload),
-                invocations: 1,
-                success_rate: 1.0,
-            }],
+            tools_used: vec![format!("message_bus::{:?}", envelope.payload)],
             solution_summary: serde_json::to_string(&envelope.payload).unwrap_or_default(),
             outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "message_id": envelope.message_id,
-                "timestamp": envelope.timestamp,
-                "priority": envelope.priority,
-            }),
+            success_metrics: {
+                let mut metrics = HashMap::new();
+                metrics.insert("message_id".to_string(), serde_json::json!(envelope.message_id));
+                metrics.insert("timestamp".to_string(), serde_json::json!(envelope.timestamp));
+                metrics.insert("priority".to_string(), serde_json::json!(envelope.priority));
+                metrics
+            },
             errors_encountered: vec![],
             lessons_learned: vec![],
-            duration_seconds: 0,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: envelope.timestamp,
+            duration_seconds: Some(0.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(envelope.timestamp),
             completed_at: Some(envelope.timestamp),
         };
 

@@ -2,9 +2,10 @@
 
 use super::*;
 use crate::{
-    AgentId as CortexAgentId, CortexBridge, Episode, EpisodeOutcome, EpisodeType, MergeStrategy,
-    Pattern, SearchFilters, SessionId, SessionScope, TokenUsage, UnitFilters, WorkspaceId,
+    CortexBridge, Episode, EpisodeOutcome,
+    Pattern, SearchFilters, SessionId, SessionScope, UnitFilters, WorkspaceId,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
@@ -170,7 +171,7 @@ impl DeveloperAgent {
         // 1. Create isolated session for this task
         let session_id = cortex
             .create_session(
-                CortexAgentId::from(self.id.to_string()),
+                self.id.to_string(),
                 spec.workspace_id.clone(),
                 SessionScope {
                     paths: vec![spec.target_path.clone()],
@@ -186,12 +187,13 @@ impl DeveloperAgent {
         let similar_code = cortex
             .semantic_search(
                 &spec.description,
-                &spec.workspace_id,
                 SearchFilters {
-                    types: vec!["function".to_string(), "class".to_string()],
-                    languages: vec![spec.language.clone()],
+                    workspace_id: Some(spec.workspace_id.to_string()),
+                    limit: Some(10),
+                    types: Some(vec!["function".to_string(), "class".to_string()]),
+                    languages: Some(vec![spec.language.clone()]),
                     visibility: Some("public".to_string()),
-                    min_relevance: 0.7,
+                    min_relevance: Some(0.7),
                 },
             )
             .await
@@ -229,11 +231,12 @@ impl DeveloperAgent {
         // 5. Get code units (dependencies we might need)
         let units = cortex
             .get_code_units(
-                &spec.workspace_id,
+                spec.workspace_id.clone(),
                 UnitFilters {
-                    unit_type: Some("function".to_string()),
+                    visibility: None,
                     language: Some(spec.language.clone()),
-                    visibility: Some("public".to_string()),
+                    unit_type: Some("function".to_string()),
+                    limit: Some(100),
                 },
             )
             .await
@@ -249,35 +252,35 @@ impl DeveloperAgent {
 
         // 8. Write generated code to session
         cortex
-            .write_file(&session_id, &spec.target_path, &code_content)
+            .write_file(session_id.clone(), &spec.target_path, &code_content)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
         debug!("Wrote generated code to session");
 
         // 9. Merge changes back to main workspace
-        let merge_report = cortex
-            .merge_session(&session_id, MergeStrategy::Auto)
+        cortex
+            .merge_session(session_id.clone(), "auto".to_string())
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
-        if merge_report.conflicts_resolved > 0 {
-            warn!(
-                "Resolved {} conflicts during merge",
-                merge_report.conflicts_resolved
-            );
-        }
+        debug!("Merged session successfully");
 
         let generation_time_ms = start_time.elapsed().as_millis() as u64;
 
         // 10. Store episode for future learning
+        let mut success_metrics = HashMap::new();
+        success_metrics.insert("similar_code_count".to_string(), serde_json::json!(similar_code.len()));
+        success_metrics.insert("patterns_used".to_string(), serde_json::json!(language_patterns.len()));
+        success_metrics.insert("generation_time_ms".to_string(), serde_json::json!(generation_time_ms));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Feature,
+            episode_type: Some("feature".to_string()),
             task_description: spec.description.clone(),
             agent_id: self.id.to_string(),
             session_id: Some(session_id.to_string()),
-            workspace_id: spec.workspace_id.to_string(),
+            workspace_id: Some(spec.workspace_id.to_string()),
             entities_created: vec![spec.target_path.clone()],
             entities_modified: vec![],
             entities_deleted: vec![],
@@ -289,17 +292,13 @@ impl DeveloperAgent {
                 spec.feature_type, spec.target_path
             ),
             outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "similar_code_count": similar_code.len(),
-                "patterns_used": language_patterns.len(),
-                "generation_time_ms": generation_time_ms,
-            }),
+            success_metrics,
             errors_encountered: vec![],
             lessons_learned: vec!["Code generation with context awareness".to_string()],
-            duration_seconds: (generation_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            duration_seconds: Some((generation_time_ms as f64) / 1000.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -310,7 +309,7 @@ impl DeveloperAgent {
 
         // 11. Cleanup session
         cortex
-            .close_session(&session_id, &CortexAgentId::from(self.id.to_string()))
+            .close_session(session_id.clone())
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -358,7 +357,7 @@ impl DeveloperAgent {
 
         // 1. Get current file from Cortex session
         let current_code = cortex
-            .read_file(session_id, file_path)
+            .read_file(session_id.clone(), file_path)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -367,11 +366,12 @@ impl DeveloperAgent {
         // 2. Get code unit details
         let units = cortex
             .get_code_units(
-                workspace_id,
+                workspace_id.clone(),
                 UnitFilters {
-                    unit_type: None,
-                    language: Some("rust".to_string()),
                     visibility: None,
+                    language: Some("rust".to_string()),
+                    unit_type: None,
+                    limit: Some(100),
                 },
             )
             .await
@@ -414,7 +414,7 @@ impl DeveloperAgent {
 
         // 7. Write back to session
         cortex
-            .write_file(session_id, file_path, &refactored_content)
+            .write_file(session_id.clone(), file_path, &refactored_content)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -423,13 +423,17 @@ impl DeveloperAgent {
         let refactoring_time_ms = start_time.elapsed().as_millis() as u64;
 
         // 8. Store episode
+        let mut success_metrics = std::collections::HashMap::new();
+        success_metrics.insert("changes_count".to_string(), serde_json::json!(changes.len()));
+        success_metrics.insert("refactoring_time_ms".to_string(), serde_json::json!(refactoring_time_ms));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Refactor,
+            episode_type: Some("refactor".to_string()),
             task_description: format!("Refactor {:?} in {}", refactoring_type, file_path),
             agent_id: self.id.to_string(),
             session_id: Some(session_id.to_string()),
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             entities_created: vec![],
             entities_modified: vec![file_path.to_string()],
             entities_deleted: vec![],
@@ -438,16 +442,13 @@ impl DeveloperAgent {
             tools_used: vec![],
             solution_summary: format!("Applied {:?} refactoring", refactoring_type),
             outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "changes_count": changes.len(),
-                "refactoring_time_ms": refactoring_time_ms,
-            }),
+            success_metrics,
             errors_encountered: vec![],
             lessons_learned: vec![format!("{:?} refactoring pattern", refactoring_type)],
-            duration_seconds: (refactoring_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            duration_seconds: Some((refactoring_time_ms as f64) / 1000.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -492,18 +493,19 @@ impl DeveloperAgent {
 
         // 1. Get current file from session
         let current_code = cortex
-            .read_file(session_id, file_path)
+            .read_file(session_id.clone(), file_path)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
         // 2. Get code units for analysis
         let units = cortex
             .get_code_units(
-                workspace_id,
+                workspace_id.clone(),
                 UnitFilters {
-                    unit_type: None,
-                    language: Some("rust".to_string()),
                     visibility: None,
+                    language: Some("rust".to_string()),
+                    unit_type: None,
+                    limit: Some(100),
                 },
             )
             .await
@@ -550,7 +552,7 @@ impl DeveloperAgent {
 
         // 8. Write back to session
         cortex
-            .write_file(session_id, file_path, &optimized_code)
+            .write_file(session_id.clone(), file_path, &optimized_code)
             .await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
@@ -566,37 +568,38 @@ impl DeveloperAgent {
         let optimization_time_ms = start_time.elapsed().as_millis() as u64;
 
         // 9. Store episode
+        let mut success_metrics = HashMap::new();
+        success_metrics.insert("bottlenecks_found".to_string(), serde_json::json!(bottlenecks.len()));
+        success_metrics.insert("optimizations_applied".to_string(), serde_json::json!(optimizations.len()));
+        success_metrics.insert("complexity_before".to_string(), serde_json::json!(complexity_before));
+        success_metrics.insert("complexity_after".to_string(), serde_json::json!(complexity_after));
+        success_metrics.insert("improvement_percent".to_string(), serde_json::json!(improvement_percent));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Feature,
-            task_description: format!("Optimize code in {}", file_path),
             agent_id: self.id.to_string(),
+            outcome: EpisodeOutcome::Success,
+            success_metrics,
+            workspace_id: Some(workspace_id.to_string()),
             session_id: Some(session_id.to_string()),
-            workspace_id: workspace_id.to_string(),
-            entities_created: vec![],
-            entities_modified: vec![file_path.to_string()],
-            entities_deleted: vec![],
-            files_touched: vec![file_path.to_string()],
-            queries_made: vec![],
-            tools_used: vec![],
+            task_description: format!("Optimize code in {}", file_path),
             solution_summary: format!(
                 "Optimized code with {:.1}% improvement",
                 improvement_percent
             ),
-            outcome: EpisodeOutcome::Success,
-            success_metrics: serde_json::json!({
-                "bottlenecks_found": bottlenecks.len(),
-                "optimizations_applied": optimizations.len(),
-                "complexity_before": complexity_before,
-                "complexity_after": complexity_after,
-                "improvement_percent": improvement_percent,
-            }),
+            files_touched: vec![file_path.to_string()],
+            tools_used: vec![],
+            queries_made: vec![],
             errors_encountered: vec![],
             lessons_learned: vec!["Performance optimization patterns".to_string()],
-            duration_seconds: (optimization_time_ms / 1000) as i32,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            tokens_used: 0,
+            episode_type: Some("optimization".to_string()),
+            entities_created: vec![],
+            entities_modified: vec![file_path.to_string()],
+            entities_deleted: vec![],
+            embedding: None,
+            duration_seconds: Some((optimization_time_ms as f64) / 1000.0),
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -647,9 +650,9 @@ impl DeveloperAgent {
             prompt.push_str("Similar implementations found:\n");
             for (i, similar) in similar_code.iter().take(3).enumerate() {
                 prompt.push_str(&format!("{}. {} (relevance: {:.2})\n",
-                    i + 1, similar.name, similar.relevance_score));
-                if !similar.snippet.is_empty() {
-                    prompt.push_str(&format!("   {}\n", similar.snippet));
+                    i + 1, similar.item.name, similar.score));
+                if !similar.item.signature.is_empty() {
+                    prompt.push_str(&format!("   {}\n", similar.item.signature));
                 }
             }
             prompt.push('\n');
@@ -936,7 +939,7 @@ impl DeveloperAgent {
                     for unit in units.iter().take(5) {
                         prompt.push_str(&format!(
                             "- {} {} (complexity: {})\n",
-                            unit.unit_type, unit.name, unit.complexity.cyclomatic
+                            format!("{:?}", unit.unit_type), unit.name, unit.complexity.cyclomatic
                         ));
                     }
                     prompt.push('\n');
@@ -1054,7 +1057,7 @@ impl DeveloperAgent {
             prompt.push_str("Past optimization experiences:\n");
             for episode in episodes.iter().take(3) {
                 prompt.push_str(&format!("- {}\n", episode.task_description));
-                if let Some(metrics) = episode.success_metrics.as_object() {
+                if let Some(metrics) = episode.success_metrics.get("improvement_percent") {
                     if let Some(improvement) = metrics.get("improvement_percent") {
                         prompt.push_str(&format!("  Achieved: {} improvement\n", improvement));
                     }
@@ -1114,37 +1117,24 @@ impl DeveloperAgent {
             )
             .build();
 
-        let mut response_stream = query(prompt, Some(options))
+        let mut response_stream = query(prompt, options)
             .await
             .map_err(|e| AgentError::CortexError(format!("Claude query failed: {}", e)))?;
 
         let mut collected_text = String::new();
 
-        while let Some(msg_result) = response_stream.next().await {
-            match msg_result {
-                Ok(Message::Assistant { message }) => {
-                    for content_block in &message.content {
-                        if let ContentBlock::Text(text_content) = content_block {
-                            collected_text.push_str(&text_content.text);
-                        }
-                    }
-                }
-                Ok(Message::Result { result, is_error, .. }) => {
-                    if is_error {
-                        if let Some(err_msg) = result {
-                            return Err(AgentError::CortexError(format!("Claude error: {}", err_msg)));
-                        }
-                    }
-                    debug!("Claude query completed");
-                }
-                Ok(_) => {
-                    // Ignore other message types
+        while let Some(block_result) = response_stream.next().await {
+            match block_result {
+                Ok(content_block) => {
+                    collected_text.push_str(&content_block.text);
                 }
                 Err(e) => {
-                    return Err(AgentError::CortexError(format!("Stream error: {}", e)));
+                    return Err(AgentError::CortexError(format!("Claude error: {}", e)));
                 }
             }
         }
+
+        // Placeholder removed - not needed with simplified stream handling
 
         if collected_text.is_empty() {
             return Err(AgentError::CortexError("No response from Claude".to_string()));

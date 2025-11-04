@@ -4,16 +4,15 @@
 //! research system architecture. It analyzes task complexity, spawns appropriate workers,
 //! and synthesizes results.
 //!
-//! TODO (Phase 6): Update imports to use cortex-* crates:
-//! - cortex_orchestration::{LeadAgent, LeadAgentConfig, StrategyLibrary, etc.}
-//! - cortex_coordination::{UnifiedMessageBus, MessageCoordinator}
-//! - Remove cortex_bridge, use direct types
+//! Direct integration with Cortex subsystems (no HTTP bridge).
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, error};
+use mcp_sdk::prelude::*;
+use async_trait::async_trait;
 
 use crate::cortex_bridge::{CortexBridge, WorkspaceId, SessionId};
 use crate::orchestration::{
@@ -31,6 +30,10 @@ use crate::coordination::{
     UnifiedMessageBus,
     MessageCoordinator,
 };
+use crate::mcp::tools::agent_registry::AgentRegistry;
+use cortex_storage::ConnectionManager;
+use cortex_vfs::VirtualFileSystem;
+use cortex_memory::SemanticMemorySystem;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct OrchestrateInput {
@@ -48,10 +51,44 @@ pub struct OrchestrateOutput {
     pub estimated_duration: Option<u64>,
 }
 
+/// Context for orchestration with direct subsystem references
+#[derive(Clone)]
+pub struct OrchestrateContext {
+    /// Agent registry for tracking executions
+    pub registry: Arc<AgentRegistry>,
+    /// Virtual filesystem for file access
+    pub vfs: Arc<VirtualFileSystem>,
+    /// Semantic memory system
+    pub memory: Arc<SemanticMemorySystem>,
+    /// Storage backend
+    pub storage: Arc<ConnectionManager>,
+    /// Legacy bridge for orchestration (temporary)
+    pub cortex: Arc<CortexBridge>,
+}
+
+impl OrchestrateContext {
+    /// Create a new OrchestrateContext
+    pub fn new(
+        registry: Arc<AgentRegistry>,
+        vfs: Arc<VirtualFileSystem>,
+        memory: Arc<SemanticMemorySystem>,
+        storage: Arc<ConnectionManager>,
+        cortex: Arc<CortexBridge>,
+    ) -> Self {
+        Self {
+            registry,
+            vfs,
+            memory,
+            storage,
+            cortex,
+        }
+    }
+}
+
 /// Orchestrate tool for multi-agent task coordination
 pub struct OrchestrateTool {
-    /// Cortex bridge for memory operations
-    cortex: Arc<CortexBridge>,
+    /// Context with direct subsystem references
+    context: OrchestrateContext,
 
     /// Lead agent for orchestration
     lead_agent: Arc<RwLock<Option<LeadAgent>>>,
@@ -77,19 +114,19 @@ pub struct OrchestrateTool {
 
 impl OrchestrateTool {
     /// Create a new OrchestrateTool
-    pub async fn new(cortex: Arc<CortexBridge>) -> Result<Self> {
+    pub async fn new(context: OrchestrateContext) -> Result<Self> {
         info!("Initializing OrchestrateTool");
 
         // Initialize message bus
         let message_bus = Arc::new(UnifiedMessageBus::new());
 
         // Initialize message coordinator
-        let coordinator = Arc::new(MessageCoordinator::new(message_bus.clone(), cortex.clone()));
+        let coordinator = Arc::new(MessageCoordinator::new(message_bus.clone(), context.cortex.clone()));
 
         // Initialize strategy library in lazy mode to avoid hanging on Cortex queries
         // during MCP server initialization. Learned strategies will be loaded on first use.
         let strategy_config = StrategyLibraryConfig::default();
-        let strategy_library = Arc::new(StrategyLibrary::new(cortex.clone(), strategy_config, true).await?);
+        let strategy_library = Arc::new(StrategyLibrary::new(context.cortex.clone(), strategy_config, true).await?);
 
         // Initialize worker registry
         let registry_config = WorkerRegistryConfig::default();
@@ -110,7 +147,7 @@ impl OrchestrateTool {
         };
 
         Ok(Self {
-            cortex,
+            context,
             lead_agent: Arc::new(RwLock::new(None)),
             strategy_library,
             worker_registry,
@@ -130,7 +167,7 @@ impl OrchestrateTool {
 
             let lead_agent = LeadAgent::new(
                 "MCP-Orchestrator".to_string(),
-                self.cortex.clone(),
+                self.context.cortex.clone(),
                 self.strategy_library.clone(),
                 self.worker_registry.clone(),
                 self.result_synthesizer.clone(),
@@ -150,7 +187,7 @@ impl OrchestrateTool {
         info!("Orchestrating task: {}", input.task);
 
         // Ensure Cortex is initialized
-        self.cortex.ensure_initialized().await?;
+        self.context.cortex.ensure_initialized().await?;
 
         // Load learned strategies now that Cortex is available (only loads once)
         if let Err(e) = self.strategy_library.ensure_learned_strategies_loaded().await {
@@ -231,5 +268,40 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len])
+    }
+}
+
+#[async_trait]
+impl Tool for OrchestrateTool {
+    fn name(&self) -> &str {
+        "axon.orchestrate"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Orchestrate a complex task across multiple specialized agents using the Orchestrator-Worker pattern")
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        serde_json::to_value(schemars::schema_for!(OrchestrateInput)).unwrap()
+    }
+
+    async fn execute(
+        &self,
+        input: serde_json::Value,
+        _context: &ToolContext,
+    ) -> std::result::Result<ToolResult, ToolError> {
+        let input: OrchestrateInput = serde_json::from_value(input)
+            .map_err(|e| ToolError::ExecutionFailed(format!("Invalid input: {}", e)))?;
+
+        let output = self.orchestrate(input).await
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        let json_output = serde_json::to_string_pretty(&output)
+            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+
+        Ok(ToolResult {
+            content: vec![ToolContent::text(json_output)],
+            is_error: false,
+        })
     }
 }

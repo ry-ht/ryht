@@ -4,11 +4,8 @@
 //! the unified message bus without needing to understand all the low-level details.
 
 use super::*;
-use cortex_agents::AgentId;
-use cortex_coordination::{
-    Message, MessageEnvelope, MessageCoordinator, UnifiedMessageBus,
-};
-use crate::cortex_bridge::{CortexBridge, SessionId, WorkspaceId, LockType};
+use crate::cortex_bridge::{AgentId, CortexBridge, SessionId, WorkspaceId, LockType};
+use crate::{Message, MessageEnvelope, MessageCoordinator, UnifiedMessageBus};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;

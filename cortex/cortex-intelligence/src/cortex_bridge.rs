@@ -356,6 +356,28 @@ impl CortexBridge {
 
         Ok(())
     }
+
+    /// Query the knowledge graph (stub implementation)
+    pub async fn query_graph(
+        &self,
+        _query: &str,
+        _params: HashMap<String, serde_json::Value>,
+    ) -> Result<Vec<serde_json::Value>> {
+        // TODO: Implement actual graph query
+        warn!("Knowledge graph query not yet implemented");
+        Ok(Vec::new())
+    }
+
+    /// Search for patterns (stub implementation)
+    pub async fn search_patterns(
+        &self,
+        _query: &str,
+        _limit: Option<usize>,
+    ) -> Result<Vec<Pattern>> {
+        // TODO: Implement actual pattern search
+        warn!("Pattern search not yet implemented");
+        Ok(Vec::new())
+    }
 }
 
 /// Convert Episode to EpisodicMemory

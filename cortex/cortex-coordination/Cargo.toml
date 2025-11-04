@@ -25,6 +25,9 @@ cortex-core = { path = "../cortex-core" }
 cortex-types = { path = "../cortex-types" }
 # cortex-runtime = { path = "../cortex-runtime" }  # Removed to break circular dependency
 cortex-consensus = { path = "../cortex-consensus" }
+cortex-agents = { path = "../cortex-agents" }
+cortex-intelligence = { path = "../cortex-intelligence" }
+cortex-storage = { path = "../cortex-storage" }
 
 # External dependencies
 tokio-stream = { version = "0.1.17", features = ["sync"] }

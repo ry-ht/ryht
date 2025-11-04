@@ -34,8 +34,8 @@
 
 use super::*;
 use crate::{
-    CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern, PatternType,
-    SearchFilters, SessionId, SessionScope, TokenUsage, UnitFilters, WorkspaceId,
+    CortexBridge, Episode, EpisodeOutcome, Pattern, PatternType,
+    SearchFilters, SessionId, SessionScope, UnitFilters, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -225,9 +225,8 @@ impl DocumenterAgent {
         info!("Generating documentation for {}", file_path);
 
         // 1. Create isolated session
-        let agent_id = crate::cortex_bridge::AgentId::from(self.id.to_string());
         let session_id = self.cortex.create_session(
-            agent_id.clone(),
+            self.id.to_string(),
             workspace_id.clone(),
             SessionScope {
                 paths: vec![file_path.to_string()],
@@ -243,15 +242,16 @@ impl DocumenterAgent {
         let context = self.retrieve_documentation_context(file_path, workspace_id).await?;
 
         // 3. Read the file to document
-        let code = self.cortex.read_file(&session_id, file_path).await
+        let code = self.cortex.read_file(session_id.clone(), file_path).await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
         // 4. Get code units to understand structure
         let units = self.cortex.get_code_units(
-            workspace_id,
+            workspace_id.clone(),
             UnitFilters {
-                unit_type: None,
                 language: Some("rust".to_string()),
+                limit: Some(100),
+                unit_type: None,
                 visibility: None,
             },
         ).await
@@ -273,7 +273,7 @@ impl DocumenterAgent {
         // 6. Write documentation files to session
         for doc in &results {
             self.cortex.write_file(
-                &session_id,
+                session_id.clone(),
                 &doc.output_path,
                 &doc.content,
             ).await
@@ -290,13 +290,13 @@ impl DocumenterAgent {
 
         // 8. Merge session back to workspace
         self.cortex.merge_session(
-            &session_id,
-            crate::cortex_bridge::MergeStrategy::Auto,
+            session_id.clone(),
+            "auto".to_string(),
         ).await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
         // 9. Close session
-        self.cortex.close_session(&session_id, &agent_id).await
+        self.cortex.close_session(session_id.clone()).await
             .map_err(|e| AgentError::CortexError(e.to_string()))?;
 
         self.session_id = None;
@@ -335,25 +335,27 @@ impl DocumenterAgent {
             // Similar code for reference
             self.cortex.semantic_search(
                 &similar_query,
-                workspace_id,
                 SearchFilters {
-                    types: vec!["function".to_string(), "module".to_string()],
-                    languages: vec!["rust".to_string()],
+                    workspace_id: Some(workspace_id.to_string()),
+                    limit: Some(10),
+                    types: Some(vec!["function".to_string(), "module".to_string()]),
+                    languages: Some(vec!["rust".to_string()]),
                     visibility: Some("public".to_string()),
-                    min_relevance: 0.7,
-                }
+                    min_relevance: Some( 0.7),
+                                }
             ),
 
             // Existing documentation files
             self.cortex.semantic_search(
                 "README documentation examples",
-                workspace_id,
                 SearchFilters {
-                    types: vec![],
-                    languages: vec![],
+                    workspace_id: Some(workspace_id.to_string()),
+                    limit: Some(10),
+                    types: Some(vec![]),
+                    languages: Some(vec![]),
                     visibility: None,
-                    min_relevance: 0.6,
-                }
+                    min_relevance: Some( 0.6),
+                                }
             )
         );
 
@@ -480,7 +482,7 @@ impl DocumenterAgent {
 
         // Extract public API
         let public_api = units.iter()
-            .filter(|u| u.visibility == "public")
+            .filter(|u| matches!(u.visibility, cortex_core::types::Visibility::Public))
             .collect::<Vec<_>>();
 
         let api_name = self.extract_project_name(file_path);
@@ -529,7 +531,7 @@ impl DocumenterAgent {
             nodes.push(format!("    {}[{}]", node_id, unit.name));
 
             // Simple dependency inference based on unit types
-            if unit.unit_type == "module" {
+            if unit.unit_type == cortex_core::types::CodeUnitType::Module {
                 // Connect modules to their parent
                 if let Some(parent_idx) = self.find_parent_module(unit, units) {
                     edges.push(format!("    N{} --> N{}", parent_idx, idx));
@@ -609,9 +611,15 @@ impl DocumenterAgent {
         let workspace_id = self.workspace_id.as_ref()
             .ok_or_else(|| AgentError::ConfigurationError("No workspace set".to_string()))?;
 
+        let mut success_metrics = HashMap::new();
+        success_metrics.insert("files_generated".to_string(), serde_json::json!(results.len()));
+        success_metrics.insert("doc_types".to_string(), serde_json::json!(doc_types.iter()
+            .map(|t| format!("{:?}", t))
+            .collect::<Vec<_>>()));
+
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
+            episode_type: Some("task".to_string()),
             task_description: format!(
                 "Generate {} documentation for {}",
                 doc_types.iter()
@@ -622,7 +630,7 @@ impl DocumenterAgent {
             ),
             agent_id: self.id.to_string(),
             session_id: self.session_id.as_ref().map(|s| s.to_string()),
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             entities_created: results.iter().map(|d| d.output_path.clone()).collect(),
             entities_modified: vec![],
             entities_deleted: vec![],
@@ -639,21 +647,16 @@ impl DocumenterAgent {
             } else {
                 EpisodeOutcome::Failure
             },
-            success_metrics: serde_json::json!({
-                "files_generated": results.len(),
-                "doc_types": doc_types.iter()
-                    .map(|t| format!("{:?}", t))
-                    .collect::<Vec<_>>(),
-            }),
+            success_metrics,
             errors_encountered: vec![],
             lessons_learned: vec![
                 "Documentation should be clear and concise".to_string(),
                 "Include examples for better understanding".to_string(),
             ],
-            duration_seconds: 120,
-            tokens_used: TokenUsage::default(),
-            embedding: vec![],
-            created_at: chrono::Utc::now(),
+            duration_seconds: Some(120.0),
+            tokens_used: 0,
+            embedding: None,
+            created_at: Some(chrono::Utc::now()),
             completed_at: Some(chrono::Utc::now()),
         };
 
@@ -669,12 +672,12 @@ impl DocumenterAgent {
 
     fn extract_public_items(&self, _code: &str, units: &[crate::cortex_bridge::CodeUnit]) -> Vec<CodeItem> {
         units.iter()
-            .filter(|u| u.visibility == "public")
+            .filter(|u| matches!(u.visibility, cortex_core::types::Visibility::Public))
             .map(|u| CodeItem {
                 name: u.name.clone(),
-                item_type: u.unit_type.clone(),
+                item_type: format!("{:?}", u.unit_type),
                 signature: u.signature.clone(),
-                line: u.lines.start,
+                line: u.start_line as u32,
             })
             .collect()
     }
@@ -784,8 +787,8 @@ impl DocumenterAgent {
 
     fn format_public_items(&self, units: &[crate::cortex_bridge::CodeUnit]) -> String {
         units.iter()
-            .filter(|u| u.visibility == "public")
-            .map(|u| format!("- `{}` - {}", u.name, u.unit_type))
+            .filter(|u| matches!(u.visibility, cortex_core::types::Visibility::Public))
+            .map(|u| format!("- `{}` - {}", u.name, format!("{:?}", u.unit_type)))
             .collect::<Vec<_>>()
             .join("\n")
     }
