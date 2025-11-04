@@ -54,7 +54,7 @@ async fn orchestrate_task(
     Json(_request): Json<OrchestrateTaskRequest>,
 ) -> ApiResult<Json<ApiResponse<OrchestrationResponse>>> {
     // TODO (Phase 6): Implement task orchestration
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Task orchestration not yet implemented - Phase 6".to_string(),
     ))
 }

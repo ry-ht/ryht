@@ -59,7 +59,7 @@ async fn launch_agent(
     Json(_request): Json<LaunchAgentRequest>,
 ) -> ApiResult<Json<ApiResponse<AgentStatusResponse>>> {
     // TODO (Phase 6): Implement agent launch
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Agent launch not yet implemented - Phase 6".to_string(),
     ))
 }
@@ -70,7 +70,7 @@ async fn get_agent_status(
     Path(_agent_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<AgentStatusResponse>>> {
     // TODO (Phase 6): Implement agent status check
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Agent status not yet implemented - Phase 6".to_string(),
     ))
 }
@@ -81,7 +81,7 @@ async fn stop_agent(
     Path(_agent_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<String>>> {
     // TODO (Phase 6): Implement agent stop
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Agent stop not yet implemented - Phase 6".to_string(),
     ))
 }

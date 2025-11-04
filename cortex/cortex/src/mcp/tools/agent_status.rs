@@ -74,7 +74,7 @@ impl Tool for AgentStatusTool {
 
         Ok(ToolResult {
             content: vec![ToolContent::text(json_output)],
-            is_error: false,
+            is_error: Some(false),
         })
     }
 }

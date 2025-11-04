@@ -70,6 +70,12 @@ impl std::str::FromStr for CortexId {
     }
 }
 
+impl From<String> for CortexId {
+    fn from(s: String) -> Self {
+        Self::parse(&s).unwrap_or_else(|_| Self::new())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

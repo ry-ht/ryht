@@ -19,7 +19,7 @@ pub use crate::protocol::{
 
 // Tool system
 pub use crate::tool::{
-    Tool, ToolContext, ToolResult, ToolRegistry,
+    Tool, ToolContext, ToolResult, ToolContent, ToolRegistry,
 };
 
 // Resource system

@@ -163,15 +163,8 @@ pub enum PatternType {
     Optimization,
 }
 
-/// Unit filters for code units
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct UnitFilters {
-    pub workspace_id: Option<String>,
-    pub language: Option<String>,
-    pub unit_type: Option<String>,
-    pub min_score: Option<f32>,
-    pub limit: Option<usize>,
-}
+// UnitFilters is already imported from cortex-intelligence at line 10
+// No need to redefine it here
 
 /// Token usage tracking
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

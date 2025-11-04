@@ -57,7 +57,7 @@ async fn run_workflow(
     Json(_request): Json<RunWorkflowRequest>,
 ) -> ApiResult<Json<ApiResponse<WorkflowStatusResponse>>> {
     // TODO (Phase 6): Implement workflow execution
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Workflow execution not yet implemented - Phase 6".to_string(),
     ))
 }
@@ -67,7 +67,7 @@ async fn list_workflows(
     State(_context): State<WorkflowContext>,
 ) -> ApiResult<Json<ApiResponse<Vec<WorkflowStatusResponse>>>> {
     // TODO (Phase 6): Implement workflow listing
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Workflow listing not yet implemented - Phase 6".to_string(),
     ))
 }
@@ -78,7 +78,7 @@ async fn get_workflow_status(
     Path(_workflow_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<WorkflowStatusResponse>>> {
     // TODO (Phase 6): Implement workflow status check
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Workflow status not yet implemented - Phase 6".to_string(),
     ))
 }
@@ -89,7 +89,7 @@ async fn cancel_workflow(
     Path(_workflow_id): Path<String>,
 ) -> ApiResult<Json<ApiResponse<String>>> {
     // TODO (Phase 6): Implement workflow cancellation
-    Err(ApiError::NotImplemented(
+    Err(ApiError::Internal(
         "Workflow cancellation not yet implemented - Phase 6".to_string(),
     ))
 }

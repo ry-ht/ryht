@@ -15,7 +15,7 @@ use mcp_sdk::prelude::*;
 use async_trait::async_trait;
 
 use crate::cortex_bridge::{CortexBridge, WorkspaceId, SessionId};
-use crate::orchestration::{
+use cortex_orchestration::{
     LeadAgent,
     LeadAgentConfig,
     StrategyLibrary,
@@ -26,7 +26,7 @@ use crate::orchestration::{
     SynthesizerConfig,
     ExecutionState,
 };
-use crate::coordination::{
+use cortex_coordination::{
     UnifiedMessageBus,
     MessageCoordinator,
 };
@@ -301,7 +301,7 @@ impl Tool for OrchestrateTool {
 
         Ok(ToolResult {
             content: vec![ToolContent::text(json_output)],
-            is_error: false,
+            is_error: Some(false),
         })
     }
 }

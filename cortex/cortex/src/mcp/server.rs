@@ -7,8 +7,8 @@ use super::tools::{
     code_manipulation::*, code_nav::*, code_quality::*, cognitive_memory::*, dependency_analysis::*,
     documentation::*, materialization::*, monitoring::*, multi_agent::*, security_analysis::*,
     semantic_search::*, testing::*, type_analysis::*, version_control::*, vfs::*, workspace::*,
-    // Axon integration tools (agent orchestration)
-    agent_launch::*, agent_status::*, agent_stop::*, orchestrate::*, cortex_query::*, session::*,
+    // Axon integration tools (agent orchestration) - use explicit paths to avoid conflicts
+    agent_launch::*, agent_status::*, agent_stop::*, orchestrate::*, cortex_query::*,
 };
 use anyhow::Result;
 use cortex_core::config::GlobalConfig;
@@ -182,13 +182,9 @@ impl CortexMcpServer {
             cortex_bridge.clone(),
         );
 
-        let agent_status_ctx = crate::mcp::tools::agent_status::AgentStatusContext::new(
-            agent_registry.clone(),
-        );
-
-        let agent_stop_ctx = crate::mcp::tools::agent_stop::AgentStopContext::new(
-            agent_registry.clone(),
-        );
+        // AgentStatusTool and AgentStopTool just need the registry directly
+        let agent_status_ctx = agent_registry.clone();
+        let agent_stop_ctx = agent_registry.clone();
 
         let orchestrate_ctx = crate::mcp::tools::orchestrate::OrchestrateContext::new(
             agent_registry.clone(),
@@ -415,8 +411,8 @@ impl CortexMcpServer {
             .tool(AgentStopTool::new(agent_stop_ctx))
             .tool(OrchestrateTool::new(orchestrate_ctx))
             .tool(CortexQueryTool::new(cortex_query_ctx))
-            .tool(SessionCreateTool::new(session_ctx.clone()))
-            .tool(SessionMergeTool::new(session_ctx.clone()))
+            .tool(super::tools::session::SessionCreateTool::new(session_ctx.clone()))
+            .tool(super::tools::session::SessionMergeTool::new(session_ctx.clone()))
             // Note: Middleware support may be added in future versions
             .build();
 

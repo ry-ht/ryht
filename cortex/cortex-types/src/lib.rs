@@ -97,6 +97,12 @@ impl From<SessionId> for Uuid {
     }
 }
 
+impl From<String> for SessionId {
+    fn from(s: String) -> Self {
+        Self(Uuid::parse_str(&s).unwrap_or_else(|_| Uuid::new_v4()))
+    }
+}
+
 /// Workspace identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkspaceId(pub Uuid);
@@ -139,6 +145,12 @@ impl From<Uuid> for WorkspaceId {
 impl From<WorkspaceId> for Uuid {
     fn from(id: WorkspaceId) -> Self {
         id.0
+    }
+}
+
+impl From<String> for WorkspaceId {
+    fn from(s: String) -> Self {
+        Self(Uuid::parse_str(&s).unwrap_or_else(|_| Uuid::new_v4()))
     }
 }
 

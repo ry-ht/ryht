@@ -58,6 +58,9 @@ impl SessionCreateTool {
     }
 
     pub async fn create(&self, input: SessionCreateInput) -> Result<SessionCreateOutput> {
+        use cortex_storage::SessionMetadata;
+        use std::collections::HashMap;
+
         // Generate a unique agent ID for this session
         let agent_id = format!("agent-{}", uuid::Uuid::new_v4());
 
@@ -68,6 +71,18 @@ impl SessionCreateTool {
         let scope = SessionScope {
             paths: vec!["/".to_string()],
             read_only_paths: vec![],
+            units: vec![],
+            allow_create: true,
+            allow_delete: true,
+        };
+
+        // Create session metadata
+        let metadata = SessionMetadata {
+            description: format!("Session for workspace {}", workspace_id),
+            tags: vec![],
+            isolation_level: IsolationLevel::Serializable,
+            scope,
+            custom: HashMap::new(),
         };
 
         info!(
@@ -75,21 +90,18 @@ impl SessionCreateTool {
             workspace_id, agent_id
         );
 
-        // Create session directly via SessionManager
-        let session = AgentSession::new(
-            agent_id.clone(),
-            workspace_id.clone(),
-            IsolationLevel::Snapshot,
-            scope,
-        );
+        // Create session via SessionManager
+        let session = self.context.sessions.create_session(
+            agent_id,
+            workspace_id,
+            metadata,
+            Some(chrono::Duration::hours(1)),
+        ).await?;
 
-        // Store session
-        let session_id = self.context.sessions.create_session(session).await?;
-
-        info!("Created session {} successfully", session_id);
+        info!("Created session {} successfully", session.id);
 
         Ok(SessionCreateOutput {
-            session_id: session_id.to_string(),
+            session_id: session.id.to_string(),
         })
     }
 }
@@ -124,7 +136,7 @@ impl Tool for SessionCreateTool {
 
         Ok(ToolResult {
             content: vec![ToolContent::text(json_output)],
-            is_error: false,
+            is_error: Some(false),
         })
     }
 }
@@ -152,12 +164,14 @@ impl SessionMergeTool {
     }
 
     pub async fn merge(&self, input: SessionMergeInput) -> Result<SessionMergeOutput> {
+        use cortex_storage::ResolutionStrategy;
+
         let session_id = SessionId::from(input.session_id.clone());
 
         info!("Merging session {}", session_id);
 
-        // Use Auto merge strategy by default
-        let strategy = cortex_storage::merge::MergeStrategy::Auto;
+        // Use AutoMerge strategy by default
+        let strategy = ResolutionStrategy::AutoMerge;
 
         // Merge session directly via SessionManager
         let merge_result = self.context.sessions
@@ -165,7 +179,7 @@ impl SessionMergeTool {
             .await?;
 
         let conflicts_count = merge_result.conflicts.len() as u32;
-        let changes_count = merge_result.merged_entities.len() as u32;
+        let changes_count = merge_result.applied_changes as u32;
 
         if conflicts_count > 0 {
             warn!(
@@ -217,7 +231,7 @@ impl Tool for SessionMergeTool {
 
         Ok(ToolResult {
             content: vec![ToolContent::text(json_output)],
-            is_error: false,
+            is_error: Some(false),
         })
     }
 }
