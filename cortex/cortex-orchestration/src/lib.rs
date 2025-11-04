@@ -51,6 +51,9 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
+// Bridge module for type re-exports
+pub mod cortex_bridge;
+
 // DAG-based workflow modules
 pub mod workflow;
 pub mod scheduler;

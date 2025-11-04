@@ -15,7 +15,7 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 use cortex_agents::{AgentType, AgentError};
-use cortex_runtime::{AgentRuntime, RuntimeConfig};
+use crate::{AgentRuntime, RuntimeConfig};
 use cortex_coordination::UnifiedMessageBus;
 use super::mcp_integration::{ToolResult, ContentItem};
 

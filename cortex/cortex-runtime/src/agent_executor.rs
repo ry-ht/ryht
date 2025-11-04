@@ -11,10 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 use cortex_agents::AgentId;
-// TODO Phase 6: Fix circular dependency
-// use cortex_orchestration::task_delegation::TaskDelegation;
-// TODO Phase 6: Fix circular dependency
-// use cortex_orchestration::lead_agent::WorkerResult;
+use cortex_orchestration::{TaskDelegation, WorkerResult};
 use super::mcp_integration::{McpServerPool, ToolCall, McpError};
 use super::agent_process::ProcessManager;
 use super::runtime_config::RuntimeConfig;

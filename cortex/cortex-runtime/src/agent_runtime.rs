@@ -11,10 +11,7 @@ use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 use cortex_agents::{AgentId, AgentType};
-// TODO Phase 6: Fix circular dependency
-// use cortex_orchestration::task_delegation::TaskDelegation;
-// TODO Phase 6: Fix circular dependency
-// use cortex_orchestration::lead_agent::WorkerResult;
+use cortex_orchestration::{TaskDelegation, WorkerResult};
 use cortex_coordination::UnifiedMessageBus;
 
 use super::{
@@ -411,14 +408,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["code_generation".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -451,14 +448,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["code_review".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -488,14 +485,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["testing".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -525,14 +522,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["optimization".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -562,14 +559,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["architecture".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -599,14 +596,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["research".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,
@@ -636,14 +633,14 @@ impl AgentRuntime {
         let delegation = TaskDelegation {
             task_id: uuid::Uuid::new_v4().to_string(),
             objective: task.to_string(),
-            output_format: crate::orchestration::strategy_library::OutputFormat {
+            output_format: cortex_orchestration::OutputFormat {
                 format_type: "json".to_string(),
                 required_sections: Vec::new(),
                 optional_sections: Vec::new(),
                 schema: None,
             },
             allowed_tools: vec!["cortex_code".to_string()],
-            boundaries: crate::orchestration::task_delegation::TaskBoundaries {
+            boundaries: cortex_orchestration::TaskBoundaries {
                 scope: vec!["documentation".to_string()],
                 constraints: Vec::new(),
                 max_tool_calls: 100,

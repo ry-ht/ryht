@@ -6,8 +6,9 @@
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use cortex_agents::AgentId;
-use cortex_runtime::{AgentRuntime, RuntimeError};
+use cortex_agents::{AgentId, AgentType};
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use super::{
     lead_agent::{WorkerResult, LeadAgent},
@@ -16,15 +17,86 @@ use super::{
     OrchestrationError, Result,
 };
 
+/// Agent status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AgentStatus {
+    Idle,
+    Running,
+    Terminated,
+    Failed,
+}
+
+/// Agent information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentInfo {
+    pub agent_id: AgentId,
+    pub name: String,
+    pub agent_type: AgentType,
+    pub status: AgentStatus,
+}
+
+/// Runtime statistics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RuntimeStatistics {
+    pub active_agents: usize,
+    pub total_tasks_executed: usize,
+    pub total_execution_time_ms: u64,
+}
+
+/// Runtime error types
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeError {
+    #[error("Agent not found: {0}")]
+    AgentNotFound(String),
+
+    #[error("Executor error: {0}")]
+    Executor(String),
+
+    #[error("Spawn error: {0}")]
+    Spawn(String),
+
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+/// Trait for agent runtime implementations
+#[async_trait]
+pub trait AgentRuntime: Send + Sync {
+    /// Execute a task on an agent
+    async fn execute_task(
+        &self,
+        agent_id: &AgentId,
+        delegation: TaskDelegation,
+    ) -> std::result::Result<WorkerResult, RuntimeError>;
+
+    /// Spawn a new agent
+    async fn spawn_agent(
+        &self,
+        name: String,
+        agent_type: AgentType,
+        command: &str,
+        args: &[String],
+    ) -> std::result::Result<AgentId, RuntimeError>;
+
+    /// Terminate an agent
+    async fn terminate_agent(&self, agent_id: &AgentId) -> std::result::Result<(), RuntimeError>;
+
+    /// Get agent information
+    async fn get_agent_info(&self, agent_id: &AgentId) -> Option<AgentInfo>;
+
+    /// Get runtime statistics
+    async fn get_statistics(&self) -> RuntimeStatistics;
+}
+
 /// Integration layer between LeadAgent and AgentRuntime
 pub struct RuntimeIntegration {
     /// Agent runtime
-    runtime: Arc<AgentRuntime>,
+    runtime: Arc<dyn AgentRuntime>,
 }
 
 impl RuntimeIntegration {
     /// Create new runtime integration
-    pub fn new(runtime: Arc<AgentRuntime>) -> Self {
+    pub fn new(runtime: Arc<dyn AgentRuntime>) -> Self {
         info!("Initializing Runtime Integration");
 
         Self { runtime }
@@ -62,7 +134,7 @@ impl RuntimeIntegration {
     pub async fn spawn_worker(
         &self,
         agent_name: String,
-        agent_type: crate::agents::AgentType,
+        agent_type: AgentType,
     ) -> Result<AgentId> {
         debug!("Spawning worker agent: {} ({:?})", agent_name, agent_type);
 
@@ -100,15 +172,15 @@ impl RuntimeIntegration {
     /// Check if worker is alive
     pub async fn is_worker_alive(&self, agent_id: &AgentId) -> bool {
         if let Some(agent_info) = self.runtime.get_agent_info(agent_id).await {
-            agent_info.status != crate::runtime::AgentStatus::Terminated
-                && agent_info.status != crate::runtime::AgentStatus::Failed
+            agent_info.status != AgentStatus::Terminated
+                && agent_info.status != AgentStatus::Failed
         } else {
             false
         }
     }
 
     /// Get runtime statistics
-    pub async fn get_runtime_statistics(&self) -> crate::runtime::RuntimeStatistics {
+    pub async fn get_runtime_statistics(&self) -> RuntimeStatistics {
         self.runtime.get_statistics().await
     }
 }
@@ -116,7 +188,7 @@ impl RuntimeIntegration {
 /// Extension trait for LeadAgent to use runtime integration
 pub trait LeadAgentRuntimeExt {
     /// Set runtime integration
-    fn with_runtime(self, runtime: Arc<AgentRuntime>) -> LeadAgentWithRuntime;
+    fn with_runtime(self, runtime: Arc<dyn AgentRuntime>) -> LeadAgentWithRuntime;
 }
 
 /// LeadAgent with runtime integration
@@ -130,7 +202,7 @@ pub struct LeadAgentWithRuntime {
 
 impl LeadAgentWithRuntime {
     /// Create new LeadAgent with runtime
-    pub fn new(lead_agent: LeadAgent, runtime: Arc<AgentRuntime>) -> Self {
+    pub fn new(lead_agent: LeadAgent, runtime: Arc<dyn AgentRuntime>) -> Self {
         let runtime_integration = Arc::new(RuntimeIntegration::new(runtime));
 
         Self {

@@ -23,6 +23,7 @@ async-stream.workspace = true
 cortex-core = { path = "../cortex-core" }
 cortex-types = { path = "../cortex-types" }
 cortex-agents = { path = "../cortex-agents" }
+cortex-intelligence = { path = "../cortex-intelligence" }
 # cortex-runtime = { path = "../cortex-runtime" }  # Removed to break circular dependency
 cortex-coordination = { path = "../cortex-coordination" }
 cortex-consensus = { path = "../cortex-consensus" }

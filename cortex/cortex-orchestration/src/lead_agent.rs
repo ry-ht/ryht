@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
 use cortex_agents::{AgentId, AgentMetrics};
-use crate::cortex_bridge::{CortexBridge, SessionId, WorkspaceId, Episode, EpisodeType, EpisodeOutcome};
+use crate::cortex_bridge::{CortexBridge, SessionId, WorkspaceId, Episode, EpisodeOutcome};
 use cortex_coordination::{UnifiedMessageBus, MessageCoordinator};
 
 use super::{
@@ -936,11 +936,11 @@ impl LeadAgent {
 
         let episode = Episode {
             id: uuid::Uuid::new_v4().to_string(),
-            episode_type: EpisodeType::Task,
+            episode_type: Some("Task".to_string()),
             task_description: query.to_string(),
             agent_id: self.id.to_string(),
             session_id: Some(session_id.to_string()),
-            workspace_id: workspace_id.to_string(),
+            workspace_id: Some(workspace_id.to_string()),
             entities_created: Vec::new(),
             entities_modified: Vec::new(),
             entities_deleted: Vec::new(),
@@ -953,26 +953,30 @@ impl LeadAgent {
             } else {
                 EpisodeOutcome::Partial
             },
-            success_metrics: serde_json::json!({
+            success_metrics: serde_json::to_value(serde_json::json!({
                 "complexity": format!("{:?}", analysis.complexity),
                 "worker_count": result.worker_count,
                 "parallel_efficiency": result.parallel_efficiency,
                 "time_reduction": result.time_reduction_percent,
-            }),
+            })).ok().map(|v| {
+                let mut map = std::collections::HashMap::new();
+                if let serde_json::Value::Object(obj) = v {
+                    for (k, val) in obj {
+                        map.insert(k, val);
+                    }
+                }
+                map
+            }).unwrap_or_default(),
             errors_encountered: Vec::new(),
             lessons_learned: vec![
                 format!("Query complexity: {:?}", analysis.complexity),
                 format!("Workers used: {}", result.worker_count),
                 format!("Parallel efficiency: {:.2}%", result.parallel_efficiency * 100.0),
             ],
-            duration_seconds: duration.as_secs() as i32,
-            tokens_used: crate::cortex_bridge::models::TokenUsage {
-                input: result.total_tokens_used / 2,
-                output: result.total_tokens_used / 2,
-                total: result.total_tokens_used,
-            },
-            embedding: Vec::new(),
-            created_at: Utc::now(),
+            duration_seconds: Some(duration.as_secs() as f64),
+            tokens_used: result.total_tokens_used as usize,
+            embedding: None,
+            created_at: Some(Utc::now()),
             completed_at: Some(Utc::now()),
         };
 

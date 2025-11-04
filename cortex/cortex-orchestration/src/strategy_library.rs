@@ -749,7 +749,8 @@ impl StrategyLibrary {
 
             // Analyze the group to extract common characteristics
             let avg_duration = group_episodes.iter()
-                .map(|e| e.duration_seconds as f32)
+                .filter_map(|e| e.duration_seconds)
+                .map(|d| d as f32)
                 .sum::<f32>() / group_episodes.len() as f32;
 
             let avg_workers = self.infer_worker_count(&group_episodes);
@@ -902,7 +903,7 @@ impl StrategyLibrary {
 
         for episode in episodes {
             for tool in &episode.tools_used {
-                *tool_counts.entry(tool.tool_name.clone()).or_insert(0) += 1;
+                *tool_counts.entry(tool.clone()).or_insert(0) += 1;
             }
         }
 
