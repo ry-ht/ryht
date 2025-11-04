@@ -15,6 +15,11 @@ pub mod tasks;
 pub mod export;
 pub mod documents;
 
+// Agent Orchestration routes (from Axon integration)
+pub mod agents;
+pub mod workflows;
+pub mod orchestration;
+
 pub use workspaces::workspace_routes;
 pub use vfs::vfs_routes;
 pub use sessions::session_routes;
@@ -29,3 +34,8 @@ pub use dashboard::dashboard_routes;
 pub use tasks::task_routes;
 pub use export::export_routes;
 pub use documents::{document_routes, DocumentContext};
+
+// Agent Orchestration route functions
+pub use agents::{agent_routes, AgentContext};
+pub use workflows::{workflow_routes, WorkflowContext};
+pub use orchestration::{orchestration_routes, OrchestrationContext};

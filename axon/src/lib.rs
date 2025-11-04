@@ -22,16 +22,16 @@
 pub mod cc;
 
 // Multi-agent system modules
-pub mod agents;
-pub mod orchestration;
-pub mod coordination;
-pub mod consensus;
-pub mod intelligence;
-pub mod monitoring;
-pub mod quality;
-
-// Agent runtime system
-pub mod runtime;
+// NOTE: These modules have been moved to cortex crates in Phase 2
+// TODO: Update all references to use cortex_* crates in Phase 3-6
+// pub mod agents;           // -> cortex-agents
+// pub mod orchestration;    // -> cortex-orchestration
+// pub mod coordination;     // -> cortex-coordination
+// pub mod consensus;        // -> cortex-consensus
+// pub mod intelligence;     // -> cortex-intelligence
+// pub mod monitoring;       // -> cortex-monitoring
+// pub mod quality;          // -> cortex-quality
+// pub mod runtime;          // -> cortex-runtime
 
 // Cortex integration
 pub mod cortex_bridge;
@@ -52,10 +52,12 @@ pub use cc::{
 };
 
 // Re-export multi-agent system types
-pub use agents::Agent;
-pub use orchestration::Orchestrator;
-pub use coordination::CoordinationPattern;
-pub use consensus::ConsensusProtocol;
+// NOTE: Temporarily disabled - modules moved to cortex crates
+// TODO: Re-enable with cortex_* imports in Phase 3
+// pub use agents::Agent;
+// pub use orchestration::Orchestrator;
+// pub use coordination::CoordinationPattern;
+// pub use consensus::ConsensusProtocol;
 
 /// Axon version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

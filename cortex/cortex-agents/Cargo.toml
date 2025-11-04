@@ -1,0 +1,36 @@
+[package]
+name = "cortex-agents"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+async-stream.workspace = true
+
+# Local Cortex dependencies
+cortex-types = { path = "../cortex-types" }
+cortex-core = { path = "../cortex-core" }
+# NOTE: cortex-runtime creates a circular dependency (runtime needs agents, agents need runtime)
+# TODO: Refactor to break circular dependency in Phase 6
+# cortex-runtime = { path = "../cortex-runtime" }
+cortex-intelligence = { path = "../cortex-intelligence" }
+
+# External dependencies
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+rand = "0.9.2"
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+tempfile.workspace = true

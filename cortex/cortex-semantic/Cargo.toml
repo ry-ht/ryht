@@ -13,6 +13,8 @@ cortex-core = { path = "../cortex-core" }
 cortex-storage = { path = "../cortex-storage" }
 cortex-memory = { path = "../cortex-memory" }
 cortex-ingestion = { path = "../cortex-ingestion" }
+# TODO (Phase 6): Resolve circular dependency: cortex-semantic -> cortex-orchestration -> cortex-agents -> cortex-intelligence -> cortex-semantic
+# cortex-orchestration = { path = "../cortex-orchestration" }
 
 # Async runtime
 tokio = { workspace = true }

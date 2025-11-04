@@ -1,0 +1,39 @@
+[package]
+name = "cortex-intelligence"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+
+# Local Cortex dependencies - Direct API access (no HTTP)
+cortex-core = { path = "../cortex-core" }
+cortex-types = { path = "../cortex-types" }
+cortex-memory = { path = "../cortex-memory" }
+cortex-semantic = { path = "../cortex-semantic" }
+cortex-vfs = { path = "../cortex-vfs" }
+cortex-storage = { path = "../cortex-storage" }
+
+# External dependencies
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+# Note: reqwest removed - no longer using HTTP for Cortex integration
+regex.workspace = true
+tiktoken-rs = "0.5.9"
+parking_lot.workspace = true
+dashmap.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+tempfile.workspace = true

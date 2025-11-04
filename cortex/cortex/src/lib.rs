@@ -13,6 +13,7 @@ pub mod server_manager;
 pub mod qdrant_commands;
 pub mod services;
 pub mod conversions;
+pub mod cortex_bridge;
 
 pub use commands::*;
 pub use doctor::*;
@@ -29,3 +30,10 @@ pub use api::{RestApiServer, ApiResponse, ApiMetadata, ApiError, ApiResult};
 
 // Re-export service layer types
 pub use services::{WorkspaceService, VfsService, SearchService, MemoryService};
+
+// Re-export cortex_bridge types for MCP tools
+pub use cortex_bridge::{
+    AgentId, SessionId, WorkspaceId, AgentType, AgentStatus,
+    CortexBridge, Episode, EpisodeOutcome, EpisodeType, Pattern, PatternType,
+    SearchFilters, UnitFilters, TokenUsage, MergeStrategy, SessionScope,
+};

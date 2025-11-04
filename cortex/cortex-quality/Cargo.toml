@@ -1,0 +1,31 @@
+[package]
+name = "cortex-quality"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+
+# Local Cortex dependencies
+cortex-core = { path = "../cortex-core" }
+cortex-code-analysis = { path = "../cortex-code-analysis" }
+
+# External dependencies
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+regex.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+tempfile.workspace = true

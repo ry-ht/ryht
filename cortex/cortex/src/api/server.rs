@@ -331,6 +331,19 @@ impl RestApiServer {
             document_service: document_service.clone(),
         };
 
+        // Create agent orchestration contexts (from Axon integration)
+        let agent_context = super::routes::AgentContext {
+            storage: self.storage.clone(),
+        };
+
+        let workflow_context = super::routes::WorkflowContext {
+            storage: self.storage.clone(),
+        };
+
+        let orchestration_context = super::routes::OrchestrationContext {
+            storage: self.storage.clone(),
+        };
+
         // Build public routes (no authentication required)
         // Single-operator mode: workspaces, documents, and tasks are public
         let public_routes = Router::new()
@@ -339,7 +352,10 @@ impl RestApiServer {
             .merge(super::routes::workspace_routes(workspace_context))
             .merge(super::routes::document_routes(document_context))
             .merge(super::routes::task_routes(task_context))
-            .merge(super::routes::dashboard_routes(dashboard_context));
+            .merge(super::routes::dashboard_routes(dashboard_context))
+            .merge(super::routes::agent_routes(agent_context))
+            .merge(super::routes::workflow_routes(workflow_context))
+            .merge(super::routes::orchestration_routes(orchestration_context));
 
         // Build protected routes (authentication required)
         let auth_state_clone = auth_state.clone();

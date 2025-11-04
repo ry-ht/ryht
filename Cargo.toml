@@ -12,6 +12,14 @@ members = [
     "cortex/cortex-semantic",
     "cortex/cortex-code-analysis",
     "cortex/cortex",
+    "cortex/cortex-orchestration",
+    "cortex/cortex-agents",
+    "cortex/cortex-runtime",
+    "cortex/cortex-coordination",
+    "cortex/cortex-consensus",
+    "cortex/cortex-intelligence",
+    "cortex/cortex-quality",
+    "cortex/cortex-monitoring",
 ]
 
 [workspace.package]
@@ -46,9 +54,13 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 tracing-appender = "0.2.3"
 
 # HTTP/Web
-axum = { version = "0.8.6", features = ["macros"] }
+# CRITICAL: Axum locked to 0.7.9 due to middleware deadlock in 0.8.x
+# DO NOT UPGRADE without extensive testing of middleware composition with heterogeneous router states
+# See: cortex/cortex/src/api/server.rs:374-414 for technical details
+# Issue: ServiceBuilder wrapping causes request hang with merged sub-routers
+axum = { version = "=0.7.9", features = ["macros"] }
 tower = { version = "0.5.2", features = ["full"] }
-tower-http = { version = "0.6.6", features = ["cors", "trace"] }
+tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
 
 # Database

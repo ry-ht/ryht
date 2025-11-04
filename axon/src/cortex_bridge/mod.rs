@@ -138,6 +138,8 @@ impl CortexBridge {
         let working_memory_manager = WorkingMemoryManager::new(client.as_ref().clone());
         let consolidation_manager = ConsolidationManager::new(client.as_ref().clone());
 
+        let initialization_timeout_secs = config.initialization_timeout_secs;
+
         Ok(Self {
             client,
             session_manager,
@@ -149,7 +151,7 @@ impl CortexBridge {
             active_sessions: Arc::new(RwLock::new(HashMap::new())),
             config,
             initialized: Arc::new(RwLock::new(!lazy)),
-            initialization_timeout_secs: 30,
+            initialization_timeout_secs,
         })
     }
 

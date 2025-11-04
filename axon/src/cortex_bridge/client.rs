@@ -97,6 +97,15 @@ pub struct CortexConfig {
     pub enable_websocket: bool,
     /// Reconnect WebSocket on disconnect
     pub reconnect_websocket: bool,
+    /// Initialization timeout in seconds (for lazy initialization)
+    /// Default: 180 seconds (3 minutes)
+    ///
+    /// This extended timeout is necessary for:
+    /// - Cold start with database initialization
+    /// - Qdrant vector database warming and index loading
+    /// - First query after server restart
+    /// - Network latency during initial connection
+    pub initialization_timeout_secs: u64,
 }
 
 impl Default for CortexConfig {
@@ -118,6 +127,7 @@ impl Default for CortexConfig {
             retry_delay_ms: 1000,
             enable_websocket: true,
             reconnect_websocket: true,
+            initialization_timeout_secs: 180, // 3 minutes to handle cold starts, DB warming, and Qdrant index loading
         }
     }
 }
@@ -148,6 +158,7 @@ impl CortexConfig {
             retry_delay_ms: 1000,
             enable_websocket: true,
             reconnect_websocket: true,
+            initialization_timeout_secs: 180, // 3 minutes to handle cold starts, DB warming, and Qdrant index loading
         })
     }
 }

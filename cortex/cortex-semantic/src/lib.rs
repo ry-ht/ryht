@@ -153,7 +153,8 @@ pub mod prelude {
         AgentCoordinator, AgentContext, AgentRole, AgentMetrics,
         MemoryPool, AccessPolicy, SearchPriority,
     };
-    pub use crate::orchestration::{SearchOrchestrator, SearchOrchestratorStats};
+    // TODO (Phase 6): Resolve circular dependency before enabling
+    // pub use cortex_orchestration::{SearchOrchestrator, SearchOrchestratorStats};
     pub use crate::context::{ContextCompressor, CompressionConfig};
     pub use crate::hyde::{HydeProcessor, HydeConfig};
     pub use crate::eval::{MetricEvaluator, QueryEvaluation};

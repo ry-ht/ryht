@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "cortex-types",
     "cortex-core",
     "cortex-storage",
     "cortex-vfs",
@@ -9,6 +10,14 @@ members = [
     "cortex-semantic",
     "cortex-code-analysis",
     "cortex",
+    "cortex-orchestration",
+    "cortex-agents",
+    "cortex-runtime",
+    "cortex-coordination",
+    "cortex-consensus",
+    "cortex-intelligence",
+    "cortex-quality",
+    "cortex-monitoring",
 ]
 
 [workspace.package]
@@ -73,6 +82,11 @@ unicode-segmentation = "1.12.0"
 # Embeddings and ML
 ort = { version = "1.16.3", features = ["load-dynamic"] }
 tokenizers = { version = "0.22.1", default-features = false, features = ["onig"] }
+tiktoken-rs = "0.5.9"
+
+# System
+log = "0.4"
+nix = { version = "0.29", features = ["signal"] }
 
 # File watching
 notify = "8.2.0"
@@ -88,6 +102,7 @@ parking_lot = "0.12.5"
 dashmap = "6.1.0"
 crossbeam = "0.8.4"
 rayon = "1.11.0"
+nix = { version = "0.29", features = ["signal"] }
 
 # Testing
 mockall = "0.13.1"

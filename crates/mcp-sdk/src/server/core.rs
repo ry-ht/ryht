@@ -673,7 +673,9 @@ impl McpServer {
                     let response = self.handle_request(request).await;
                     if let Err(e) = transport.send(response).await {
                         warn!("Failed to send response: {}", e);
-                        break;
+                        // Continue serving instead of breaking - a single send failure
+                        // shouldn't terminate the entire server connection
+                        continue;
                     }
                 }
                 None => {

@@ -1,6 +1,6 @@
 //! Cortex MCP Tools
 //!
-//! This module provides 182 MCP tools for Cortex, organized by category:
+//! This module provides 189 MCP tools for Cortex, organized by category:
 //! - Workspace Management (12 tools)
 //! - Virtual Filesystem (17 tools)
 //! - Code Navigation (10 tools)
@@ -21,6 +21,7 @@
 //! - AI-Assisted Development (6 tools)
 //! - Advanced Testing (2 tools)
 //! - Architecture Analysis (5 tools)
+//! - Agent Orchestration (7 tools) [NEW]
 
 pub mod workspace;
 pub mod vfs;
@@ -43,6 +44,14 @@ pub mod ai_assisted;
 pub mod advanced_testing;
 pub mod architecture_analysis;
 
+// Agent Orchestration tools (from Axon)
+pub mod agent_launch;
+pub mod agent_status;
+pub mod agent_stop;
+pub mod orchestrate;
+pub mod cortex_query;
+pub mod session;
+
 // Re-export all tools
 pub use workspace::*;
 pub use vfs::*;
@@ -64,6 +73,14 @@ pub use type_analysis::*;
 pub use ai_assisted::*;
 pub use advanced_testing::*;
 pub use architecture_analysis::*;
+
+// Agent Orchestration tools
+pub use agent_launch::*;
+pub use agent_status::*;
+pub use agent_stop::*;
+pub use orchestrate::*;
+pub use cortex_query::*;
+pub use session::*;
 
 use mcp_sdk::tool::ToolDefinition;
 use mcp_sdk::Tool;

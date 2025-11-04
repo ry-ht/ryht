@@ -3344,3 +3344,55 @@ pub use crate::qdrant_commands::{
     qdrant_optimize,
     qdrant_list,
 };
+
+// ============================================================================
+// Workflow Commands (from Axon integration)
+// ============================================================================
+
+/// TODO (Phase 6): Implement workflow execution using cortex-orchestration
+pub async fn workflow_run(
+    workflow: PathBuf,
+    _input: Option<String>,
+    _dry_run: bool,
+) -> Result<()> {
+    output::info(format!("Would run workflow: {}", workflow.display()));
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    Err(anyhow::anyhow!("Workflow execution not yet implemented - Phase 6"))
+}
+
+/// TODO (Phase 6): Implement workflow listing
+pub async fn workflow_list(_status: Option<String>, _format: OutputFormat) -> Result<()> {
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    Err(anyhow::anyhow!("Workflow listing not yet implemented - Phase 6"))
+}
+
+/// TODO (Phase 6): Implement workflow status checking
+pub async fn workflow_status(_workflow_id: String, _format: OutputFormat) -> Result<()> {
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    Err(anyhow::anyhow!("Workflow status not yet implemented - Phase 6"))
+}
+
+/// TODO (Phase 6): Implement workflow cancellation
+pub async fn workflow_cancel(_workflow_id: String) -> Result<()> {
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    Err(anyhow::anyhow!("Workflow cancellation not yet implemented - Phase 6"))
+}
+
+/// TODO (Phase 6): Implement workflow validation
+pub async fn workflow_validate(workflow: PathBuf) -> Result<()> {
+    output::info(format!("Would validate workflow: {}", workflow.display()));
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    Err(anyhow::anyhow!("Workflow validation not yet implemented - Phase 6"))
+}
+
+// ============================================================================
+// Orchestration Commands (from Axon integration)
+// ============================================================================
+
+/// TODO (Phase 6): Implement task orchestration
+pub async fn orchestrate_task(task: String, _workspace: Option<String>) -> Result<()> {
+    output::info(format!("Would orchestrate task: {}", task));
+    output::warning("This command will be fully implemented with cortex-orchestration integration");
+    output::info("Use MCP tool axon_orchestrate_task for now");
+    Err(anyhow::anyhow!("Orchestration not yet implemented - Phase 6"))
+}

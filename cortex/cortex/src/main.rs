@@ -142,6 +142,20 @@ enum Commands {
     #[command(subcommand)]
     Agent(AgentCommands),
 
+    /// Workflow orchestration (from Axon)
+    #[command(subcommand)]
+    Workflow(WorkflowCommands),
+
+    /// Task orchestration
+    Orchestrate {
+        /// Task description to orchestrate
+        task: String,
+
+        /// Target workspace (uses active workspace if not specified)
+        #[arg(short, long)]
+        workspace: Option<String>,
+    },
+
     /// Memory operations
     #[command(subcommand)]
     Memory(MemoryCommands),
@@ -539,6 +553,48 @@ enum AgentCommands {
     Delete {
         /// Session ID
         session_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommands {
+    /// Run a workflow from a file
+    Run {
+        /// Path to workflow file (YAML or JSON)
+        workflow: PathBuf,
+
+        /// Input data as JSON string
+        #[arg(short, long)]
+        input: Option<String>,
+
+        /// Dry run (validate only, don't execute)
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+
+    /// List workflows
+    List {
+        /// Filter by status
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+
+    /// Get workflow status
+    Status {
+        /// Workflow ID
+        workflow_id: String,
+    },
+
+    /// Cancel a running workflow
+    Cancel {
+        /// Workflow ID
+        workflow_id: String,
+    },
+
+    /// Validate a workflow file
+    Validate {
+        /// Path to workflow file
+        workflow: PathBuf,
     },
 }
 
@@ -1096,6 +1152,28 @@ async fn run() -> Result<()> {
             AgentCommands::Delete { session_id } => {
                 commands::agent_delete(session_id).await?;
             }
+        },
+
+        Commands::Workflow(workflow_cmd) => match workflow_cmd {
+            WorkflowCommands::Run { workflow, input, dry_run } => {
+                commands::workflow_run(workflow, input, dry_run).await?;
+            }
+            WorkflowCommands::List { status } => {
+                commands::workflow_list(status, format).await?;
+            }
+            WorkflowCommands::Status { workflow_id } => {
+                commands::workflow_status(workflow_id, format).await?;
+            }
+            WorkflowCommands::Cancel { workflow_id } => {
+                commands::workflow_cancel(workflow_id).await?;
+            }
+            WorkflowCommands::Validate { workflow } => {
+                commands::workflow_validate(workflow).await?;
+            }
+        },
+
+        Commands::Orchestrate { task, workspace } => {
+            commands::orchestrate_task(task, workspace).await?;
         },
 
         Commands::Memory(memory_cmd) => match memory_cmd {
