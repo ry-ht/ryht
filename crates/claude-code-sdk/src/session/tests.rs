@@ -4,9 +4,9 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::cc::core::SessionId;
-    use crate::cc::messages::{Message, UserMessage};
-    use crate::cc::session::{
+    use crate::core::SessionId;
+    use crate::messages::{Message, UserMessage};
+    use crate::session::{
         SessionCache, Session, CacheConfig, SessionFilter, SortBy,
         ExportFormat, SessionStats, CreateSessionOptions, SessionInfo,
         SessionMetadata, clear_cache, set_cached_projects, get_cached_projects,

@@ -6,9 +6,9 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::session::writer::{create_session, write_message};
-//! use crate::cc::core::SessionId;
-//! use crate::cc::types::Message;
+//! use crate::session::writer::{create_session, write_message};
+//! use crate::core::SessionId;
+//! use crate::types::Message;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
 //! // Create a new session
@@ -29,10 +29,10 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde_json;
 
-use crate::cc::core::SessionId;
-use crate::cc::error::{Error, SessionError};
-use crate::cc::result::Result;
-use crate::cc::messages::Message;
+use crate::core::SessionId;
+use crate::error::{Error, SessionError};
+use crate::result::Result;
+use crate::messages::Message;
 
 use super::discovery::{get_projects_dir, list_projects};
 use super::types::{Project, Session};
@@ -65,8 +65,8 @@ pub struct CreateSessionOptions {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::create_session;
-/// use crate::cc::core::SessionId;
+/// use crate::session::writer::create_session;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("new-session");
@@ -168,9 +168,9 @@ pub async fn create_session(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::write_message;
-/// use crate::cc::core::SessionId;
-/// use crate::cc::types::Message;
+/// use crate::session::writer::write_message;
+/// use crate::core::SessionId;
+/// use crate::types::Message;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("session-id");
@@ -225,8 +225,8 @@ pub async fn write_message(session_id: &SessionId, message: &Message) -> Result<
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::update_session_metadata;
-/// use crate::cc::core::SessionId;
+/// use crate::session::writer::update_session_metadata;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("session-id");
@@ -258,7 +258,7 @@ pub async fn update_session_metadata(
     }
 
     let session = session.ok_or_else(|| {
-        Error::Session(crate::cc::error::SessionError::NotFound {
+        Error::Session(crate::error::SessionError::NotFound {
             session_id: session_id.clone(),
         })
     })?;
@@ -270,7 +270,7 @@ pub async fn update_session_metadata(
     // Read existing metadata or create new
     let mut existing_metadata = if metadata_path.exists() {
         let content = fs::read_to_string(&metadata_path).await.map_err(|e| {
-            Error::Session(crate::cc::error::SessionError::IoError(e))
+            Error::Session(crate::error::SessionError::IoError(e))
         })?;
         serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}))
     } else {
@@ -286,7 +286,7 @@ pub async fn update_session_metadata(
 
     // Write updated metadata
     let metadata_content = serde_json::to_string_pretty(&existing_metadata).map_err(|e| {
-        Error::Session(crate::cc::error::SessionError::ParseError(
+        Error::Session(crate::error::SessionError::ParseError(
             format!("Failed to serialize metadata: {}", e)
         ))
     })?;
@@ -294,7 +294,7 @@ pub async fn update_session_metadata(
     fs::write(&metadata_path, metadata_content)
         .await
         .map_err(|e| {
-            Error::Session(crate::cc::error::SessionError::IoError(e))
+            Error::Session(crate::error::SessionError::IoError(e))
         })?;
 
     // Clear cache to ensure next read gets updated data
@@ -319,8 +319,8 @@ pub async fn update_session_metadata(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::delete_session;
-/// use crate::cc::core::SessionId;
+/// use crate::session::writer::delete_session;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("session-id");
@@ -370,7 +370,7 @@ pub async fn delete_session(session_id: &SessionId, force: bool) -> Result<()> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::create_project;
+/// use crate::session::writer::create_project;
 /// use std::path::PathBuf;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
@@ -441,7 +441,7 @@ pub async fn create_project(project_id: &str, project_path: &Path) -> Result<Pro
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::writer::delete_project;
+/// use crate::session::writer::delete_project;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// delete_project("project-id", false).await?;

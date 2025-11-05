@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde_json;
 
-use crate::cc::core::SessionId;
-use crate::cc::error::{Error, SessionError};
-use crate::cc::result::Result;
-use crate::cc::messages::Message;
+use crate::core::SessionId;
+use crate::error::{Error, SessionError};
+use crate::result::Result;
+use crate::messages::Message;
 
 use super::types::{Project, Session, SessionMetadata};
 

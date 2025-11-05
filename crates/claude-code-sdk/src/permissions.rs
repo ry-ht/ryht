@@ -22,7 +22,7 @@
 //! # Example
 //!
 //! ```rust
-//! use crate::cc::permissions::PermissionMode;
+//! use crate::permissions::PermissionMode;
 //!
 //! let mode = PermissionMode::AcceptEdits;
 //! ```
@@ -57,7 +57,7 @@ impl PermissionMode {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::permissions::PermissionMode;
+    /// use crate::permissions::PermissionMode;
     ///
     /// assert!(PermissionMode::AcceptEdits.allows_edits());
     /// assert!(!PermissionMode::Default.allows_edits());
@@ -72,7 +72,7 @@ impl PermissionMode {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::permissions::PermissionMode;
+    /// use crate::permissions::PermissionMode;
     ///
     /// assert!(PermissionMode::BypassPermissions.bypasses_all());
     /// assert!(!PermissionMode::Default.bypasses_all());
@@ -87,7 +87,7 @@ impl PermissionMode {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::permissions::PermissionMode;
+    /// use crate::permissions::PermissionMode;
     ///
     /// assert!(PermissionMode::Default.requires_prompts());
     /// assert!(!PermissionMode::BypassPermissions.requires_prompts());

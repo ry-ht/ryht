@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn test_builder_pattern() {
         let builder = AgentMessagingAdapterBuilder::new()
-            .agent_id(AgentId::from_string("test-agent"))
+            .agent_id(AgentId::from_string("test-agent".to_string()))
             .session_id(SessionId::from("test-session".to_string()))
             .workspace_id(WorkspaceId::from("test-workspace".to_string()));
 

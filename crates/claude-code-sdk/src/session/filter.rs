@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::session::filter::{SessionFilter, SortBy, search_sessions};
+//! use crate::session::filter::{SessionFilter, SortBy, search_sessions};
 //! use chrono::{Utc, Duration};
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
@@ -26,8 +26,8 @@
 use chrono::{DateTime, Utc};
 use regex::Regex;
 
-use crate::cc::result::Result;
-use crate::cc::messages::Message;
+use crate::result::Result;
+use crate::messages::Message;
 
 use super::discovery::{list_projects, list_sessions, load_session_history};
 use super::types::Session;
@@ -170,7 +170,7 @@ pub struct SessionInfo {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::filter::{SessionFilter, search_sessions};
+/// use crate::session::filter::{SessionFilter, search_sessions};
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let filter = SessionFilter::new()
@@ -307,7 +307,7 @@ pub async fn search_sessions(filter: SessionFilter) -> Result<Vec<SessionInfo>> 
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::filter::search_by_content;
+/// use crate::session::filter::search_by_content;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let sessions = search_by_content("error", false, false).await?;
@@ -332,7 +332,7 @@ pub async fn search_by_content(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::filter::filter_by_date_range;
+/// use crate::session::filter::filter_by_date_range;
 /// use chrono::{Utc, Duration};
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
@@ -355,7 +355,7 @@ pub async fn filter_by_date_range(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::filter::filter_by_project;
+/// use crate::session::filter::filter_by_project;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let sessions = filter_by_project("my-project").await?;
@@ -408,7 +408,7 @@ fn extract_message_content(message: &Message) -> String {
                 .content
                 .iter()
                 .filter_map(|block| {
-                    if let crate::cc::messages::ContentBlock::Text(text_content) = block {
+                    if let crate::messages::ContentBlock::Text(text_content) = block {
                         Some(text_content.text.clone())
                     } else {
                         None

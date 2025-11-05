@@ -23,7 +23,7 @@
 //! # Example
 //!
 //! ```rust
-//! use crate::cc::hooks::{HookCallback, HookInput, HookJSONOutput, HookContext};
+//! use crate::hooks::{HookCallback, HookInput, HookJSONOutput, HookContext};
 //! use super::Error;
 //! use async_trait::async_trait;
 //!
@@ -48,7 +48,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // Re-export CanUseTool from permissions (it's hook-related)
-pub use crate::cc::permissions::CanUseTool;
+pub use crate::permissions::CanUseTool;
 
 /// Hook context
 #[derive(Debug, Clone)]
@@ -310,7 +310,7 @@ pub trait HookCallback: Send + Sync {
         input: &HookInput,
         tool_use_id: Option<&str>,
         context: &HookContext,
-    ) -> Result<HookJSONOutput, crate::cc::error::Error>;
+    ) -> Result<HookJSONOutput, crate::error::Error>;
 }
 
 /// Hook matcher configuration
@@ -911,7 +911,7 @@ mod tests {
             _input: &HookInput,
             _tool_use_id: Option<&str>,
             _context: &HookContext,
-        ) -> Result<HookJSONOutput, crate::cc::error::Error> {
+        ) -> Result<HookJSONOutput, crate::error::Error> {
             Ok(HookJSONOutput::Sync(SyncHookJSONOutput {
                 continue_: Some(self.should_continue),
                 ..Default::default()
@@ -971,8 +971,8 @@ mod tests {
             _input: &HookInput,
             _tool_use_id: Option<&str>,
             _context: &HookContext,
-        ) -> Result<HookJSONOutput, crate::cc::error::Error> {
-            Err(crate::cc::error::ClientError::HookFailed {
+        ) -> Result<HookJSONOutput, crate::error::Error> {
+            Err(crate::error::ClientError::HookFailed {
                 hook_name: "ErrorHook".to_string(),
                 reason: "Test error".to_string(),
                 source: None,
@@ -994,7 +994,7 @@ mod tests {
         let result = hook.execute(&input, None, &context).await;
         assert!(result.is_err());
         match result {
-            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::HookFailed {
+            Err(crate::error::Error::Client(crate::error::ClientError::HookFailed {
                 hook_name,
                 reason,
                 ..
@@ -1015,7 +1015,7 @@ mod tests {
             _input: &HookInput,
             _tool_use_id: Option<&str>,
             _context: &HookContext,
-        ) -> Result<HookJSONOutput, crate::cc::error::Error> {
+        ) -> Result<HookJSONOutput, crate::error::Error> {
             Ok(HookJSONOutput::Async(AsyncHookJSONOutput {
                 async_: true,
                 async_timeout: Some(10000),

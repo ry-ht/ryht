@@ -7,8 +7,8 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::binary::cache::DiscoveryCache;
-//! use crate::cc::cache::CacheConfig;
+//! use crate::binary::cache::DiscoveryCache;
+//! use crate::cache::CacheConfig;
 //! use std::time::Duration;
 //!
 //! let config = CacheConfig::new(Duration::from_secs(3600), true);
@@ -21,7 +21,7 @@ use std::hash::Hash;
 use super::discovery::ClaudeInstallation;
 
 /// Re-export generic cache types for convenience
-pub use crate::cc::cache::{CachedEntry, CacheConfig};
+pub use crate::cache::{CachedEntry, CacheConfig};
 
 /// Cache key based on discovery configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -76,7 +76,7 @@ impl CacheKey {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::cache::DiscoveryCache;
+/// use crate::binary::cache::DiscoveryCache;
 ///
 /// let mut cache = DiscoveryCache::default();
 ///
@@ -97,7 +97,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::{DiscoveryCache, CacheConfig};
+    /// use crate::binary::cache::{DiscoveryCache, CacheConfig};
     /// use std::time::Duration;
     ///
     /// let config = CacheConfig {
@@ -124,7 +124,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// assert!(cache.get_default().is_none()); // Empty cache
@@ -143,7 +143,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// let custom_paths = vec!["/custom/path".to_string()];
@@ -180,7 +180,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// cache.set_default(vec![]); // Cache empty result
@@ -199,7 +199,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// let custom_paths = vec!["/custom/path".to_string()];
@@ -231,7 +231,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// cache.set_default(vec![]);
@@ -249,7 +249,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let mut cache = DiscoveryCache::default();
     /// let removed = cache.cleanup();
@@ -269,7 +269,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let cache = DiscoveryCache::default();
     /// assert_eq!(cache.len(), 0);
@@ -283,7 +283,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::DiscoveryCache;
+    /// use crate::binary::cache::DiscoveryCache;
     ///
     /// let cache = DiscoveryCache::default();
     /// assert!(cache.is_empty());
@@ -300,7 +300,7 @@ impl DiscoveryCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::cache::{DiscoveryCache, CacheConfig};
+    /// use crate::binary::cache::{DiscoveryCache, CacheConfig};
     /// use std::time::Duration;
     ///
     /// let mut cache = DiscoveryCache::default();
@@ -347,7 +347,7 @@ fn global_cache() -> &'static std::sync::Mutex<DiscoveryCache> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::cache;
+/// use crate::binary::cache;
 ///
 /// if let Some(installations) = cache::get_cached_default() {
 ///     println!("Found {} cached installations", installations.len());
@@ -367,7 +367,7 @@ pub fn get_cached_default() -> Option<Vec<ClaudeInstallation>> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::cache;
+/// use crate::binary::cache;
 ///
 /// cache::set_cached_default(vec![]);
 /// ```
@@ -382,7 +382,7 @@ pub fn set_cached_default(installations: Vec<ClaudeInstallation>) {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::cache;
+/// use crate::binary::cache;
 ///
 /// cache::clear_cache();
 /// ```

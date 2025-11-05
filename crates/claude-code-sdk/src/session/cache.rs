@@ -7,8 +7,8 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::session::cache::SessionCache;
-//! use crate::cc::cache::CacheConfig;
+//! use crate::session::cache::SessionCache;
+//! use crate::cache::CacheConfig;
 //! use std::time::Duration;
 //!
 //! let config = CacheConfig::new(Duration::from_secs(300), true);
@@ -22,7 +22,7 @@ use std::sync::{Arc, RwLock};
 use super::types::{Project, Session};
 
 /// Re-export generic cache types for convenience
-pub use crate::cc::cache::{CachedEntry, CacheConfig};
+pub use crate::cache::{CachedEntry, CacheConfig};
 
 /// Cache key for session queries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,7 +46,7 @@ enum CacheKey {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache::SessionCache;
+/// use crate::session::cache::SessionCache;
 ///
 /// let cache = SessionCache::default();
 ///
@@ -69,7 +69,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::{SessionCache, CacheConfig};
+    /// use crate::session::cache::{SessionCache, CacheConfig};
     /// use std::time::Duration;
     ///
     /// let config = CacheConfig {
@@ -97,7 +97,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// assert!(cache.get_projects().is_none()); // Empty cache
@@ -116,7 +116,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// cache.set_projects(vec![]); // Cache empty result
@@ -141,7 +141,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// assert!(cache.get_sessions("project-id").is_none());
@@ -160,7 +160,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// cache.set_sessions("project-id", vec![]);
@@ -180,7 +180,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// cache.set_projects(vec![]);
@@ -201,7 +201,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// cache.set_projects(vec![]);
@@ -219,7 +219,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// cache.set_sessions("project-id".to_string(), vec![]);
@@ -239,7 +239,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// let removed = cache.cleanup();
@@ -274,7 +274,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// let (projects, sessions) = cache.len();
@@ -303,7 +303,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::SessionCache;
+    /// use crate::session::cache::SessionCache;
     ///
     /// let cache = SessionCache::default();
     /// assert!(cache.is_empty());
@@ -321,7 +321,7 @@ impl SessionCache {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::session::cache::{SessionCache, CacheConfig};
+    /// use crate::session::cache::{SessionCache, CacheConfig};
     /// use std::time::Duration;
     ///
     /// let cache = SessionCache::default();
@@ -366,7 +366,7 @@ fn global_cache() -> &'static SessionCache {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache;
+/// use crate::session::cache;
 ///
 /// if let Some(projects) = cache::get_cached_projects() {
 ///     println!("Found {} cached projects", projects.len());
@@ -383,7 +383,7 @@ pub fn get_cached_projects() -> Option<Vec<Project>> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache;
+/// use crate::session::cache;
 ///
 /// cache::set_cached_projects(vec![]);
 /// ```
@@ -396,7 +396,7 @@ pub fn set_cached_projects(projects: Vec<Project>) {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache;
+/// use crate::session::cache;
 ///
 /// if let Some(sessions) = cache::get_cached_sessions("project-id") {
 ///     println!("Found {} cached sessions", sessions.len());
@@ -411,7 +411,7 @@ pub fn get_cached_sessions(project_id: &str) -> Option<Vec<Session>> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache;
+/// use crate::session::cache;
 ///
 /// cache::set_cached_sessions("project-id".to_string(), vec![]);
 /// ```
@@ -424,7 +424,7 @@ pub fn set_cached_sessions(project_id: String, sessions: Vec<Session>) {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::cache;
+/// use crate::session::cache;
 ///
 /// cache::clear_cache();
 /// ```
@@ -435,7 +435,7 @@ pub fn clear_cache() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cc::core::SessionId;
+    use crate::core::SessionId;
     use chrono::Utc;
     use std::path::PathBuf;
     use std::time::Duration;

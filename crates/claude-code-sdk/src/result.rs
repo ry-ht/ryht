@@ -22,7 +22,7 @@
 ///
 /// ```rust
 /// use super::Result;
-/// use crate::cc::error::Error;
+/// use crate::error::Error;
 ///
 /// fn parse_config() -> Result<String> {
 ///     Ok("config".to_string())

@@ -33,7 +33,7 @@
 //! # Example
 //!
 //! ```rust
-//! use crate::cc::requests::SDKControlInterruptRequest;
+//! use crate::requests::SDKControlInterruptRequest;
 //!
 //! let interrupt = SDKControlInterruptRequest {
 //!     subtype: "interrupt".to_string(),
@@ -43,7 +43,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::cc::permissions::PermissionUpdate;
+use crate::permissions::PermissionUpdate;
 
 /// SDK Control Protocol - Interrupt request
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -9,7 +9,7 @@
 //! ## Using File-Based Storage
 //!
 //! ```no_run
-//! use crate::cc::binary::preferences::{FilePreferenceStore, PreferenceStore};
+//! use crate::binary::preferences::{FilePreferenceStore, PreferenceStore};
 //! use std::path::PathBuf;
 //!
 //! let store = FilePreferenceStore::new(PathBuf::from("/tmp/claude-prefs.json"));
@@ -26,7 +26,7 @@
 //! ## Custom Storage Backend
 //!
 //! ```
-//! use crate::cc::binary::preferences::PreferenceStore;
+//! use crate::binary::preferences::PreferenceStore;
 //! use std::collections::HashMap;
 //! use std::sync::{Arc, Mutex};
 //!
@@ -101,7 +101,7 @@ pub trait PreferenceStore: Send + Sync {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::preferences::{FilePreferenceStore, PreferenceStore};
+/// use crate::binary::preferences::{FilePreferenceStore, PreferenceStore};
 /// use std::path::PathBuf;
 ///
 /// let store = FilePreferenceStore::new(PathBuf::from("~/.config/claude/prefs.json"));
@@ -193,7 +193,7 @@ impl PreferenceStore for FilePreferenceStore {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::preferences::default_preference_path;
+/// use crate::binary::preferences::default_preference_path;
 ///
 /// if let Some(path) = default_preference_path() {
 ///     println!("Preferences stored at: {}", path.display());
@@ -217,7 +217,7 @@ pub fn default_preference_path() -> Option<PathBuf> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::preferences::default_file_store;
+/// use crate::binary::preferences::default_file_store;
 ///
 /// if let Some(store) = default_file_store() {
 ///     store.set_preferred_path("/usr/local/bin/claude").unwrap();

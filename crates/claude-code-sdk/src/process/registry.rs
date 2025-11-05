@@ -3,8 +3,8 @@
 //! This module provides the core `ProcessRegistry` and `ProcessHandle` types for
 //! tracking and managing multiple concurrent processes with thread-safe access.
 
-use crate::cc::core::SessionId;
-use crate::cc::result::Result;
+use crate::core::SessionId;
+use crate::result::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::process::ProcessType;
+/// use crate::process::ProcessType;
 ///
 /// let agent_type = ProcessType::AgentRun {
 ///     agent_id: 1,
@@ -55,7 +55,7 @@ pub enum ProcessType {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::process::{ProcessInfo, ProcessType};
+/// use crate::process::{ProcessInfo, ProcessType};
 /// use std::time::SystemTime;
 ///
 /// let info = ProcessInfo {
@@ -101,8 +101,8 @@ pub struct ProcessInfo {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use crate::cc::process::ProcessHandle;
-/// use crate::cc::core::SessionId;
+/// use crate::process::ProcessHandle;
+/// use crate::core::SessionId;
 /// use tokio::process::Command;
 ///
 /// #[tokio::main]
@@ -150,8 +150,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::process::ProcessHandle;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessHandle;
+    /// use crate::core::SessionId;
     /// use tokio::process::Command;
     ///
     /// # #[tokio::main]
@@ -187,8 +187,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::process::{ProcessHandle, ProcessInfo, ProcessType};
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::{ProcessHandle, ProcessInfo, ProcessType};
+    /// use crate::core::SessionId;
     /// use tokio::process::Command;
     /// use std::time::SystemTime;
     ///
@@ -258,8 +258,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessHandle;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessHandle;
+    /// use crate::core::SessionId;
     /// use tokio::process::Command;
     ///
     /// # #[tokio::main]
@@ -291,8 +291,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust
-    /// # use crate::cc::process::ProcessHandle;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessHandle;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -320,8 +320,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust
-    /// # use crate::cc::process::ProcessHandle;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessHandle;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -352,8 +352,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessHandle;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessHandle;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -403,8 +403,8 @@ impl ProcessHandle {
     /// # Examples
     ///
     /// ```rust
-    /// # use crate::cc::process::ProcessHandle;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessHandle;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -441,8 +441,8 @@ impl ProcessHandle {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use crate::cc::process::ProcessRegistry;
-/// use crate::cc::core::SessionId;
+/// use crate::process::ProcessRegistry;
+/// use crate::core::SessionId;
 /// use tokio::process::Command;
 ///
 /// #[tokio::main]
@@ -486,7 +486,7 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
+    /// use crate::process::ProcessRegistry;
     ///
     /// let registry = ProcessRegistry::new();
     /// ```
@@ -504,7 +504,7 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
+    /// use crate::process::ProcessRegistry;
     ///
     /// let registry = ProcessRegistry::new();
     /// let run_id = registry.generate_run_id().unwrap();
@@ -566,8 +566,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::process::ProcessRegistry;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessRegistry;
+    /// use crate::core::SessionId;
     /// use tokio::process::Command;
     ///
     /// # #[tokio::main]
@@ -646,8 +646,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessRegistry;
+    /// use crate::core::SessionId;
     ///
     /// let registry = ProcessRegistry::new();
     /// let session_id = SessionId::generate();
@@ -714,8 +714,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessRegistry;
+    /// use crate::core::SessionId;
     ///
     /// let registry = ProcessRegistry::new();
     /// let session_id = SessionId::generate();
@@ -768,7 +768,7 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::process::ProcessRegistry;
+    /// use crate::process::ProcessRegistry;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -808,7 +808,7 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
+    /// use crate::process::ProcessRegistry;
     ///
     /// let registry = ProcessRegistry::new();
     /// // ... register some Claude sessions ...
@@ -846,8 +846,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::process::ProcessRegistry;
-    /// use crate::cc::core::SessionId;
+    /// use crate::process::ProcessRegistry;
+    /// use crate::core::SessionId;
     ///
     /// let registry = ProcessRegistry::new();
     /// let session_id = SessionId::new("my-session");
@@ -884,8 +884,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessRegistry;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -920,8 +920,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessRegistry;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -947,8 +947,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessRegistry;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -980,8 +980,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessRegistry;
+    /// # use crate::core::SessionId;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// # let registry = ProcessRegistry::new();
@@ -1019,8 +1019,8 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
-    /// # use crate::cc::core::SessionId;
+    /// # use crate::process::ProcessRegistry;
+    /// # use crate::core::SessionId;
     /// # use tokio::process::Command;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1207,7 +1207,7 @@ impl ProcessRegistry {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// # use crate::cc::process::ProcessRegistry;
+    /// # use crate::process::ProcessRegistry;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let registry = ProcessRegistry::new();

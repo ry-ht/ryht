@@ -22,7 +22,7 @@ use std::process::Command;
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::create_command_with_env;
+/// use crate::binary::create_command_with_env;
 ///
 /// let mut cmd = create_command_with_env("/usr/local/bin/claude");
 /// cmd.arg("--version");
@@ -235,7 +235,7 @@ fn setup_proxy_env(cmd: &mut Command) {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::get_claude_version;
+/// use crate::binary::get_claude_version;
 ///
 /// match get_claude_version("/usr/local/bin/claude") {
 ///     Ok(Some(version)) => println!("Claude version: {}", version),
@@ -286,7 +286,7 @@ pub fn get_claude_version(path: &str) -> Result<Option<String>, String> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::setup_environment;
+/// use crate::binary::setup_environment;
 /// use std::process::Command;
 ///
 /// let env = setup_environment();
@@ -335,7 +335,7 @@ pub fn setup_environment() -> HashMap<String, String> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::reconstruct_path;
+/// use crate::binary::reconstruct_path;
 ///
 /// let full_path = reconstruct_path();
 /// println!("Full PATH: {}", full_path);

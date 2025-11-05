@@ -2,7 +2,6 @@
 resolver = "2"
 
 members = [
-    "axon",
     "crates/*",
     "cortex/cortex-core",
     "cortex/cortex-storage",

@@ -15,7 +15,7 @@
 //! ## Basic Server Setup
 //!
 //! ```no_run
-//! use crate::cc::mcp::{self, McpServer, Tool, ToolRegistry};
+//! use crate::mcp::{self, McpServer, Tool, ToolRegistry};
 //! use async_trait::async_trait;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -31,8 +31,8 @@
 //! ## Using Tool Registry
 //!
 //! ```no_run
-//! use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
-//! use crate::cc::error::Error;
+//! use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+//! use crate::error::Error;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
 //! let registry = ToolRegistry::new();
@@ -46,8 +46,8 @@
 //! ## Error Conversion
 //!
 //! ```no_run
-//! use crate::cc::mcp;
-//! use crate::cc::error::Error;
+//! use crate::mcp;
+//! use crate::error::Error;
 //!
 //! # fn example() -> cc_sdk::Result<()> {
 //! // MCP errors automatically convert to cc-sdk errors
@@ -71,9 +71,9 @@ pub use mcp_sdk::{
     PROTOCOL_VERSION,
 };
 
-use crate::cc::options::McpServerConfig;
-use crate::cc::result::Result;
-use crate::cc::error::Error;
+use crate::options::McpServerConfig;
+use crate::result::Result;
+use crate::error::Error;
 use std::sync::Arc;
 
 /// Convert a cc-sdk McpServerConfig to an mcp-sdk server configuration.
@@ -83,8 +83,8 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::mcp::config_to_server_builder;
-/// use crate::cc::types::McpServerConfig;
+/// use crate::mcp::config_to_server_builder;
+/// use crate::types::McpServerConfig;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let config = McpServerConfig::Stdio {
@@ -122,7 +122,7 @@ pub fn config_to_server_builder(config: &McpServerConfig) -> Result<ServerBuilde
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::mcp::{create_sdk_server_config, McpServer};
+/// use crate::mcp::{create_sdk_server_config, McpServer};
 /// use std::sync::Arc;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -167,8 +167,8 @@ pub fn create_sdk_server_config(
 /// # Examples
 ///
 /// ```
-/// use crate::cc::mcp::error::ToolError;
-/// use crate::cc::error::Error;
+/// use crate::mcp::error::ToolError;
+/// use crate::error::Error;
 ///
 /// let mcp_error = mcp_sdk::error::McpError::Tool(
 ///     ToolError::NotFound("my_tool".to_string())
@@ -182,13 +182,13 @@ impl From<McpError> for Error {
                 // Map mcp-sdk transport errors to cc-sdk transport errors
                 match transport_err {
                     mcp_sdk::error::TransportError::Io(io_err) => {
-                        Error::Transport(crate::cc::error::TransportError::Io(io_err))
+                        Error::Transport(crate::error::TransportError::Io(io_err))
                     }
                     mcp_sdk::error::TransportError::Closed => {
-                        Error::Transport(crate::cc::error::TransportError::Closed)
+                        Error::Transport(crate::error::TransportError::Closed)
                     }
                     mcp_sdk::error::TransportError::InvalidMessage(msg) => {
-                        Error::Transport(crate::cc::error::TransportError::InvalidMessage {
+                        Error::Transport(crate::error::TransportError::InvalidMessage {
                             reason: msg.clone(),
                             raw: msg,
                         })
@@ -258,8 +258,8 @@ impl From<MiddlewareError> for Error {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
-/// use crate::cc::error::Error;
+/// use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+/// use crate::error::Error;
 /// use async_trait::async_trait;
 /// use serde_json::{json, Value};
 ///
@@ -293,7 +293,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::mcp::ToolRegistry;
+    /// use crate::mcp::ToolRegistry;
     ///
     /// let registry = ToolRegistry::new();
     /// ```
@@ -312,7 +312,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// use async_trait::async_trait;
     /// use serde_json::{json, Value};
     ///
@@ -353,7 +353,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// # use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// # use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// # use async_trait::async_trait;
     /// # use serde_json::{json, Value};
     /// #
@@ -386,7 +386,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// # use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// # use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// # use async_trait::async_trait;
     /// # use serde_json::{json, Value};
     /// #
@@ -421,7 +421,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// # use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// # use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// # use async_trait::async_trait;
     /// # use serde_json::{json, Value};
     /// #
@@ -468,7 +468,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// # use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// # use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// # use async_trait::async_trait;
     /// # use serde_json::{json, Value};
     /// #
@@ -519,7 +519,7 @@ impl ToolRegistry {
     /// # Examples
     ///
     /// ```no_run
-    /// # use crate::cc::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
+    /// # use crate::mcp::{ToolRegistry, Tool, ToolContext, ToolResult};
     /// # use async_trait::async_trait;
     /// # use serde_json::{json, Value};
     /// #
@@ -589,8 +589,8 @@ impl Clone for ToolRegistry {
 /// # Examples
 ///
 /// ```
-/// use crate::cc::mcp::validate_mcp_config;
-/// use crate::cc::types::McpServerConfig;
+/// use crate::mcp::validate_mcp_config;
+/// use crate::types::McpServerConfig;
 ///
 /// let config = McpServerConfig::Stdio {
 ///     command: "node".to_string(),
@@ -665,7 +665,7 @@ pub mod middleware {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::mcp;
+    /// use crate::mcp;
     ///
     /// let server = mcp::McpServer::builder()
     ///     .name("my-server")
@@ -687,7 +687,7 @@ pub mod middleware {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::mcp;
+    /// use crate::mcp;
     ///
     /// let metrics_mw = mcp::middleware::metrics();
     /// ```

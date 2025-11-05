@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::cache::{CachedEntry, CacheConfig};
+//! use crate::cache::{CachedEntry, CacheConfig};
 //! use std::time::Duration;
 //!
 //! let config = CacheConfig {
@@ -38,7 +38,7 @@ impl CacheConfig {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CacheConfig;
+    /// use crate::cache::CacheConfig;
     /// use std::time::Duration;
     ///
     /// let config = CacheConfig::new(Duration::from_secs(600), true);
@@ -54,7 +54,7 @@ impl CacheConfig {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CacheConfig;
+    /// use crate::cache::CacheConfig;
     ///
     /// let config = CacheConfig::disabled();
     /// assert!(!config.enabled);
@@ -88,7 +88,7 @@ impl Default for CacheConfig {
 /// # Examples
 ///
 /// ```
-/// use crate::cc::cache::CachedEntry;
+/// use crate::cache::CachedEntry;
 /// use std::time::Duration;
 ///
 /// let entry = CachedEntry::new(vec![1, 2, 3]);
@@ -111,7 +111,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     ///
     /// let entry = CachedEntry::new("cached data".to_string());
     /// ```
@@ -129,7 +129,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     /// use std::time::Duration;
     ///
     /// let entry = CachedEntry::new(42);
@@ -144,7 +144,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     ///
     /// let entry = CachedEntry::new(vec![1, 2, 3]);
     /// assert_eq!(entry.data(), &vec![1, 2, 3]);
@@ -171,7 +171,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     ///
     /// let entry = CachedEntry::new("data");
     /// let age = entry.age();
@@ -186,7 +186,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     ///
     /// let entry = CachedEntry::new(vec![1, 2, 3]);
     /// let data = entry.into_inner();
@@ -204,7 +204,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     /// use std::time::Duration;
     ///
     /// let mut entry = CachedEntry::new(42);
@@ -221,7 +221,7 @@ impl<T> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     ///
     /// let mut entry = CachedEntry::new(42);
     /// entry.update(100);
@@ -242,7 +242,7 @@ impl<T: Clone> CachedEntry<T> {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::cache::CachedEntry;
+    /// use crate::cache::CachedEntry;
     /// use std::time::Duration;
     ///
     /// let entry = CachedEntry::new(vec![1, 2, 3]);

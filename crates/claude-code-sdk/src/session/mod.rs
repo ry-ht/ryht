@@ -14,8 +14,8 @@
 //! ## Basic Session Discovery
 //!
 //! ```no_run
-//! use crate::cc::session::{list_projects, list_sessions, load_session_history};
-//! use crate::cc::core::SessionId;
+//! use crate::session::{list_projects, list_sessions, load_session_history};
+//! use crate::core::SessionId;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
 //! // List all projects
@@ -41,8 +41,8 @@
 //! ## Creating and Writing Sessions
 //!
 //! ```no_run
-//! use crate::cc::session::writer::{create_session, write_message};
-//! use crate::cc::core::SessionId;
+//! use crate::session::writer::{create_session, write_message};
+//! use crate::core::SessionId;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
 //! // Create a new session
@@ -59,7 +59,7 @@
 //! ## Filtering and Search
 //!
 //! ```no_run
-//! use crate::cc::session::filter::{SessionFilter, SortBy, search_sessions};
+//! use crate::session::filter::{SessionFilter, SortBy, search_sessions};
 //! use chrono::{Utc, Duration};
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
@@ -81,8 +81,8 @@
 //! ## Session Management
 //!
 //! ```no_run
-//! use crate::cc::session::management::{fork_session, export_session, ExportFormat};
-//! use crate::cc::core::SessionId;
+//! use crate::session::management::{fork_session, export_session, ExportFormat};
+//! use crate::core::SessionId;
 //! use std::path::PathBuf;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
@@ -100,7 +100,7 @@
 //! ## Caching
 //!
 //! ```no_run
-//! use crate::cc::session::cache::{SessionCache, CacheConfig};
+//! use crate::session::cache::{SessionCache, CacheConfig};
 //! use std::time::Duration;
 //!
 //! // Create a custom cache
@@ -111,7 +111,7 @@
 //! let cache = SessionCache::new(config);
 //!
 //! // Or use the global cache
-//! use crate::cc::session::cache;
+//! use crate::session::cache;
 //! cache::set_cached_projects(vec![]);
 //! ```
 

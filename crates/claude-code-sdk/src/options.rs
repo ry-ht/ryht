@@ -22,7 +22,7 @@
 //! # Example
 //!
 //! ```rust
-//! use crate::cc::options::{ClaudeCodeOptions, PermissionMode};
+//! use crate::options::{ClaudeCodeOptions, PermissionMode};
 //!
 //! let options = ClaudeCodeOptions::builder()
 //!     .model("claude-sonnet-4")
@@ -38,8 +38,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::cc::hooks::{CanUseTool, HookMatcher};
-use crate::cc::permissions::PermissionMode;
+use crate::hooks::{CanUseTool, HookMatcher};
+use crate::permissions::PermissionMode;
 
 /// Control protocol format for sending messages
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,7 +436,7 @@ impl ClaudeCodeOptionsBuilder {
     ///
     /// For a simple string prompt, use `SystemPrompt::String`:
     /// ```rust
-    /// use crate::cc::options::{ClaudeCodeOptions, SystemPrompt};
+    /// use crate::options::{ClaudeCodeOptions, SystemPrompt};
     ///
     /// let options = ClaudeCodeOptions::builder()
     ///     .system_prompt(SystemPrompt::String("You are a helpful assistant.".to_string()))
@@ -445,7 +445,7 @@ impl ClaudeCodeOptionsBuilder {
     ///
     /// For a preset-based prompt:
     /// ```rust
-    /// use crate::cc::options::{ClaudeCodeOptions, SystemPrompt};
+    /// use crate::options::{ClaudeCodeOptions, SystemPrompt};
     ///
     /// let options = ClaudeCodeOptions::builder()
     ///     .system_prompt(SystemPrompt::Preset {
@@ -629,7 +629,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .cli_channel_buffer_size(500)
     ///     .build();
@@ -651,7 +651,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// // Enable debug for all categories
     /// let options = ClaudeCodeOptions::builder()
     ///     .debug_mode("")
@@ -679,7 +679,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .print_mode(true)
     ///     .build();
@@ -700,7 +700,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::{ClaudeCodeOptions, OutputFormat};
+    /// # use crate::options::{ClaudeCodeOptions, OutputFormat};
     /// let options = ClaudeCodeOptions::builder()
     ///     .output_format(OutputFormat::Json)
     ///     .build();
@@ -721,7 +721,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::{ClaudeCodeOptions, InputFormat};
+    /// # use crate::options::{ClaudeCodeOptions, InputFormat};
     /// let options = ClaudeCodeOptions::builder()
     ///     .input_format(InputFormat::Text)
     ///     .build();
@@ -743,7 +743,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .model("claude-sonnet-4")
     ///     .fallback_model("claude-opus-4")
@@ -765,7 +765,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .ide_autoconnect(true)
     ///     .build();
@@ -786,7 +786,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .strict_mcp_config(true)
     ///     .build();
@@ -807,7 +807,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// # use uuid::Uuid;
     /// let session_id = Uuid::new_v4();
     /// let options = ClaudeCodeOptions::builder()
@@ -830,7 +830,7 @@ impl ClaudeCodeOptionsBuilder {
     /// # Example
     ///
     /// ```rust
-    /// # use crate::cc::options::ClaudeCodeOptions;
+    /// # use crate::options::ClaudeCodeOptions;
     /// let options = ClaudeCodeOptions::builder()
     ///     .replay_user_messages(true)
     ///     .build();

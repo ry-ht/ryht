@@ -6,8 +6,8 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::session::management::{fork_session, get_session_stats};
-//! use crate::cc::core::SessionId;
+//! use crate::session::management::{fork_session, get_session_stats};
+//! use crate::core::SessionId;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
 //! // Fork a session
@@ -28,10 +28,10 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::cc::core::SessionId;
-use crate::cc::error::{Error, SessionError};
-use crate::cc::result::Result;
-use crate::cc::messages::Message;
+use crate::core::SessionId;
+use crate::error::{Error, SessionError};
+use crate::result::Result;
+use crate::messages::Message;
 
 use super::discovery::{list_projects, load_session_history};
 use super::writer::{create_session, write_message, CreateSessionOptions};
@@ -86,8 +86,8 @@ pub enum ExportFormat {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::management::fork_session;
-/// use crate::cc::core::SessionId;
+/// use crate::session::management::fork_session;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let original = SessionId::new("original");
@@ -147,8 +147,8 @@ pub async fn fork_session(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::management::merge_sessions;
-/// use crate::cc::core::SessionId;
+/// use crate::session::management::merge_sessions;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let sessions = vec![
@@ -211,8 +211,8 @@ pub async fn merge_sessions(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::management::{export_session, ExportFormat};
-/// use crate::cc::core::SessionId;
+/// use crate::session::management::{export_session, ExportFormat};
+/// use crate::core::SessionId;
 /// use std::path::PathBuf;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
@@ -255,8 +255,8 @@ pub async fn export_session(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::management::get_session_stats;
-/// use crate::cc::core::SessionId;
+/// use crate::session::management::get_session_stats;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let session_id = SessionId::new("session-id");
@@ -296,11 +296,11 @@ pub async fn get_session_stats(session_id: &SessionId) -> Result<SessionStats> {
                 // Count tool uses and tool results
                 for block in &message.content {
                     match block {
-                        crate::cc::messages::ContentBlock::ToolUse(tool_use) => {
+                        crate::messages::ContentBlock::ToolUse(tool_use) => {
                             stats.tool_use_count += 1;
                             *tool_counts.entry(tool_use.name.clone()).or_insert(0) += 1;
                         }
-                        crate::cc::messages::ContentBlock::ToolResult(_) => {
+                        crate::messages::ContentBlock::ToolResult(_) => {
                             stats.tool_result_count += 1;
                         }
                         _ => {}
@@ -330,8 +330,8 @@ pub async fn get_session_stats(session_id: &SessionId) -> Result<SessionStats> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::session::management::get_bulk_stats;
-/// use crate::cc::core::SessionId;
+/// use crate::session::management::get_bulk_stats;
+/// use crate::core::SessionId;
 ///
 /// # async fn example() -> cc_sdk::Result<()> {
 /// let sessions = vec![SessionId::new("s1"), SessionId::new("s2")];
@@ -384,11 +384,11 @@ fn export_as_markdown(messages: &[Message], session_id: &SessionId) -> String {
                 output.push_str("## Assistant\n\n");
                 for block in &asst_msg.content {
                     match block {
-                        crate::cc::messages::ContentBlock::Text(text_content) => {
+                        crate::messages::ContentBlock::Text(text_content) => {
                             output.push_str(&text_content.text);
                             output.push_str("\n\n");
                         }
-                        crate::cc::messages::ContentBlock::ToolUse(tool_use) => {
+                        crate::messages::ContentBlock::ToolUse(tool_use) => {
                             output.push_str(&format!("**Tool Use:** `{}`\n\n", tool_use.name));
                             if let Ok(json) = serde_json::to_string_pretty(&tool_use.input) {
                                 output.push_str("```json\n");
@@ -396,13 +396,13 @@ fn export_as_markdown(messages: &[Message], session_id: &SessionId) -> String {
                                 output.push_str("\n```\n\n");
                             }
                         }
-                        crate::cc::messages::ContentBlock::ToolResult(tool_result) => {
+                        crate::messages::ContentBlock::ToolResult(tool_result) => {
                             output.push_str("### Tool Result\n\n");
                             output.push_str("```\n");
                             if let Some(content) = &tool_result.content {
                                 match content {
-                                    crate::cc::messages::ContentValue::Text(text) => output.push_str(text),
-                                    crate::cc::messages::ContentValue::Structured(vals) => {
+                                    crate::messages::ContentValue::Text(text) => output.push_str(text),
+                                    crate::messages::ContentValue::Structured(vals) => {
                                         if let Ok(json) = serde_json::to_string_pretty(vals) {
                                             output.push_str(&json);
                                         }
@@ -435,7 +435,7 @@ fn export_as_text(messages: &[Message]) -> String {
             Message::Assistant { message: asst_msg } => {
                 output.push_str("ASSISTANT:\n");
                 for block in &asst_msg.content {
-                    if let crate::cc::messages::ContentBlock::Text(text_content) = block {
+                    if let crate::messages::ContentBlock::Text(text_content) = block {
                         output.push_str(&text_content.text);
                         output.push('\n');
                     }

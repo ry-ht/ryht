@@ -1064,8 +1064,8 @@ mod tests {
             message_id: "test-123".to_string(),
             correlation_id: None,
             causation_id: None,
-            from: AgentId::from_string("agent-1"),
-            to: Some(AgentId::from_string("agent-2")),
+            from: AgentId::from_string("agent-1".to_string()),
+            to: Some(AgentId::from_string("agent-2".to_string())),
             topic: None,
             session_id: SessionId::from("session-1".to_string()),
             workspace_id: WorkspaceId::from("workspace-1".to_string()),
@@ -1112,8 +1112,8 @@ mod tests {
             message_id: "msg-1".to_string(),
             correlation_id: None,
             causation_id: None,
-            from: AgentId::from_string("agent-1"),
-            to: Some(AgentId::from_string("agent-2")),
+            from: AgentId::from_string("agent-1".to_string()),
+            to: Some(AgentId::from_string("agent-2".to_string())),
             topic: None,
             session_id: session1.clone(),
             workspace_id: WorkspaceId::from("workspace-1".to_string()),
@@ -1175,8 +1175,8 @@ mod tests {
                 message_id: format!("msg-{}", i),
                 correlation_id: None,
                 causation_id: None,
-                from: AgentId::from_string("agent-1"),
-                to: Some(AgentId::from_string("agent-2")),
+                from: AgentId::from_string("agent-1".to_string()),
+                to: Some(AgentId::from_string("agent-2".to_string())),
                 topic: None,
                 session_id: session,
                 workspace_id: WorkspaceId::from("workspace-1".to_string()),
@@ -1221,7 +1221,7 @@ mod tests {
             stats: Arc::new(RwLock::new(MessageBusStats::default())),
         };
 
-        let agent_id = AgentId::from_string("test-agent");
+        let agent_id = AgentId::from_string("test-agent".to_string());
 
         // First 5 messages should succeed
         for i in 0..5 {
@@ -1273,7 +1273,7 @@ mod tests {
             stats: Arc::new(RwLock::new(MessageBusStats::default())),
         };
 
-        let agent_id = AgentId::from_string("test-agent");
+        let agent_id = AgentId::from_string("test-agent".to_string());
 
         // Send multiple bursts over time
         for burst in 0..3 {

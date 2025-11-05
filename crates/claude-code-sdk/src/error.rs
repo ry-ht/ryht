@@ -19,7 +19,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use crate::cc::error::{Error, BinaryError};
+//! use crate::error::{Error, BinaryError};
 //!
 //! fn may_fail() -> Result<(), Error> {
 //!     Err(BinaryError::NotFound {
@@ -43,7 +43,7 @@ use thiserror::Error;
 /// All sub-error types automatically convert to `Error` via the `From` trait:
 ///
 /// ```rust
-/// use crate::cc::error::{Error, BinaryError};
+/// use crate::error::{Error, BinaryError};
 ///
 /// let binary_error = BinaryError::NotFound {
 ///     searched_paths: vec!["/usr/local/bin".into()],
@@ -88,7 +88,7 @@ pub enum Error {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::error::BinaryError;
+/// use crate::error::BinaryError;
 ///
 /// // Binary not found
 /// let error = BinaryError::NotFound {
@@ -176,7 +176,7 @@ pub enum BinaryError {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::error::TransportError;
+/// use crate::error::TransportError;
 ///
 /// // Connection closed
 /// let error = TransportError::Closed;
@@ -262,7 +262,7 @@ pub enum TransportError {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::error::SessionError;
+/// use crate::error::SessionError;
 ///
 /// // Session not found
 /// let error = SessionError::NotFound {
@@ -284,7 +284,7 @@ pub enum SessionError {
     #[error("Session not found: {session_id}")]
     NotFound {
         /// Session ID that was not found
-        session_id: crate::cc::core::SessionId,
+        session_id: crate::core::SessionId,
     },
 
     /// I/O error during session operations.
@@ -357,7 +357,7 @@ pub enum SessionError {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::error::SettingsError;
+/// use crate::error::SettingsError;
 /// use std::path::PathBuf;
 ///
 /// // File not found
@@ -465,7 +465,7 @@ pub enum SettingsError {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::error::ClientError;
+/// use crate::error::ClientError;
 ///
 /// // Not connected
 /// let error = ClientError::NotConnected;
@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn test_session_error_not_found() {
         let error = SessionError::NotFound {
-            session_id: crate::cc::core::SessionId::new("test-session"),
+            session_id: crate::core::SessionId::new("test-session"),
         };
         assert!(error.to_string().contains("test-session"));
     }
@@ -792,7 +792,7 @@ mod tests {
             }),
             Error::Transport(TransportError::Closed),
             Error::Session(SessionError::NotFound {
-                session_id: crate::cc::core::SessionId::new("test"),
+                session_id: crate::core::SessionId::new("test"),
             }),
             Error::Settings(SettingsError::FileNotFound {
                 path: PathBuf::from("test"),

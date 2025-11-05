@@ -14,7 +14,7 @@
 //! # Examples
 //!
 //! ```rust,no_run
-//! use crate::cc::streaming::{JsonlReader, OutputBuffer};
+//! use crate::streaming::{JsonlReader, OutputBuffer};
 //! use tokio::io::BufReader;
 //! use futures::StreamExt;
 //!
@@ -60,7 +60,7 @@ pin_project! {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::streaming::JsonlReader;
+    /// use crate::streaming::JsonlReader;
     /// use tokio::io::BufReader;
     /// use futures::StreamExt;
     ///
@@ -88,7 +88,7 @@ impl<R: AsyncBufRead> JsonlReader<R> {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::streaming::JsonlReader;
+    /// use crate::streaming::JsonlReader;
     /// use tokio::io::BufReader;
     ///
     /// let reader = BufReader::new(tokio::io::stdin());
@@ -158,7 +158,7 @@ impl<R: AsyncBufRead + Unpin> Stream for JsonlReader<R> {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::streaming::OutputBuffer;
+/// use crate::streaming::OutputBuffer;
 ///
 /// let buffer = OutputBuffer::new();
 ///
@@ -186,7 +186,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// ```
@@ -201,7 +201,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::with_capacity(1000);
     /// ```
@@ -219,7 +219,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// buffer.push("Hello, world!");
@@ -239,7 +239,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// buffer.push("line 1");
@@ -260,7 +260,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// buffer.push("line 1");
@@ -283,7 +283,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// buffer.push("error: something went wrong");
@@ -306,7 +306,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// assert_eq!(buffer.len(), 0);
@@ -324,7 +324,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// assert!(buffer.is_empty());
@@ -342,7 +342,7 @@ impl OutputBuffer {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::streaming::OutputBuffer;
+    /// use crate::streaming::OutputBuffer;
     ///
     /// let buffer = OutputBuffer::new();
     /// buffer.push("line 1");
@@ -371,8 +371,8 @@ impl Default for OutputBuffer {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use crate::cc::streaming::extract_session_id;
-/// use crate::cc::messages::Message;
+/// use crate::streaming::extract_session_id;
+/// use crate::messages::Message;
 ///
 /// # fn example(message: Message) -> Option<cc_sdk::core::SessionId> {
 /// if let Some(session_id) = extract_session_id(&message) {
@@ -408,7 +408,7 @@ pub fn extract_session_id(message: &Message) -> Option<SessionId> {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::streaming::extract_session_id_from_line;
+/// use crate::streaming::extract_session_id_from_line;
 ///
 /// let line = r#"{"type":"result","session_id":"abc123","subtype":"done","duration_ms":1000,"duration_api_ms":500,"is_error":false,"num_turns":1}"#;
 /// if let Ok(Some(session_id)) = extract_session_id_from_line(line) {
@@ -450,7 +450,7 @@ pub fn extract_session_id_from_line(line: &str) -> Result<Option<SessionId>> {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::streaming::parse_jsonl_line;
+/// use crate::streaming::parse_jsonl_line;
 ///
 /// let line = r#"{"type":"user","message":{"content":"Hello"}}"#;
 /// let message = parse_jsonl_line(line).unwrap();

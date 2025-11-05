@@ -7,8 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use serde_json;
 
-use crate::cc::error::{Error, SettingsError};
-use crate::cc::result::Result;
+use crate::error::{Error, SettingsError};
+use crate::result::Result;
 
 use super::types::{ClaudeSettings, SettingsScope};
 

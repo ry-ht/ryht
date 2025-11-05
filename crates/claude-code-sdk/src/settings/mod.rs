@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::settings::{load_settings, save_settings, SettingsScope, ClaudeSettings};
+//! use crate::settings::{load_settings, save_settings, SettingsScope, ClaudeSettings};
 //! use std::path::PathBuf;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {

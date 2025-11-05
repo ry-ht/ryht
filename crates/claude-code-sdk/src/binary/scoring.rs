@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::binary::{discover_installations, scoring::compare_installations};
+//! use crate::binary::{discover_installations, scoring::compare_installations};
 //!
 //! let installations = discover_installations();
 //! if let Some(best) = compare_installations(&installations) {
@@ -77,8 +77,8 @@ impl ScoreBreakdown {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::{ClaudeInstallation, InstallationType};
-/// use crate::cc::binary::scoring::score_installation;
+/// use crate::binary::{ClaudeInstallation, InstallationType};
+/// use crate::binary::scoring::score_installation;
 ///
 /// let installation = ClaudeInstallation {
 ///     path: "/usr/local/bin/claude".to_string(),
@@ -264,7 +264,7 @@ fn calculate_bonus(
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::{discover_installations, scoring::compare_installations};
+/// use crate::binary::{discover_installations, scoring::compare_installations};
 ///
 /// let installations = discover_installations();
 /// if let Some(best) = compare_installations(&installations) {
@@ -300,7 +300,7 @@ pub fn compare_installations(installations: &[ClaudeInstallation]) -> Option<Sco
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::{discover_installations, scoring::rank_installations};
+/// use crate::binary::{discover_installations, scoring::rank_installations};
 ///
 /// let installations = discover_installations();
 /// let ranked = rank_installations(&installations);
@@ -327,7 +327,7 @@ pub fn rank_installations(installations: &[ClaudeInstallation]) -> Vec<ScoredIns
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cc::binary::InstallationType;
+    use crate::binary::InstallationType;
 
     fn make_installation(path: &str, version: Option<&str>, source: &str) -> ClaudeInstallation {
         ClaudeInstallation {

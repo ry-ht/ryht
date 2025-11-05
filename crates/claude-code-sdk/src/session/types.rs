@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::cc::core::SessionId;
-use crate::cc::messages::Message;
+use crate::core::SessionId;
+use crate::messages::Message;
 
 /// Represents a Claude Code project.
 ///

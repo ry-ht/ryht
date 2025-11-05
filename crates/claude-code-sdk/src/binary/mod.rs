@@ -22,7 +22,7 @@
 //! The simplest way to find Claude is using the [`find_claude_binary`] function:
 //!
 //! ```no_run
-//! use crate::cc::binary::find_claude_binary;
+//! use crate::binary::find_claude_binary;
 //!
 //! match find_claude_binary() {
 //!     Ok(path) => println!("Found Claude at: {}", path),
@@ -47,7 +47,7 @@
 //! ## Basic Usage
 //!
 //! ```no_run
-//! use crate::cc::binary::find_claude_binary;
+//! use crate::binary::find_claude_binary;
 //!
 //! let claude_path = find_claude_binary()
 //!     .expect("Claude Code not found");
@@ -58,7 +58,7 @@
 //! ## Discovering All Installations
 //!
 //! ```no_run
-//! use crate::cc::binary::discover_installations;
+//! use crate::binary::discover_installations;
 //!
 //! let installations = discover_installations();
 //! for install in installations {
@@ -70,7 +70,7 @@
 //! ## Custom Discovery
 //!
 //! ```no_run
-//! use crate::cc::binary::DiscoveryBuilder;
+//! use crate::binary::DiscoveryBuilder;
 //!
 //! let installations = DiscoveryBuilder::new()
 //!     .custom_path("/opt/custom/claude")
@@ -83,7 +83,7 @@
 //! ## Working with Versions
 //!
 //! ```
-//! use crate::cc::binary::{Version, compare_versions};
+//! use crate::binary::{Version, compare_versions};
 //! use std::cmp::Ordering;
 //!
 //! let v1 = Version::parse("1.0.41").unwrap();
@@ -96,7 +96,7 @@
 //! ## Creating Commands
 //!
 //! ```no_run
-//! use crate::cc::binary::{find_claude_binary, create_command_with_env};
+//! use crate::binary::{find_claude_binary, create_command_with_env};
 //!
 //! let claude_path = find_claude_binary().unwrap();
 //! let mut cmd = create_command_with_env(&claude_path);
@@ -142,7 +142,7 @@
 //! Functions return `Result<T, String>` with descriptive error messages:
 //!
 //! ```no_run
-//! use crate::cc::binary::find_claude_binary;
+//! use crate::binary::find_claude_binary;
 //!
 //! match find_claude_binary() {
 //!     Ok(path) => {
@@ -189,7 +189,7 @@ pub mod async_discovery {
     //! # Examples
     //!
     //! ```no_run
-    //! use crate::cc::binary::async_discovery::find_claude_binary_async;
+    //! use crate::binary::async_discovery::find_claude_binary_async;
     //!
     //! #[tokio::main]
     //! async fn main() {

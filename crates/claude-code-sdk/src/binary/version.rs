@@ -13,7 +13,7 @@ use std::fmt;
 /// # Examples
 ///
 /// ```
-/// use crate::cc::binary::Version;
+/// use crate::binary::Version;
 ///
 /// let v1 = Version::parse("1.0.41").unwrap();
 /// let v2 = Version::parse("1.0.40").unwrap();
@@ -51,7 +51,7 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::binary::Version;
+    /// use crate::binary::Version;
     ///
     /// let v = Version::parse("1.0.41").unwrap();
     /// assert_eq!(v.major, 1);
@@ -99,7 +99,7 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::binary::Version;
+    /// use crate::binary::Version;
     ///
     /// let stable = Version::parse("1.0.0").unwrap();
     /// assert!(!stable.is_prerelease());
@@ -116,7 +116,7 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use crate::cc::binary::Version;
+    /// use crate::binary::Version;
     ///
     /// let v = Version::parse("1.0.41-beta.1+build").unwrap();
     /// assert_eq!(v.core_version(), "1.0.41");
@@ -201,7 +201,7 @@ impl Ord for Version {
 /// # Examples
 ///
 /// ```
-/// use crate::cc::binary::extract_version_from_output;
+/// use crate::binary::extract_version_from_output;
 ///
 /// let output = b"claude version 1.0.41\n";
 /// let version = extract_version_from_output(output);
@@ -289,7 +289,7 @@ fn extract_version_with_pattern(text: &str, _pattern: &str) -> Option<String> {
 /// # Examples
 ///
 /// ```
-/// use crate::cc::binary::compare_versions;
+/// use crate::binary::compare_versions;
 /// use std::cmp::Ordering;
 ///
 /// assert_eq!(compare_versions("1.0.41", "1.0.40"), Ordering::Greater);

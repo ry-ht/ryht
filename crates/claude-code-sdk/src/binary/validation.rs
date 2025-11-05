@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use crate::cc::binary::validation::{verify_binary, BinaryHealth};
+//! use crate::binary::validation::{verify_binary, BinaryHealth};
 //!
 //! match verify_binary("/usr/local/bin/claude") {
 //!     Ok(health) => {
@@ -72,7 +72,7 @@ impl BinaryHealth {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::cc::binary::validation::verify_binary;
+    /// use crate::binary::validation::verify_binary;
     ///
     /// let health = verify_binary("/usr/local/bin/claude").unwrap();
     /// if health.meets_version_requirement("1.0.0") {
@@ -116,7 +116,7 @@ impl BinaryHealth {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::validation::verify_binary;
+/// use crate::binary::validation::verify_binary;
 ///
 /// match verify_binary("/usr/local/bin/claude") {
 ///     Ok(health) => {
@@ -225,7 +225,7 @@ pub fn verify_binary(path: &str) -> Result<BinaryHealth, String> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::validation::is_executable;
+/// use crate::binary::validation::is_executable;
 ///
 /// if is_executable("/usr/local/bin/claude") {
 ///     println!("Binary is executable");
@@ -270,7 +270,7 @@ pub fn is_executable(path: &str) -> bool {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::validation::check_version_compatibility;
+/// use crate::binary::validation::check_version_compatibility;
 ///
 /// match check_version_compatibility("/usr/local/bin/claude", "1.0.0") {
 ///     Ok(true) => println!("Version is compatible"),
@@ -304,7 +304,7 @@ pub fn check_version_compatibility(path: &str, min_version: &str) -> Result<bool
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::validation::health_check_all;
+/// use crate::binary::validation::health_check_all;
 ///
 /// let paths = vec!["/usr/local/bin/claude", "/opt/homebrew/bin/claude"];
 /// let results = health_check_all(&paths);

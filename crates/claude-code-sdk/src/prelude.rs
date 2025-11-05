@@ -6,7 +6,7 @@
 //! # Usage
 //!
 //! ```rust
-//! use crate::cc::prelude::*;
+//! use crate::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<()> {
@@ -54,123 +54,123 @@
 // ============================================================================
 
 /// Type-safe Claude client.
-pub use crate::cc::client::ClaudeClient;
+pub use crate::client::ClaudeClient;
 
 /// Builder for creating a Claude client with type-safe state transitions.
-pub use crate::cc::client::ClaudeClientBuilder;
+pub use crate::client::ClaudeClientBuilder;
 
 /// Stream of messages from Claude.
-pub use crate::cc::client::MessageStream;
+pub use crate::client::MessageStream;
 
 // ============================================================================
 // Core Types
 // ============================================================================
 
 /// Strongly-typed binary path.
-pub use crate::cc::core::BinaryPath;
+pub use crate::core::BinaryPath;
 
 /// Strongly-typed model identifier.
-pub use crate::cc::core::ModelId;
+pub use crate::core::ModelId;
 
 /// Strongly-typed session identifier.
-pub use crate::cc::core::SessionId;
+pub use crate::core::SessionId;
 
 /// Semantic version type.
-pub use crate::cc::core::Version;
+pub use crate::core::Version;
 
 // ============================================================================
 // Error Handling
 // ============================================================================
 
 /// Main error type for the SDK.
-pub use crate::cc::error::Error;
+pub use crate::error::Error;
 
 /// Binary discovery and execution errors.
-pub use crate::cc::error::BinaryError;
+pub use crate::error::BinaryError;
 
 /// Client operation errors.
-pub use crate::cc::error::ClientError;
+pub use crate::error::ClientError;
 
 /// Session management errors.
-pub use crate::cc::error::SessionError;
+pub use crate::error::SessionError;
 
 /// Settings loading/saving errors.
-pub use crate::cc::error::SettingsError;
+pub use crate::error::SettingsError;
 
 /// Transport and communication errors.
-pub use crate::cc::error::TransportError;
+pub use crate::error::TransportError;
 
 /// Result type alias for SDK operations.
-pub use crate::cc::result::Result;
+pub use crate::result::Result;
 
 // ============================================================================
 // Message Types
 // ============================================================================
 
 /// Top-level message type.
-pub use crate::cc::messages::Message;
+pub use crate::messages::Message;
 
 /// User message containing prompts and content.
-pub use crate::cc::messages::UserMessage;
+pub use crate::messages::UserMessage;
 
 /// Assistant message containing responses.
-pub use crate::cc::messages::AssistantMessage;
+pub use crate::messages::AssistantMessage;
 
 /// Content blocks (text, thinking, tool use, tool result).
-pub use crate::cc::messages::ContentBlock;
+pub use crate::messages::ContentBlock;
 
 /// Content value enumeration.
-pub use crate::cc::messages::ContentValue;
+pub use crate::messages::ContentValue;
 
 /// Text content block.
-pub use crate::cc::messages::TextContent;
+pub use crate::messages::TextContent;
 
 /// Thinking content block.
-pub use crate::cc::messages::ThinkingContent;
+pub use crate::messages::ThinkingContent;
 
 /// Tool use content block.
-pub use crate::cc::messages::ToolUseContent;
+pub use crate::messages::ToolUseContent;
 
 /// Tool result content block.
-pub use crate::cc::messages::ToolResultContent;
+pub use crate::messages::ToolResultContent;
 
 /// User-specific content wrapper.
-pub use crate::cc::messages::UserContent;
+pub use crate::messages::UserContent;
 
 /// Assistant-specific content wrapper.
-pub use crate::cc::messages::AssistantContent;
+pub use crate::messages::AssistantContent;
 
 // ============================================================================
 // Configuration Types
 // ============================================================================
 
 /// Main configuration options for Claude client.
-pub use crate::cc::options::ClaudeCodeOptions;
+pub use crate::options::ClaudeCodeOptions;
 
 /// Builder for ClaudeCodeOptions.
-pub use crate::cc::options::ClaudeCodeOptionsBuilder;
+pub use crate::options::ClaudeCodeOptionsBuilder;
 
 /// Permission mode for tool and file access.
-pub use crate::cc::permissions::PermissionMode;
+pub use crate::permissions::PermissionMode;
 
 /// Agent definition (name, version, etc.).
-pub use crate::cc::options::AgentDefinition;
+pub use crate::options::AgentDefinition;
 
 /// System prompt configuration.
-pub use crate::cc::options::SystemPrompt;
+pub use crate::options::SystemPrompt;
 
 // ============================================================================
 // Binary Discovery
 // ============================================================================
 
 /// Find the Claude binary automatically.
-pub use crate::cc::binary::find_claude_binary;
+pub use crate::binary::find_claude_binary;
 
 /// Discover all Claude installations on the system.
-pub use crate::cc::binary::discover_installations;
+pub use crate::binary::discover_installations;
 
 /// Information about a Claude installation.
-pub use crate::cc::binary::ClaudeInstallation;
+pub use crate::binary::ClaudeInstallation;
 
 // ============================================================================
 // Simple Query Interface
@@ -183,7 +183,7 @@ pub use crate::cc::binary::ClaudeInstallation;
 /// # Example
 ///
 /// ```no_run
-/// use crate::cc::prelude::*;
+/// use crate::prelude::*;
 /// use futures::StreamExt;
 ///
 /// # async fn example() -> Result<()> {
@@ -194,42 +194,42 @@ pub use crate::cc::binary::ClaudeInstallation;
 /// # Ok(())
 /// # }
 /// ```
-pub use crate::cc::query::query;
+pub use crate::query::query;
 
 // ============================================================================
 // Session Management (Basic)
 // ============================================================================
 
 /// Project information.
-pub use crate::cc::session::Project;
+pub use crate::session::Project;
 
 /// Session information.
-pub use crate::cc::session::Session;
+pub use crate::session::Session;
 
 /// List all projects.
-pub use crate::cc::session::list_projects;
+pub use crate::session::list_projects;
 
 /// List sessions for a project.
-pub use crate::cc::session::list_sessions;
+pub use crate::session::list_sessions;
 
 /// Load a session's message history.
-pub use crate::cc::session::load_session_history;
+pub use crate::session::load_session_history;
 
 /// Find a project by its path.
-pub use crate::cc::session::find_project_by_path;
+pub use crate::session::find_project_by_path;
 
 // ============================================================================
 // Settings Management (Basic)
 // ============================================================================
 
 /// Claude settings structure.
-pub use crate::cc::settings::ClaudeSettings;
+pub use crate::settings::ClaudeSettings;
 
 /// Settings scope (User, Project, Local).
-pub use crate::cc::settings::SettingsScope;
+pub use crate::settings::SettingsScope;
 
 /// Load settings from specified scopes.
-pub use crate::cc::settings::load_settings;
+pub use crate::settings::load_settings;
 
 /// Save settings to a scope.
-pub use crate::cc::settings::save_settings;
+pub use crate::settings::save_settings;

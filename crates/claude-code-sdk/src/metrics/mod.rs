@@ -14,7 +14,7 @@
 //! # Examples
 //!
 //! ```rust,no_run
-//! use crate::cc::metrics::SessionMetrics;
+//! use crate::metrics::SessionMetrics;
 //! use futures::StreamExt;
 //!
 //! # async fn example() -> cc_sdk::Result<()> {
@@ -56,7 +56,7 @@ pub const DEFAULT_OUTPUT_TOKEN_COST: f64 = 15.0;
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::metrics::SessionMetrics;
+/// use crate::metrics::SessionMetrics;
 ///
 /// let mut metrics = SessionMetrics::new();
 ///
@@ -114,7 +114,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let metrics = SessionMetrics::new();
     /// assert_eq!(metrics.message_count, 0);
@@ -128,7 +128,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// // Custom pricing: $2/1M input, $10/1M output
     /// let metrics = SessionMetrics::with_pricing(2.0, 10.0);
@@ -157,7 +157,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     /// use futures::StreamExt;
     ///
     /// # async fn example() -> cc_sdk::Result<()> {
@@ -198,7 +198,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// let line = r#"{"type":"result","duration_ms":500}"#;
@@ -223,8 +223,8 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
-    /// use crate::cc::messages::{Message, UserMessage};
+    /// use crate::metrics::SessionMetrics;
+    /// use crate::messages::{Message, UserMessage};
     ///
     /// let mut metrics = SessionMetrics::new();
     /// let message = Message::User {
@@ -246,7 +246,7 @@ impl SessionMetrics {
 
                 // Count tool uses in assistant messages
                 for content in &message.content {
-                    if let crate::cc::messages::ContentBlock::ToolUse(_) = content {
+                    if let crate::messages::ContentBlock::ToolUse(_) = content {
                         self.tool_use_count += 1;
                     }
                 }
@@ -369,7 +369,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// metrics.set_pricing(2.0, 10.0);
@@ -387,7 +387,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// metrics.total_tokens = Some(1000);
@@ -409,7 +409,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// metrics.cost_usd = Some(1.5);
@@ -431,7 +431,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// metrics.error_count = 2;
@@ -451,7 +451,7 @@ impl SessionMetrics {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::metrics::SessionMetrics;
+    /// use crate::metrics::SessionMetrics;
     ///
     /// let mut metrics = SessionMetrics::new();
     /// metrics.message_count = 10;
@@ -473,7 +473,7 @@ impl Default for SessionMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cc::messages::{AssistantMessage, ContentBlock, TextContent, UserMessage};
+    use crate::messages::{AssistantMessage, ContentBlock, TextContent, UserMessage};
 
     #[test]
     fn test_session_metrics_new() {

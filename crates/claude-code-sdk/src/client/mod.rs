@@ -12,8 +12,8 @@
 //!
 //! ```no_run
 //! use super::ClaudeClient;
-//! use crate::cc::core::ModelId;
-//! use crate::cc::types::PermissionMode;
+//! use crate::core::ModelId;
+//! use crate::types::PermissionMode;
 //! use futures::StreamExt;
 //!
 //! #[tokio::main]

@@ -15,8 +15,8 @@
 //! # Examples
 //!
 //! ```rust,no_run
-//! use crate::cc::process::{ProcessRegistry, ProcessHandle};
-//! use crate::cc::core::SessionId;
+//! use crate::process::{ProcessRegistry, ProcessHandle};
+//! use crate::core::SessionId;
 //! use tokio::process::Command;
 //!
 //! #[tokio::main]
@@ -57,7 +57,7 @@ pub use registry::{ProcessHandle, ProcessInfo, ProcessRegistry, ProcessType};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cc::core::SessionId;
+    use crate::core::SessionId;
     use std::time::Duration;
 
     /// Test that ProcessRegistry is re-exported correctly

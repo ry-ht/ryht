@@ -28,8 +28,8 @@
 //!
 //! ```no_run
 //! use super::ClaudeClient;
-//! use crate::cc::core::ModelId;
-//! use crate::cc::types::PermissionMode;
+//! use crate::core::ModelId;
+//! use crate::types::PermissionMode;
 //! use futures::StreamExt;
 //!
 //! #[tokio::main]
@@ -61,7 +61,7 @@
 //!
 //! ```no_run
 //! use super::{ClaudeClient, core::ModelId};
-//! use crate::cc::types::{PermissionMode, McpServerConfig};
+//! use crate::types::{PermissionMode, McpServerConfig};
 //! use futures::StreamExt;
 //! use std::path::PathBuf;
 //!
@@ -123,16 +123,16 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use std::collections::HashMap;
 
-use crate::cc::binary;
-use crate::cc::core::{state::*, BinaryPath, ModelId, SessionId};
-use crate::cc::error::{Error, BinaryError, ClientError, SessionError};
-use crate::cc::result::Result;
-use crate::cc::transport::{InputMessage, SubprocessTransport, Transport};
-use crate::cc::messages::Message;
-use crate::cc::options::{ClaudeCodeOptions, McpServerConfig};
-use crate::cc::permissions::PermissionMode;
-use crate::cc::metrics::SessionMetrics;
-use crate::cc::streaming::OutputBuffer;
+use crate::binary;
+use crate::core::{state::*, BinaryPath, ModelId, SessionId};
+use crate::error::{Error, BinaryError, ClientError, SessionError};
+use crate::result::Result;
+use crate::transport::{InputMessage, SubprocessTransport, Transport};
+use crate::messages::Message;
+use crate::options::{ClaudeCodeOptions, McpServerConfig};
+use crate::permissions::PermissionMode;
+use crate::metrics::SessionMetrics;
+use crate::streaming::OutputBuffer;
 
 /// Type-safe Claude client with compile-time state verification.
 ///
@@ -246,8 +246,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
-            metrics: Arc::new(tokio::sync::Mutex::new(crate::cc::metrics::SessionMetrics::new())),
-            output_buffer: Arc::new(crate::cc::streaming::OutputBuffer::new()),
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
         });
 
         Ok(ClaudeClientBuilder {
@@ -279,8 +279,8 @@ impl ClaudeClientBuilder<NoBinary> {
             transport: None,
             session_id: None,
             message_tx: None,
-            metrics: Arc::new(tokio::sync::Mutex::new(crate::cc::metrics::SessionMetrics::new())),
-            output_buffer: Arc::new(crate::cc::streaming::OutputBuffer::new()),
+            metrics: Arc::new(tokio::sync::Mutex::new(crate::metrics::SessionMetrics::new())),
+            output_buffer: Arc::new(crate::streaming::OutputBuffer::new()),
         });
 
         ClaudeClientBuilder {
@@ -298,7 +298,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::core::ModelId;
+    /// use crate::core::ModelId;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -329,7 +329,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::core::ModelId;
+    /// use crate::core::ModelId;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -375,7 +375,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::PermissionMode;
+    /// use crate::types::PermissionMode;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -597,7 +597,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::options::SystemPrompt;
+    /// use crate::options::SystemPrompt;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -617,7 +617,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn system_prompt(mut self, prompt: crate::cc::options::SystemPrompt) -> Self {
+    pub fn system_prompt(mut self, prompt: crate::options::SystemPrompt) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -666,7 +666,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::core::SessionId;
+    /// use crate::core::SessionId;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -698,7 +698,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::core::SessionId;
+    /// use crate::core::SessionId;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -729,7 +729,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::McpServerConfig;
+    /// use crate::types::McpServerConfig;
     /// use std::collections::HashMap;
     ///
     /// # #[tokio::main]
@@ -764,7 +764,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::McpServerConfig;
+    /// use crate::types::McpServerConfig;
     /// use std::collections::HashMap;
     ///
     /// # #[tokio::main]
@@ -1050,7 +1050,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::OutputFormat;
+    /// use crate::types::OutputFormat;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -1060,7 +1060,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn output_format(mut self, format: crate::cc::options::OutputFormat) -> Self {
+    pub fn output_format(mut self, format: crate::options::OutputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1079,7 +1079,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::InputFormat;
+    /// use crate::types::InputFormat;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -1089,7 +1089,7 @@ impl ClaudeClientBuilder<WithBinary> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn input_format(mut self, format: crate::cc::options::InputFormat) -> Self {
+    pub fn input_format(mut self, format: crate::options::InputFormat) -> Self {
         let inner = Arc::get_mut(&mut self.inner)
             .expect("Builder should have unique access to inner");
 
@@ -1108,7 +1108,7 @@ impl ClaudeClientBuilder<WithBinary> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::core::ModelId;
+    /// use crate::core::ModelId;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -1770,7 +1770,7 @@ impl ClaudeClient<Connected> {
         let mut transport_guard = transport.lock().await;
 
         // Send interrupt via control request
-        use crate::cc::requests::ControlRequest;
+        use crate::requests::ControlRequest;
         let request_id = uuid::Uuid::new_v4().to_string();
         transport_guard.send_control_request(ControlRequest::Interrupt { request_id }).await
             .map_err(|e| Error::Protocol(format!("Interrupt failed: {}", e)))?;
@@ -1878,8 +1878,8 @@ impl ClaudeClient<Connected> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn list_project_sessions(&self) -> Result<Vec<crate::cc::session::Session>> {
-        use crate::cc::session;
+    pub async fn list_project_sessions(&self) -> Result<Vec<crate::session::Session>> {
+        use crate::session;
 
         // Get the working directory from options
         let project_path = self.inner.options.as_ref()
@@ -1908,7 +1908,7 @@ impl ClaudeClient<Connected> {
     ///
     /// ```no_run
     /// use super::ClaudeClient;
-    /// use crate::cc::types::PermissionMode;
+    /// use crate::types::PermissionMode;
     ///
     /// # #[tokio::main]
     /// # async fn main() -> cc_sdk::Result<()> {
@@ -1928,7 +1928,7 @@ impl ClaudeClient<Connected> {
         let mut transport_guard = transport.lock().await;
 
         // Send permission mode update via SDK control request
-        use crate::cc::requests::{SDKControlRequest, SDKControlSetPermissionModeRequest};
+        use crate::requests::{SDKControlRequest, SDKControlSetPermissionModeRequest};
         let mode_str = match mode {
             PermissionMode::Default => "default",
             PermissionMode::AcceptEdits => "acceptEdits",
@@ -1978,7 +1978,7 @@ impl ClaudeClient<Connected> {
     /// # }
     /// ```
     pub async fn get_history(&self) -> Result<Vec<Message>> {
-        use crate::cc::session;
+        use crate::session;
 
         let session_id = self.session_id();
         session::load_session_history(session_id).await
@@ -2405,7 +2405,7 @@ mod tests {
             .binary("/usr/local/bin/claude")
             .max_output_tokens(8000)
             .max_turns(20)
-            .system_prompt(crate::cc::options::SystemPrompt::String("You are a helpful assistant".to_string()))
+            .system_prompt(crate::options::SystemPrompt::String("You are a helpful assistant".to_string()))
             .configure();
 
         let options = builder.inner.options.as_ref().unwrap();
@@ -2413,7 +2413,7 @@ mod tests {
         assert_eq!(options.max_turns, Some(20));
         assert!(matches!(
             options.system_prompt,
-            Some(crate::cc::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
+            Some(crate::options::SystemPrompt::String(ref s)) if s == "You are a helpful assistant"
         ));
     }
 

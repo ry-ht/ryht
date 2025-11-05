@@ -20,7 +20,7 @@
 //! # Example
 //!
 //! ```rust
-//! use crate::cc::messages::{Message, UserMessage};
+//! use crate::messages::{Message, UserMessage};
 //!
 //! let message = Message::User {
 //!     message: UserMessage {
@@ -91,7 +91,7 @@ impl UserMessage {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::UserMessage;
+    /// use crate::messages::UserMessage;
     ///
     /// let msg = UserMessage::new("Hello, Claude!");
     /// assert_eq!(msg.content, "Hello, Claude!");
@@ -134,7 +134,7 @@ impl AssistantMessage {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::{AssistantMessage, ContentBlock, TextContent};
+    /// use crate::messages::{AssistantMessage, ContentBlock, TextContent};
     ///
     /// let msg = AssistantMessage::new(vec![
     ///     ContentBlock::Text(TextContent { text: "Hello!".to_string() })
@@ -151,7 +151,7 @@ impl AssistantMessage {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::AssistantMessage;
+    /// use crate::messages::AssistantMessage;
     ///
     /// let msg = AssistantMessage::with_text("Hello!");
     /// assert_eq!(msg.content.len(), 1);
@@ -199,7 +199,7 @@ impl TextContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::TextContent;
+    /// use crate::messages::TextContent;
     ///
     /// let content = TextContent::new("Hello, world!");
     /// assert_eq!(content.text, "Hello, world!");
@@ -241,7 +241,7 @@ impl ThinkingContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::ThinkingContent;
+    /// use crate::messages::ThinkingContent;
     ///
     /// let content = ThinkingContent::new("Let me think...", "sig123");
     /// assert_eq!(content.thinking, "Let me think...");
@@ -273,7 +273,7 @@ impl ToolUseContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::ToolUseContent;
+    /// use crate::messages::ToolUseContent;
     /// use serde_json::json;
     ///
     /// let content = ToolUseContent::new("tool_123", "Bash", json!({"command": "ls"}));
@@ -309,7 +309,7 @@ impl ToolResultContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::{ToolResultContent, ContentValue};
+    /// use crate::messages::{ToolResultContent, ContentValue};
     ///
     /// let content = ToolResultContent::new("tool_123", Some(ContentValue::Text("Success".to_string())), false);
     /// assert_eq!(content.tool_use_id, "tool_123");
@@ -329,7 +329,7 @@ impl ToolResultContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::ToolResultContent;
+    /// use crate::messages::ToolResultContent;
     ///
     /// let result = ToolResultContent::success("tool_123", "Command completed");
     /// assert_eq!(result.is_error, Some(false));
@@ -348,7 +348,7 @@ impl ToolResultContent {
     /// # Examples
     ///
     /// ```rust
-    /// use crate::cc::messages::ToolResultContent;
+    /// use crate::messages::ToolResultContent;
     ///
     /// let result = ToolResultContent::error("tool_123", "Command failed");
     /// assert_eq!(result.is_error, Some(true));

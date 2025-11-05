@@ -222,14 +222,14 @@ impl Query {
                 debug!("Received control response for {}", request_id);
                 Ok(response)
             }
-            Ok(Err(_)) => Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::ControlRequestFailed {
+            Ok(Err(_)) => Err(crate::error::Error::Client(crate::error::ClientError::ControlRequestFailed {
                 reason: "Response channel closed".to_string(),
             })),
             Err(_) => {
                 // Clean up pending response
                 let mut pending = self.pending_responses.write().await;
                 pending.remove(&request_id);
-                Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::Timeout {
+                Err(crate::error::Error::Transport(crate::error::TransportError::Timeout {
                     duration: Duration::from_secs(60),
                 }))
             }
@@ -345,7 +345,7 @@ impl Query {
         control_message: &JsonValue,
     ) -> JsonValue {
         // Try to parse as HookInput
-        let hook_result = match serde_json::from_value::<crate::cc::hooks::HookInput>(input.clone()) {
+        let hook_result = match serde_json::from_value::<crate::hooks::HookInput>(input.clone()) {
             Ok(hook_input) => {
                 hook_callback
                     .execute(&hook_input, tool_use_id.as_deref(), context)
@@ -353,7 +353,7 @@ impl Query {
             }
             Err(parse_err) => {
                 error!("Failed to parse hook input: {}", parse_err);
-                Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::InvalidMessage {
+                Err(crate::error::Error::Transport(crate::error::TransportError::InvalidMessage {
                     reason: format!("Invalid hook input: {parse_err}"),
                     raw: input.to_string(),
                 }))
@@ -629,7 +629,7 @@ impl Query {
 
     /// Set the active model via control protocol
     pub async fn set_model(&mut self, model: Option<String>) -> Result<()> {
-        let req = SDKControlRequest::SetModel(crate::cc::requests::SDKControlSetModelRequest {
+        let req = SDKControlRequest::SetModel(crate::requests::SDKControlSetModelRequest {
             subtype: "set_model".to_string(),
             model,
         });
@@ -652,7 +652,7 @@ impl Query {
         // Check if we have an SDK server with this name
         if self.sdk_mcp_servers.contains_key(server_name) {
             // SDK MCP server support removed - direct users to mcp-sdk
-            Err(crate::cc::error::Error::Client(crate::cc::error::ClientError::NotSupported {
+            Err(crate::error::Error::Client(crate::error::ClientError::NotSupported {
                 feature: format!(
                     "SDK MCP server support removed. Use mcp-sdk crate for MCP integration. \
                      For server '{}', configure via ClaudeCodeOptions.mcp_servers instead.",
@@ -660,7 +660,7 @@ impl Query {
                 ),
             }))
         } else {
-            Err(crate::cc::error::Error::Session(crate::cc::error::SessionError::InvalidState {
+            Err(crate::error::Error::Session(crate::error::SessionError::InvalidState {
                 current: "SDK MCP server not found".to_string(),
                 expected: format!("MCP server with name: {server_name}"),
             }))

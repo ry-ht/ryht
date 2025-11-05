@@ -12,7 +12,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use crate::cc::core::state::*;
+//! use crate::core::state::*;
 //!
 //! // Type-safe state progression
 //! struct Client<S = NoBinary> {
@@ -233,7 +233,7 @@ pub mod state {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::core::SessionId;
+/// use crate::core::SessionId;
 ///
 /// let session_id = SessionId::new("abc123");
 /// assert_eq!(session_id.as_str(), "abc123");
@@ -270,7 +270,7 @@ impl SessionId {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::core::BinaryPath;
+/// use crate::core::BinaryPath;
 /// use std::path::PathBuf;
 ///
 /// let path = BinaryPath::new("/usr/local/bin/claude");
@@ -317,7 +317,7 @@ impl BinaryPath {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::core::ModelId;
+/// use crate::core::ModelId;
 ///
 /// let model = ModelId::new("claude-sonnet-4-5-20250929");
 /// assert_eq!(model.as_str(), "claude-sonnet-4-5-20250929");
@@ -385,7 +385,7 @@ pub mod models {
 /// # Examples
 ///
 /// ```rust
-/// use crate::cc::core::Version;
+/// use crate::core::Version;
 ///
 /// let version = Version::parse("0.2.5").unwrap();
 /// assert_eq!(version.major, 0);
@@ -399,12 +399,12 @@ pub mod models {
 /// not `pre`. Use the field accessor directly:
 ///
 /// ```rust
-/// use crate::cc::core::Version;
+/// use crate::core::Version;
 ///
 /// let v = Version::parse("1.0.0-beta").unwrap();
 /// assert_eq!(v.prerelease, Some("beta".to_string()));
 /// ```
-pub use crate::cc::binary::Version;
+pub use crate::binary::Version;
 
 #[cfg(test)]
 mod tests {

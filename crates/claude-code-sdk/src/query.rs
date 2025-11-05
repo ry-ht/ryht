@@ -191,7 +191,7 @@ async fn query_print_mode(
     use tokio::process::Command;
     use tokio::sync::Mutex;
 
-    let cli_path = crate::cc::transport::subprocess::find_claude_cli()?;
+    let cli_path = crate::transport::subprocess::find_claude_cli()?;
     let mut cmd = Command::new(&cli_path);
 
     // Build command with --print mode
@@ -201,10 +201,10 @@ async fn query_print_mode(
     // Add all options to match Python SDK exactly
     if let Some(ref prompt) = options.system_prompt {
         match prompt {
-            crate::cc::options::SystemPrompt::String(s) => {
+            crate::options::SystemPrompt::String(s) => {
                 cmd.arg("--system-prompt").arg(s);
             }
-            crate::cc::options::SystemPrompt::Preset { preset, append, .. } => {
+            crate::options::SystemPrompt::Preset { preset, append, .. } => {
                 cmd.arg("--system-prompt-preset").arg(preset);
                 if let Some(append_text) = append {
                     cmd.arg("--append-system-prompt").arg(append_text);
@@ -311,7 +311,7 @@ async fn query_print_mode(
     debug!("Command: {:?}", cmd);
 
     let mut child = cmd.spawn().map_err(|e| {
-        crate::cc::error::Error::Binary(crate::cc::error::BinaryError::SpawnFailed {
+        crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
             path: cli_path.clone(),
             reason: format!("Failed to spawn process: {}", e),
             source: e,
@@ -321,11 +321,11 @@ async fn query_print_mode(
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdout".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stderr".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
     // Wrap child process in Arc<Mutex> for shared ownership
     let child = Arc::new(Mutex::new(child));
@@ -363,7 +363,7 @@ async fn query_print_mode(
             // Parse JSON line
             match serde_json::from_str::<serde_json::Value>(&line) {
                 Ok(json) => {
-                    match crate::cc::message_parser::parse_message(json) {
+                    match crate::message_parser::parse_message(json) {
                         Ok(Some(message)) => {
                             if tx.send(Ok(message)).await.is_err() {
                                 break;
@@ -391,14 +391,14 @@ async fn query_print_mode(
             Ok(status) => {
                 if !status.success() {
                     let _ = tx
-                        .send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::ProcessExited {
+                        .send(Err(crate::error::Error::Transport(crate::error::TransportError::ProcessExited {
                             code: status.code(),
                         })))
                         .await;
                 }
             }
             Err(e) => {
-                let _ = tx.send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::Io(e)))).await;
+                let _ = tx.send(Err(crate::error::Error::Transport(crate::error::TransportError::Io(e)))).await;
             }
         }
     });
@@ -452,7 +452,7 @@ async fn query_stream_mode(
     use tokio::process::Command;
     use tokio::sync::Mutex;
 
-    let cli_path = crate::cc::transport::subprocess::find_claude_cli()?;
+    let cli_path = crate::transport::subprocess::find_claude_cli()?;
     let mut cmd = Command::new(&cli_path);
 
     // Build command for interactive mode (stream-json input/output)
@@ -463,10 +463,10 @@ async fn query_stream_mode(
     // Add all options - similar to query_print_mode but without --print flag
     if let Some(ref prompt) = options.system_prompt {
         match prompt {
-            crate::cc::options::SystemPrompt::String(s) => {
+            crate::options::SystemPrompt::String(s) => {
                 cmd.arg("--system-prompt").arg(s);
             }
-            crate::cc::options::SystemPrompt::Preset { preset, append, .. } => {
+            crate::options::SystemPrompt::Preset { preset, append, .. } => {
                 cmd.arg("--system-prompt-preset").arg(preset);
                 if let Some(append_text) = append {
                     cmd.arg("--append-system-prompt").arg(append_text);
@@ -566,7 +566,7 @@ async fn query_stream_mode(
     debug!("Command: {:?}", cmd);
 
     let mut child = cmd.spawn().map_err(|e| {
-        crate::cc::error::Error::Binary(crate::cc::error::BinaryError::SpawnFailed {
+        crate::error::Error::Binary(crate::error::BinaryError::SpawnFailed {
             path: cli_path.clone(),
             reason: format!("Failed to spawn process: {}", e),
             source: e,
@@ -576,15 +576,15 @@ async fn query_stream_mode(
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdin".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdin".into())))?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stdout".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stdout".into())))?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| crate::cc::error::Error::Transport(crate::cc::error::TransportError::ChannelError("Failed to get stderr".into())))?;
+        .ok_or_else(|| crate::error::Error::Transport(crate::error::TransportError::ChannelError("Failed to get stderr".into())))?;
 
     // Wrap child process in Arc<Mutex> for shared ownership
     let child = Arc::new(Mutex::new(child));
@@ -661,7 +661,7 @@ async fn query_stream_mode(
             // Parse JSON line
             match serde_json::from_str::<serde_json::Value>(&line) {
                 Ok(json) => {
-                    match crate::cc::message_parser::parse_message(json) {
+                    match crate::message_parser::parse_message(json) {
                         Ok(Some(message)) => {
                             if tx.send(Ok(message)).await.is_err() {
                                 break;
@@ -689,14 +689,14 @@ async fn query_stream_mode(
             Ok(status) => {
                 if !status.success() {
                     let _ = tx
-                        .send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::ProcessExited {
+                        .send(Err(crate::error::Error::Transport(crate::error::TransportError::ProcessExited {
                             code: status.code(),
                         })))
                         .await;
                 }
             }
             Err(e) => {
-                let _ = tx.send(Err(crate::cc::error::Error::Transport(crate::cc::error::TransportError::Io(e)))).await;
+                let _ = tx.send(Err(crate::error::Error::Transport(crate::error::TransportError::Io(e)))).await;
             }
         }
     });
@@ -1129,7 +1129,7 @@ mod integration_tests {
     #[tokio::test]
     #[ignore] // Requires Claude CLI to be installed
     async fn test_streaming_with_options_example() {
-        use crate::cc::options::SystemPrompt;
+        use crate::options::SystemPrompt;
 
         let session_id = "test-session-4";
 

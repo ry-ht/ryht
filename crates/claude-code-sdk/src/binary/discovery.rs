@@ -27,7 +27,7 @@ pub enum InstallationType {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::{discover_installations, ClaudeInstallation};
+/// use crate::binary::{discover_installations, ClaudeInstallation};
 ///
 /// let installations = discover_installations();
 /// for install in installations {
@@ -66,7 +66,7 @@ static CACHED_BINARY: OnceLock<Option<String>> = OnceLock::new();
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::find_claude_binary;
+/// use crate::binary::find_claude_binary;
 ///
 /// match find_claude_binary() {
 ///     Ok(path) => println!("Found Claude at: {}", path),
@@ -142,7 +142,7 @@ pub fn find_claude_binary() -> Result<String, String> {
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::discover_installations;
+/// use crate::binary::discover_installations;
 ///
 /// let installations = discover_installations();
 /// println!("Found {} installations", installations.len());
@@ -633,7 +633,7 @@ fn select_best_installation(installations: Vec<ClaudeInstallation>) -> Option<Cl
 /// # Examples
 ///
 /// ```no_run
-/// use crate::cc::binary::DiscoveryBuilder;
+/// use crate::binary::DiscoveryBuilder;
 ///
 /// let builder = DiscoveryBuilder::new()
 ///     .custom_path("/opt/custom/claude")
